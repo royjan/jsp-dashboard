@@ -1,26 +1,129 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+:root {
+  --radius: 0.625rem;
+  --background: #ffffff;
+  --foreground: #0a0a0a;
+  --card: #ffffff;
+  --card-foreground: #0a0a0a;
+  --popover: #ffffff;
+  --popover-foreground: #0a0a0a;
+  --primary: #2563eb;
+  --primary-foreground: #ffffff;
+  --secondary: #f1f5f9;
+  --secondary-foreground: #0f172a;
+  --muted: #f1f5f9;
+  --muted-foreground: #64748b;
+  --accent: #f1f5f9;
+  --accent-foreground: #0f172a;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: #e2e8f0;
+  --input: #e2e8f0;
+  --ring: #2563eb;
+  --chart-grid: #d1d5db;
+  --chart-text: #4b5563;
+}
+
+.dark {
+  --background: #0c0e14;
+  --foreground: #f0f0f5;
+  --card: #151821;
+  --card-foreground: #f0f0f5;
+  --popover: #1a1d28;
+  --popover-foreground: #f0f0f5;
+  --primary: #60a5fa;
+  --primary-foreground: #0c0e14;
+  --secondary: #1e2230;
+  --secondary-foreground: #e2e8f0;
+  --muted: #1e2230;
+  --muted-foreground: #94a3b8;
+  --accent: #1e2230;
+  --accent-foreground: #e2e8f0;
+  --destructive: #f87171;
+  --destructive-foreground: #0c0e14;
+  --border: #2a2f3e;
+  --input: #2a2f3e;
+  --ring: #60a5fa;
+  --chart-grid: #4a5168;
+  --chart-text: #e2e8f0;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* RTL support */
+[dir="rtl"] .prose {
+  text-align: right;
+}
+[dir="rtl"] .prose ul,
+[dir="rtl"] .prose ol {
+  padding-right: 1.5em;
+  padding-left: 0;
+}
+[dir="rtl"] .prose table {
+  direction: rtl;
+}
+[dir="rtl"] .prose th,
+[dir="rtl"] .prose td {
+  text-align: right;
+}
+
+/* Recharts theme-aware fixes */
+.recharts-cartesian-grid line {
+  stroke: var(--chart-grid);
+}
+.recharts-text,
+.recharts-cartesian-axis-tick-value,
+.recharts-label,
+.recharts-cartesian-axis text,
+.recharts-yAxis text,
+.recharts-xAxis text {
+  fill: var(--chart-text) !important;
+}
+.recharts-cartesian-axis-line,
+.recharts-cartesian-axis-tick-line {
+  stroke: var(--chart-grid) !important;
+}
+.recharts-tooltip-wrapper .recharts-default-tooltip {
+  background-color: var(--popover) !important;
+  border-color: var(--border) !important;
+  color: var(--popover-foreground) !important;
+}
+.recharts-legend-item-text {
+  color: var(--foreground) !important;
 }
