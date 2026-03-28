@@ -7,25 +7,23 @@ import { useLocale } from '@/lib/locale-context'
 import type { TranslationKey } from '@/lib/i18n'
 import {
   LayoutDashboard,
-  TrendingUp,
-  BarChart3,
   Sun,
-  PackageSearch,
   Warehouse,
-  Sparkles,
   ChevronLeft,
+  Users,
+  FileBarChart,
+  Trash2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 
 const navItems: Array<{ href: string; labelKey: TranslationKey; icon: typeof LayoutDashboard }> = [
   { href: '/', labelKey: 'overview', icon: LayoutDashboard },
-  { href: '/demand', labelKey: 'demand', icon: TrendingUp },
-  { href: '/sales', labelKey: 'sales', icon: BarChart3 },
   { href: '/seasonal', labelKey: 'seasonal', icon: Sun },
-  { href: '/reorder', labelKey: 'reorder', icon: PackageSearch },
   { href: '/stock', labelKey: 'stock', icon: Warehouse },
-  { href: '/insights', labelKey: 'aiInsights', icon: Sparkles },
+  { href: '/customers', labelKey: 'customers', icon: Users },
+  { href: '/scrap', labelKey: 'scrap', icon: Trash2 },
+  { href: '/report', labelKey: 'report', icon: FileBarChart },
 ]
 
 interface SidebarProps {
@@ -42,7 +40,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
     <TooltipProvider delayDuration={0}>
       <aside
         className={cn(
-          'fixed top-0 z-40 h-screen border-e bg-card transition-all duration-300 hidden md:flex flex-col',
+          'fixed top-0 z-40 h-screen border-e bg-card transition-all duration-300 hidden lg:flex flex-col',
           isRTL ? 'right-0' : 'left-0',
           collapsed ? 'w-16' : 'w-56'
         )}

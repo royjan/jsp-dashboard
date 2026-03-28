@@ -1,3 +1,5 @@
+export const maxDuration = 60
+
 import { NextResponse } from 'next/server'
 import { getTopSellingItems } from '@/lib/services/analytics-service'
 import { initializeSecrets } from '@/lib/aws-secrets'

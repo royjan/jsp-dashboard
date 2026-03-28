@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { TopBar } from '@/components/layout/TopBar'
 import { MobileNav } from '@/components/layout/MobileNav'
+import { QueryLoadingBar } from '@/components/layout/QueryLoadingBar'
 import { useLocale } from '@/lib/locale-context'
 import { cn } from '@/lib/utils'
 
@@ -16,15 +17,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const isRTL = dir === 'rtl'
 
   const marginClass = collapsed
-    ? (isRTL ? 'md:mr-16' : 'md:ml-16')
-    : (isRTL ? 'md:mr-56' : 'md:ml-56')
+    ? (isRTL ? 'lg:mr-16' : 'lg:ml-16')
+    : (isRTL ? 'lg:mr-56' : 'lg:ml-56')
 
   return (
     <>
+      <QueryLoadingBar />
       <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} />
       <div className={cn('min-h-screen transition-all duration-300', marginClass)}>
         <TopBar />
-        <main className="p-4 md:p-6 pb-20 md:pb-6">
+        <main className="p-4 lg:p-6 pb-20 lg:pb-6">
           <AnimatePresence mode="wait">
             <motion.div
               key={pathname}

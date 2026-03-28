@@ -1,212 +1,203 @@
 #!/bin/bash
-set -euo pipefail
 
+# Deploy script for pushing Docker image to ECR and creating/updating App Runner service
+# Usage: ./deploy-apprunner.sh [tag]
+
+set -e
+
+# Configuration
+ECR_REGISTRY="224072612352.dkr.ecr.eu-central-1.amazonaws.com"
+ECR_REPOSITORY="jan-parts-dashboard"
+IMAGE_NAME="jan-parts-dashboard"
+AWS_REGION="eu-central-1"
 SERVICE_NAME="jan-parts-dashboard"
-REGION="eu-central-1"
-POWER="small"
-SCALE=1
-PORT=3000
 DOMAIN="dashboard.jan.parts"
 HOSTED_ZONE_ID="Z021997128UFF2MPJGHPZ"
-CERT_NAME="dashboard-jan-parts-cert"
-IMAGE_LABEL="app"
 
-echo "=== Deploying $SERVICE_NAME to AWS Lightsail Containers ==="
+# Get tag from argument or use timestamp
+TAG=${1:-$(date +%Y%m%d-%H%M%S)}
+FULL_IMAGE_NAME="${ECR_REGISTRY}/${ECR_REPOSITORY}:${TAG}"
+LATEST_IMAGE_NAME="${ECR_REGISTRY}/${ECR_REPOSITORY}:latest"
 
-# 1. Build Docker image
-echo ""
-echo ">>> Building Docker image..."
-docker build --platform linux/amd64 -t "$SERVICE_NAME" .
+echo "Starting deployment process..."
+echo "Image: ${FULL_IMAGE_NAME}"
+echo "Latest: ${LATEST_IMAGE_NAME}"
 
-# 2. Create Lightsail container service (if not exists)
-echo ""
-echo ">>> Checking if container service exists..."
-if aws lightsail get-container-services --service-name "$SERVICE_NAME" --region "$REGION" > /dev/null 2>&1; then
-  echo "Container service already exists."
-else
-  echo "Creating container service..."
-  aws lightsail create-container-service \
-    --service-name "$SERVICE_NAME" \
-    --power "$POWER" \
-    --scale "$SCALE" \
-    --region "$REGION"
-
-  echo "Waiting for container service to become active..."
-  while true; do
-    STATE=$(aws lightsail get-container-services \
-      --service-name "$SERVICE_NAME" \
-      --region "$REGION" \
-      --query "containerServices[0].state" \
-      --output text)
-    echo "  State: $STATE"
-    if [ "$STATE" = "READY" ] || [ "$STATE" = "ACTIVE" ]; then
-      break
-    fi
-    sleep 10
-  done
+# Check if AWS CLI is installed
+if ! command -v aws &> /dev/null; then
+    echo "AWS CLI is not installed. Please install it first."
+    exit 1
 fi
 
-# 3. Push image to Lightsail
-echo ""
-echo ">>> Pushing image to Lightsail..."
-aws lightsail push-container-image \
-  --service-name "$SERVICE_NAME" \
-  --label "$IMAGE_LABEL" \
-  --image "$SERVICE_NAME:latest" \
-  --region "$REGION"
-
-# Get the pushed image URI
-IMAGE_URI=$(aws lightsail get-container-images \
-  --service-name "$SERVICE_NAME" \
-  --region "$REGION" \
-  --query "containerImages[0].image" \
-  --output text)
-echo "Pushed image: $IMAGE_URI"
-
-# 4. Create SSL certificate for custom domain
-echo ""
-echo ">>> Setting up SSL certificate for $DOMAIN..."
-if aws lightsail get-certificates --certificate-name "$CERT_NAME" --region "$REGION" > /dev/null 2>&1; then
-  echo "Certificate already exists."
-else
-  echo "Creating certificate..."
-  aws lightsail create-certificate \
-    --certificate-name "$CERT_NAME" \
-    --domain-name "$DOMAIN" \
-    --region "$REGION"
+# Check if Docker is running
+if ! docker info &> /dev/null; then
+    echo "Docker is not running. Please start Docker first."
+    exit 1
 fi
 
-# Get DNS validation records
-echo "Fetching certificate DNS validation records..."
-CERT_INFO=$(aws lightsail get-certificates \
-  --certificate-name "$CERT_NAME" \
-  --region "$REGION" \
-  --query "certificates[0].certificateDetail")
+# 1. Ensure ECR repository exists
+echo ""
+echo ">>> Ensuring ECR repository exists..."
+aws ecr describe-repositories --repository-names "$ECR_REPOSITORY" --region "$AWS_REGION" 2>/dev/null || \
+  aws ecr create-repository --repository-name "$ECR_REPOSITORY" --region "$AWS_REGION"
 
-CERT_STATUS=$(echo "$CERT_INFO" | jq -r '.status')
-echo "Certificate status: $CERT_STATUS"
+# 2. Authenticate with ECR
+echo ""
+echo ">>> Authenticating with ECR..."
+aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REGISTRY}
 
-if [ "$CERT_STATUS" = "PENDING_VALIDATION" ]; then
-  VALIDATION_NAME=$(echo "$CERT_INFO" | jq -r '.domainValidationRecords[0].resourceRecord.name')
-  VALIDATION_VALUE=$(echo "$CERT_INFO" | jq -r '.domainValidationRecords[0].resourceRecord.value')
+if [ $? -ne 0 ]; then
+    echo "ECR authentication failed. Check your AWS credentials."
+    exit 1
+fi
 
-  echo "Adding DNS validation record..."
-  aws route53 change-resource-record-sets \
-    --hosted-zone-id "$HOSTED_ZONE_ID" \
-    --change-batch "{
-      \"Changes\": [{
-        \"Action\": \"UPSERT\",
-        \"ResourceRecordSet\": {
-          \"Name\": \"$VALIDATION_NAME\",
-          \"Type\": \"CNAME\",
-          \"TTL\": 300,
-          \"ResourceRecords\": [{\"Value\": \"$VALIDATION_VALUE\"}]
+# 3. Build Docker image
+echo ""
+echo ">>> Building Docker image for x86_64..."
+export DOCKER_BUILDKIT=1
+docker build \
+    --platform linux/amd64 \
+    --provenance=false \
+    --sbom=false \
+    -t ${IMAGE_NAME} .
+
+if [ $? -ne 0 ]; then
+    echo "Docker build failed."
+    exit 1
+fi
+
+# 4. Tag and push
+echo ""
+echo ">>> Tagging images..."
+docker tag ${IMAGE_NAME} ${FULL_IMAGE_NAME}
+docker tag ${IMAGE_NAME} ${LATEST_IMAGE_NAME}
+
+echo ">>> Pushing image with tag: ${TAG}..."
+DOCKER_CONTENT_TRUST=0 docker push ${FULL_IMAGE_NAME}
+
+if [ $? -ne 0 ]; then
+    echo "Failed to push tagged image."
+    exit 1
+fi
+
+echo ">>> Pushing latest image..."
+DOCKER_CONTENT_TRUST=0 docker push ${LATEST_IMAGE_NAME}
+
+if [ $? -ne 0 ]; then
+    echo "Failed to push latest image."
+    exit 1
+fi
+
+# 5. Check if App Runner service already exists
+echo ""
+echo ">>> Checking for existing App Runner service..."
+EXISTING_SERVICE=$(aws apprunner list-services --region ${AWS_REGION} \
+  --query "ServiceSummaryList[?ServiceName=='${SERVICE_NAME}'].ServiceArn" --output text 2>/dev/null || echo "")
+
+if [ -z "${EXISTING_SERVICE}" ] || [ "${EXISTING_SERVICE}" = "None" ]; then
+    echo ">>> Creating new App Runner service..."
+    cat > /tmp/apprunner-dashboard-config.json <<EOF
+{
+  "ServiceName": "${SERVICE_NAME}",
+  "SourceConfiguration": {
+    "ImageRepository": {
+      "ImageIdentifier": "${LATEST_IMAGE_NAME}",
+      "ImageConfiguration": {
+        "Port": "3000",
+        "RuntimeEnvironmentVariables": {
+          "NODE_ENV": "production",
+          "HOSTNAME": "0.0.0.0",
+          "PORT": "3000",
+          "AWS_REGION": "${AWS_REGION}"
         }
-      }]
-    }"
+      },
+      "ImageRepositoryType": "ECR"
+    },
+    "AutoDeploymentsEnabled": false
+  },
+  "InstanceConfiguration": {
+    "Cpu": "1 vCPU",
+    "Memory": "2 GB"
+  },
+  "HealthCheckConfiguration": {
+    "Protocol": "HTTP",
+    "Path": "/",
+    "Interval": 10,
+    "Timeout": 5,
+    "HealthyThreshold": 1,
+    "UnhealthyThreshold": 5
+  },
+  "Tags": [
+    {
+      "Key": "Application",
+      "Value": "jan-parts-dashboard"
+    }
+  ]
+}
+EOF
 
-  echo "Waiting for certificate validation..."
-  while true; do
-    STATUS=$(aws lightsail get-certificates \
-      --certificate-name "$CERT_NAME" \
-      --region "$REGION" \
-      --query "certificates[0].certificateDetail.status" \
+    SERVICE_ARN=$(aws apprunner create-service \
+      --cli-input-json file:///tmp/apprunner-dashboard-config.json \
+      --region ${AWS_REGION} \
+      --query 'Service.ServiceArn' \
       --output text)
-    echo "  Certificate status: $STATUS"
-    if [ "$STATUS" = "ISSUED" ]; then
-      break
+
+    rm -f /tmp/apprunner-dashboard-config.json
+    echo "Created service: ${SERVICE_ARN}"
+else
+    SERVICE_ARN="${EXISTING_SERVICE}"
+    echo ">>> Triggering deployment on existing service..."
+    aws apprunner start-deployment --service-arn "${SERVICE_ARN}" --region ${AWS_REGION}
+    echo "Deployment triggered on: ${SERVICE_ARN}"
+fi
+
+# 6. Wait for deployment
+echo ""
+echo ">>> Waiting for App Runner service to be running..."
+while true; do
+    STATUS=$(aws apprunner describe-service --service-arn "${SERVICE_ARN}" --region ${AWS_REGION} \
+      --query "Service.Status" --output text)
+    echo "  Status: ${STATUS}"
+    if [ "${STATUS}" = "RUNNING" ]; then
+        break
+    fi
+    if [ "${STATUS}" = "CREATE_FAILED" ] || [ "${STATUS}" = "DELETE_FAILED" ]; then
+        echo "ERROR: Service failed with status ${STATUS}"
+        exit 1
     fi
     sleep 15
-  done
-fi
+done
 
-# 5. Deploy container with custom domain
+# 7. Get service URL
+SERVICE_URL=$(aws apprunner describe-service --service-arn "${SERVICE_ARN}" --region ${AWS_REGION} \
+  --query "Service.ServiceUrl" --output text)
 echo ""
-echo ">>> Deploying container..."
-aws lightsail create-container-service-deployment \
-  --service-name "$SERVICE_NAME" \
-  --region "$REGION" \
-  --containers "{
-    \"$SERVICE_NAME\": {
-      \"image\": \"$IMAGE_URI\",
-      \"ports\": {\"$PORT\": \"HTTP\"},
-      \"environment\": {
-        \"NODE_ENV\": \"production\",
-        \"HOSTNAME\": \"0.0.0.0\",
-        \"PORT\": \"$PORT\",
-        \"AWS_REGION\": \"$REGION\"
-      }
-    }
-  }" \
-  --public-endpoint "{
-    \"containerName\": \"$SERVICE_NAME\",
-    \"containerPort\": $PORT,
-    \"healthCheck\": {
-      \"path\": \"/\",
-      \"intervalSeconds\": 30,
-      \"timeoutSeconds\": 5,
-      \"healthyThreshold\": 2,
-      \"unhealthyThreshold\": 3
-    }
-  }"
+echo "Service URL: https://${SERVICE_URL}"
 
-# 6. Attach custom domain
+# 8. Update Route53 DNS
 echo ""
-echo ">>> Attaching custom domain $DOMAIN..."
-# Update service with public domain
-aws lightsail update-container-service \
-  --service-name "$SERVICE_NAME" \
-  --region "$REGION" \
-  --public-domain-names "{\"$CERT_NAME\": [\"$DOMAIN\"]}" || true
-
-# 7. Create Route53 record
-echo ""
-echo ">>> Setting up Route53 DNS record..."
-SERVICE_URL=$(aws lightsail get-container-services \
-  --service-name "$SERVICE_NAME" \
-  --region "$REGION" \
-  --query "containerServices[0].url" \
-  --output text | sed 's|https://||' | sed 's|/$||')
-
-echo "Service URL: $SERVICE_URL"
-
+echo ">>> Updating Route53 DNS for ${DOMAIN}..."
 aws route53 change-resource-record-sets \
-  --hosted-zone-id "$HOSTED_ZONE_ID" \
+  --hosted-zone-id "${HOSTED_ZONE_ID}" \
   --change-batch "{
     \"Changes\": [{
       \"Action\": \"UPSERT\",
       \"ResourceRecordSet\": {
-        \"Name\": \"$DOMAIN\",
+        \"Name\": \"${DOMAIN}\",
         \"Type\": \"CNAME\",
         \"TTL\": 300,
-        \"ResourceRecords\": [{\"Value\": \"$SERVICE_URL\"}]
+        \"ResourceRecords\": [{\"Value\": \"${SERVICE_URL}\"}]
       }
     }]
   }"
 
-# 8. Wait for deployment
-echo ""
-echo ">>> Waiting for deployment to complete..."
-while true; do
-  STATE=$(aws lightsail get-container-services \
-    --service-name "$SERVICE_NAME" \
-    --region "$REGION" \
-    --query "containerServices[0].state" \
-    --output text)
-  echo "  Service state: $STATE"
-  if [ "$STATE" = "RUNNING" ] || [ "$STATE" = "READY" ] || [ "$STATE" = "ACTIVE" ]; then
-    break
-  fi
-  if [ "$STATE" = "DEPLOYING" ]; then
-    sleep 15
-    continue
-  fi
-  sleep 10
-done
-
 echo ""
 echo "=== Deployment complete! ==="
-echo "Lightsail URL: https://$SERVICE_URL"
-echo "Custom domain: https://$DOMAIN"
+echo "App Runner URL: https://${SERVICE_URL}"
+echo "Custom domain:  https://${DOMAIN}"
 echo ""
-echo "Note: DNS propagation may take a few minutes."
+echo "Monitor deployment:"
+echo "  aws apprunner describe-service --service-arn ${SERVICE_ARN} --query 'Service.{Status:Status,ServiceUrl:ServiceUrl}' --output table"
+echo ""
+echo "To delete old Lightsail service after verification:"
+echo "  aws lightsail delete-container-service --service-name ${SERVICE_NAME} --region eu-central-1"

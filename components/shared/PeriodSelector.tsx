@@ -15,22 +15,34 @@ const periods: { value: Period; label: string }[] = [
 interface PeriodSelectorProps {
   value: Period
   onChange: (period: Period) => void
+  isCustom?: boolean
+  onCustom?: () => void
 }
 
-export function PeriodSelector({ value, onChange }: PeriodSelectorProps) {
+export function PeriodSelector({ value, onChange, isCustom, onCustom }: PeriodSelectorProps) {
   return (
-    <div className="flex gap-1 rounded-lg border p-1">
+    <div className="flex flex-wrap gap-1 rounded-lg border p-1">
       {periods.map((p) => (
         <Button
           key={p.value}
-          variant={value === p.value ? 'default' : 'ghost'}
+          variant={!isCustom && value === p.value ? 'default' : 'ghost'}
           size="sm"
-          className={cn('h-7 px-3 text-xs', value === p.value && 'shadow-sm')}
+          className={cn('h-7 px-2 sm:px-3 text-xs', !isCustom && value === p.value && 'shadow-sm')}
           onClick={() => onChange(p.value)}
         >
           {p.label}
         </Button>
       ))}
+      {onCustom && (
+        <Button
+          variant={isCustom ? 'default' : 'ghost'}
+          size="sm"
+          className={cn('h-7 px-2 sm:px-3 text-xs', isCustom && 'shadow-sm')}
+          onClick={onCustom}
+        >
+          Custom
+        </Button>
+      )}
     </div>
   )
 }

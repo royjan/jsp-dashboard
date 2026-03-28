@@ -18,6 +18,7 @@ export function ReorderRadarChart({ item }: ReorderRadarChartProps) {
     { metric: t('seasonalFit'), value: item.seasonal_relevance * 100 },
     { metric: t('customerBreadth'), value: item.customer_breadth * 100 },
     { metric: t('urgency'), value: Math.min(item.urgency_score * 10, 100) },
+    { metric: t('supplierFreshness'), value: (item.supplier_freshness ?? 0.5) * 100 },
   ]
 
   return (

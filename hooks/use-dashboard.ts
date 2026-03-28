@@ -23,5 +23,6 @@ export function useItems() {
       return res.json()
     },
     staleTime: 30 * 60 * 1000,
+    retry: 2,
   })
 }

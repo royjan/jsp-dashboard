@@ -26,13 +26,14 @@ export const MONTH_NAMES = [
 ] as const
 
 // Redis cache TTLs (in seconds)
+// Cron warms cache every 2h during business hours; TTLs just need to survive the gap
 export const CACHE_TTL = {
-  DASHBOARD: 5 * 60,       // 5 min
-  ITEMS: 30 * 60,          // 30 min
-  DOCUMENTS: 15 * 60,      // 15 min
-  ANALYTICS: 60 * 60,      // 1 hour
-  SEASONAL: 6 * 60 * 60,   // 6 hours
-  AI_INSIGHTS: 2 * 60 * 60, // 2 hours
+  DASHBOARD: 3 * 60 * 60,    // 3 hours (refreshed every 2h by cron)
+  ITEMS: 3 * 60 * 60,        // 3 hours
+  DOCUMENTS: 3 * 60 * 60,    // 3 hours
+  ANALYTICS: 3 * 60 * 60,    // 3 hours
+  SEASONAL: 48 * 60 * 60,    // 48 hours (changes rarely, survives weekend)
+  AI_INSIGHTS: 2 * 60 * 60,  // 2 hours
 } as const
 
 // Currency formatting

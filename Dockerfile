@@ -1,6 +1,6 @@
 FROM node:25.2.1-alpine AS base
 
-RUN apk add --no-cache libc6-compat
+RUN apk add --no-cache libc6-compat python3 make g++
 
 # --- Build stage ---
 FROM base AS builder
@@ -10,6 +10,7 @@ COPY package*.json ./
 RUN npm ci --legacy-peer-deps
 
 COPY . .
+COPY data/ ./data/
 RUN npm run build
 
 # --- Production stage ---
@@ -23,6 +24,7 @@ RUN addgroup -g 1001 -S nodejs && \
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
+COPY --from=builder /app/data ./data
 
 COPY docker-entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh

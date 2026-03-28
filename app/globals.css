@@ -1,5 +1,13 @@
 @import "tailwindcss";
 
+@keyframes banner-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-banner-in {
+  animation: banner-in 0.25s ease-out both;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

@@ -1,5 +1,6 @@
 'use client'
 
+import React from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
@@ -12,13 +13,14 @@ interface SeasonalHeatmapProps {
   isLoading?: boolean
 }
 
-function getIntensityColor(intensity: number): string {
-  if (intensity > 0.8) return 'bg-emerald-500 dark:bg-emerald-600'
-  if (intensity > 0.6) return 'bg-emerald-400 dark:bg-emerald-500'
-  if (intensity > 0.4) return 'bg-emerald-300 dark:bg-emerald-400'
-  if (intensity > 0.2) return 'bg-emerald-200 dark:bg-emerald-300'
-  if (intensity > 0.05) return 'bg-emerald-100 dark:bg-emerald-200'
-  return 'bg-muted'
+function getIntensityStyle(intensity: number, hasData: boolean): React.CSSProperties {
+  if (!hasData || intensity <= 0) return { backgroundColor: 'hsl(220 13% 18%)' }
+  // Interpolate hue 220→142 (blue-gray → green), saturation 15→80%, lightness 20→52%
+  const t = Math.pow(intensity, 0.7) // slight gamma so low values are still visible
+  const hue = Math.round(220 - t * (220 - 142))
+  const sat = Math.round(15 + t * 65)
+  const lit = Math.round(20 + t * 32)
+  return { backgroundColor: `hsl(${hue} ${sat}% ${lit}%)` }
 }
 
 export function SeasonalHeatmap({ data, isLoading }: SeasonalHeatmapProps) {
@@ -41,6 +43,14 @@ export function SeasonalHeatmap({ data, isLoading }: SeasonalHeatmapProps) {
     dataMap.get(d.category)!.set(d.month, d)
   }
 
+  // Per-row max for normalization: each row's highest month = 1.0
+  const rowMax = new Map<string, number>()
+  for (const category of categories) {
+    const months = dataMap.get(category)!
+    const max = Math.max(...Array.from(months.values()).map(p => p.avg_sales || 0))
+    rowMax.set(category, max || 1)
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -57,7 +67,7 @@ export function SeasonalHeatmap({ data, isLoading }: SeasonalHeatmapProps) {
               <div
                 key={month}
                 className={cn(
-                  'flex-1 text-center py-1 min-w-[50px]',
+                  'flex-1 text-center py-1 min-w-[32px] sm:min-w-[50px]',
                   isSummer ? 'bg-amber-100/50 dark:bg-amber-900/20' : 'bg-blue-100/50 dark:bg-blue-900/20'
                 )}
               >
@@ -92,14 +102,14 @@ export function SeasonalHeatmap({ data, isLoading }: SeasonalHeatmapProps) {
               </div>
               {Array.from({ length: 12 }, (_, i) => {
                 const point = dataMap.get(category)?.get(i + 1)
-                const intensity = point?.intensity || 0
+                const avgSales = point?.avg_sales || 0
+                const hasData = !!point && avgSales > 0
+                const intensity = hasData ? avgSales / rowMax.get(category)! : 0
                 return (
                   <div
                     key={i}
-                    className={cn(
-                      'flex-1 h-8 rounded-sm min-w-[50px] transition-colors cursor-default',
-                      getIntensityColor(intensity)
-                    )}
+                    className="flex-1 h-8 rounded-sm min-w-[32px] sm:min-w-[50px] transition-colors cursor-default"
+                    style={getIntensityStyle(intensity, hasData)}
                     title={`${category} - ${MONTH_NAMES[i]}: ${point?.avg_sales?.toLocaleString() || 0} units`}
                   />
                 )
@@ -112,8 +122,8 @@ export function SeasonalHeatmap({ data, isLoading }: SeasonalHeatmapProps) {
         <div className="flex items-center gap-2 mt-4 text-xs text-muted-foreground">
           <span>{t('low')}</span>
           <div className="flex gap-0.5">
-            {['bg-muted', 'bg-emerald-100', 'bg-emerald-200', 'bg-emerald-300', 'bg-emerald-400', 'bg-emerald-500'].map((c, i) => (
-              <div key={i} className={cn('w-6 h-3 rounded-sm', c)} />
+            {[0, 0.2, 0.4, 0.6, 0.8, 1.0].map((v, i) => (
+              <div key={i} className="w-6 h-3 rounded-sm" style={getIntensityStyle(v, v > 0)} />
             ))}
           </div>
           <span>{t('high')}</span>

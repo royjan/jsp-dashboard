@@ -2,6 +2,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Button } from '@/components/ui/button'
 import { useLocale } from '@/lib/locale-context'
 import type { DeadStockItem } from '@/lib/types'
 
@@ -16,9 +17,12 @@ interface DeadStockTreemapProps {
   data: DeadStockItem[]
   isLoading?: boolean
   bare?: boolean
+  page?: number
+  pageSize?: number
+  onPageChange?: (page: number) => void
 }
 
-export function DeadStockTreemap({ data, isLoading, bare }: DeadStockTreemapProps) {
+export function DeadStockTreemap({ data, isLoading, bare, page = 0, pageSize = 50, onPageChange }: DeadStockTreemapProps) {
   const { t } = useLocale()
 
   if (isLoading) {
@@ -32,7 +36,8 @@ export function DeadStockTreemap({ data, isLoading, bare }: DeadStockTreemapProp
 
   const totalCapital = data.reduce((sum, item) => sum + item.capital_tied, 0)
   const maxCapital = Math.max(...data.map(i => i.capital_tied), 1)
-  const items = data.slice(0, 50)
+  const totalPages = Math.ceil(data.length / pageSize)
+  const items = data.slice(page * pageSize, (page + 1) * pageSize)
 
   // Calculate treemap layout using simple squarified algorithm
   function layoutItems(items: DeadStockItem[], width: number, height: number) {
@@ -107,7 +112,7 @@ export function DeadStockTreemap({ data, isLoading, bare }: DeadStockTreemapProp
                   strokeWidth={2}
                   rx={3}
                 >
-                  <title>{`${item.name} (${item.code})\n₪${item.capital_tied.toLocaleString()} | ${item.years_dead} ${Number(item.years_dead) > 1 ? t('yearsDead') : t('yearDead')} | ${t('stock')}: ${item.stock_qty}`}</title>
+                  <title>{`${item.name} (${item.code})\n₪${item.capital_tied.toLocaleString()} | ${item.years_dead} ${Number(item.years_dead) > 1 ? t('yearsDead') : t('yearDead')} | ${t('stock')}: ${item.stock_qty}${item.sale_date ? `\n${t('lastSale')}: ${item.sale_date.substring(0, 10)}` : ''}${item.count_date ? `\n${t('lastCount')}: ${item.count_date.substring(0, 10)}` : ''}`}</title>
                 </rect>
                 {showText && (
                   <>
@@ -131,13 +136,22 @@ export function DeadStockTreemap({ data, isLoading, bare }: DeadStockTreemapProp
           })}
         </svg>
 
-        <div className="flex items-center gap-4 mt-4 text-xs">
-          {Object.entries(COLORS_BY_YEARS).map(([years, color]) => (
-            <div key={years} className="flex items-center gap-1">
-              <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: color }} />
-              <span className="text-muted-foreground">{deadLabel(Number(years))}</span>
+        <div className="flex items-center justify-between mt-4">
+          <div className="flex items-center gap-4 text-xs">
+            {Object.entries(COLORS_BY_YEARS).map(([years, color]) => (
+              <div key={years} className="flex items-center gap-1">
+                <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: color }} />
+                <span className="text-muted-foreground">{deadLabel(Number(years))}</span>
+              </div>
+            ))}
+          </div>
+          {onPageChange && totalPages > 1 && (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Button variant="outline" size="sm" className="h-7 px-2" onClick={() => onPageChange(page - 1)} disabled={page === 0}>‹</Button>
+              <span>{page + 1} / {totalPages}</span>
+              <Button variant="outline" size="sm" className="h-7 px-2" onClick={() => onPageChange(page + 1)} disabled={page >= totalPages - 1}>›</Button>
             </div>
-          ))}
+          )}
         </div>
     </>
   )

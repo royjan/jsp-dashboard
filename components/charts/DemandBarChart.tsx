@@ -34,7 +34,7 @@ export function DemandBarChart({ data, isLoading, mode, limit = 10, hoveredCode,
     .slice(0, limit)
 
   const chartData = filtered.map(item => ({
-    name: item.name.length > 22 ? item.name.slice(0, 22) + '...' : item.name,
+    name: item.name.length > 18 ? item.name.slice(0, 18) + '...' : item.name,
     code: item.code,
     value: mode === 'count' ? item.request_count : item.total_qty_requested,
     fullName: item.name,
@@ -43,7 +43,7 @@ export function DemandBarChart({ data, isLoading, mode, limit = 10, hoveredCode,
   const total = chartData.reduce((s, d) => s + d.value, 0)
 
   const renderLabel = ({ name, percent, cx, x, y }: any) => {
-    if (percent < 0.05) return null
+    if (percent < 0.07) return null
     const isRight = x > cx
     return (
       <text x={x} y={y} fill="var(--foreground)" fontSize={11} fontWeight={500} textAnchor={isRight ? 'start' : 'end'}>
@@ -59,7 +59,7 @@ export function DemandBarChart({ data, isLoading, mode, limit = 10, hoveredCode,
       </CardHeader>
       <CardContent>
         <div className="flex flex-col lg:flex-row items-center gap-4">
-          <div className="w-full lg:w-1/2" style={{ height: 350 }}>
+          <div className="w-full lg:w-1/2 h-[250px] sm:h-[300px] lg:h-[350px]">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
@@ -67,7 +67,7 @@ export function DemandBarChart({ data, isLoading, mode, limit = 10, hoveredCode,
                   cx="50%"
                   cy="50%"
                   innerRadius={60}
-                  outerRadius={120}
+                  outerRadius={100}
                   paddingAngle={2}
                   dataKey="value"
                   label={renderLabel}

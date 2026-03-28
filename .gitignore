@@ -40,3 +40,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 /.firebase/
+/.playwright-mcp
+
+# SQLite data
+/data/

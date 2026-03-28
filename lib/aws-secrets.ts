@@ -2,9 +2,8 @@ import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-sec
 
 interface AppSecrets {
   GEMINI_API_KEY?: string
-  UPSTASH_REDIS_REST_URL?: string
-  UPSTASH_REDIS_REST_TOKEN?: string
   FINANSIT_API_CREDENTIALS?: string
+  CRON_SECRET?: string
   [key: string]: string | undefined
 }
 
@@ -23,9 +22,8 @@ export async function loadFromSecretsManager(): Promise<AppSecrets> {
   if (process.env.DISABLE_AWS === 'true') {
     const envSecrets: AppSecrets = {
       GEMINI_API_KEY: process.env.GEMINI_API_KEY,
-      UPSTASH_REDIS_REST_URL: process.env.UPSTASH_REDIS_REST_URL,
-      UPSTASH_REDIS_REST_TOKEN: process.env.UPSTASH_REDIS_REST_TOKEN,
       FINANSIT_API_CREDENTIALS: process.env.FINANSIT_API_CREDENTIALS,
+      CRON_SECRET: process.env.CRON_SECRET,
     }
     cachedSecrets = envSecrets
     secretsCacheTimestamp = Date.now()
@@ -61,9 +59,8 @@ export async function loadFromSecretsManager(): Promise<AppSecrets> {
     console.warn(`[AWS Secrets] Failed: ${error}. Using env vars.`)
     const fallback: AppSecrets = {
       GEMINI_API_KEY: process.env.GEMINI_API_KEY,
-      UPSTASH_REDIS_REST_URL: process.env.UPSTASH_REDIS_REST_URL,
-      UPSTASH_REDIS_REST_TOKEN: process.env.UPSTASH_REDIS_REST_TOKEN,
       FINANSIT_API_CREDENTIALS: process.env.FINANSIT_API_CREDENTIALS,
+      CRON_SECRET: process.env.CRON_SECRET,
     }
     cachedSecrets = fallback
     secretsCacheTimestamp = Date.now()
