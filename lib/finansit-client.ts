@@ -215,7 +215,7 @@ export async function fetchDocumentFormats(params?: { enable_caching?: boolean; 
 export async function fetchDocumentLines(params: {
   doc_format?: string; item_code?: string; date_from?: string
   date_to?: string; limit?: number; year?: string
-}): Promise<any[]> {
+}): Promise<any> {
   return client.documents.getLines(params as any)
 }
 
@@ -253,7 +253,7 @@ export async function fetchAllCustomers(): Promise<any[]> {
   const limit = 500
   while (true) {
     const data = await client.customers.list({ start, sort: 'code', direction: 'asc', limit })
-    const items: any[] = data.customers || data.items || data || []
+    const items: any[] = (data as any).customers || (data as any).items || data || []
     if (!items.length) break
     all.push(...items)
     if (items.length < limit) break

@@ -23,7 +23,7 @@ interface RawDoc {
   customer_code: string
   customer_name: string
   grand_total: number
-  doc_date: string
+  doc_date: string | null
 }
 
 export async function POST() {
@@ -57,7 +57,7 @@ export async function POST() {
           if (doc.customer_name && doc.customer_name.length > existing.name.length) {
             existing.name = doc.customer_name
           }
-          if (doc.doc_date > existing.lastDate) {
+          if (doc.doc_date && doc.doc_date > existing.lastDate) {
             existing.lastDate = doc.doc_date
           }
         } else {
