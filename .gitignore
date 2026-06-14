@@ -44,3 +44,7 @@ next-env.d.ts
 
 # SQLite data
 /data/
+
+# Firebase debug logs
+firebase-debug.log
+firebase-debug.*.log
