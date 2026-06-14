@@ -13,10 +13,9 @@ const nextConfig: NextConfig = {
             key: 'Strict-Transport-Security',
             value: 'max-age=31536000; includeSubDomains',
           },
-          {
-            key: 'Content-Security-Policy',
-            value: "upgrade-insecure-requests",
-          },
+          // NOTE: 'Content-Security-Policy: upgrade-insecure-requests' removed —
+          // it forces all sub-resources to HTTPS, which breaks plain-HTTP access
+          // (the internal/LAN box). HTTPS is enforced at the edge in prod anyway.
           {
             key: 'X-Frame-Options',
             value: 'DENY',
