@@ -15,6 +15,14 @@ const memoryCache = new Map<string, { data: unknown; expires: number }>()
 function getRedis(): Redis | null {
   if (redisInitialized) return redis
 
+  // Opt out of Upstash (e.g. on the internal/LAN box) — fall back to the
+  // in-memory cache so data is fetched live from FINAPI, not the shared Redis.
+  if (process.env.DISABLE_REDIS === 'true') {
+    redisInitialized = true
+    console.warn('[redis-client] DISABLE_REDIS=true — in-memory cache, live FINAPI reads')
+    return null
+  }
+
   const url = process.env.UPSTASH_REDIS_REST_URL || getSecret('UPSTASH_REDIS_REST_URL')
   const token = process.env.UPSTASH_REDIS_REST_TOKEN || getSecret('UPSTASH_REDIS_REST_TOKEN')
 
