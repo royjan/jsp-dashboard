@@ -57,12 +57,12 @@ export function SeasonalHeatmap({ data, isLoading }: SeasonalHeatmapProps) {
         <CardTitle>{t('seasonalHeatmap')}</CardTitle>
         <CardDescription>{t('salesIntensity')}</CardDescription>
       </CardHeader>
-      <CardContent className="overflow-x-auto">
+      <CardContent className="overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0">
         {/* Season overlay */}
         <div className="flex mb-2 text-xs">
-          <div className="w-32 shrink-0" />
+          <div className="w-20 sm:w-32 shrink-0" />
           {MONTH_NAMES.map((month, i) => {
-            const isSummer = ISRAELI_SEASONS.SUMMER.months.includes(i + 1)
+            const isSummer = (ISRAELI_SEASONS.SUMMER.months as readonly number[]).includes(i + 1)
             return (
               <div
                 key={month}
@@ -79,7 +79,7 @@ export function SeasonalHeatmap({ data, isLoading }: SeasonalHeatmapProps) {
 
         {/* Season labels */}
         <div className="flex mb-4 text-xs text-muted-foreground">
-          <div className="w-32 shrink-0" />
+          <div className="w-20 sm:w-32 shrink-0" />
           <div className="flex-1 flex">
             <div className="flex-1 text-center" style={{ flex: 4 }}>
               {ISRAELI_SEASONS.WINTER.icon} {t('winter')}
@@ -97,7 +97,7 @@ export function SeasonalHeatmap({ data, isLoading }: SeasonalHeatmapProps) {
         <div className="space-y-1">
           {categories.map((category) => (
             <div key={category} className="flex items-center gap-1">
-              <div className="w-32 shrink-0 text-xs font-medium truncate" title={category}>
+              <div className="w-20 sm:w-32 shrink-0 text-[10px] sm:text-xs font-medium truncate" title={category}>
                 {category}
               </div>
               {Array.from({ length: 12 }, (_, i) => {

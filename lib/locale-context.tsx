@@ -27,7 +27,7 @@ export function LocaleProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const t = useCallback((key: TranslationKey) => {
-    return translations[locale][key] || key
+    return (translations[locale] as Record<string, string>)[key] || key
   }, [locale])
 
   // Load saved locale

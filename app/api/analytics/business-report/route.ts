@@ -300,9 +300,11 @@ export async function GET() {
       SELECT COUNT(*) as count FROM item_snapshot WHERE qty > 0
     `)
 
-    const annualRevenue2025 = revenueByYear.find((r: any) => r.year === 2025)?.revenue || 0
+    const latestYearRevenue = revenueByYear.length > 0
+      ? revenueByYear.reduce((a: any, b: any) => (b.year > a.year ? b : a)).revenue
+      : 0
     const inventoryValue = deadStockSummary?.total_inventory_value || 1
-    const turnoverRatio = Math.round(annualRevenue2025 / inventoryValue * 100) / 100
+    const turnoverRatio = Math.round(latestYearRevenue / inventoryValue * 100) / 100
 
     return NextResponse.json({
       revenue_by_year: revenueByYear,
@@ -329,7 +331,7 @@ export async function GET() {
       seasonality,
       avg_invoice_value: avgInvoiceValue,
       kpis: {
-        monthly_revenue: annualRevenue2025 / 12,
+        monthly_revenue: latestYearRevenue / 12,
         turnover_ratio: turnoverRatio,
         dead_stock_pct_3y: deadStockSummary?.total_inventory_value > 0
           ? Math.round(deadStockSummary.no_sales_3y / deadStockSummary.total_inventory_value * 1000) / 10

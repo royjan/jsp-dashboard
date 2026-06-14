@@ -13,16 +13,53 @@ import {
   Users,
   FileBarChart,
   Trash2,
+  Receipt,
+  SearchX,
+  TrendingDown,
+  Search,
+  ShoppingCart,
+  RotateCcw,
+  MessageCircle,
+  Car,
+  CarFront,
+  HeartPulse,
+  Bell,
+  DollarSign,
+  ScanBarcode,
+  Sparkles,
+  BookOpen,
+  Truck,
+  Briefcase,
+  PackageCheck,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
+import { useUnacknowledgedCount } from '@/hooks/use-analytics'
 
 const navItems: Array<{ href: string; labelKey: TranslationKey; icon: typeof LayoutDashboard }> = [
   { href: '/', labelKey: 'overview', icon: LayoutDashboard },
+  { href: '/search', labelKey: 'smartSearch', icon: Sparkles },
   { href: '/seasonal', labelKey: 'seasonal', icon: Sun },
   { href: '/stock', labelKey: 'stock', icon: Warehouse },
+  { href: '/stock/quick-check', labelKey: 'stockCheck', icon: ScanBarcode },
+  { href: '/stock-forecast', labelKey: 'stockForecast', icon: TrendingDown },
   { href: '/customers', labelKey: 'customers', icon: Users },
+  { href: '/customers/health-score', labelKey: 'customerHealth', icon: HeartPulse },
+  { href: '/receivables', labelKey: 'receivables', icon: Receipt },
+  { href: '/demand', labelKey: 'demand', icon: Search },
+  { href: '/gap', labelKey: 'gapAnalysis', icon: SearchX },
   { href: '/scrap', labelKey: 'scrap', icon: Trash2 },
+  { href: '/returns', labelKey: 'returns', icon: RotateCcw },
+  { href: '/ebay', labelKey: 'ebay', icon: ShoppingCart },
+  { href: '/chat-insights', labelKey: 'chatInsights', icon: MessageCircle },
+  { href: '/catalog', labelKey: 'vinCatalog', icon: BookOpen },
+  { href: '/vehicle-intelligence', labelKey: 'vehicleIntelligence', icon: CarFront },
+  { href: '/market', labelKey: 'market', icon: Car },
+  { href: '/alerts', labelKey: 'alerts', icon: Bell },
+  { href: '/pricing', labelKey: 'pricing', icon: DollarSign },
+  { href: '/suppliers', labelKey: 'suppliers', icon: PackageCheck },
+  { href: '/deliveries', labelKey: 'deliveries', icon: Truck },
+  { href: '/sales-rep', labelKey: 'salesRep', icon: Briefcase },
   { href: '/report', labelKey: 'report', icon: FileBarChart },
 ]
 
@@ -35,6 +72,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const pathname = usePathname()
   const { t, dir } = useLocale()
   const isRTL = dir === 'rtl'
+  const { data: unackCount } = useUnacknowledgedCount()
 
   return (
     <TooltipProvider delayDuration={0}>
@@ -59,25 +97,44 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
           )}
         </div>
 
-        <nav className="flex-1 space-y-1 p-2">
+        <nav className="flex-1 overflow-y-auto space-y-1 p-2">
           {navItems.map((item) => {
             const isActive = pathname === item.href
             const Icon = item.icon
+            // Show badge on health-score and customers nav items
+            const showBadge =
+              (item.href === '/customers/health-score' || item.href === '/customers') &&
+              typeof unackCount === 'number' &&
+              unackCount > 0
 
             const link = (
               <Link
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                  'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors relative',
                   isActive
                     ? 'bg-primary text-primary-foreground'
                     : 'text-muted-foreground hover:bg-accent hover:text-foreground',
                   collapsed && 'justify-center px-2'
                 )}
               >
-                <Icon className="h-4 w-4 shrink-0" />
-                {!collapsed && <span>{t(item.labelKey)}</span>}
+                <span className="relative">
+                  <Icon className="h-4 w-4 shrink-0" />
+                  {showBadge && collapsed && (
+                    <span className="absolute -top-1 -end-1 h-2 w-2 rounded-full bg-red-500" />
+                  )}
+                </span>
+                {!collapsed && (
+                  <span className="flex items-center gap-2">
+                    {t(item.labelKey)}
+                    {showBadge && (
+                      <span className="inline-flex items-center justify-center h-4 min-w-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold leading-none">
+                        {unackCount}
+                      </span>
+                    )}
+                  </span>
+                )}
               </Link>
             )
 

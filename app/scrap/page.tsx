@@ -8,8 +8,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
+import { ItemLink } from '@/components/shared/ItemLink'
+import { EbayRecommendButton } from '@/components/shared/EbayRecommendButton'
 import { ILS_FORMAT, NUMBER_FORMAT } from '@/lib/constants'
-import { Search, Trash2, AlertTriangle, Package, ArrowUpDown, Download } from 'lucide-react'
+import { Search, Trash2, AlertTriangle, Package, ArrowUpDown, Download, ShoppingCart, Loader2 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 
 type SortField = 'scrap_score' | 'capital_tied' | 'price' | 'qty' | 'item_name'
@@ -54,6 +56,9 @@ function ScrapContent() {
   const [sortField, setSortField] = useState<SortField>('scrap_score')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [tableFilter, setTableFilter] = useState('')
+
+  const [ebayExporting, setEbayExporting] = useState(false)
+  const [ebayExportResult, setEbayExportResult] = useState<{ count: number; url: string } | null>(null)
 
   const { data, isLoading, isFetching } = useDeadStockSearch(query)
 
@@ -114,6 +119,39 @@ function ScrapContent() {
     XLSX.utils.book_append_sheet(wb, ws, isHe ? 'גריטה' : 'Scrap')
     XLSX.writeFile(wb, `scrap-${query}-${new Date().toISOString().split('T')[0]}.xlsx`)
   }, [sortedItems, query, isHe])
+
+  const exportToEbay = useCallback(async () => {
+    if (!sortedItems.length) return
+    setEbayExporting(true)
+    setEbayExportResult(null)
+    try {
+      const itemCodes = sortedItems.map((i: any) => i.item_code)
+      const res = await fetch('/api/analytics/dead-stock/export-to-ebay', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ item_codes: itemCodes, min_score: 0 }),
+      })
+      if (!res.ok) throw new Error('Export failed')
+      const payload = await res.json()
+
+      // Download as JSON file
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `dead-stock-ebay-${query || 'all'}-${new Date().toISOString().split('T')[0]}.json`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+
+      setEbayExportResult({ count: payload.count, url })
+    } catch (err) {
+      console.error('eBay export failed:', err)
+    } finally {
+      setEbayExporting(false)
+    }
+  }, [sortedItems, query])
 
   const SortHeader = ({ field, children, className }: { field: SortField; children: React.ReactNode; className?: string }) => (
     <th
@@ -234,14 +272,29 @@ function ScrapContent() {
                   <Badge variant="secondary" className="ms-2">{sortedItems.length}</Badge>
                   {isFetching && <span className="text-xs text-muted-foreground ms-2 animate-pulse">{isHe ? 'טוען...' : 'Loading...'}</span>}
                 </CardTitle>
-                <button
-                  onClick={exportToExcel}
-                  disabled={!sortedItems.length}
-                  className="h-8 px-3 rounded-md border border-input text-xs font-medium hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed transition-colors inline-flex items-center gap-1.5 shrink-0"
-                >
-                  <Download className="h-3.5 w-3.5" />
-                  Excel
-                </button>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={exportToEbay}
+                    disabled={!sortedItems.length || ebayExporting}
+                    className="h-8 px-3 rounded-md bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors inline-flex items-center gap-1.5"
+                  >
+                    {ebayExporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShoppingCart className="h-3.5 w-3.5" />}
+                    {isHe ? 'ייצוא ל-eBay' : 'Export to eBay'}
+                  </button>
+                  {ebayExportResult && (
+                    <span className="text-[11px] text-green-500">
+                      {isHe ? `${ebayExportResult.count} פריטים יוצאו` : `${ebayExportResult.count} items exported`}
+                    </span>
+                  )}
+                  <button
+                    onClick={exportToExcel}
+                    disabled={!sortedItems.length}
+                    className="h-8 px-3 rounded-md border border-input text-xs font-medium hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed transition-colors inline-flex items-center gap-1.5"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    Excel
+                  </button>
+                </div>
                 <div className="relative min-w-[160px] sm:max-w-xs">
                   <Search className="absolute start-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
                   <input
@@ -279,8 +332,13 @@ function ScrapContent() {
                         className="border-b hover:bg-muted/50 transition-colors"
                       >
                         <td className="py-2 ps-4 md:ps-0 text-muted-foreground tabular-nums">{i + 1}</td>
-                        <td className="py-2 font-mono text-xs text-muted-foreground">{item.item_code}</td>
-                        <td className="py-2 truncate max-w-[220px]">{item.item_name}</td>
+                        <td className="py-2 font-mono text-xs text-muted-foreground">
+                          <div className="flex items-center gap-1.5">
+                            <EbayRecommendButton itemCode={item.item_code} itemName={item.item_name} source="scrap_analysis" />
+                            <ItemLink code={item.item_code} showCode />
+                          </div>
+                        </td>
+                        <td className="py-2 truncate max-w-[220px]"><ItemLink code={item.item_code} name={item.item_name} /></td>
                         <td className="py-2 text-end tabular-nums">{NUMBER_FORMAT.format(item.qty)}</td>
                         <td className="py-2 text-end font-mono tabular-nums">{ILS_FORMAT.format(Math.round(item.price))}</td>
                         <td className="py-2 text-end font-mono tabular-nums font-semibold text-destructive">{ILS_FORMAT.format(Math.round(item.capital_tied))}</td>

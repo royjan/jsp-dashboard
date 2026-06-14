@@ -8,3 +8,4 @@ node_modules
 firebase.json
 firebase-debug.log
 *.md
+data/

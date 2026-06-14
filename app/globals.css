@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@import "tailwindcss/index.css" source("../");
 
 @keyframes banner-in {
   from { opacity: 0; transform: translateY(-6px); }

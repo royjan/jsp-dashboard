@@ -5,6 +5,15 @@
 
 set -e
 
+# Refuse to run as root. Docker Desktop on macOS stores ECR credentials in the user
+# Keychain via credsStore, which root cannot access. `docker login` prints "Login Succeeded"
+# but the subsequent `docker push` fails with "no basic auth credentials".
+if [ "$(id -u)" = "0" ]; then
+  echo "❌ Do not run this script with sudo. Docker Desktop credentials are per-user." >&2
+  echo "   Run it as your normal user (no sudo)." >&2
+  exit 1
+fi
+
 # Configuration
 ECR_REGISTRY="224072612352.dkr.ecr.eu-central-1.amazonaws.com"
 ECR_REPOSITORY="jan-parts-dashboard"
@@ -40,12 +49,35 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
+echo "Refreshing CodeArtifact token for @jan scope..."
+CODEARTIFACT_TOKEN=$(aws codeartifact get-authorization-token \
+    --domain jan-parts \
+    --domain-owner 224072612352 \
+    --region ${AWS_REGION} \
+    --query authorizationToken \
+    --output text)
+
+if [ -z "${CODEARTIFACT_TOKEN}" ]; then
+    echo "Failed to get CodeArtifact token. Check your AWS credentials."
+    exit 1
+fi
+
+# Write temporary .npmrc for Docker build secret
+NPMRC_TMP=$(mktemp)
+cat > ${NPMRC_TMP} <<EOF
+@jan:registry=https://jan-parts-224072612352.d.codeartifact.eu-central-1.amazonaws.com/npm/jan-npm/
+//jan-parts-224072612352.d.codeartifact.eu-central-1.amazonaws.com/npm/jan-npm/:_authToken=${CODEARTIFACT_TOKEN}
+//jan-parts-224072612352.d.codeartifact.eu-central-1.amazonaws.com/npm/jan-npm/:always-auth=true
+EOF
+trap "rm -f ${NPMRC_TMP}" EXIT
+
 echo "Building Docker image for x86_64..."
 export DOCKER_BUILDKIT=1
 docker build \
     --platform linux/amd64 \
     --provenance=false \
     --sbom=false \
+    --secret id=npmrc,src=${NPMRC_TMP} \
     -t ${IMAGE_NAME} .
 
 if [ $? -ne 0 ]; then

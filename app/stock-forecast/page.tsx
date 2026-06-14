@@ -1,0 +1,399 @@
+'use client'
+
+import { useState, useMemo } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { useStockForecast, useItemStockForecast } from '@/hooks/use-analytics'
+import { useLocale } from '@/lib/locale-context'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
+import { AnimatedCounter } from '@/components/shared/AnimatedCounter'
+import { cn } from '@/lib/utils'
+import { AlertTriangle, Clock, ShieldAlert, Eye, TrendingDown, ArrowLeft, Search, Filter, X } from 'lucide-react'
+import { EbayRecommendButton } from '@/components/shared/EbayRecommendButton'
+import { ItemLink } from '@/components/shared/ItemLink'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Area, AreaChart } from 'recharts'
+import { ILS_FORMAT } from '@/lib/constants'
+
+type UrgencyLevel = 'critical' | 'warning' | 'watch' | 'ok'
+
+const URGENCY_CONFIG: Record<UrgencyLevel, { color: string; bgColor: string; borderColor: string; label: { he: string; en: string } }> = {
+  critical: { color: 'text-red-700 dark:text-red-400', bgColor: 'bg-red-100 dark:bg-red-950', borderColor: 'border-red-200 dark:border-red-800', label: { he: 'קריטי', en: 'Critical' } },
+  warning: { color: 'text-amber-700 dark:text-amber-400', bgColor: 'bg-amber-100 dark:bg-amber-950', borderColor: 'border-amber-200 dark:border-amber-800', label: { he: 'אזהרה', en: 'Warning' } },
+  watch: { color: 'text-blue-700 dark:text-blue-400', bgColor: 'bg-blue-100 dark:bg-blue-950', borderColor: 'border-blue-200 dark:border-blue-800', label: { he: 'מעקב', en: 'Watch' } },
+  ok: { color: 'text-green-700 dark:text-green-400', bgColor: 'bg-green-100 dark:bg-green-950', borderColor: 'border-green-200 dark:border-green-800', label: { he: 'תקין', en: 'OK' } },
+}
+
+function UrgencyBadge({ urgency, locale }: { urgency: UrgencyLevel; locale: 'he' | 'en' }) {
+  const config = URGENCY_CONFIG[urgency] || URGENCY_CONFIG.ok
+  return (
+    <Badge variant="outline" className={cn('text-xs font-semibold', config.color, config.bgColor, config.borderColor)}>
+      {config.label[locale]}
+    </Badge>
+  )
+}
+
+function formatDate(dateStr: string | null | undefined, locale: 'he' | 'en'): string {
+  if (!dateStr) return locale === 'he' ? 'לא ידוע' : 'Unknown'
+  try {
+    const d = new Date(dateStr)
+    return d.toLocaleDateString(locale === 'he' ? 'he-IL' : 'en-US', { day: 'numeric', month: 'short', year: 'numeric' })
+  } catch {
+    return dateStr
+  }
+}
+
+function ForecastChart({ itemCode }: { itemCode: string }) {
+  const { data, isLoading, error } = useItemStockForecast(itemCode)
+  const { locale } = useLocale()
+
+  if (isLoading) return <Skeleton className="h-64 w-full" />
+  if (error || !data) return <div className="text-sm text-muted-foreground p-4">{locale === 'he' ? 'שגיאה בטעינת תחזית' : 'Error loading forecast'}</div>
+
+  const projections = data.monthly_projections || []
+  if (projections.length === 0) return <div className="text-sm text-muted-foreground p-4">{locale === 'he' ? 'אין נתוני תחזית' : 'No forecast data'}</div>
+
+  const chartData = [
+    { month: locale === 'he' ? 'עכשיו' : 'Now', stock: data.current_stock, demand: 0 },
+    ...projections.map((p: any) => ({
+      month: p.month,
+      stock: p.projected_stock,
+      demand: p.predicted_demand,
+    })),
+  ]
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="text-center">
+          <div className="text-xs text-muted-foreground">{locale === 'he' ? 'מלאי נוכחי' : 'Current Stock'}</div>
+          <div className="text-lg font-bold">{data.current_stock}</div>
+        </div>
+        <div className="text-center">
+          <div className="text-xs text-muted-foreground">{locale === 'he' ? 'ביקוש חודשי צפוי' : 'Predicted Monthly Demand'}</div>
+          <div className="text-lg font-bold">{data.predicted_monthly_demand}</div>
+        </div>
+        <div className="text-center">
+          <div className="text-xs text-muted-foreground">{locale === 'he' ? 'תאריך אזילה' : 'Stock-out Date'}</div>
+          <div className="text-lg font-bold">{formatDate(data.stock_out_date, locale)}</div>
+        </div>
+        <div className="text-center">
+          <div className="text-xs text-muted-foreground">{locale === 'he' ? 'רמת ביטחון' : 'Confidence'}</div>
+          <div className="text-lg font-bold">{Math.round((data.confidence || 0) * 100)}%</div>
+        </div>
+      </div>
+
+      <ResponsiveContainer width="100%" height={280}>
+        <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+          <defs>
+            <linearGradient id="stockGradient" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
+              <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+          <XAxis dataKey="month" className="text-xs" tick={{ fontSize: 11 }} />
+          <YAxis className="text-xs" tick={{ fontSize: 11 }} />
+          <Tooltip
+            contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: '12px' }}
+            labelStyle={{ fontWeight: 600 }}
+          />
+          <ReferenceLine y={0} stroke="hsl(var(--destructive))" strokeDasharray="3 3" label={{ value: locale === 'he' ? 'אזילה' : 'Stock-out', position: 'right', fontSize: 11 }} />
+          <Area type="monotone" dataKey="stock" stroke="hsl(var(--primary))" fill="url(#stockGradient)" name={locale === 'he' ? 'מלאי צפוי' : 'Projected Stock'} strokeWidth={2} />
+          <Line type="monotone" dataKey="demand" stroke="hsl(var(--destructive))" name={locale === 'he' ? 'ביקוש חודשי' : 'Monthly Demand'} strokeWidth={1.5} strokeDasharray="5 5" dot={false} />
+        </AreaChart>
+      </ResponsiveContainer>
+
+      {data.historical_monthly && data.historical_monthly.length > 0 && (
+        <div className="mt-4">
+          <h4 className="text-sm font-medium mb-2">{locale === 'he' ? 'היסטוריית מכירות חודשית' : 'Monthly Sales History'}</h4>
+          <ResponsiveContainer width="100%" height={160}>
+            <LineChart data={data.historical_monthly} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+              <XAxis dataKey="month" tick={{ fontSize: 10 }} tickFormatter={(v: number) => String(v)} />
+              <YAxis tick={{ fontSize: 10 }} />
+              <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: '12px' }} />
+              <Line type="monotone" dataKey="quantity" stroke="hsl(var(--chart-2))" name={locale === 'he' ? 'כמות' : 'Quantity'} strokeWidth={1.5} dot={{ r: 2 }} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export default function StockForecastPage() {
+  const { t, locale, dir } = useLocale()
+  const isRTL = dir === 'rtl'
+  const [urgencyFilter, setUrgencyFilter] = useState<string | undefined>(undefined)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [expandedItem, setExpandedItem] = useState<string | null>(null)
+
+  const { data, isLoading, error } = useStockForecast(urgencyFilter, 200)
+
+  const items: any[] = data?.items || []
+
+  // Filter by search
+  const filteredItems = useMemo(() => {
+    if (!searchQuery) return items
+    const q = searchQuery.toLowerCase()
+    return items.filter(
+      (i: any) =>
+        (i.item_code || '').toLowerCase().includes(q) ||
+        (i.item_name || '').toLowerCase().includes(q)
+    )
+  }, [items, searchQuery])
+
+  // KPI calculations
+  const criticalCount = items.filter((i: any) => i.urgency === 'critical').length
+  const warningCount = items.filter((i: any) => i.urgency === 'warning').length
+  const watchCount = items.filter((i: any) => i.urgency === 'watch').length
+  const totalValueAtRisk = items
+    .filter((i: any) => i.urgency === 'critical' || i.urgency === 'warning')
+    .reduce((sum: number, i: any) => sum + (i.current_stock || 0) * (i.price || 0), 0)
+
+  const he = locale === 'he'
+
+  return (
+    <div className="space-y-6" dir={dir}>
+      {/* Header */}
+      <div>
+        <h1 className="text-xl sm:text-2xl font-bold tracking-tight">
+          {he ? 'תחזית אזילת מלאי' : 'Stock-out Forecast'}
+        </h1>
+        <p className="text-muted-foreground text-sm mt-1">
+          {he
+            ? 'תחזית אזילת מלאי מבוססת החלקה מעריכית (שיטת הולט) על נתוני מכירות היסטוריים'
+            : 'Predictive stock-out alerts based on Holt\'s exponential smoothing of historical sales data'}
+        </p>
+      </div>
+
+      {/* KPI Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 lg:gap-4">
+        <Card className={cn('border-red-200 dark:border-red-800')}>
+          <CardContent className="pt-4 pb-3">
+            <div className="flex items-center gap-2 mb-1">
+              <ShieldAlert className="h-4 w-4 text-red-500" />
+              <span className="text-xs text-muted-foreground">{he ? 'קריטי (<30 יום)' : 'Critical (<30 days)'}</span>
+            </div>
+            <div className="text-2xl font-bold text-red-600 dark:text-red-400">
+              {isLoading ? <Skeleton className="h-8 w-12" /> : <AnimatedCounter value={criticalCount} />}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className={cn('border-amber-200 dark:border-amber-800')}>
+          <CardContent className="pt-4 pb-3">
+            <div className="flex items-center gap-2 mb-1">
+              <AlertTriangle className="h-4 w-4 text-amber-500" />
+              <span className="text-xs text-muted-foreground">{he ? 'אזהרה (30-60 יום)' : 'Warning (30-60 days)'}</span>
+            </div>
+            <div className="text-2xl font-bold text-amber-600 dark:text-amber-400">
+              {isLoading ? <Skeleton className="h-8 w-12" /> : <AnimatedCounter value={warningCount} />}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className={cn('border-blue-200 dark:border-blue-800')}>
+          <CardContent className="pt-4 pb-3">
+            <div className="flex items-center gap-2 mb-1">
+              <Eye className="h-4 w-4 text-blue-500" />
+              <span className="text-xs text-muted-foreground">{he ? 'מעקב (60-90 יום)' : 'Watch (60-90 days)'}</span>
+            </div>
+            <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+              {isLoading ? <Skeleton className="h-8 w-12" /> : <AnimatedCounter value={watchCount} />}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-4 pb-3">
+            <div className="flex items-center gap-2 mb-1">
+              <TrendingDown className="h-4 w-4 text-muted-foreground" />
+              <span className="text-xs text-muted-foreground">{he ? 'ערך מלאי בסיכון' : 'Value at Risk'}</span>
+            </div>
+            <div className="text-2xl font-bold">
+              {isLoading ? <Skeleton className="h-8 w-20" /> : ILS_FORMAT.format(totalValueAtRisk)}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Filters */}
+      <Card>
+        <CardContent className="pt-4 pb-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2">
+              <Filter className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-medium">{he ? 'סנן לפי דחיפות:' : 'Filter by urgency:'}</span>
+            </div>
+            <div className="flex gap-1.5">
+              {[
+                { key: undefined, label: he ? 'הכל' : 'All' },
+                { key: 'critical', label: he ? 'קריטי' : 'Critical' },
+                { key: 'warning', label: he ? 'אזהרה' : 'Warning' },
+                { key: 'watch', label: he ? 'מעקב' : 'Watch' },
+                { key: 'critical,warning', label: he ? 'קריטי + אזהרה' : 'Critical + Warning' },
+              ].map((f) => (
+                <Button
+                  key={f.key ?? 'all'}
+                  variant={urgencyFilter === f.key ? 'default' : 'outline'}
+                  size="sm"
+                  className="text-xs h-7"
+                  onClick={() => setUrgencyFilter(f.key)}
+                >
+                  {f.label}
+                </Button>
+              ))}
+            </div>
+            <div className="flex-1 min-w-[200px]">
+              <div className="relative">
+                <Search className={cn('absolute top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground', isRTL ? 'right-2.5' : 'left-2.5')} />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder={he ? 'חפש לפי קוד או שם...' : 'Search by code or name...'}
+                  className={cn(
+                    'w-full h-8 rounded-md border border-input bg-background text-sm px-8',
+                    'focus:outline-none focus:ring-1 focus:ring-ring'
+                  )}
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className={cn('absolute top-1/2 -translate-y-1/2', isRTL ? 'left-2.5' : 'right-2.5')}
+                  >
+                    <X className="h-3.5 w-3.5 text-muted-foreground" />
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Error state */}
+      {error && (
+        <Card className="border-destructive">
+          <CardContent className="pt-4">
+            <p className="text-destructive text-sm">{he ? 'שגיאה בטעינת נתוני תחזית' : 'Error loading forecast data'}</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Items Table */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">
+            {he ? 'פריטים לפי סיכון אזילה' : 'Items by Stock-out Risk'}
+            {!isLoading && <span className="text-sm font-normal text-muted-foreground ms-2">({filteredItems.length} {he ? 'פריטים' : 'items'})</span>}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <div className="space-y-3">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <Skeleton key={i} className="h-12 w-full" />
+              ))}
+            </div>
+          ) : filteredItems.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground text-sm">
+              {he ? 'לא נמצאו פריטים' : 'No items found'}
+            </div>
+          ) : (
+            <div className="overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0">
+              <table className="w-full text-xs sm:text-sm min-w-[700px]">
+                <thead>
+                  <tr className="border-b text-muted-foreground">
+                    <th className="py-2 font-medium text-end">{he ? 'קוד' : 'Code'}</th>
+                    <th className="py-2 font-medium text-end">{he ? 'שם' : 'Name'}</th>
+                    <th className="py-2 font-medium text-center">{he ? 'מלאי' : 'Stock'}</th>
+                    <th className="py-2 font-medium text-center">{he ? 'ביקוש/חודש' : 'Demand/Mo'}</th>
+                    <th className="py-2 font-medium text-center">{he ? 'תאריך אזילה' : 'Stock-out Date'}</th>
+                    <th className="py-2 font-medium text-center">{he ? 'ימים' : 'Days'}</th>
+                    <th className="py-2 font-medium text-center">{he ? 'ביטחון' : 'Conf.'}</th>
+                    <th className="py-2 font-medium text-center">{he ? 'דחיפות' : 'Urgency'}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <AnimatePresence>
+                    {filteredItems.map((item: any) => (
+                      <motion.tr
+                        key={item.item_code}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className={cn(
+                          'border-b hover:bg-muted/50 cursor-pointer transition-colors',
+                          expandedItem === item.item_code && 'bg-muted/30'
+                        )}
+                        onClick={() => setExpandedItem(expandedItem === item.item_code ? null : item.item_code)}
+                      >
+                        <td className="py-2.5 font-mono text-xs text-end">
+                          <div className="flex items-center gap-1.5">
+                            <EbayRecommendButton itemCode={item.item_code} itemName={item.item_name} />
+                            <ItemLink code={item.item_code} showCode />
+                          </div>
+                        </td>
+                        <td className="py-2.5 max-w-[200px] truncate text-end" title={item.item_name}><ItemLink code={item.item_code} name={item.item_name || '-'} /></td>
+                        <td className="py-2.5 text-center tabular-nums">{item.current_stock}</td>
+                        <td className="py-2.5 text-center tabular-nums">{item.predicted_monthly_demand}</td>
+                        <td className="py-2.5 text-center text-xs">{formatDate(item.stock_out_date, locale)}</td>
+                        <td className="py-2.5 text-center tabular-nums">
+                          {item.days_until_stockout != null ? (
+                            <span className={cn(
+                              item.days_until_stockout < 30 ? 'text-red-600 dark:text-red-400 font-semibold' :
+                              item.days_until_stockout < 60 ? 'text-amber-600 dark:text-amber-400' :
+                              'text-muted-foreground'
+                            )}>
+                              {item.days_until_stockout}
+                            </span>
+                          ) : '-'}
+                        </td>
+                        <td className="py-2.5 text-center text-xs text-muted-foreground">{Math.round((item.confidence || 0) * 100)}%</td>
+                        <td className="py-2.5 text-center">
+                          <UrgencyBadge urgency={item.urgency} locale={locale} />
+                        </td>
+                      </motion.tr>
+                    ))}
+                  </AnimatePresence>
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Expanded forecast chart */}
+          <AnimatePresence>
+            {expandedItem && (
+              <motion.div
+                key={expandedItem}
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="mt-4 overflow-hidden"
+              >
+                <Card className="border-dashed">
+                  <CardHeader className="pb-2">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-sm font-medium">
+                        {he ? 'תחזית מפורטת:' : 'Detailed Forecast:'} {expandedItem}
+                      </CardTitle>
+                      <Button variant="ghost" size="sm" onClick={() => setExpandedItem(null)}>
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <ForecastChart itemCode={expandedItem} />
+                  </CardContent>
+                </Card>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}

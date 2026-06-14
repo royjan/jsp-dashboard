@@ -80,9 +80,9 @@ ${JSON.stringify(cOverstockSample, null, 2)}
       model: getGeminiPro(),
       system: SYSTEM_PROMPT_HE,
       prompt,
-      maxTokens: 800,
+      maxOutputTokens: 800,
     })
-    result.text.then(t => setCache(cacheKey, { text: t, ts: now }, 7 * 24 * 60 * 60)).catch(() => {})
+    Promise.resolve(result.text).then(t => setCache(cacheKey, { text: t, ts: now }, 7 * 24 * 60 * 60)).catch(() => {})
 
     const streamResponse = result.toTextStreamResponse()
     const headers = new Headers(streamResponse.headers)

@@ -25,7 +25,13 @@ export function ComparisonChart({ data, title, isLoading, headerActions }: Compa
       </CardHeader>
       <CardContent>
         {isLoading ? (
-          <Skeleton className="w-full h-[220px] sm:h-[280px] lg:h-[350px]" />
+          <div className="space-y-3">
+            <div className="flex items-center gap-4">
+              <Skeleton className="h-3 w-16" />
+              <Skeleton className="h-3 w-16" />
+            </div>
+            <Skeleton className="w-full h-[200px] sm:h-[260px] lg:h-[330px]" />
+          </div>
         ) : data.length === 0 ? (
           <div className="flex items-center justify-center h-[220px] sm:h-[280px] lg:h-[350px] text-muted-foreground text-sm">
             {t('noInsights')}

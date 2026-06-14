@@ -7,10 +7,10 @@ FROM base AS builder
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm ci --legacy-peer-deps
+RUN --mount=type=secret,id=npmrc,target=/app/.npmrc npm ci --legacy-peer-deps
 
 COPY . .
-COPY data/ ./data/
+# data/ directory no longer bundled — SQLite is synced from PG at runtime
 RUN npm run build
 
 # --- Production stage ---
@@ -24,7 +24,7 @@ RUN addgroup -g 1001 -S nodejs && \
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
-COPY --from=builder /app/data ./data
+# SQLite DB is synced from PG at runtime into /tmp — no bundled data/ needed
 
 COPY docker-entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh

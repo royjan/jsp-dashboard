@@ -25,6 +25,11 @@ export const MONTH_NAMES = [
   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
 ] as const
 
+// Cache key versions — bump here when data shape changes, all consumers read from this single place
+export const CACHE_VERSIONS = {
+  ITEMS_ENRICHED: 'items:enriched:v12',
+} as const
+
 // Redis cache TTLs (in seconds)
 // Cron warms cache every 2h during business hours; TTLs just need to survive the gap
 export const CACHE_TTL = {

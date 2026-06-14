@@ -10,8 +10,10 @@ import { AnimatedCounter } from '@/components/shared/AnimatedCounter'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import { CustomersPageSkeleton } from '@/components/layout/PageSkeleton'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
+import Link from 'next/link'
 import {
   ArrowUpDown, Search,
   Users, UserMinus, DollarSign, AlertTriangle, TrendingUp, TrendingDown, Minus, Crown, ShieldAlert,
@@ -264,7 +266,7 @@ function CustomersSection({ searchQuery }: { searchQuery: string }) {
                                 <div className="flex items-center gap-2">
                                   {idx < 3 && <Crown className={cn('h-3.5 w-3.5 shrink-0', idx === 0 ? 'text-amber-500' : idx === 1 ? 'text-slate-400' : 'text-amber-700')} />}
                                   <div>
-                                    <div className="font-medium truncate max-w-[180px] md:max-w-none">{cust.name}</div>
+                                    <Link href={`/customers/${cust.code}`} className="font-medium truncate max-w-[180px] md:max-w-none text-primary hover:underline block">{cust.name}</Link>
                                     <div className="text-xs text-muted-foreground">{cust.code}</div>
                                   </div>
                                 </div>
@@ -303,7 +305,7 @@ function CustomersSection({ searchQuery }: { searchQuery: string }) {
                             {churned.map((cust: any, idx: number) => (
                               <motion.tr key={cust.code || idx} custom={idx} variants={tableRowVariants} initial="hidden" animate="visible" className="border-b hover:bg-muted/50 transition-colors">
                                 <td className="py-2.5 ps-4 md:ps-0">
-                                  <div className="font-medium truncate max-w-[200px] md:max-w-none">{cust.name}</div>
+                                  <Link href={`/customers/${cust.code}`} className="font-medium truncate max-w-[200px] md:max-w-none text-primary hover:underline block">{cust.name}</Link>
                                   <div className="text-xs text-muted-foreground">{cust.code}</div>
                                 </td>
                                 <td className="py-2.5 text-end font-mono text-destructive tabular-nums">{ILS_FORMAT.format(cust.last_year_revenue)}</td>
@@ -394,7 +396,7 @@ function CustomersPageContent() {
 
 export default function CustomersPage() {
   return (
-    <Suspense fallback={<LoadingSkeleton />}>
+    <Suspense fallback={<CustomersPageSkeleton />}>
       <CustomersPageContent />
     </Suspense>
   )

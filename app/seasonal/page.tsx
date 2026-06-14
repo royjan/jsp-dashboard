@@ -8,6 +8,7 @@ import { SeasonalHeatmap } from '@/components/charts/SeasonalHeatmap'
 import { DateRangePicker } from '@/components/shared/DateRangePicker'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { SeasonalPageSkeleton } from '@/components/layout/PageSkeleton'
 import { Badge } from '@/components/ui/badge'
 import { MONTH_NAMES } from '@/lib/constants'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
@@ -390,7 +391,7 @@ function SeasonalPageContent() {
 
 export default function SeasonalPage() {
   return (
-    <Suspense fallback={<Skeleton className="w-full h-[600px]" />}>
+    <Suspense fallback={<SeasonalPageSkeleton />}>
       <SeasonalPageContent />
     </Suspense>
   )

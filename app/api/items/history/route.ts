@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { fetchItemHistory } from '@/lib/finansit-client'
+import { client } from '@/lib/finansit-client'
 import { initializeSecrets } from '@/lib/aws-secrets'
 
 export async function GET(req: NextRequest) {
@@ -7,7 +7,7 @@ export async function GET(req: NextRequest) {
   if (!code) return NextResponse.json({ error: 'code required' }, { status: 400 })
   try {
     await initializeSecrets()
-    const history = await fetchItemHistory(code)
+    const history = await client.items.getHistory(code)
     return NextResponse.json(history)
   } catch (error) {
     return NextResponse.json(

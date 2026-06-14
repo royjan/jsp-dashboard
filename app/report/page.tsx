@@ -257,8 +257,8 @@ function ReportContent() {
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="year" />
                     <YAxis tickFormatter={(v) => `${(v / 1_000_000).toFixed(1)}M`} />
-                    <Tooltip contentStyle={tooltipStyle} formatter={(value: any, name: string) => [
-                      name === 'credits' ? ILS_FORMAT.format(value) : ILS_FORMAT.format(value),
+                    <Tooltip contentStyle={tooltipStyle} formatter={(value, name) => [
+                      ILS_FORMAT.format(Number(value)),
                       name === 'revenue' ? (isHe ? 'הכנסות' : 'Revenue') : (isHe ? 'זיכויים' : 'Credits')
                     ]} />
                     <Legend formatter={(v) => v === 'revenue' ? (isHe ? 'הכנסות' : 'Revenue') : (isHe ? 'זיכויים' : 'Credits')} />
@@ -729,7 +729,7 @@ function ReportContent() {
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="year" />
                   <YAxis tickFormatter={(v) => `${v}%`} />
-                  <Tooltip contentStyle={tooltipStyle} formatter={(value: any, name: string) => [
+                  <Tooltip contentStyle={tooltipStyle} formatter={(value, name) => [
                     `${value}%`,
                     name === 'credit_pct' ? (isHe ? '% כמות' : '% Count') : (isHe ? '% ערך' : '% Value')
                   ]} />

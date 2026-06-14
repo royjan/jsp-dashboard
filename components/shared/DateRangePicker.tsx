@@ -51,7 +51,7 @@ export function DateRangePicker({ dateFrom, dateTo, onChange }: DateRangePickerP
           setLocalFrom(e.target.value)
           emitChange(e.target.value, localTo)
         }}
-        className="h-8 rounded-md border border-input bg-background px-2 text-sm text-foreground [color-scheme:dark] dark:[color-scheme:dark] [&::-webkit-calendar-picker-indicator]:opacity-70"
+        className="h-9 sm:h-8 rounded-md border border-input bg-background px-2 text-sm text-foreground [color-scheme:dark] dark:[color-scheme:dark] [&::-webkit-calendar-picker-indicator]:opacity-70"
       />
       <span className="text-muted-foreground text-sm">{t('to')}</span>
       <input
@@ -63,7 +63,7 @@ export function DateRangePicker({ dateFrom, dateTo, onChange }: DateRangePickerP
           setLocalTo(e.target.value)
           emitChange(localFrom, e.target.value)
         }}
-        className="h-8 rounded-md border border-input bg-background px-2 text-sm text-foreground [color-scheme:dark] dark:[color-scheme:dark] [&::-webkit-calendar-picker-indicator]:opacity-70"
+        className="h-9 sm:h-8 rounded-md border border-input bg-background px-2 text-sm text-foreground [color-scheme:dark] dark:[color-scheme:dark] [&::-webkit-calendar-picker-indicator]:opacity-70"
       />
     </div>
   )

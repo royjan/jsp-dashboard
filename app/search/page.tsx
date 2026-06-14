@@ -1,0 +1,369 @@
+'use client'
+
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { useLocale } from '@/lib/locale-context'
+import Link from 'next/link'
+import { motion, AnimatePresence } from 'framer-motion'
+import { Card, CardContent } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Search, Sparkles, Package, Clock, X, ArrowLeft, ExternalLink } from 'lucide-react'
+import { ILS_FORMAT } from '@/lib/constants'
+
+interface SemanticResult {
+  code: string
+  name: string
+  similarity: number
+  price: number | null
+  stock_qty: number | null
+  ordered_qty: number | null
+  incoming_qty: number | null
+}
+
+interface ExactResult {
+  code: string
+  name?: string
+  description?: string
+  stock_qty?: number
+  price?: number
+}
+
+const RECENT_SEARCHES_KEY = 'jan-parts-recent-searches'
+const MAX_RECENT = 8
+
+function getRecentSearches(): string[] {
+  if (typeof window === 'undefined') return []
+  try {
+    return JSON.parse(localStorage.getItem(RECENT_SEARCHES_KEY) || '[]')
+  } catch {
+    return []
+  }
+}
+
+function addRecentSearch(query: string) {
+  const recent = getRecentSearches().filter((s) => s !== query)
+  recent.unshift(query)
+  localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(recent.slice(0, MAX_RECENT)))
+}
+
+function clearRecentSearches() {
+  localStorage.removeItem(RECENT_SEARCHES_KEY)
+}
+
+function StockBadge({ qty, t }: { qty: number | null; t: (k: any) => string }) {
+  if (qty === null || qty === undefined) return null
+  if (qty > 5) {
+    return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-300 dark:border-green-800">{t('search.inStock')} ({qty})</Badge>
+  }
+  if (qty > 0) {
+    return <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200 dark:bg-yellow-950 dark:text-yellow-300 dark:border-yellow-800">{t('search.lowStock')} ({qty})</Badge>
+  }
+  return <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-300 dark:border-red-800">{t('search.outOfStock')}</Badge>
+}
+
+function RelevanceBar({ score }: { score: number }) {
+  const pct = Math.round(score * 100)
+  return (
+    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+      <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
+        <div
+          className="h-full bg-primary rounded-full transition-all"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <span>{pct}%</span>
+    </div>
+  )
+}
+
+function ResultSkeleton() {
+  return (
+    <Card>
+      <CardContent className="p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <Skeleton className="h-5 w-32" />
+          <Skeleton className="h-5 w-20" />
+        </div>
+        <Skeleton className="h-4 w-48" />
+        <div className="flex gap-2">
+          <Skeleton className="h-5 w-16" />
+          <Skeleton className="h-5 w-20" />
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+export default function SearchPage() {
+  const { t } = useLocale()
+  const [query, setQuery] = useState('')
+  const [debouncedQuery, setDebouncedQuery] = useState('')
+  const [recentSearches, setRecentSearches] = useState<string[]>([])
+  const inputRef = useRef<HTMLInputElement>(null)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Auto-focus
+  useEffect(() => {
+    inputRef.current?.focus()
+    setRecentSearches(getRecentSearches())
+  }, [])
+
+  // Debounce
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    if (!query || query.length < 2) {
+      setDebouncedQuery('')
+      return
+    }
+    debounceRef.current = setTimeout(() => {
+      setDebouncedQuery(query)
+      addRecentSearch(query)
+      setRecentSearches(getRecentSearches())
+    }, 500)
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+    }
+  }, [query])
+
+  // Semantic search
+  const { data: semanticData, isLoading: semanticLoading } = useQuery({
+    queryKey: ['semantic-search', debouncedQuery],
+    queryFn: async () => {
+      const res = await fetch(`/api/search/semantic?q=${encodeURIComponent(debouncedQuery)}&limit=20`)
+      if (!res.ok) throw new Error('Failed')
+      return res.json() as Promise<{ items: SemanticResult[]; count: number }>
+    },
+    enabled: debouncedQuery.length >= 2,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 15 * 60 * 1000,
+  })
+
+  // Exact search
+  const { data: exactData, isLoading: exactLoading } = useQuery({
+    queryKey: ['exact-search', debouncedQuery],
+    queryFn: async () => {
+      const res = await fetch(`/api/search?q=${encodeURIComponent(debouncedQuery)}`)
+      if (!res.ok) throw new Error('Failed')
+      return res.json() as Promise<{ items: ExactResult[] }>
+    },
+    enabled: debouncedQuery.length >= 2,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 15 * 60 * 1000,
+  })
+
+  const isLoading = semanticLoading || exactLoading
+  const hasQuery = debouncedQuery.length >= 2
+  const semanticItems = semanticData?.items || []
+  const exactItems = exactData?.items || []
+  const hasResults = semanticItems.length > 0 || exactItems.length > 0
+
+  const handleRecentClick = useCallback((search: string) => {
+    setQuery(search)
+  }, [])
+
+  const handleClearRecent = useCallback(() => {
+    clearRecentSearches()
+    setRecentSearches([])
+  }, [])
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center gap-3">
+        <Sparkles className="h-6 w-6 text-primary" />
+        <div>
+          <h1 className="text-2xl font-bold">{t('page.smartSearch')}</h1>
+        </div>
+      </div>
+
+      {/* Search Input */}
+      <div className="relative">
+        <Search className="absolute start-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+        <input
+          ref={inputRef}
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={t('search.placeholder')}
+          className="w-full h-14 ps-12 pe-12 text-lg rounded-xl border bg-card shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary placeholder:text-muted-foreground"
+        />
+        {query && (
+          <button
+            onClick={() => { setQuery(''); setDebouncedQuery('') }}
+            className="absolute end-4 top-1/2 transform -translate-y-1/2 text-muted-foreground hover:text-foreground"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        )}
+      </div>
+
+      {/* Recent Searches */}
+      {!hasQuery && recentSearches.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <Clock className="h-4 w-4" />
+              {t('search.recentSearches')}
+            </h3>
+            <button
+              onClick={handleClearRecent}
+              className="text-xs text-muted-foreground hover:text-foreground"
+            >
+              {t('search.clearRecent')}
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {recentSearches.map((search) => (
+              <button
+                key={search}
+                onClick={() => handleRecentClick(search)}
+                className="px-3 py-1.5 text-sm rounded-lg border bg-card hover:bg-accent transition-colors"
+              >
+                {search}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Loading State */}
+      {isLoading && hasQuery && (
+        <div className="space-y-4">
+          <div className="space-y-3">
+            {[...Array(4)].map((_, i) => (
+              <ResultSkeleton key={i} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* No Results */}
+      {hasQuery && !isLoading && !hasResults && (
+        <Card>
+          <CardContent className="py-12 text-center space-y-3">
+            <Search className="h-12 w-12 mx-auto text-muted-foreground/50" />
+            <h3 className="text-lg font-medium">{t('search.noResults')}</h3>
+            <p className="text-sm text-muted-foreground">{t('search.noResultsHint')}</p>
+          </CardContent>
+        </Card>
+      )}
+
+      <AnimatePresence mode="wait">
+        {hasQuery && !isLoading && hasResults && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="space-y-6"
+          >
+            {/* Semantic Results */}
+            {semanticItems.length > 0 && (
+              <div className="space-y-3">
+                <h2 className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-primary" />
+                  {t('search.semantic')}
+                  <Badge variant="secondary" className="text-xs">{semanticItems.length}</Badge>
+                </h2>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {semanticItems.map((item, idx) => (
+                    <motion.div
+                      key={item.code}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: idx * 0.05 }}
+                    >
+                      <Card className="hover:shadow-md transition-shadow group">
+                        <CardContent className="p-4 space-y-2">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <Package className="h-4 w-4 text-muted-foreground shrink-0" />
+                                <span className="font-bold text-sm">{item.code}</span>
+                              </div>
+                              <p className="text-sm text-muted-foreground truncate mt-1">{item.name}</p>
+                            </div>
+                            <RelevanceBar score={item.similarity} />
+                          </div>
+                          <div className="flex items-center justify-between gap-2 pt-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <StockBadge qty={item.stock_qty} t={t} />
+                              {item.price != null && (
+                                <span className="text-sm font-medium">{ILS_FORMAT.format(item.price)}</span>
+                              )}
+                            </div>
+                            <Link
+                              href={`/items/${encodeURIComponent(item.code)}`}
+                              className="text-xs text-primary hover:underline flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                              {t('search.viewDetails')}
+                              <ExternalLink className="h-3 w-3" />
+                            </Link>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </motion.div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Exact Match Results */}
+            {exactItems.length > 0 && (
+              <div className="space-y-3">
+                <h2 className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
+                  <Search className="h-4 w-4" />
+                  {t('search.exact')}
+                  <Badge variant="secondary" className="text-xs">{exactItems.length}</Badge>
+                </h2>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {exactItems.map((item, idx) => (
+                    <motion.div
+                      key={item.code}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: idx * 0.05 }}
+                    >
+                      <Card className="hover:shadow-md transition-shadow group">
+                        <CardContent className="p-4 space-y-2">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <Package className="h-4 w-4 text-muted-foreground shrink-0" />
+                                <span className="font-bold text-sm">{item.code}</span>
+                              </div>
+                              <p className="text-sm text-muted-foreground truncate mt-1">
+                                {item.name || item.description || ''}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between gap-2 pt-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {item.stock_qty !== undefined && (
+                                <StockBadge qty={item.stock_qty} t={t} />
+                              )}
+                              {item.price != null && (
+                                <span className="text-sm font-medium">{ILS_FORMAT.format(item.price)}</span>
+                              )}
+                            </div>
+                            <Link
+                              href={`/items/${encodeURIComponent(item.code)}`}
+                              className="text-xs text-primary hover:underline flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                              {t('search.viewDetails')}
+                              <ExternalLink className="h-3 w-3" />
+                            </Link>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </motion.div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}

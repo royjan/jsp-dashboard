@@ -10,11 +10,25 @@ import { QueryLoadingBar } from '@/components/layout/QueryLoadingBar'
 import { useLocale } from '@/lib/locale-context'
 import { cn } from '@/lib/utils'
 
+// Pages that render their own full-screen layout (no sidebar/topbar/mobile-nav)
+const FULLSCREEN_PATHS = ['/stock/quick-check', '/deliveries/driver', '/sales-rep']
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false)
   const pathname = usePathname()
   const { dir } = useLocale()
   const isRTL = dir === 'rtl'
+
+  const isFullscreen = FULLSCREEN_PATHS.some((p) => pathname.startsWith(p))
+
+  if (isFullscreen) {
+    return (
+      <>
+        <QueryLoadingBar />
+        {children}
+      </>
+    )
+  }
 
   const marginClass = collapsed
     ? (isRTL ? 'lg:mr-16' : 'lg:ml-16')
@@ -26,7 +40,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} />
       <div className={cn('min-h-screen transition-all duration-300', marginClass)}>
         <TopBar />
-        <main className="p-4 lg:p-6 pb-20 lg:pb-6">
+        <main className="p-2 sm:p-4 lg:p-6 pb-20 lg:pb-6">
           <AnimatePresence mode="wait">
             <motion.div
               key={pathname}

@@ -3,10 +3,12 @@
 import { useState, useMemo, useEffect, useRef, Suspense } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useDashboard, useItems } from '@/hooks/use-dashboard'
-import { useSalesAnalytics, useTopSellingItems, useSalesRange, useDemandAnalysis } from '@/hooks/use-analytics'
+import { useSalesAnalytics, useTopSellingItems, useSalesRange, useDemandAnalysis, useCrossPlatformKpis } from '@/hooks/use-analytics'
 import { useLocale } from '@/lib/locale-context'
 import { useUrlParams } from '@/hooks/use-url-params'
+import { ItemLink } from '@/components/shared/ItemLink'
 import { KPIGrid } from '@/components/dashboard/KPIGrid'
+import { MorningBrief } from '@/components/dashboard/MorningBrief'
 import { ComparisonChart } from '@/components/charts/ComparisonChart'
 import { DemandBarChart } from '@/components/charts/DemandBarChart'
 import { PeriodSelector } from '@/components/shared/PeriodSelector'
@@ -14,6 +16,7 @@ import { DateRangePicker } from '@/components/shared/DateRangePicker'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Skeleton } from '@/components/ui/skeleton'
+import { OverviewPageSkeleton } from '@/components/layout/PageSkeleton'
 import { ILS_FORMAT } from '@/lib/constants'
 import type { Period, SalesDataPoint, TopSellingItem } from '@/lib/types'
 import {
@@ -228,14 +231,17 @@ function HomePageContent() {
   const filteredScatter = scatterData.filter((d: any) => d.y <= yMax * 1.2)
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
+
+      {/* ── Morning Brief ── */}
+      <MorningBrief />
 
       {/* ── KPIs ── */}
       <KPIGrid data={dashboard} isLoading={dashLoading} />
 
       {/* ── Sales controls ── */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-4">
+        <div className="flex items-center gap-2 sm:gap-3">
           <PeriodSelector
             value={period}
             onChange={(p) => { setPeriod(p); setCustomMode(false) }}
@@ -254,7 +260,7 @@ function HomePageContent() {
             />
           )}
         </div>
-        <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+        <div className="flex flex-wrap gap-x-3 sm:gap-x-4 gap-y-1 text-xs sm:text-sm">
           <div>
             <span className="text-muted-foreground">{t('total')}: </span>
             <span className="font-semibold">{totalRevenue.toLocaleString('he-IL', { style: 'currency', currency: 'ILS', maximumFractionDigits: 0 })}</span>
@@ -304,16 +310,16 @@ function HomePageContent() {
           ) : topItems.length === 0 ? (
             <div className="text-sm text-muted-foreground text-center py-8">{t('topItemsPlaceholder')}</div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+            <div className="overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+              <table className="w-full text-xs sm:text-sm min-w-[600px]">
                 <thead>
                   <tr className="border-b text-muted-foreground">
-                    <th className="text-start py-2 pe-4">#</th>
-                    <th className="text-start py-2 pe-4">{t('code')}</th>
-                    <th className="text-start py-2 pe-4">{t('item')}</th>
-                    <th className="text-end py-2 pe-4">{t('quantity')}</th>
-                    <th className="text-end py-2 pe-4">{t('revenue')}</th>
-                    <th className="text-end py-2 pe-4">{t('price')}</th>
+                    <th className="text-start py-2 pe-2 sm:pe-4">#</th>
+                    <th className="text-start py-2 pe-2 sm:pe-4">{t('code')}</th>
+                    <th className="text-start py-2 pe-2 sm:pe-4">{t('item')}</th>
+                    <th className="text-end py-2 pe-2 sm:pe-4">{t('quantity')}</th>
+                    <th className="text-end py-2 pe-2 sm:pe-4">{t('revenue')}</th>
+                    <th className="text-end py-2 pe-2 sm:pe-4">{t('price')}</th>
                     <th className="text-end py-2">{t('stockQty')}</th>
                   </tr>
                 </thead>
@@ -321,8 +327,8 @@ function HomePageContent() {
                   {topItems.map((item, idx) => (
                     <tr key={`${item.code}-${idx}`} className="border-b last:border-0 hover:bg-muted/50">
                       <td className="py-2 pe-4 text-muted-foreground">{idx + 1}</td>
-                      <td className="py-2 pe-4 font-mono text-xs">{item.code}</td>
-                      <td className="py-2 pe-4">{item.name}</td>
+                      <td className="py-2 pe-4 font-mono text-xs"><ItemLink code={item.code} showCode /></td>
+                      <td className="py-2 pe-4"><ItemLink code={item.code} name={item.name} /></td>
                       <td className="py-2 pe-4 text-end">{item.total_qty_sold.toLocaleString()}</td>
                       <td className="py-2 pe-4 text-end font-medium">{ILS_FORMAT.format(item.total_revenue)}</td>
                       <td className="py-2 pe-4 text-end">{ILS_FORMAT.format(item.avg_price)}</td>
@@ -348,7 +354,7 @@ function HomePageContent() {
       </div>
 
       {/* ── Demand controls ── */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-4">
         <Tabs value={demandMode} onValueChange={(v) => setDemandMode(v as 'count' | 'qty')}>
           <TabsList>
             <TabsTrigger value="count">{t('byRequests')}</TabsTrigger>
@@ -447,13 +453,60 @@ function HomePageContent() {
         </CardContent>
       </Card>
 
+      {/* Cross-Platform KPIs */}
+      <CrossPlatformKPIs />
+
     </div>
+  )
+}
+
+function CrossPlatformKPIs() {
+  const { t } = useLocale()
+  const { data } = useCrossPlatformKpis()
+  if (!data) return null
+
+  const chat = data.chat || {}
+  const ebay = data.ebay || {}
+  const market = data.market || {}
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base">{t('overview')} — Platforms</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+          {/* Chat */}
+          <a href="/chat-insights" className="p-3 rounded-lg bg-blue-500/5 hover:bg-blue-500/10 transition-colors">
+            <div className="text-xs text-muted-foreground mb-1">AutoMate Chat</div>
+            <div className="text-base sm:text-lg font-bold">{chat.conversations_today || 0} <span className="text-xs font-normal text-muted-foreground">today</span></div>
+            <div className="text-xs text-muted-foreground">
+              {chat.satisfaction_rate || 0}% satisfaction · {chat.zero_result_rate || 0}% zero results
+            </div>
+          </a>
+          {/* eBay */}
+          <a href="/ebay" className="p-3 rounded-lg bg-green-500/5 hover:bg-green-500/10 transition-colors">
+            <div className="text-xs text-muted-foreground mb-1">eBay Channel</div>
+            <div className="text-base sm:text-lg font-bold">{ebay.active_listings || 0} <span className="text-xs font-normal text-muted-foreground">listings</span></div>
+            <div className="text-xs text-muted-foreground">
+              {ebay.pending_recommendations || 0} pending · {ebay.stock_alerts || 0} alerts
+            </div>
+          </a>
+          {/* Market */}
+          <a href="/market" className="p-3 rounded-lg bg-violet-500/5 hover:bg-violet-500/10 transition-colors">
+            <div className="text-xs text-muted-foreground mb-1">Vehicle Market</div>
+            <div className="text-base sm:text-lg font-bold">{(market.total_vehicles || 0).toLocaleString()} <span className="text-xs font-normal text-muted-foreground">vehicles</span></div>
+            <div className="text-xs text-muted-foreground">Israel registrations (ICS)</div>
+          </a>
+        </div>
+      </CardContent>
+    </Card>
   )
 }
 
 export default function HomePage() {
   return (
-    <Suspense fallback={<Skeleton className="w-full h-[600px]" />}>
+    <Suspense fallback={<OverviewPageSkeleton />}>
       <HomePageContent />
     </Suspense>
   )

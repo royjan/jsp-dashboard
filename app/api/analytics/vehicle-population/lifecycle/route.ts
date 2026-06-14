@@ -1,0 +1,178 @@
+export const maxDuration = 30
+
+import { NextResponse } from 'next/server'
+import { initializeSecrets } from '@/lib/aws-secrets'
+import { query } from '@/lib/db'
+import { getCached, setCache } from '@/lib/redis-client'
+
+const CACHE_KEY = 'vehicle-population:lifecycle:v1'
+const CACHE_TTL = 86400 // 24h
+
+/**
+ * Vehicle lifecycle analysis: shows which maintenance items peak at which vehicle age.
+ * Based on when parts are most commonly sold relative to vehicle registration year.
+ *
+ * Returns: age brackets (0-15 years) with top parts categories and estimated demand intensity.
+ */
+export async function GET() {
+  try {
+    await initializeSecrets()
+
+    const cached = await getCached<any>(CACHE_KEY)
+    if (cached) return NextResponse.json(cached)
+
+    const currentYear = new Date().getFullYear()
+
+    // Get parts categories with their sales volumes
+    const categorySalesResult = await query(`
+      SELECT
+        COALESCE(snap.category, 'אחר') as category,
+        ms.year,
+        ms.month,
+        SUM(ms.quantity::numeric) as qty,
+        SUM(ms.revenue::numeric) as rev
+      FROM dashboard.monthly_sales ms
+      LEFT JOIN dashboard.item_snapshots snap
+        ON ms.item_code = snap.item_code
+        AND snap.snapshot_date = (SELECT MAX(snapshot_date) FROM dashboard.item_snapshots)
+      WHERE ms.year >= $1
+      GROUP BY COALESCE(snap.category, 'אחר'), ms.year, ms.month
+      HAVING SUM(ms.quantity::numeric) > 0
+      ORDER BY category, ms.year, ms.month
+    `, [currentYear - 3])
+
+    // Aggregate by category
+    const categoryTotals = new Map<string, number>()
+    for (const row of categorySalesResult.rows) {
+      const cat = row.category as string
+      categoryTotals.set(cat, (categoryTotals.get(cat) || 0) + Number(row.qty))
+    }
+
+    // Top 12 categories by volume
+    const topCategories = Array.from(categoryTotals.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 12)
+      .map(([cat]) => cat)
+
+    // Vehicle age distribution for normalization
+    const ageDistResult = await query(`
+      SELECT
+        ($1 - EXTRACT(YEAR FROM "registrationDate")::int) as age,
+        SUM(COALESCE(quantity, 1)) as count
+      FROM ics."Vehicles"
+      WHERE EXTRACT(YEAR FROM "registrationDate") >= $2
+        AND EXTRACT(YEAR FROM "registrationDate") <= $1
+      GROUP BY age
+      ORDER BY age
+    `, [currentYear, currentYear - 15])
+
+    const ageDistMap = new Map<number, number>()
+    for (const row of ageDistResult.rows) {
+      ageDistMap.set(Number(row.age), Number(row.count))
+    }
+
+    // Build lifecycle heatmap data
+    // Each cell: [vehicle_age, parts_category] -> demand intensity
+    // We use domain knowledge for the lifecycle patterns since direct correlation
+    // requires VIN-level matching which we don't have.
+    const lifecyclePatterns: Record<string, number[]> = {}
+
+    // Default lifecycle curve (peaks around 7-10 years)
+    const defaultCurve = [0.1, 0.15, 0.2, 0.3, 0.5, 0.6, 0.75, 0.9, 1.0, 0.95, 0.9, 0.85, 0.8, 0.7, 0.6, 0.5]
+
+    // Category-specific lifecycle curves (0-15 years)
+    const knownPatterns: Record<string, number[]> = {
+      // Filters peak early and stay constant
+      'filters': [0.3, 0.6, 0.8, 0.9, 1.0, 1.0, 1.0, 1.0, 0.95, 0.9, 0.85, 0.8, 0.75, 0.7, 0.6, 0.5],
+      'oil': [0.3, 0.6, 0.8, 0.9, 1.0, 1.0, 1.0, 1.0, 0.95, 0.9, 0.85, 0.8, 0.75, 0.7, 0.6, 0.5],
+      // Brakes peak at 4-8 years
+      'brake': [0.05, 0.1, 0.2, 0.5, 0.8, 1.0, 1.0, 0.9, 0.85, 0.8, 0.75, 0.7, 0.65, 0.6, 0.5, 0.4],
+      // Timing belts peak at 5-8 years
+      'timing': [0.0, 0.0, 0.05, 0.1, 0.3, 0.7, 1.0, 1.0, 0.8, 0.5, 0.3, 0.2, 0.15, 0.1, 0.05, 0.05],
+      // Suspension peaks at 6-10 years
+      'suspension': [0.0, 0.05, 0.1, 0.2, 0.4, 0.6, 0.8, 1.0, 1.0, 0.95, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4],
+      // Clutch peaks at 7-11 years
+      'clutch': [0.0, 0.0, 0.05, 0.1, 0.2, 0.3, 0.5, 0.8, 1.0, 1.0, 0.9, 0.8, 0.6, 0.4, 0.3, 0.2],
+      // AC peaks in summer vehicles 3-8 years
+      'ac': [0.1, 0.2, 0.3, 0.5, 0.8, 1.0, 1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.15],
+      'cooling': [0.05, 0.1, 0.2, 0.3, 0.5, 0.7, 0.9, 1.0, 1.0, 0.9, 0.85, 0.8, 0.7, 0.6, 0.5, 0.4],
+      // Electrical issues increase with age
+      'electric': [0.05, 0.1, 0.15, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 1.0, 1.0, 0.95, 0.9],
+      // Exhaust peaks 8-12 years
+      'exhaust': [0.0, 0.0, 0.05, 0.1, 0.15, 0.25, 0.4, 0.6, 0.8, 1.0, 1.0, 0.9, 0.8, 0.7, 0.6, 0.5],
+    }
+
+    for (const category of topCategories) {
+      const catLower = category.toLowerCase()
+      let curve = defaultCurve
+
+      for (const [pattern, patternCurve] of Object.entries(knownPatterns)) {
+        if (catLower.includes(pattern)) {
+          curve = patternCurve
+          break
+        }
+      }
+
+      // Scale by actual sales volume
+      const totalSales = categoryTotals.get(category) || 1
+      lifecyclePatterns[category] = curve.map((v, age) => {
+        const vehiclesAtAge = ageDistMap.get(age) || 1
+        // intensity = pattern curve * sales volume factor * vehicle population weight
+        return Math.round(v * (totalSales / 1000) * (vehiclesAtAge / 10000) * 100) / 100
+      })
+    }
+
+    // Normalize each category to 0-1 range for heatmap
+    const heatmapData: Array<{
+      category: string
+      ages: Array<{ age: number; intensity: number; rawValue: number }>
+    }> = []
+
+    for (const category of topCategories) {
+      const values = lifecyclePatterns[category] || defaultCurve
+      const max = Math.max(...values, 0.001)
+
+      heatmapData.push({
+        category,
+        ages: values.map((v, age) => ({
+          age,
+          intensity: Math.round((v / max) * 100) / 100,
+          rawValue: v,
+        })),
+      })
+    }
+
+    // Peak analysis: for each category, when does demand peak?
+    const peakAnalysis = heatmapData.map(cat => {
+      const peakAge = cat.ages.reduce((max, curr) => curr.intensity > max.intensity ? curr : max, cat.ages[0])
+      return {
+        category: cat.category,
+        peak_age: peakAge.age,
+        peak_intensity: peakAge.intensity,
+        total_sales: categoryTotals.get(cat.category) || 0,
+      }
+    })
+
+    const response = {
+      heatmap: heatmapData,
+      peak_analysis: peakAnalysis.sort((a, b) => a.peak_age - b.peak_age),
+      age_distribution: Array.from(ageDistMap.entries())
+        .map(([age, count]) => ({ age, count }))
+        .sort((a, b) => a.age - b.age),
+      total_categories: topCategories.length,
+      note_he: 'הערכה מבוססת על דפוסי תחזוקה ידועים ומתואמת לאוכלוסיית הרכבים בישראל. נתונים אלו הם אומדן בלבד.',
+      note_en: 'Estimate based on known maintenance patterns correlated with Israeli vehicle population. These figures are estimates only.',
+      cached_at: new Date().toISOString(),
+    }
+
+    await setCache(CACHE_KEY, response, CACHE_TTL)
+
+    return NextResponse.json(response)
+  } catch (error) {
+    console.error('[Vehicle Lifecycle] Error:', error)
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Failed to fetch lifecycle data' },
+      { status: 500 },
+    )
+  }
+}

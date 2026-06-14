@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server'
 import { initializeSecrets } from '@/lib/aws-secrets'
 import { fetchDocuments, fetchDocumentDetail, searchDocuments, refreshCache, waitForStockCache, fetchAllStockItemsBlocking } from '@/lib/finansit-client'
-import { query } from '@/lib/db'
-import { DOC_FORMATS } from '@/lib/constants'
+import { query, getDb } from '@/lib/db'
+import { monthlySales, dailySales, itemSnapshots, documents } from '@/lib/db/schema'
+import { sql } from 'drizzle-orm'
+import { DOC_FORMATS, CACHE_VERSIONS } from '@/lib/constants'
 import { getItems } from '@/lib/services/analytics-service'
 import { deleteCache } from '@/lib/redis-client'
 import { fixRtlItemName } from '@/lib/rtl-fix'
@@ -83,6 +85,7 @@ export async function GET(request: Request) {
     // Backfill-docs mode: aggregate daily_sales from dashboard.documents (full history from 2020)
     if (mode === 'backfill-docs') {
       await ensureTables()
+      // Complex cross-table INSERT...SELECT with ON CONFLICT -- keep as raw SQL
       await query(`
         INSERT INTO dashboard.daily_sales (date, revenue, invoice_count)
         SELECT doc_date, SUM(grand_total), COUNT(*)
@@ -109,7 +112,7 @@ export async function GET(request: Request) {
       const items = await fetchAllStockItemsBlocking(180000)
       const ready = items.length > 0
       if (ready) {
-        await deleteCache('items:enriched:v12')
+        await deleteCache(CACHE_VERSIONS.ITEMS_ENRICHED)
       }
       return NextResponse.json({
         status: ready ? 'refreshed' : 'timeout',
@@ -120,6 +123,7 @@ export async function GET(request: Request) {
     }
 
     await ensureTables()
+    const db = await getDb()
 
     // Step 0: Build chain map from items for code resolution
     const chainMap = new Map<string, string>()
@@ -191,18 +195,19 @@ export async function GET(request: Request) {
     const dailyEntries = [...dailyMap.entries()]
     for (let i = 0; i < dailyEntries.length; i += 50) {
       const batch = dailyEntries.slice(i, i + 50)
-      const values: any[] = []
-      const placeholders: string[] = []
-      batch.forEach(([date, data], idx) => {
-        const offset = idx * 3
-        placeholders.push(`($${offset + 1}, $${offset + 2}, $${offset + 3})`)
-        values.push(date, data.revenue, data.count)
-      })
-      await query(
-        `INSERT INTO dashboard.daily_sales (date, revenue, invoice_count) VALUES ${placeholders.join(', ')}
-         ON CONFLICT (date) DO UPDATE SET revenue = EXCLUDED.revenue, invoice_count = EXCLUDED.invoice_count`,
-        values
-      )
+      await db.insert(dailySales)
+        .values(batch.map(([date, data]) => ({
+          date,
+          revenue: String(data.revenue),
+          invoiceCount: data.count,
+        })))
+        .onConflictDoUpdate({
+          target: dailySales.date,
+          set: {
+            revenue: sql`excluded.revenue`,
+            invoiceCount: sql`excluded.invoice_count`,
+          },
+        })
       dailyUpserted += batch.length
     }
 
@@ -248,17 +253,27 @@ export async function GET(request: Request) {
       const month = parseInt(parts[1], 10)
       const itemCode = parts[2]
 
-      await query(
-        `INSERT INTO dashboard.monthly_sales (year, month, item_code, item_name, quantity, revenue, invoice_count, season)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-         ON CONFLICT (year, month, item_code) DO UPDATE SET
-           item_name = EXCLUDED.item_name,
-           quantity = EXCLUDED.quantity,
-           revenue = EXCLUDED.revenue,
-           invoice_count = EXCLUDED.invoice_count,
-           season = EXCLUDED.season`,
-        [year, month, itemCode, data.itemName, data.qty, data.revenue, data.count, getSeason(month)]
-      )
+      await db.insert(monthlySales)
+        .values({
+          year,
+          month,
+          itemCode,
+          itemName: data.itemName,
+          quantity: String(data.qty),
+          revenue: String(data.revenue),
+          invoiceCount: data.count,
+          season: getSeason(month),
+        })
+        .onConflictDoUpdate({
+          target: [monthlySales.year, monthlySales.month, monthlySales.itemCode],
+          set: {
+            itemName: sql`excluded.item_name`,
+            quantity: sql`excluded.quantity`,
+            revenue: sql`excluded.revenue`,
+            invoiceCount: sql`excluded.invoice_count`,
+            season: sql`excluded.season`,
+          },
+        })
       monthlyUpserted++
     }
 
@@ -278,19 +293,38 @@ export async function GET(request: Request) {
       for (const code of activeItems) {
         const item = itemMap.get(code)
         if (!item) continue
-        await query(
-          `INSERT INTO dashboard.item_snapshots (item_code, item_name, stock_qty, price, sold_this_year, sold_last_year, inquiry_count, category, snapshot_date, sale_date, purchase_date, update_date, count_date)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_DATE, $9, $10, $11, $12)
-           ON CONFLICT (item_code, snapshot_date) DO UPDATE SET
-             item_name = EXCLUDED.item_name, stock_qty = EXCLUDED.stock_qty, price = EXCLUDED.price,
-             sold_this_year = EXCLUDED.sold_this_year, sold_last_year = EXCLUDED.sold_last_year,
-             inquiry_count = EXCLUDED.inquiry_count, category = EXCLUDED.category,
-             sale_date = EXCLUDED.sale_date, purchase_date = EXCLUDED.purchase_date,
-             update_date = EXCLUDED.update_date, count_date = EXCLUDED.count_date`,
-          [item.code, fixRtlItemName(item.name), item.stock_qty || 0, item.price || 0,
-           item.sold_this_year || 0, item.sold_last_year || 0, item.inquiry_count || 0, item.category || '',
-           item.sale_date || null, item.purchase_date || null, item.update_date || null, item.count_date || null]
-        )
+        await db.insert(itemSnapshots)
+          .values({
+            itemCode: item.code,
+            itemName: fixRtlItemName(item.name),
+            stockQty: String(item.stock_qty || 0),
+            price: String(item.price || 0),
+            soldThisYear: String(item.sold_this_year || 0),
+            soldLastYear: String(item.sold_last_year || 0),
+            inquiryCount: String(item.inquiry_count || 0),
+            category: item.category || '',
+            snapshotDate: sql`CURRENT_DATE`,
+            saleDate: item.sale_date || null,
+            purchaseDate: item.purchase_date || null,
+            updateDate: item.update_date || null,
+            countDate: item.count_date || null,
+          })
+          .onConflictDoUpdate({
+            target: [itemSnapshots.itemCode, itemSnapshots.snapshotDate],
+            set: {
+              itemName: sql`excluded.item_name`,
+              stockQty: sql`excluded.stock_qty`,
+              price: sql`excluded.price`,
+              soldThisYear: sql`excluded.sold_this_year`,
+              soldLastYear: sql`excluded.sold_last_year`,
+              inquiryCount: sql`excluded.inquiry_count`,
+              category: sql`excluded.category`,
+              saleDate: sql`excluded.sale_date`,
+              purchaseDate: sql`excluded.purchase_date`,
+              updateDate: sql`excluded.update_date`,
+              countDate: sql`excluded.count_date`,
+            },
+          })
         snapshotted++
       }
     }

@@ -13,10 +13,13 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Tooltip as UITooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip'
 import { AnimatedCounter } from '@/components/shared/AnimatedCounter'
+import { EbayRecommendButton } from '@/components/shared/EbayRecommendButton'
+import { ItemLink } from '@/components/shared/ItemLink'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
+import { StockPageSkeleton } from '@/components/layout/PageSkeleton'
 import { cn } from '@/lib/utils'
 import { ArrowUpDown, Search, Crown, TrendingUp, Layers, AlertTriangle, Sparkles, RefreshCw, TableIcon, LayoutGrid, ChevronDown, ChevronLeft, ChevronRight, Filter, Target, FileText, TrendingDown, Clock, ArrowRightLeft } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from 'recharts'
@@ -337,7 +340,7 @@ function ABCInsights({ data }: { data: any }) {
         ) : text ? (
           <p className="text-sm leading-relaxed whitespace-pre-wrap text-foreground/90 dir-rtl">
             {text}
-            {!done && <span className="inline-block w-1 h-4 bg-primary ml-0.5 animate-pulse align-text-bottom" />}
+            {!done && <span className="inline-block w-1 h-4 bg-primary ms-0.5 animate-pulse align-text-bottom" />}
           </p>
         ) : null}
       </CardContent>
@@ -444,9 +447,20 @@ function ConversionSection({ searchQuery }: { searchQuery: string }) {
   if (isLoading) return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {[1,2,3,4].map(i => <Card key={i}><CardContent className="p-4"><Skeleton className="h-24 w-full" /></CardContent></Card>)}
+        {[1,2,3,4].map(i => (
+          <Card key={i}>
+            <CardContent className="p-4">
+              <Skeleton className="h-4 w-20 mb-3" />
+              <Skeleton className="h-8 w-24 mb-2" />
+              <Skeleton className="h-3 w-16" />
+            </CardContent>
+          </Card>
+        ))}
       </div>
-      <Skeleton className="w-full h-[300px]" />
+      <Card>
+        <CardHeader><Skeleton className="h-5 w-40" /></CardHeader>
+        <CardContent><Skeleton className="w-full h-[280px]" /></CardContent>
+      </Card>
     </div>
   )
   if (!data) return null
@@ -572,8 +586,8 @@ function ConversionSection({ searchQuery }: { searchQuery: string }) {
                       {unconvertedItems.map((item: any, idx: number) => (
                         <motion.tr key={idx} custom={idx} variants={convRowVariants} initial="hidden" animate="visible" className="border-b hover:bg-muted/50 transition-colors">
                           <td className="py-2.5 ps-4 md:ps-0">
-                            <div className="font-medium truncate max-w-[200px] md:max-w-none">{item.name}</div>
-                            {item.code && <div className="text-xs text-muted-foreground">{item.code}</div>}
+                            <div className="font-medium truncate max-w-[200px] md:max-w-none"><ItemLink code={item.code} name={item.name} /></div>
+                            {item.code && <div className="text-xs text-muted-foreground font-mono"><ItemLink code={item.code} showCode className="text-muted-foreground hover:text-primary" /></div>}
                           </td>
                           <td className="py-2.5 text-end tabular-nums">{item.timesQuoted}</td>
                           <td className="py-2.5 text-end tabular-nums">{item.timesSold}</td>
@@ -1229,8 +1243,11 @@ function StockPageContent() {
                         >
                           {/* פריט (sticky) */}
                           <td className="py-2 ps-4 md:ps-0 sticky left-0 bg-background z-10 border-r border-muted/30">
-                            <div className="font-medium leading-tight">{item.name}</div>
-                            <div className="text-xs text-muted-foreground font-mono">{item.code}</div>
+                            <div className="flex items-start gap-1.5">
+                              <EbayRecommendButton itemCode={item.code} itemName={item.name} />
+                              <div className="min-w-0">
+                                <div className="font-medium leading-tight"><ItemLink code={item.code} name={item.name} /></div>
+                                <div className="text-xs text-muted-foreground font-mono"><ItemLink code={item.code} showCode className="text-muted-foreground hover:text-primary" /></div>
                             {item.alias_codes && item.alias_codes.length > 0 && (
                               chain.length >= 2 ? (
                                 <UITooltip>
@@ -1252,6 +1269,8 @@ function StockPageContent() {
                                 <div className="text-[10px] text-muted-foreground/60">{item.alias_codes.slice(0, 2).join(', ')}</div>
                               )
                             )}
+                              </div>
+                            </div>
                           </td>
 
                           {/* מלאי */}
@@ -1457,8 +1476,13 @@ function StockPageContent() {
                           {deadItems.map((item: any, idx: number) => (
                             <tr key={`${item.code}-${idx}`} className="border-b hover:bg-muted/50 transition-colors">
                               <td className="py-2">
-                                <div className="font-medium">{item.name}</div>
-                                <div className="text-xs text-muted-foreground">{item.code}</div>
+                                <div className="flex items-center gap-1.5">
+                                  <EbayRecommendButton itemCode={item.code} itemName={item.name} source="dead_stock" />
+                                  <div>
+                                    <div className="font-medium"><ItemLink code={item.code} name={item.name} /></div>
+                                    <div className="text-xs text-muted-foreground font-mono"><ItemLink code={item.code} showCode className="text-muted-foreground hover:text-primary" /></div>
+                                  </div>
+                                </div>
                                 {item.alias_codes && item.alias_codes.length > 0 && (
                                   <div className="text-[10px] text-muted-foreground/70">{t('alsoKnownAs')}: {item.alias_codes.join(', ')}</div>
                                 )}
@@ -1493,7 +1517,7 @@ function StockPageContent() {
 
 export default function StockPage() {
   return (
-    <Suspense fallback={<Skeleton className="w-full h-[600px]" />}>
+    <Suspense fallback={<StockPageSkeleton />}>
       <StockPageContent />
     </Suspense>
   )

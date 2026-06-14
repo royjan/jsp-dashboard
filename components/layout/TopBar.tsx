@@ -7,6 +7,8 @@ import { useTheme } from 'next-themes'
 import { useLocale } from '@/lib/locale-context'
 import { useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
+import { AppSwitcher } from '@/components/layout/AppSwitcher'
+import { CommandPalette } from '@/components/layout/CommandPalette'
 import type { TranslationKey } from '@/lib/i18n'
 
 const pageTitleKeys: Record<string, TranslationKey> = {
@@ -20,6 +22,10 @@ const pageTitleKeys: Record<string, TranslationKey> = {
   '/abc': 'page.abc',
   '/customers': 'page.customers',
   '/scrap': 'page.scrap',
+  '/returns': 'page.returns',
+  '/ebay': 'page.ebay',
+  '/chat-insights': 'page.chatInsights',
+  '/market': 'page.market',
   '/report': 'page.report',
 }
 
@@ -58,8 +64,10 @@ export function TopBar() {
 
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4 md:px-6">
-      <h1 className="text-lg font-semibold">{titleKey ? t(titleKey) : t('dashboard')}</h1>
+      <h1 className="text-sm sm:text-lg font-semibold truncate">{titleKey ? t(titleKey) : t('dashboard')}</h1>
       <div className="flex items-center gap-1">
+        <CommandPalette />
+        <AppSwitcher currentApp="dashboard" />
         <Button
           variant="ghost"
           size="sm"

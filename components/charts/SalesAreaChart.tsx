@@ -57,7 +57,7 @@ export function SalesAreaChart({ data, isLoading, title, height = 300 }: SalesAr
             />
             <Tooltip
               contentStyle={{ backgroundColor: 'var(--popover)', borderColor: 'var(--border)', borderRadius: '8px', color: 'var(--popover-foreground)' }}
-              formatter={(value: number) => [`₪${value.toLocaleString()}`, t('revenue')]}
+              formatter={(value) => [`₪${Number(value).toLocaleString()}`, t('revenue')]}
               labelFormatter={(label) => new Date(label).toLocaleDateString(dateLocale, { weekday: 'short', month: 'short', day: 'numeric' })}
               labelStyle={{ color: 'var(--muted-foreground)' }}
             />

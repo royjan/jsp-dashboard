@@ -19,6 +19,95 @@ export function useDemandAnalysis(dateFrom?: string, dateTo?: string) {
   })
 }
 
+export function useDemandOverview(days = 30) {
+  return useQuery({
+    queryKey: ['demand-overview', days],
+    queryFn: async () => {
+      const res = await fetch(`/api/analytics/demand?view=overview&days=${days}`)
+      if (!res.ok) throw new Error('Failed')
+      return res.json()
+    },
+    staleTime: 5 * 60 * 1000,
+    gcTime: 15 * 60 * 1000,
+    retry: 2,
+    refetchOnWindowFocus: false,
+  })
+}
+
+export function useEbayAnalytics() {
+  return useQuery({
+    queryKey: ['ebay-analytics'],
+    queryFn: async () => {
+      const res = await fetch('/api/analytics/ebay')
+      if (!res.ok) throw new Error('Failed')
+      return res.json()
+    },
+    staleTime: 5 * 60 * 1000,
+    gcTime: 15 * 60 * 1000,
+    retry: 2,
+    refetchOnWindowFocus: false,
+  })
+}
+
+export function useReturnsAnalysis() {
+  return useQuery({
+    queryKey: ['returns-analysis'],
+    queryFn: async () => {
+      const res = await fetch('/api/analytics/returns')
+      if (!res.ok) throw new Error('Failed')
+      return res.json()
+    },
+    staleTime: 5 * 60 * 1000,
+    gcTime: 15 * 60 * 1000,
+    retry: 2,
+    refetchOnWindowFocus: false,
+  })
+}
+
+export function useChatInsights(days = 30) {
+  return useQuery({
+    queryKey: ['chat-insights', days],
+    queryFn: async () => {
+      const res = await fetch(`/api/analytics/chat-insights?days=${days}`)
+      if (!res.ok) throw new Error('Failed')
+      return res.json()
+    },
+    staleTime: 5 * 60 * 1000,
+    gcTime: 15 * 60 * 1000,
+    retry: 2,
+    refetchOnWindowFocus: false,
+  })
+}
+
+export function useMarketAnalytics() {
+  return useQuery({
+    queryKey: ['market-analytics'],
+    queryFn: async () => {
+      const res = await fetch('/api/analytics/market')
+      if (!res.ok) throw new Error('Failed')
+      return res.json()
+    },
+    staleTime: 30 * 60 * 1000,
+    gcTime: 60 * 60 * 1000,
+    retry: 1,
+    refetchOnWindowFocus: false,
+  })
+}
+
+export function useCrossPlatformKpis() {
+  return useQuery({
+    queryKey: ['cross-platform-kpis'],
+    queryFn: async () => {
+      const res = await fetch('/api/dashboard/cross-platform')
+      if (!res.ok) throw new Error('Failed')
+      return res.json()
+    },
+    staleTime: 2 * 60 * 1000,
+    retry: 1,
+    refetchOnWindowFocus: false,
+  })
+}
+
 export function useSalesAnalytics(period: Period = '30d', enabled = true) {
   return useQuery({
     queryKey: ['sales', period],
@@ -83,8 +172,10 @@ export function useDeadStock(years: number = 1) {
       if (!res.ok) throw new Error('Failed')
       return res.json()
     },
-    staleTime: 5 * 60 * 1000,
+    staleTime: 10 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
     retry: 2,
+    refetchOnWindowFocus: false,
   })
 }
 
@@ -111,8 +202,10 @@ export function useReorderRecommendations(dateFrom?: string, dateTo?: string) {
       if (!res.ok) throw new Error('Failed')
       return res.json()
     },
-    staleTime: 5 * 60 * 1000,
+    staleTime: 10 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
     retry: 2,
+    refetchOnWindowFocus: false,
   })
 }
 
@@ -127,8 +220,10 @@ export function useConversionAnalysis(dateFrom?: string, dateTo?: string) {
       if (!res.ok) throw new Error('Failed')
       return res.json()
     },
-    staleTime: 5 * 60 * 1000,
+    staleTime: 10 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
     retry: 2,
+    refetchOnWindowFocus: false,
   })
 }
 
@@ -144,8 +239,10 @@ export function useABCClassification(dateFrom?: string, dateTo?: string) {
       if (!res.ok) throw new Error('Failed')
       return res.json()
     },
-    staleTime: 5 * 60 * 1000,
+    staleTime: 10 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
     retry: 2,
+    refetchOnWindowFocus: false,
   })
 }
 
@@ -187,6 +284,161 @@ export function useCustomerAnalytics(dateFrom?: string, dateTo?: string) {
       return res.json()
     },
     staleTime: 5 * 60 * 1000,
+    retry: 2,
+  })
+}
+
+export function useCustomerHealth(dateFrom?: string, dateTo?: string) {
+  return useQuery({
+    queryKey: ['customer-health', dateFrom, dateTo],
+    queryFn: async () => {
+      const params = new URLSearchParams()
+      if (dateFrom) params.set('date_from', dateFrom)
+      if (dateTo) params.set('date_to', dateTo)
+      const res = await fetch(`/api/analytics/customer-health?${params}`)
+      if (!res.ok) throw new Error('Failed')
+      return res.json()
+    },
+    staleTime: 5 * 60 * 1000,
+    retry: 2,
+  })
+}
+
+export function useHealthTransitions(direction?: string) {
+  return useQuery({
+    queryKey: ['health-transitions', direction],
+    queryFn: async () => {
+      const params = new URLSearchParams()
+      if (direction && direction !== 'all') params.set('direction', direction)
+      params.set('limit', '100')
+      const res = await fetch(`/api/analytics/customer-health/transitions?${params}`)
+      if (!res.ok) throw new Error('Failed')
+      return res.json()
+    },
+    staleTime: 2 * 60 * 1000,
+    retry: 2,
+    refetchOnWindowFocus: true,
+  })
+}
+
+export function useUnacknowledgedCount() {
+  return useQuery({
+    queryKey: ['health-transitions-unack-count'],
+    queryFn: async () => {
+      const res = await fetch('/api/analytics/customer-health/transitions?direction=unacknowledged&limit=1')
+      if (!res.ok) throw new Error('Failed')
+      const data = await res.json()
+      return data.unacknowledgedDeterioratingCount ?? 0
+    },
+    staleTime: 60 * 1000,
+    retry: 1,
+    refetchOnWindowFocus: true,
+    refetchInterval: 5 * 60 * 1000, // poll every 5 min
+  })
+}
+
+export function useReceivables(limit = 50) {
+  return useQuery({
+    queryKey: ['receivables', limit],
+    queryFn: async () => {
+      const res = await fetch(`/api/analytics/receivables?limit=${limit}`)
+      if (!res.ok) throw new Error('Failed')
+      return res.json()
+    },
+    staleTime: 10 * 60 * 1000,
+    gcTime: 15 * 60 * 1000,
+    retry: 1,
+    refetchOnWindowFocus: false,
+  })
+}
+
+export function useGapAnalysis(format = '31', limit = 200) {
+  return useQuery({
+    queryKey: ['gap-analysis', format, limit],
+    queryFn: async () => {
+      const res = await fetch(`/api/analytics/gap?format=${format}&limit=${limit}`)
+      if (!res.ok) throw new Error('Failed')
+      return res.json()
+    },
+    staleTime: 10 * 60 * 1000,
+    gcTime: 15 * 60 * 1000,
+    retry: 2,
+    refetchOnWindowFocus: false,
+  })
+}
+
+export function useFollowUpStats(daysBack = 3) {
+  return useQuery({
+    queryKey: ['followup-stats', daysBack],
+    queryFn: async () => {
+      const res = await fetch(`/api/analytics/followups?days_back=${daysBack}`)
+      if (!res.ok) throw new Error('Failed')
+      return res.json()
+    },
+    staleTime: 10 * 60 * 1000,
+    gcTime: 15 * 60 * 1000,
+    retry: 1,
+    refetchOnWindowFocus: false,
+  })
+}
+
+export function useCustomerDetail(code: string | null) {
+  return useQuery({
+    queryKey: ['customer-detail', code],
+    queryFn: async () => {
+      const res = await fetch(`/api/customers?code=${code}`)
+      if (!res.ok) throw new Error('Failed')
+      return res.json()
+    },
+    enabled: !!code,
+    staleTime: 2 * 60 * 1000,
+    retry: 2,
+  })
+}
+
+export function useItemDetail(code: string | null) {
+  return useQuery({
+    queryKey: ['item-detail', code],
+    queryFn: async () => {
+      const res = await fetch(`/api/items/${encodeURIComponent(code!)}`)
+      if (!res.ok) throw new Error('Failed')
+      return res.json()
+    },
+    enabled: !!code,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 15 * 60 * 1000,
+    retry: 2,
+    refetchOnWindowFocus: false,
+  })
+}
+
+export function useStockForecast(urgency?: string, limit = 50) {
+  return useQuery({
+    queryKey: ['stock-forecast', urgency, limit],
+    queryFn: async () => {
+      const params = new URLSearchParams({ limit: String(limit) })
+      if (urgency) params.set('urgency', urgency)
+      const res = await fetch(`/api/analytics/stock-forecast?${params}`)
+      if (!res.ok) throw new Error('Failed')
+      return res.json()
+    },
+    staleTime: 30 * 60 * 1000,
+    gcTime: 60 * 60 * 1000,
+    retry: 2,
+    refetchOnWindowFocus: false,
+  })
+}
+
+export function useItemStockForecast(itemCode: string | null) {
+  return useQuery({
+    queryKey: ['stock-forecast-item', itemCode],
+    queryFn: async () => {
+      const res = await fetch(`/api/analytics/stock-forecast/${encodeURIComponent(itemCode!)}`)
+      if (!res.ok) throw new Error('Failed')
+      return res.json()
+    },
+    enabled: !!itemCode,
+    staleTime: 30 * 60 * 1000,
     retry: 2,
   })
 }

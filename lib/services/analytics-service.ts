@@ -1,8 +1,8 @@
-import { fetchItems, fetchDocuments, fetchDocumentDetail, fetchDashboard, fetchItemDetail, fetchBatchStock, fetchStock, searchDocuments, fetchAllStockItems, fetchBatchPrices, fetchAllCustomers, fetchItemHistory } from '../finansit-client'
+import { client, fetchItems, fetchDocuments, fetchDocumentDetail, fetchBatchStock, searchDocuments, fetchAllStockItems, fetchBatchPrices, fetchAllCustomers } from '../finansit-client'
 import { getCached, setCache, deleteCache } from '../redis-client'
 import { query as dbQuery } from '../db'
 import { readQuery } from '../sqlite'
-import { CACHE_TTL, DOC_FORMATS, MONTH_NAMES } from '../constants'
+import { CACHE_TTL, CACHE_VERSIONS, DOC_FORMATS, MONTH_NAMES } from '../constants'
 import type { DemandItem, SalesDataPoint, SeasonalDataPoint, DeadStockItem, ReorderItem, FinansitItem, DashboardData, TopSellingItem } from '../types'
 import { fixRtlItemName } from '../rtl-fix'
 
@@ -13,7 +13,7 @@ export async function getDashboardData(): Promise<DashboardData> {
   const cached = await getCached<DashboardData>(cacheKey)
   if (cached) return cached
 
-  const data = await fetchDashboard()
+  const data = await client.dashboard.get()
   await setCache(cacheKey, data, CACHE_TTL.DASHBOARD)
   return data
 }
@@ -197,7 +197,7 @@ let cachedChainMap: Map<string, string> | null = null
 let chainMapCacheTime = 0
 const CHAIN_MAP_TTL = 300_000 // 5 minutes
 
-async function getChainMap(): Promise<Map<string, string>> {
+export async function getChainMap(): Promise<Map<string, string>> {
   if (cachedChainMap && Date.now() - chainMapCacheTime < CHAIN_MAP_TTL) {
     return cachedChainMap
   }
@@ -218,17 +218,17 @@ const IN_MEMORY_FRESH_TTL = 30 * 60 * 1000  // 30 min
 const IN_MEMORY_STALE_TTL = 6 * 60 * 60 * 1000  // 6 hours
 
 export async function getItems(): Promise<FinansitItem[]> {
-  const cacheKey = 'items:enriched:v12'
-  const staleCacheKey = 'items:enriched:v11:stale'
+  const cacheKey = CACHE_VERSIONS.ITEMS_ENRICHED
+  const staleCacheKey = `${CACHE_VERSIONS.ITEMS_ENRICHED}:stale`
 
-  // Try Redis first
-  const cached = await getCached<FinansitItem[]>(cacheKey)
-  if (cached) return cached
-
-  // Try in-memory fresh cache
+  // Try in-memory fresh cache first (always populated, Redis may skip large payloads)
   if (inMemoryItemsCache && Date.now() - inMemoryItemsCache.time < IN_MEMORY_FRESH_TTL) {
     return inMemoryItemsCache.data
   }
+
+  // Then try Redis
+  const cached = await getCached<FinansitItem[]>(cacheKey)
+  if (cached) return cached
 
   // Stale-while-revalidate: return stale data immediately, refresh in background
   const stale = await getCached<FinansitItem[]>(staleCacheKey)
@@ -278,6 +278,7 @@ function mergeEnrichedIntoItem(item: FinansitItem, enriched: any): void {
 
 async function _getItemsImpl(cacheKey: string, staleCacheKey?: string): Promise<FinansitItem[]> {
   const STALE_TTL = 6 * 60 * 60 // 6 hours
+  const t0 = Date.now()
 
   // Strategy:
   // 1. fetchAllStockItems() HTTP call — FINAPI caches internally via its own Redis
@@ -301,6 +302,7 @@ async function _getItemsImpl(cacheKey: string, staleCacheKey?: string): Promise<
       return [] as any[]
     }),
   ])
+  console.log(`[Analytics] getItems SDK calls took ${Date.now() - t0}ms (stock: ${stockItems?.length ?? 0}, catalog: ${catalogItems.length})`)
 
   const effectiveStockItems = stockItems
 
@@ -371,7 +373,7 @@ async function _getItemsImpl(cacheKey: string, staleCacheKey?: string): Promise<
       await Promise.allSettled(
         numericNameItems.map(async (item) => {
           try {
-            const history = await fetchItemHistory(item.code)
+            const history = await client.items.getHistory(item.code)
             const description = history?.canonical_name
             if (description && !/^\d+$/.test(description)) item.name = fixRtlItemName(description)
           } catch {}
@@ -429,8 +431,12 @@ async function _getItemsImpl(cacheKey: string, staleCacheKey?: string): Promise<
     cachedChainMap = resolved.codeToCanonical
     chainMapCacheTime = Date.now()
     console.log(`[Analytics] Chain resolution: ${items.length} → ${resolved.items.length} items`)
-    await setCache(cacheKey, resolved.items, CACHE_TTL.ITEMS)
-    if (staleCacheKey) await setCache(staleCacheKey, resolved.items, STALE_TTL)
+    // Only cache to Redis if payload is small enough for Upstash REST API
+    // For large catalogs, in-memory cache is sufficient (single-container deployment)
+    if (resolved.items.length <= 2000) {
+      await setCache(cacheKey, resolved.items, CACHE_TTL.ITEMS)
+      if (staleCacheKey) await setCache(staleCacheKey, resolved.items, STALE_TTL)
+    }
     inMemoryItemsCache = { data: resolved.items, time: Date.now() }
     return resolved.items
   }
@@ -472,7 +478,7 @@ async function _getItemsImpl(cacheKey: string, staleCacheKey?: string): Promise<
     const batch = activeCodes.slice(i, i + 10)
     const results = await Promise.all(
       batch.map(async (code) => {
-        try { return await fetchItemDetail(code) } catch { return null }
+        try { return await client.items.get(code) } catch { return null }
       })
     )
     for (const raw of results) {
@@ -574,6 +580,24 @@ export async function getDemandAnalysis(dateFrom?: string, dateTo?: string): Pro
     }
   }
 
+  // Resolve names for demand items not found in itemMap (quote-only items with no stock)
+  const unresolvedCodes = Array.from(demandMap.keys()).filter(code => code.length > 1 && !itemMap.has(code))
+  const resolvedNameMap = new Map<string, string>()
+  if (unresolvedCodes.length > 0) {
+    const MAX_NAME_RESOLVE = 50
+    const codesToResolve = unresolvedCodes.slice(0, MAX_NAME_RESOLVE)
+    console.log(`[Analytics] Resolving ${codesToResolve.length} demand item names via history API`)
+    await Promise.allSettled(
+      codesToResolve.map(async (code) => {
+        try {
+          const history = await client.items.getHistory(code)
+          const description = history?.canonical_name
+          if (description && !/^\d+$/.test(description)) resolvedNameMap.set(code, fixRtlItemName(description))
+        } catch {}
+      })
+    )
+  }
+
   const result: DemandItem[] = Array.from(demandMap.entries())
     .filter(([code]) => code.length > 1)
     .map(([code, data]) => {
@@ -583,7 +607,7 @@ export async function getDemandAnalysis(dateFrom?: string, dateTo?: string): Pro
         : undefined
       return {
         code,
-        name: item?.name || code,
+        name: item?.name || resolvedNameMap.get(code) || code,
         request_count: data.count,
         total_qty_requested: data.qty,
         stock_qty: item?.stock_qty || 0,
@@ -679,16 +703,16 @@ export async function getSeasonalData(dateFrom?: string, dateTo?: string): Promi
     if (dateFrom) {
       const fromYear = parseInt(dateFrom.substring(0, 4), 10)
       const fromMonth = parseInt(dateFrom.substring(5, 7), 10)
-      conditions.push(`(year > $${paramIdx} OR (year = $${paramIdx} AND month >= $${paramIdx + 1}))`)
-      params.push(fromYear, fromMonth)
-      paramIdx += 2
+      conditions.push(`(year > $${paramIdx} OR (year = $${paramIdx + 1} AND month >= $${paramIdx + 2}))`)
+      params.push(fromYear, fromYear, fromMonth)
+      paramIdx += 3
     }
     if (dateTo) {
       const toYear = parseInt(dateTo.substring(0, 4), 10)
       const toMonth = parseInt(dateTo.substring(5, 7), 10)
-      conditions.push(`(year < $${paramIdx} OR (year = $${paramIdx} AND month <= $${paramIdx + 1}))`)
-      params.push(toYear, toMonth)
-      paramIdx += 2
+      conditions.push(`(year < $${paramIdx} OR (year = $${paramIdx + 1} AND month <= $${paramIdx + 2}))`)
+      params.push(toYear, toYear, toMonth)
+      paramIdx += 3
     }
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
@@ -1548,7 +1572,7 @@ export async function getConversionAnalysis(dateFrom?: string, dateTo?: string) 
 
       // Item stats
       if (!itemStats.has(line.item_code)) {
-        itemStats.set(line.item_code, { code: line.item_code, name: line.item_name || line.item_code, timesQuoted: 0, timesSold: 0, lostValue: 0, lastQuoted: '' })
+        itemStats.set(line.item_code, { code: line.item_code, name: line.item_name || line.item_code, timesQuoted: 0, timesSold: 0, lostValue: 0, lastQuoted: '' } as any)
       }
       const item = itemStats.get(line.item_code)!
       item.timesQuoted++
@@ -1872,7 +1896,9 @@ export async function getCustomerAnalytics(dateFrom?: string, dateTo?: string) {
               is_credit: true,
             })
           }
-        } catch {}
+        } catch (e) {
+          console.error(`[Analytics] Customer history year ${y} fetch failed:`, e)
+        }
       }
     }
   }
@@ -1927,7 +1953,9 @@ export async function getCustomerAnalytics(dateFrom?: string, dateTo?: string) {
           is_credit: true,
         })
       }
-    } catch {}
+    } catch (e) {
+      console.error(`[Analytics] Customer partial year ${y} fetch failed:`, e)
+    }
   }
 
   // Active year: always fetch live from FINAPI REST
@@ -1968,7 +1996,9 @@ export async function getCustomerAnalytics(dateFrom?: string, dateTo?: string) {
           is_credit: true,
         })
       }
-    } catch {}
+    } catch (e) {
+      console.error('[Analytics] Customer active year FINAPI fetch failed:', e)
+    }
 
     // If FINAPI returned nothing for the active year, fall back to PostgreSQL
     const activeYearInvoiceCount = allInvoices.filter(inv => !inv.is_credit && inv.doc_date >= (fromYear === activeYear ? effDateFrom : `${activeYear}-01-01`)).length
@@ -2001,6 +2031,8 @@ export async function getCustomerAnalytics(dateFrom?: string, dateTo?: string) {
       }
     }
   }
+
+  console.log(`[Analytics] Customers: total allInvoices=${allInvoices.length} for range ${effDateFrom}–${effDateTo} (years ${fromYear}–${toYear}, activeYear=${activeYear})`)
 
   // Load customer names from API for enrichment
   const customerNames = await getCustomerNameMap().catch(() => new Map<string, string>())

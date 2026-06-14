@@ -24,7 +24,22 @@ export function DemandBarChart({ data, isLoading, mode, limit = 10, hoveredCode,
     return (
       <Card>
         <CardHeader><CardTitle>{t('topDemandedParts')}</CardTitle></CardHeader>
-        <CardContent><Skeleton className="w-full h-[400px]" /></CardContent>
+        <CardContent>
+          <div className="flex flex-col lg:flex-row items-center gap-3 sm:gap-4">
+            <div className="w-full lg:w-1/2 flex items-center justify-center">
+              <Skeleton className="h-[200px] w-[200px] rounded-full" />
+            </div>
+            <div className="w-full lg:w-1/2 space-y-1.5">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <Skeleton className="w-3 h-3 rounded-sm shrink-0" />
+                  <Skeleton className="h-3 flex-1" />
+                  <Skeleton className="h-3 w-14" />
+                </div>
+              ))}
+            </div>
+          </div>
+        </CardContent>
       </Card>
     )
   }
@@ -58,8 +73,8 @@ export function DemandBarChart({ data, isLoading, mode, limit = 10, hoveredCode,
         <CardTitle>{t('topDemandedParts')} ({mode === 'count' ? t('byRequests') : t('byQuantity')})</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="flex flex-col lg:flex-row items-center gap-4">
-          <div className="w-full lg:w-1/2 h-[250px] sm:h-[300px] lg:h-[350px]">
+        <div className="flex flex-col lg:flex-row items-center gap-3 sm:gap-4">
+          <div className="w-full lg:w-1/2 h-[220px] sm:h-[300px] lg:h-[350px]">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
@@ -88,9 +103,10 @@ export function DemandBarChart({ data, isLoading, mode, limit = 10, hoveredCode,
                 </Pie>
                 <Tooltip
                   contentStyle={{ backgroundColor: 'var(--popover)', borderColor: 'var(--border)', borderRadius: '8px', color: 'var(--popover-foreground)' }}
-                  formatter={(value: number) => {
-                    const pct = total > 0 ? ((value / total) * 100).toFixed(1) : '0'
-                    return [`${value} (${pct}%)`, mode === 'count' ? t('requests') : t('quantity')]
+                  formatter={(value) => {
+                    const v = Number(value)
+                    const pct = total > 0 ? ((v / total) * 100).toFixed(1) : '0'
+                    return [`${v} (${pct}%)`, mode === 'count' ? t('requests') : t('quantity')]
                   }}
                   labelFormatter={(_, payload) => payload?.[0]?.payload?.fullName || ''}
                   labelStyle={{ color: 'var(--popover-foreground)', fontWeight: 'bold' }}
@@ -99,7 +115,7 @@ export function DemandBarChart({ data, isLoading, mode, limit = 10, hoveredCode,
             </ResponsiveContainer>
           </div>
           {/* Legend as a list */}
-          <div className="w-full lg:w-1/2 space-y-1.5">
+          <div className="w-full lg:w-1/2 space-y-1 sm:space-y-1.5 max-h-[250px] overflow-y-auto">
             {chartData.map((item, i) => {
               const pct = total > 0 ? ((item.value / total) * 100).toFixed(1) : '0'
               const isHighlighted = item.code === hoveredCode

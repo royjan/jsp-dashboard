@@ -1,7 +1,22 @@
 import { NextResponse } from 'next/server'
 import { readQuery } from '@/lib/sqlite'
+import { client } from '@/lib/finansit-client'
 
 export const dynamic = 'force-dynamic'
+
+/** Resolve item code to canonical and get all chain codes */
+async function resolveItemChain(code: string) {
+  try {
+    const history = await client.items.getHistory(code)
+    return {
+      canonical_code: history.canonical_code,
+      canonical_name: history.canonical_name,
+      chain_codes: history.item_id_history || [code],
+    }
+  } catch {
+    return { canonical_code: code, canonical_name: null, chain_codes: [code] }
+  }
+}
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
@@ -17,7 +32,8 @@ export async function GET(request: Request) {
   const params = terms.map(t => `%${t}%`)
 
   try {
-    const items = readQuery(`
+    // Step 1: Search SQLite for matching items
+    const rawItems = readQuery(`
       SELECT
         item_code,
         item_name,
@@ -27,23 +43,82 @@ export async function GET(request: Request) {
         CAST(sold_this_year AS INT) as sold_this_year,
         CAST(sold_last_year AS INT) as sold_last_year,
         CAST(sold_2y_ago AS INT) as sold_2y_ago,
-        CAST(sold_3y_ago AS INT) as sold_3y_ago,
-        ROUND(
-          MIN(LOG10(MAX(qty * retail_price, 1)) * 11.5, 50)
-          + CASE
-              WHEN sold_this_year = 0 AND sold_last_year = 0 AND sold_2y_ago = 0 AND sold_3y_ago = 0 THEN 30
-              WHEN sold_this_year = 0 AND sold_last_year = 0 AND sold_2y_ago = 0 THEN 20
-              WHEN sold_this_year = 0 AND sold_last_year = 0 THEN 10
-              ELSE 0
-            END
-          + MIN(qty / 3.0, 10)
-          - MIN((sold_this_year + sold_last_year + sold_2y_ago + sold_3y_ago) * 3, 20)
-        , 1) as scrap_score
+        CAST(sold_3y_ago AS INT) as sold_3y_ago
       FROM item_snapshot
       WHERE qty > 0
         AND (${whereClause})
-      ORDER BY scrap_score DESC
-    `, params).rows
+    `, params).rows as any[]
+
+    // Step 2: Resolve chains and aggregate sales across ALL codes per chain
+    const seen = new Set<string>()
+    const items: any[] = []
+
+    const batchSize = 10
+    for (let i = 0; i < rawItems.length; i += batchSize) {
+      const batch = rawItems.slice(i, i + batchSize)
+      const resolved = await Promise.all(
+        batch.map(async (item: any) => {
+          const chain = await resolveItemChain(item.item_code)
+
+          // Dedupe by canonical code
+          if (seen.has(chain.canonical_code)) return null
+          seen.add(chain.canonical_code)
+
+          // Aggregate across chain
+          const chainPlaceholders = chain.chain_codes.map(() => '?').join(',')
+          const chainResult = readQuery(`
+            SELECT
+              CAST(qty AS INT) as qty,
+              retail_price as price,
+              ROUND(qty * retail_price) as capital_tied,
+              CAST(sold_this_year AS INT) as sold_this_year,
+              CAST(sold_last_year AS INT) as sold_last_year,
+              CAST(sold_2y_ago AS INT) as sold_2y_ago,
+              CAST(sold_3y_ago AS INT) as sold_3y_ago
+            FROM item_snapshot
+            WHERE item_code IN (${chainPlaceholders})
+          `, chain.chain_codes).rows as any[]
+
+          const totalQty = chainResult.reduce((s: number, r: any) => s + (r.qty || 0), 0)
+          const bestPrice = Math.max(...chainResult.map((r: any) => r.price || 0), 0)
+          const totalCapital = chainResult.reduce((s: number, r: any) => s + (r.capital_tied || 0), 0)
+          const soldThisYear = chainResult.reduce((s: number, r: any) => s + (r.sold_this_year || 0), 0)
+          const soldLastYear = chainResult.reduce((s: number, r: any) => s + (r.sold_last_year || 0), 0)
+          const sold2yAgo = chainResult.reduce((s: number, r: any) => s + (r.sold_2y_ago || 0), 0)
+          const sold3yAgo = chainResult.reduce((s: number, r: any) => s + (r.sold_3y_ago || 0), 0)
+
+          if (totalQty <= 0) return null
+
+          // Compute scrap score using aggregated data
+          const capitalTiedLog = Math.min(Math.log10(Math.max(totalQty * bestPrice, 1)) * 11.5, 50)
+          const salesPenalty = soldThisYear === 0 && soldLastYear === 0 && sold2yAgo === 0 && sold3yAgo === 0 ? 30
+            : soldThisYear === 0 && soldLastYear === 0 && sold2yAgo === 0 ? 20
+            : soldThisYear === 0 && soldLastYear === 0 ? 10
+            : 0
+          const qtyBonus = Math.min(totalQty / 3.0, 10)
+          const salesReduction = Math.min((soldThisYear + soldLastYear + sold2yAgo + sold3yAgo) * 3, 20)
+          const scrapScore = Math.round((capitalTiedLog + salesPenalty + qtyBonus - salesReduction) * 10) / 10
+
+          return {
+            item_code: chain.canonical_code,
+            item_name: chain.canonical_name || item.item_name,
+            chain_codes: chain.chain_codes,
+            qty: totalQty,
+            price: bestPrice,
+            capital_tied: totalCapital,
+            sold_this_year: soldThisYear,
+            sold_last_year: soldLastYear,
+            sold_2y_ago: sold2yAgo,
+            sold_3y_ago: sold3yAgo,
+            scrap_score: scrapScore,
+          }
+        })
+      )
+      items.push(...resolved.filter(Boolean))
+    }
+
+    // Sort by scrap score descending
+    items.sort((a: any, b: any) => (b.scrap_score || 0) - (a.scrap_score || 0))
 
     const totalCapital = items.reduce((s: number, i: any) => s + (i.capital_tied || 0), 0)
     const totalUnits = items.reduce((s: number, i: any) => s + (i.qty || 0), 0)

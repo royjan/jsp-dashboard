@@ -29,11 +29,11 @@ export function KPICard({ label, value, format, icon: Icon, trend, changePercent
       transition={{ duration: 0.3 }}
     >
       <Card className="relative overflow-hidden">
-        <CardContent className="p-6">
+        <CardContent className="p-3 sm:p-4 lg:p-6">
           <div className="flex items-center justify-between">
-            <div className="space-y-1">
-              <p className="text-sm text-muted-foreground">{label}</p>
-              <AnimatedCounter value={value} format={format} className="text-2xl font-bold" />
+            <div className="space-y-1 min-w-0">
+              <p className="text-xs sm:text-sm text-muted-foreground truncate">{label}</p>
+              <AnimatedCounter value={value} format={format} className="text-lg sm:text-xl lg:text-2xl font-bold" />
             </div>
             <div className={cn('rounded-full p-2.5', iconBg)}>
               <Icon className={cn('h-5 w-5', iconColor)} />

@@ -2,8 +2,10 @@ import { NextResponse } from 'next/server'
 import { initializeSecrets, getSecret } from '@/lib/aws-secrets'
 import { searchDocuments, fetchDocumentDetail, fetchDocuments } from '@/lib/finansit-client'
 import { deleteCache } from '@/lib/redis-client'
-import { query } from '@/lib/db'
-import { DOC_FORMATS } from '@/lib/constants'
+import { query, getDb } from '@/lib/db'
+import { monthlySales, dailySales } from '@/lib/db/schema'
+import { sql } from 'drizzle-orm'
+import { DOC_FORMATS, CACHE_VERSIONS } from '@/lib/constants'
 import {
   getItems,
   getDemandAnalysis,
@@ -64,6 +66,7 @@ async function runWarmCache(mode: string, from?: number, to?: number) {
   try {
     if (mode === 'historical') {
       await ensureTables()
+      const db = await getDb()
       const items = await timed('getItems', getItems)
       const chainMap = new Map<string, string>()
       for (const item of items) {
@@ -94,7 +97,7 @@ async function runWarmCache(mode: string, from?: number, to?: number) {
           const invoices = await searchDocuments(searchP)
           if (invoices.length === 0) continue
 
-          // daily_sales
+          // daily_sales upsert via Drizzle
           const dailyMap = new Map<string, { revenue: number; count: number }>()
           for (const inv of invoices) {
             const d = inv.doc_date
@@ -108,21 +111,22 @@ async function runWarmCache(mode: string, from?: number, to?: number) {
           const dailyEntries = [...dailyMap.entries()]
           for (let i = 0; i < dailyEntries.length; i += 50) {
             const batch = dailyEntries.slice(i, i + 50)
-            const values: (string | number)[] = []
-            const placeholders: string[] = []
-            batch.forEach(([date, data], idx) => {
-              const offset = idx * 3
-              placeholders.push(`($${offset + 1}, $${offset + 2}, $${offset + 3})`)
-              values.push(date, data.revenue, data.count)
-            })
-            await query(
-              `INSERT INTO dashboard.daily_sales (date, revenue, invoice_count) VALUES ${placeholders.join(', ')}
-               ON CONFLICT (date) DO UPDATE SET revenue = EXCLUDED.revenue, invoice_count = EXCLUDED.invoice_count`,
-              values
-            )
+            await db.insert(dailySales)
+              .values(batch.map(([date, data]) => ({
+                date,
+                revenue: String(data.revenue),
+                invoiceCount: data.count,
+              })))
+              .onConflictDoUpdate({
+                target: dailySales.date,
+                set: {
+                  revenue: sql`excluded.revenue`,
+                  invoiceCount: sql`excluded.invoice_count`,
+                },
+              })
           }
 
-          // monthly_sales from line items
+          // monthly_sales from line items via Drizzle
           const monthlyData = new Map<string, { qty: number; revenue: number; count: number; itemName: string }>()
           for (let i = 0; i < invoices.length; i += 20) {
             const batch = invoices.slice(i, i + 20)
@@ -150,14 +154,27 @@ async function runWarmCache(mode: string, from?: number, to?: number) {
           }
           for (const [key, data] of monthlyData) {
             const parts = key.split('|')
-            await query(
-              `INSERT INTO dashboard.monthly_sales (year, month, item_code, item_name, quantity, revenue, invoice_count, season)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-               ON CONFLICT (year, month, item_code) DO UPDATE SET
-                 item_name = EXCLUDED.item_name, quantity = EXCLUDED.quantity,
-                 revenue = EXCLUDED.revenue, invoice_count = EXCLUDED.invoice_count, season = EXCLUDED.season`,
-              [parseInt(parts[0], 10), parseInt(parts[1], 10), parts[2], data.itemName, data.qty, data.revenue, data.count, getSeason(parseInt(parts[1], 10))]
-            )
+            await db.insert(monthlySales)
+              .values({
+                year: parseInt(parts[0], 10),
+                month: parseInt(parts[1], 10),
+                itemCode: parts[2],
+                itemName: data.itemName,
+                quantity: String(data.qty),
+                revenue: String(data.revenue),
+                invoiceCount: data.count,
+                season: getSeason(parseInt(parts[1], 10)),
+              })
+              .onConflictDoUpdate({
+                target: [monthlySales.year, monthlySales.month, monthlySales.itemCode],
+                set: {
+                  itemName: sql`excluded.item_name`,
+                  quantity: sql`excluded.quantity`,
+                  revenue: sql`excluded.revenue`,
+                  invoiceCount: sql`excluded.invoice_count`,
+                  season: sql`excluded.season`,
+                },
+              })
             totalUpserted++
           }
           const monthLabel = `${targetDate.getFullYear()}-${String(targetDate.getMonth() + 1).padStart(2, '0')}`
@@ -172,8 +189,9 @@ async function runWarmCache(mode: string, from?: number, to?: number) {
     }
 
     // Default warm mode: clear items cache, then warm all analytics
-    await deleteCache('items:enriched:v9')
+    await deleteCache(CACHE_VERSIONS.ITEMS_ENRICHED)
     await ensureTables()
+    const db = await getDb()
 
     const items = await timed('getItems', getItems)
     results['items'] = items.length
@@ -186,36 +204,45 @@ async function runWarmCache(mode: string, from?: number, to?: number) {
       }
     }
 
-    // Incremental sync in full mode
-    if (mode === 'full') {
-      await timed('incremental-sync', async () => {
-        const invoices = await fetchDocuments(DOC_FORMATS.TAX_INVOICE, 1000)
-        const dailyMap = new Map<string, { revenue: number; count: number }>()
-        for (const inv of invoices) {
-          const d = inv.doc_date
-          if (!d) continue
-          const dateKey = d.split('T')[0]
-          const existing = dailyMap.get(dateKey) || { revenue: 0, count: 0 }
-          existing.revenue += inv.grand_total || inv.total || 0
-          existing.count += 1
-          dailyMap.set(dateKey, existing)
-        }
-        const dailyEntries = [...dailyMap.entries()]
-        for (let i = 0; i < dailyEntries.length; i += 50) {
-          const batch = dailyEntries.slice(i, i + 50)
-          const values: (string | number)[] = []
-          const placeholders: string[] = []
-          batch.forEach(([date, data], idx) => {
-            const offset = idx * 3
-            placeholders.push(`($${offset + 1}, $${offset + 2}, $${offset + 3})`)
-            values.push(date, data.revenue, data.count)
+    // Always sync daily_sales from recent invoices (fast — headers only, no line items)
+    await timed('daily-sales-sync', async () => {
+      const invoices = await fetchDocuments(DOC_FORMATS.TAX_INVOICE, 1000)
+      const dailyMap = new Map<string, { revenue: number; count: number }>()
+      for (const inv of invoices) {
+        const d = inv.doc_date
+        if (!d) continue
+        const dateKey = d.split('T')[0]
+        const existing = dailyMap.get(dateKey) || { revenue: 0, count: 0 }
+        existing.revenue += inv.grand_total || inv.total || 0
+        existing.count += 1
+        dailyMap.set(dateKey, existing)
+      }
+      const dailyEntries = [...dailyMap.entries()]
+      for (let i = 0; i < dailyEntries.length; i += 50) {
+        const batch = dailyEntries.slice(i, i + 50)
+        await db.insert(dailySales)
+          .values(batch.map(([date, data]) => ({
+            date,
+            revenue: String(data.revenue),
+            invoiceCount: data.count,
+          })))
+          .onConflictDoUpdate({
+            target: dailySales.date,
+            set: {
+              revenue: sql`excluded.revenue`,
+              invoiceCount: sql`excluded.invoice_count`,
+            },
           })
-          await query(
-            `INSERT INTO dashboard.daily_sales (date, revenue, invoice_count) VALUES ${placeholders.join(', ')}
-             ON CONFLICT (date) DO UPDATE SET revenue = EXCLUDED.revenue, invoice_count = EXCLUDED.invoice_count`,
-            values
-          )
-        }
+      }
+      results['daily_sales_synced'] = dailyMap.size
+    })
+
+    // Monthly sales line-item sync only in full mode (slower — requires fetching line items)
+    if (mode === 'full') {
+      await timed('monthly-sales-sync', async () => {
+        const invoices = await fetchDocuments(DOC_FORMATS.TAX_INVOICE, 1000)
+
+        // monthly_sales from line items via Drizzle
         const monthlyData = new Map<string, { qty: number; revenue: number; count: number; itemName: string }>()
         for (let i = 0; i < invoices.length; i += 20) {
           const batch = invoices.slice(i, i + 20)
@@ -243,16 +270,29 @@ async function runWarmCache(mode: string, from?: number, to?: number) {
         }
         for (const [key, data] of monthlyData) {
           const parts = key.split('|')
-          await query(
-            `INSERT INTO dashboard.monthly_sales (year, month, item_code, item_name, quantity, revenue, invoice_count, season)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-             ON CONFLICT (year, month, item_code) DO UPDATE SET
-               item_name = EXCLUDED.item_name, quantity = EXCLUDED.quantity,
-               revenue = EXCLUDED.revenue, invoice_count = EXCLUDED.invoice_count, season = EXCLUDED.season`,
-            [parseInt(parts[0], 10), parseInt(parts[1], 10), parts[2], data.itemName, data.qty, data.revenue, data.count, getSeason(parseInt(parts[1], 10))]
-          )
+          await db.insert(monthlySales)
+            .values({
+              year: parseInt(parts[0], 10),
+              month: parseInt(parts[1], 10),
+              itemCode: parts[2],
+              itemName: data.itemName,
+              quantity: String(data.qty),
+              revenue: String(data.revenue),
+              invoiceCount: data.count,
+              season: getSeason(parseInt(parts[1], 10)),
+            })
+            .onConflictDoUpdate({
+              target: [monthlySales.year, monthlySales.month, monthlySales.itemCode],
+              set: {
+                itemName: sql`excluded.item_name`,
+                quantity: sql`excluded.quantity`,
+                revenue: sql`excluded.revenue`,
+                invoiceCount: sql`excluded.invoice_count`,
+                season: sql`excluded.season`,
+              },
+            })
         }
-        return { invoices: invoices.length, daily: dailyMap.size, monthly: monthlyData.size }
+        return { invoices: invoices.length, monthly: monthlyData.size }
       })
     }
 
