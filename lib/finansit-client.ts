@@ -16,6 +16,10 @@ import type {
 } from './types'
 
 const client = createClient({
+  // Point at FINANSIT_BASE_URL when set (e.g. the LAN FINAPI on the internal
+  // box); falls back to the SDK default (prod) when unset. createClient does
+  // NOT read this env var itself — only the SDK's MCP CLI does — so pass it here.
+  baseUrl: process.env.FINANSIT_BASE_URL || undefined,
   credentials: async () => {
     await initializeSecrets()
     return getSecret('FINANSIT_API_CREDENTIALS', '')
