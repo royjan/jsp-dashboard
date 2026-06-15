@@ -1,36 +1,46 @@
-import { Redis } from '@upstash/redis'
+import Redis from 'ioredis'
 import { getSecret } from './aws-secrets'
 
 // ---------------------------------------------------------------------------
-// Upstash Redis client with in-memory Map fallback for local dev
+// Local Redis (TCP) client with in-memory Map fallback.
+// FINAPI and the dashboard share the local Proxmox Redis (192.168.0.160);
+// Upstash is reserved for partly/lambdas. Set REDIS_URL=redis://:<pw>@host:6379.
+// (Was @upstash/redis — a REST client that can't talk to a normal Redis.)
 // ---------------------------------------------------------------------------
 
 let redis: Redis | null = null
 let redisInitialized = false
 
-// Fallback in-memory cache (used when Upstash env vars are not set)
+// Fallback in-memory cache (used when REDIS_URL is not set / DISABLE_REDIS).
 const memoryCache = new Map<string, { data: unknown; expires: number }>()
 
-/** Lazily initialize Upstash Redis (secrets may not be available at module load time). */
+/** Lazily initialize Redis (secrets may not be available at module load time). */
 function getRedis(): Redis | null {
   if (redisInitialized) return redis
 
-  // Opt out of Upstash (e.g. on the internal/LAN box) — fall back to the
-  // in-memory cache so data is fetched live from FINAPI, not the shared Redis.
+  // Opt out (e.g. local dev) — fall back to the in-memory cache so data is
+  // fetched live from FINAPI rather than a shared Redis.
   if (process.env.DISABLE_REDIS === 'true') {
     redisInitialized = true
     console.warn('[redis-client] DISABLE_REDIS=true — in-memory cache, live FINAPI reads')
     return null
   }
 
-  const url = process.env.UPSTASH_REDIS_REST_URL || getSecret('UPSTASH_REDIS_REST_URL')
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN || getSecret('UPSTASH_REDIS_REST_TOKEN')
+  const url = process.env.REDIS_URL || getSecret('REDIS_URL')
 
-  if (url && token) {
-    redis = new Redis({ url, token })
-    console.log('[redis-client] Connected to Upstash Redis')
+  if (url) {
+    redis = new Redis(url, {
+      // Fail fast to the in-memory fallback instead of hanging if Redis is down.
+      maxRetriesPerRequest: 2,
+      enableOfflineQueue: false,
+      connectTimeout: 5000,
+    })
+    redis.on('error', (e: Error) =>
+      console.warn('[redis-client] Redis error:', e.message?.substring(0, 200)),
+    )
+    console.log('[redis-client] Using local Redis (TCP)')
   } else {
-    console.warn('[redis-client] Upstash credentials not available — using in-memory Map fallback')
+    console.warn('[redis-client] REDIS_URL not set — using in-memory Map fallback')
   }
 
   redisInitialized = true
@@ -44,8 +54,18 @@ function getRedis(): Redis | null {
 export async function getCached<T>(key: string): Promise<T | null> {
   const r = getRedis()
   if (r) {
-    const value = await r.get<T>(key)
-    return value ?? null
+    try {
+      const value = await r.get(key)
+      if (value == null) return null
+      try {
+        return JSON.parse(value) as T
+      } catch {
+        return value as unknown as T // non-JSON value
+      }
+    } catch (e: any) {
+      console.warn(`[redis-client] getCached failed for "${key}":`, e.message?.substring(0, 200))
+      return null
+    }
   }
 
   // In-memory fallback
@@ -61,7 +81,7 @@ export async function setCache(key: string, value: unknown, ttlSeconds: number):
   const r = getRedis()
   if (r) {
     try {
-      await r.set(key, value, { ex: ttlSeconds })
+      await r.set(key, JSON.stringify(value), 'EX', ttlSeconds)
     } catch (e: any) {
       console.warn(`[redis-client] setCache failed for key "${key}":`, e.message?.substring(0, 200))
     }
@@ -75,7 +95,11 @@ export async function setCache(key: string, value: unknown, ttlSeconds: number):
 export async function deleteCache(key: string): Promise<void> {
   const r = getRedis()
   if (r) {
-    await r.del(key)
+    try {
+      await r.del(key)
+    } catch (e: any) {
+      console.warn(`[redis-client] deleteCache failed for key "${key}":`, e.message?.substring(0, 200))
+    }
     return
   }
 
