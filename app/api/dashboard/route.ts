@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { getDashboardData } from '@/lib/services/analytics-service'
 import { initializeSecrets } from '@/lib/aws-secrets'
 import { query as dbQuery } from '@/lib/db'
-import { readQuery } from '@/lib/sqlite'
+import { readQueryAsync } from '@/lib/sqlite'
 
 /** Compute this-month sales from the DB (same source as sales chart). */
 async function getMonthSalesFromDb(): Promise<{ total: number; count: number }> {
@@ -12,7 +12,7 @@ async function getMonthSalesFromDb(): Promise<{ total: number; count: number }> 
 
   // SQLite first (fast, local)
   try {
-    const r = readQuery(
+    const r = await readQueryAsync(
       `SELECT COALESCE(SUM(revenue), 0) as total, COALESCE(SUM(invoice_count), 0) as count
        FROM daily_sales WHERE date >= ? AND date <= ?`,
       [monthStart, today],

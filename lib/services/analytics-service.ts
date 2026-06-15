@@ -1,7 +1,7 @@
 import { client, fetchItems, fetchDocuments, fetchDocumentDetail, fetchBatchStock, searchDocuments, fetchAllStockItems, fetchBatchPrices, fetchAllCustomers } from '../finansit-client'
 import { getCached, setCache, deleteCache } from '../redis-client'
 import { query as dbQuery } from '../db'
-import { readQuery } from '../sqlite'
+import { readQueryAsync } from '../sqlite'
 import { CACHE_TTL, CACHE_VERSIONS, DOC_FORMATS, MONTH_NAMES } from '../constants'
 import type { DemandItem, SalesDataPoint, SeasonalDataPoint, DeadStockItem, ReorderItem, FinansitItem, DashboardData, TopSellingItem } from '../types'
 import { fixRtlItemName } from '../rtl-fix'
@@ -416,7 +416,7 @@ async function _getItemsImpl(cacheKey: string, staleCacheKey?: string): Promise<
               const BATCH = 500
               for (let i = 0; i < stillMissing.length; i += BATCH) {
                 const batch = stillMissing.slice(i, i + BATCH)
-                const pgResult = readQuery(
+                const pgResult = await readQueryAsync(
                   `SELECT item_code, retail_price AS price
                    FROM item_snapshot
                    WHERE item_code IN (${batch.map(() => '?').join(',')}) AND retail_price > 0`,
@@ -663,7 +663,7 @@ export async function getSalesData(period: string = '30d', overrideDateFrom?: st
 
   // Try SQLite first (fast, local)
   try {
-    const dbResult = readQuery(
+    const dbResult = await readQueryAsync(
       `SELECT date, revenue, invoice_count
        FROM daily_sales
        WHERE date >= ? AND date <= ?
@@ -739,7 +739,7 @@ export async function getSeasonalData(dateFrom?: string, dateTo?: string): Promi
     const sqliteWhere = conditions.length > 0
       ? `WHERE ${conditions.join(' AND ').replace(/\$\d+/g, '?')}`
       : ''
-    const dbResult = readQuery(
+    const dbResult = await readQueryAsync(
       `SELECT
          month,
          SUM(revenue) AS total_revenue,
@@ -761,7 +761,7 @@ export async function getSeasonalData(dateFrom?: string, dateTo?: string): Promi
         const distinctYears = Math.max(...dbResult.rows.map((r: any) => Number(r.year_count)), 0)
         if (requestedYears >= 2 && distinctYears < 2) {
           // Fall back to daily_sales aggregated by month — covers full history when monthly_sales is sparse
-          const dailyResult = readQuery(`
+          const dailyResult = await readQueryAsync(`
             SELECT
               CAST(strftime('%Y', date) AS INTEGER) AS year,
               CAST(strftime('%m', date) AS INTEGER) AS month,
@@ -812,7 +812,7 @@ export async function getSeasonalData(dateFrom?: string, dateTo?: string): Promi
         try {
           const suppFrom = dateFrom || `${new Date().getFullYear() - 2}-01-01`
           const suppTo = dateTo || new Date().toISOString().split('T')[0]
-          const dailySupp = readQuery(`
+          const dailySupp = await readQueryAsync(`
             SELECT
               CAST(strftime('%m', date) AS INTEGER) AS month,
               CAST(strftime('%Y', date) AS INTEGER) AS year,
@@ -1291,7 +1291,7 @@ export async function getTopSellingItems(period: string = '30d'): Promise<TopSel
     const toYear = now.getFullYear()
     const toMonth = now.getMonth() + 1
 
-    const dbResult = readQuery(
+    const dbResult = await readQueryAsync(
       `SELECT item_code, item_name,
               SUM(quantity) AS total_qty,
               SUM(revenue) AS total_revenue,
@@ -1670,7 +1670,7 @@ export async function getABCClassification(dateFrom?: string, dateTo?: string) {
   // Query monthly_sales for date-range revenue
   let revenueByCode = new Map<string, number>()
   try {
-    const salesResult = readQuery(
+    const salesResult = await readQueryAsync(
       `SELECT item_code, SUM(revenue) AS total_revenue
        FROM monthly_sales
        WHERE (year * 100 + month) >= ?
@@ -1837,7 +1837,7 @@ export async function getCustomerAnalytics(dateFrom?: string, dateTo?: string) {
   const histToYear = Math.min(pgToYear, activeYear - 1)
   if (histFromYear <= histToYear) {
     try {
-      const pgResult = readQuery(
+      const pgResult = await readQueryAsync(
         `SELECT customer_code, customer_name,
                 year, total_revenue, invoice_count,
                 last_invoice
@@ -2023,7 +2023,7 @@ export async function getCustomerAnalytics(dateFrom?: string, dateTo?: string) {
       const yFrom = fromYear === activeYear ? effDateFrom : `${activeYear}-01-01`
       const yTo = effDateTo
       try {
-        const docsResult = readQuery(
+        const docsResult = await readQueryAsync(
           `SELECT customer_code, MAX(customer_name) AS customer_name,
                   SUM(grand_total) AS total_revenue, COUNT(*) AS invoice_count
            FROM documents

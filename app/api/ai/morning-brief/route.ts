@@ -6,7 +6,7 @@ import { getCached, setCache } from '@/lib/redis-client'
 import { getDashboardData } from '@/lib/services/analytics-service'
 import { client } from '@/lib/finansit-client'
 import { query as dbQuery } from '@/lib/db'
-import { readQuery } from '@/lib/sqlite'
+import { readQueryAsync } from '@/lib/sqlite'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -38,25 +38,25 @@ async function getSalesKpis() {
   let yearAgoMonthSales = { total: 0, count: 0 }
 
   try {
-    const tRes = readQuery(
+    const tRes = await readQueryAsync(
       `SELECT COALESCE(SUM(revenue), 0) as total, COALESCE(SUM(invoice_count), 0) as count FROM daily_sales WHERE date = ?`,
       [today],
     )
     if (tRes.rows.length > 0) todaySales = { total: parseFloat(tRes.rows[0].total), count: parseInt(tRes.rows[0].count) || 0 }
 
-    const wRes = readQuery(
+    const wRes = await readQueryAsync(
       `SELECT COALESCE(SUM(revenue), 0) as total, COALESCE(SUM(invoice_count), 0) as count FROM daily_sales WHERE date >= ? AND date <= ?`,
       [weekAgo, today],
     )
     if (wRes.rows.length > 0) weekSales = { total: parseFloat(wRes.rows[0].total), count: parseInt(wRes.rows[0].count) || 0 }
 
-    const mRes = readQuery(
+    const mRes = await readQueryAsync(
       `SELECT COALESCE(SUM(revenue), 0) as total, COALESCE(SUM(invoice_count), 0) as count FROM daily_sales WHERE date >= ? AND date <= ?`,
       [monthStart, today],
     )
     if (mRes.rows.length > 0) monthSales = { total: parseFloat(mRes.rows[0].total), count: parseInt(mRes.rows[0].count) || 0 }
 
-    const yRes = readQuery(
+    const yRes = await readQueryAsync(
       `SELECT COALESCE(SUM(revenue), 0) as total, COALESCE(SUM(invoice_count), 0) as count FROM daily_sales WHERE date >= ? AND date <= ?`,
       [yearAgoMonthStart, yearAgoToday],
     )

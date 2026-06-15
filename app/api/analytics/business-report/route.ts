@@ -1,26 +1,26 @@
 import { NextResponse } from 'next/server'
-import { readQuery } from '@/lib/sqlite'
+import { readQueryAsync } from '@/lib/sqlite'
 
 export const dynamic = 'force-dynamic'
 
-function safeQuery(sql: string, params?: any[]): any[] {
+async function safeQuery(sql: string, params?: any[]): Promise<any[]> {
   try {
-    return readQuery(sql, params).rows
+    return (await readQueryAsync(sql, params)).rows
   } catch (e: any) {
     console.warn('[business-report] Query failed:', e?.message?.substring(0, 100))
     return []
   }
 }
 
-function safeQueryOne(sql: string, params?: any[]): any {
-  const rows = safeQuery(sql, params)
+async function safeQueryOne(sql: string, params?: any[]): Promise<any> {
+  const rows = await safeQuery(sql, params)
   return rows[0] || null
 }
 
 export async function GET() {
   try {
     // 1. Revenue by year
-    const revenueByYear = safeQuery(`
+    const revenueByYear = await safeQuery(`
       SELECT
         year,
         SUM(CASE WHEN format = '11' THEN total ELSE 0 END) as revenue,
@@ -34,7 +34,7 @@ export async function GET() {
     `)
 
     // 2. Monthly revenue
-    const monthlyRevenue = safeQuery(`
+    const monthlyRevenue = await safeQuery(`
       SELECT
         year,
         CAST(strftime('%m', doc_date) AS INTEGER) as month,
@@ -47,7 +47,7 @@ export async function GET() {
     `)
 
     // 3. Credit notes analysis by year
-    const creditsByYear = safeQuery(`
+    const creditsByYear = await safeQuery(`
       SELECT
         year,
         SUM(CASE WHEN format = '11' THEN 1 ELSE 0 END) as invoice_count,
@@ -61,7 +61,7 @@ export async function GET() {
     `)
 
     // 4. Day of week analysis (Sun-Fri Israeli work week)
-    const sunToWed = safeQuery(`
+    const sunToWed = await safeQuery(`
       SELECT
         CASE CAST(strftime('%w', date) AS INTEGER)
           WHEN 0 THEN 'Sunday'
@@ -80,7 +80,7 @@ export async function GET() {
       ORDER BY CAST(strftime('%w', date) AS INTEGER)
     `)
 
-    const endOfWeek = safeQueryOne(`
+    const endOfWeek = await safeQueryOne(`
       SELECT
         ROUND(AVG(week_total)) as avg_week_end_total,
         ROUND(AVG(week_invoices)) as avg_week_end_invoices,
@@ -107,7 +107,7 @@ export async function GET() {
     ]
 
     // 5. Dead stock summary from item_snapshot
-    const deadStockSummary = safeQueryOne(`
+    const deadStockSummary = await safeQueryOne(`
       SELECT
         COUNT(*) as total_items_with_stock,
         SUM(qty * retail_price) as total_inventory_value,
@@ -122,7 +122,7 @@ export async function GET() {
     `)
 
     // 6. Top dead stock items
-    const topDeadStock = safeQuery(`
+    const topDeadStock = await safeQuery(`
       SELECT
         item_code,
         item_name,
@@ -143,7 +143,7 @@ export async function GET() {
     `)
 
     // 7. Customer retention analysis
-    const customerRetention = safeQuery(`
+    const customerRetention = await safeQuery(`
       SELECT
         year,
         COUNT(DISTINCT customer_code) as total_customers,
@@ -155,7 +155,7 @@ export async function GET() {
     `)
 
     // 8. Customer concentration per year
-    const customerConcentration = safeQuery(`
+    const customerConcentration = await safeQuery(`
       SELECT
         year,
         customer_code,
@@ -190,7 +190,7 @@ export async function GET() {
     }).sort((a, b) => a.year - b.year)
 
     // 9. New vs returning customers per year
-    const allCustomerYears = safeQuery(`
+    const allCustomerYears = await safeQuery(`
       SELECT customer_code, MIN(year) as first_year
       FROM customer_stats
       WHERE total_revenue > 0
@@ -218,7 +218,7 @@ export async function GET() {
     })
 
     // 10. Overstock analysis
-    const overstockItems = safeQueryOne(`
+    const overstockItems = await safeQueryOne(`
       SELECT
         COUNT(*) as overstock_count,
         SUM(qty * retail_price) as overstock_value
@@ -229,7 +229,7 @@ export async function GET() {
     `)
 
     // 11. Items with open orders
-    const openOrders = safeQueryOne(`
+    const openOrders = await safeQueryOne(`
       SELECT
         COUNT(CASE WHEN ordered_qty > 0 THEN 1 END) as items_ordered,
         SUM(CASE WHEN ordered_qty > 0 THEN ordered_qty ELSE 0 END) as total_ordered,
@@ -239,7 +239,7 @@ export async function GET() {
     `)
 
     // 12. ABC summary from monthly sales
-    const abcData = safeQuery(`
+    const abcData = await safeQuery(`
       SELECT
         item_code,
         item_name,
@@ -264,7 +264,7 @@ export async function GET() {
     }
 
     // 13. Monthly average across years for seasonality
-    const seasonality = safeQuery(`
+    const seasonality = await safeQuery(`
       SELECT
         month,
         AVG(revenue) as avg_revenue,
@@ -290,13 +290,13 @@ export async function GET() {
     }))
 
     // 15. KPIs summary
-    const activeItems = safeQueryOne(`
+    const activeItems = await safeQueryOne(`
       SELECT COUNT(DISTINCT item_code) as count
       FROM monthly_sales
       WHERE year >= 2024 AND revenue > 0
     `)
 
-    const totalItemsWithStock = safeQueryOne(`
+    const totalItemsWithStock = await safeQueryOne(`
       SELECT COUNT(*) as count FROM item_snapshot WHERE qty > 0
     `)
 

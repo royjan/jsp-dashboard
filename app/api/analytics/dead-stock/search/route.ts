@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { readQuery } from '@/lib/sqlite'
+import { readQueryAsync } from '@/lib/sqlite'
 import { client } from '@/lib/finansit-client'
 
 export const dynamic = 'force-dynamic'
@@ -33,7 +33,7 @@ export async function GET(request: Request) {
 
   try {
     // Step 1: Search SQLite for matching items
-    const rawItems = readQuery(`
+    const rawItems = (await readQueryAsync(`
       SELECT
         item_code,
         item_name,
@@ -47,7 +47,7 @@ export async function GET(request: Request) {
       FROM item_snapshot
       WHERE qty > 0
         AND (${whereClause})
-    `, params).rows as any[]
+    `, params)).rows as any[]
 
     // Step 2: Resolve chains and aggregate sales across ALL codes per chain
     const seen = new Set<string>()
@@ -66,7 +66,7 @@ export async function GET(request: Request) {
 
           // Aggregate across chain
           const chainPlaceholders = chain.chain_codes.map(() => '?').join(',')
-          const chainResult = readQuery(`
+          const chainResult = (await readQueryAsync(`
             SELECT
               CAST(qty AS INT) as qty,
               retail_price as price,
@@ -77,7 +77,7 @@ export async function GET(request: Request) {
               CAST(sold_3y_ago AS INT) as sold_3y_ago
             FROM item_snapshot
             WHERE item_code IN (${chainPlaceholders})
-          `, chain.chain_codes).rows as any[]
+          `, chain.chain_codes)).rows as any[]
 
           const totalQty = chainResult.reduce((s: number, r: any) => s + (r.qty || 0), 0)
           const bestPrice = Math.max(...chainResult.map((r: any) => r.price || 0), 0)

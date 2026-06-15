@@ -1,7 +1,7 @@
 export const maxDuration = 60
 
 import { NextResponse } from 'next/server'
-import { readQuery } from '@/lib/sqlite'
+import { readQueryAsync } from '@/lib/sqlite'
 import { query as pgQuery } from '@/lib/db'
 import { initializeSecrets, getSecret } from '@/lib/aws-secrets'
 import { getCached, setCache } from '@/lib/redis-client'
@@ -81,12 +81,12 @@ export async function GET(request: Request) {
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
 
     // Check if SQLite table has any data at all
-    const tableCheck = readQuery('SELECT COUNT(*) AS cnt FROM monthly_sales LIMIT 1', [])
+    const tableCheck = await readQueryAsync('SELECT COUNT(*) AS cnt FROM monthly_sales LIMIT 1', [])
     const hasTableData = Number(tableCheck.rows[0]?.cnt || 0) > 0
 
     // Fetch SQLite rows and items (for chain resolution) in parallel
     let sqliteResult = hasTableData
-      ? readQuery(
+      ? await readQueryAsync(
           `SELECT
              item_code,
              MAX(item_name) AS item_name,

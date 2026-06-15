@@ -1,7 +1,7 @@
 export const maxDuration = 60
 
 import { NextResponse } from 'next/server'
-import { readQuery } from '@/lib/sqlite'
+import { readQueryAsync } from '@/lib/sqlite'
 import { client } from '@/lib/finansit-client'
 
 /**
@@ -34,9 +34,9 @@ async function resolveItemChain(code: string) {
 }
 
 /** Query SQLite for all codes in a chain and aggregate sales/stock */
-function aggregateChainData(chainCodes: string[]) {
+async function aggregateChainData(chainCodes: string[]) {
   const placeholders = chainCodes.map(() => '?').join(',')
-  const result = readQuery(`
+  const result = await readQueryAsync(`
     SELECT
       item_code,
       item_name,
@@ -85,7 +85,7 @@ export async function POST(request: Request) {
 
     if (item_codes && item_codes.length > 0) {
       const placeholders = item_codes.map(() => '?').join(',')
-      const result = readQuery(`
+      const result = await readQueryAsync(`
         SELECT item_code, item_name, CAST(qty AS INT) as qty, retail_price as price,
           ROUND(qty * retail_price) as capital_tied,
           CAST(sold_this_year AS INT) as sold_this_year,
@@ -101,7 +101,7 @@ export async function POST(request: Request) {
       const whereClause = terms.map(() => `item_name LIKE ?`).join(' OR ')
       const params = terms.map((t: string) => `%${t}%`)
 
-      const result = readQuery(`
+      const result = await readQueryAsync(`
         SELECT item_code, item_name, CAST(qty AS INT) as qty, retail_price as price,
           ROUND(qty * retail_price) as capital_tied,
           CAST(sold_this_year AS INT) as sold_this_year,
@@ -143,7 +143,7 @@ export async function POST(request: Request) {
           seen.add(chain.canonical_code)
 
           // Aggregate sales/stock across entire chain
-          const aggregated = aggregateChainData(chain.chain_codes)
+          const aggregated = await aggregateChainData(chain.chain_codes)
           if (!aggregated || aggregated.total_qty <= 0) return null
 
           // Use canonical name from API, fall back to SQLite name
