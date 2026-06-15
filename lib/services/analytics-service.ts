@@ -18,6 +18,23 @@ export async function getDashboardData(): Promise<DashboardData> {
   return data
 }
 
+/**
+ * Simple catalog aggregates (number of items, total stock quantity), pre-warmed
+ * daily into `dashboard:summary` by the cache-warmer lambda. Reading this avoids
+ * the heavy live `getItems()` catalog fetch just to show a count. Returns null
+ * when the key hasn't been warmed yet (cold cache) — callers can fall back to
+ * deriving counts from `getItems()` if they truly need a live value.
+ */
+export interface DashboardSummary {
+  total_items: number
+  total_stock_qty: number
+  timestamp?: string
+}
+
+export async function getDashboardSummary(): Promise<DashboardSummary | null> {
+  return await getCached<DashboardSummary>('dashboard:summary')
+}
+
 // ── Helper: map raw API item to FinansitItem ──
 
 function mapRawItem(raw: any): FinansitItem | null {
