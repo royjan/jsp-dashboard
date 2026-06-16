@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { initializeSecrets } from '@/lib/aws-secrets'
-import { getDb } from '@/lib/db'
+import { getDb, query } from '@/lib/db'
 import { deliveries, deliveryStatusLog } from '@/lib/db/schema'
 import { eq, desc, and, gte, lte, sql } from 'drizzle-orm'
 import { fetchDocumentDetail } from '@/lib/finansit-client'
@@ -27,6 +27,35 @@ export async function GET(request: Request) {
       .from(deliveries)
       .where(conditions.length > 0 ? and(...conditions) : undefined)
       .orderBy(desc(deliveries.createdAt))
+
+    // No operational dispatches recorded yet → surface the real delivery-note
+    // history (format 21) so the page isn't empty. These are completed
+    // deliveries (status 'delivered'); they switch to live dispatch data once
+    // the dispatch flow (POST) is used.
+    if (rows.length === 0) {
+      const docRes = await query(
+        `SELECT year, doc_number, customer_code, customer_name,
+                doc_date::text AS doc_date, grand_total
+         FROM dashboard.documents
+         WHERE format='21' AND doc_date IS NOT NULL
+         ORDER BY doc_date DESC
+         LIMIT 300`,
+      )
+      const docDeliveries = docRes.rows.map((r: any) => ({
+        id: `doc-${r.year}-${r.doc_number}`,
+        documentNumber: r.doc_number,
+        customerCode: r.customer_code,
+        customerName: r.customer_name,
+        customerAddress: null,
+        driverName: null,
+        status: 'delivered',
+        total: Number(r.grand_total) || 0,
+        createdAt: r.doc_date,
+        deliveredAt: r.doc_date,
+        source: 'document',
+      }))
+      return NextResponse.json({ deliveries: docDeliveries })
+    }
 
     return NextResponse.json({ deliveries: rows })
   } catch (error) {

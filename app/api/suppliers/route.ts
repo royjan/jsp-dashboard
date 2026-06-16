@@ -1,9 +1,9 @@
 export const maxDuration = 30
 
 import { NextResponse } from 'next/server'
-import { getDb } from '@/lib/db'
-import { supplierProfiles, supplierOrderConfirmations } from '@/lib/db/schema'
-import { eq, sql, desc } from 'drizzle-orm'
+import { getDb, query } from '@/lib/db'
+import { supplierProfiles } from '@/lib/db/schema'
+import { desc } from 'drizzle-orm'
 import { initializeSecrets } from '@/lib/aws-secrets'
 
 export async function GET() {
@@ -11,40 +11,66 @@ export async function GET() {
     await initializeSecrets()
     const db = await getDb()
 
-    const suppliers = await db
-      .select()
-      .from(supplierProfiles)
-      .orderBy(desc(supplierProfiles.updatedAt))
+    // Manual profiles (lead time, contacts, payment terms) — enrichment only.
+    const profiles = await db.select().from(supplierProfiles).orderBy(desc(supplierProfiles.updatedAt))
+    const profileMap = Object.fromEntries(profiles.map((p) => [p.supplierCode, p]))
 
-    // Get pending order counts per supplier
-    const confirmations = await db
-      .select({
-        supplierCode: supplierOrderConfirmations.supplierCode,
-        pendingCount: sql<number>`count(*) filter (where ${supplierOrderConfirmations.status} = 'pending')`,
-        totalCount: sql<number>`count(*)`,
-        lastDelivery: sql<string>`max(${supplierOrderConfirmations.actualDelivery})`,
-      })
-      .from(supplierOrderConfirmations)
-      .groupBy(supplierOrderConfirmations.supplierCode)
-
-    const confirmMap = Object.fromEntries(
-      confirmations.map(c => [c.supplierCode, c])
+    // Derive the actual supplier list from purchase documents — on a purchase
+    // doc the "customer" IS the supplier. 61=order, 62=in-transit, 58=invoice.
+    // status '0'/'' = open → pending.
+    const derived = await query(
+      `SELECT customer_code AS code, MAX(customer_name) AS name,
+              COUNT(*)::int AS total_orders,
+              COUNT(*) FILTER (WHERE format='61' AND COALESCE(status,'') IN ('','0'))::int AS pending_orders,
+              MAX(doc_date)::text AS last_order
+       FROM dashboard.documents
+       WHERE format IN ('61','62','58') AND customer_code IS NOT NULL AND customer_code <> ''
+       GROUP BY customer_code
+       ORDER BY total_orders DESC
+       LIMIT 500`,
     )
 
-    const enriched = suppliers.map(s => ({
-      ...s,
-      pendingOrders: confirmMap[s.supplierCode]?.pendingCount || 0,
-      totalOrders: confirmMap[s.supplierCode]?.totalCount || 0,
-      lastDelivery: confirmMap[s.supplierCode]?.lastDelivery || null,
-    }))
+    const suppliers = derived.rows.map((r: any) => {
+      const p = profileMap[r.code]
+      return {
+        supplierCode: r.code,
+        supplierName: r.name || p?.supplierName || r.code,
+        active: p?.active ?? true,
+        leadTimeDays: p?.leadTimeDays ?? null,
+        contactEmail: p?.contactEmail ?? null,
+        contactPhone: p?.contactPhone ?? null,
+        paymentTerms: p?.paymentTerms ?? null,
+        pendingOrders: Number(r.pending_orders) || 0,
+        totalOrders: Number(r.total_orders) || 0,
+        lastDelivery: r.last_order || null,
+      }
+    })
+
+    // Manual-only suppliers that have no purchase docs yet.
+    for (const p of profiles) {
+      if (!suppliers.some((s) => s.supplierCode === p.supplierCode)) {
+        suppliers.push({
+          supplierCode: p.supplierCode,
+          supplierName: p.supplierName,
+          active: p.active ?? true,
+          leadTimeDays: p.leadTimeDays ?? null,
+          contactEmail: p.contactEmail ?? null,
+          contactPhone: p.contactPhone ?? null,
+          paymentTerms: p.paymentTerms ?? null,
+          pendingOrders: 0,
+          totalOrders: 0,
+          lastDelivery: null,
+        })
+      }
+    }
 
     return NextResponse.json({
-      suppliers: enriched,
+      suppliers,
       summary: {
         total: suppliers.length,
-        active: suppliers.filter(s => s.active).length,
-        pendingOrders: confirmations.reduce((sum, c) => sum + (c.pendingCount || 0), 0),
-        overdueDeliveries: 0, // Will compute from estimated vs actual delivery
+        active: suppliers.filter((s) => s.active).length,
+        pendingOrders: suppliers.reduce((sum, s) => sum + s.pendingOrders, 0),
+        overdueDeliveries: 0,
       },
     })
   } catch (error) {
