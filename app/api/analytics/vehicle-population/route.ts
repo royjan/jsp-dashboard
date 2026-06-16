@@ -1,122 +1,73 @@
-export const maxDuration = 30
+export const maxDuration = 20
 
 import { NextResponse } from 'next/server'
 import { initializeSecrets } from '@/lib/aws-secrets'
-import { query } from '@/lib/db'
 import { getCached, setCache } from '@/lib/redis-client'
 
-const CACHE_KEY = 'vehicle-population:summary:v1'
-const CACHE_TTL = 86400 // 24 hours
+const ICS_API = 'https://pgzwvgwxtw.eu-central-1.awsapprunner.com'
+const CACHE_KEY = 'vehicle-population:summary:v2'
+const CACHE_TTL = 86400 // 24h
 
-interface ManufacturerSummary {
-  manufacturer: string
-  count: number
-  models: { model: string; count: number }[]
-}
+// National fleet age mix (Israel) — snapshot of the registration-year
+// distribution. Computing this live means a full GROUP BY over the 3.7M-row
+// ics."Vehicles" table, which takes >200s (and trips the DB statement_timeout),
+// so we keep a stable snapshot and scale it to the live total. The mix shifts
+// only slowly year-to-year; refresh the ratios occasionally if needed.
+const AGE_MIX = [
+  { bracket: '0-3 years', bracketHe: '0-3 שנים', minAge: 0, maxAge: 3, ratio: 755443 / 3720429 },
+  { bracket: '3-7 years', bracketHe: '3-7 שנים', minAge: 3, maxAge: 7, ratio: 1150453 / 3720429 },
+  { bracket: '7-12 years', bracketHe: '7-12 שנים', minAge: 7, maxAge: 12, ratio: 995844 / 3720429 },
+  { bracket: '12+ years', bracketHe: '12+ שנים', minAge: 12, maxAge: 100, ratio: 818689 / 3720429 },
+]
 
-interface AgeDistribution {
-  bracket: string
-  bracketHe: string
-  minAge: number
-  maxAge: number
-  count: number
-}
-
-export async function GET(request: Request) {
+export async function GET() {
   try {
     await initializeSecrets()
 
-    const { searchParams } = new URL(request.url)
-    const forceRefresh = searchParams.get('refresh') === '1'
+    const cached = await getCached<any>(CACHE_KEY)
+    if (cached) return NextResponse.json(cached)
 
-    if (!forceRefresh) {
-      const cached = await getCached<any>(CACHE_KEY)
-      if (cached) return NextResponse.json(cached)
+    // Pre-aggregated, fast — same source the /market page uses.
+    const res = await fetch(`${ICS_API}/api/stats`, {
+      next: { revalidate: 3600 },
+      signal: AbortSignal.timeout(12000),
+    })
+    if (!res.ok) throw new Error(`ICS API error: ${res.status}`)
+    const stats = await res.json()
+
+    const total = Number(stats.overview?.totalVehicles) || 0
+    const topModels: any[] = stats.topModels || []
+
+    // Manufacturers (+ their top models) aggregated from topModels.
+    const mfrMap = new Map<string, { manufacturer: string; count: number; models: { model: string; count: number }[] }>()
+    for (const m of topModels) {
+      const mfr = m.manufacturer || 'Unknown'
+      if (!mfrMap.has(mfr)) mfrMap.set(mfr, { manufacturer: mfr, count: 0, models: [] })
+      const e = mfrMap.get(mfr)!
+      e.count += m.count || 0
+      e.models.push({ model: m.model, count: m.count || 0 })
     }
+    const manufacturers = Array.from(mfrMap.values())
+      .map((e) => ({ ...e, models: e.models.sort((a, b) => b.count - a.count).slice(0, 15) }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 20)
 
-    const currentYear = new Date().getFullYear()
-
-    // Top 20 manufacturers with vehicle counts
-    const mfrResult = await query(`
-      SELECT manufacturer, SUM(COALESCE(quantity, 1)) as count
-      FROM ics."Vehicles"
-      WHERE manufacturer IS NOT NULL AND manufacturer != ''
-      GROUP BY manufacturer
-      ORDER BY count DESC
-      LIMIT 20
-    `)
-
-    // For each top manufacturer, get top models
-    const manufacturers: ManufacturerSummary[] = []
-    for (const row of mfrResult.rows) {
-      const modelsResult = await query(`
-        SELECT model, SUM(COALESCE(quantity, 1)) as count
-        FROM ics."Vehicles"
-        WHERE manufacturer = $1 AND model IS NOT NULL AND model != ''
-        GROUP BY model
-        ORDER BY count DESC
-        LIMIT 15
-      `, [row.manufacturer])
-
-      manufacturers.push({
-        manufacturer: row.manufacturer,
-        count: Number(row.count),
-        models: modelsResult.rows.map((m: any) => ({
-          model: m.model,
-          count: Number(m.count),
-        })),
-      })
-    }
-
-    // Age distribution brackets
-    const ageBrackets: AgeDistribution[] = [
-      { bracket: '0-3 years', bracketHe: '0-3 שנים', minAge: 0, maxAge: 3, count: 0 },
-      { bracket: '3-7 years', bracketHe: '3-7 שנים', minAge: 3, maxAge: 7, count: 0 },
-      { bracket: '7-12 years', bracketHe: '7-12 שנים', minAge: 7, maxAge: 12, count: 0 },
-      { bracket: '12+ years', bracketHe: '12+ שנים', minAge: 12, maxAge: 100, count: 0 },
-    ]
-
-    for (const bracket of ageBrackets) {
-      const fromYear = currentYear - bracket.maxAge
-      const toYear = currentYear - bracket.minAge
-      const result = await query(`
-        SELECT COALESCE(SUM(COALESCE(quantity, 1)), 0) as count
-        FROM ics."Vehicles"
-        WHERE EXTRACT(YEAR FROM "registrationDate") > $1
-          AND EXTRACT(YEAR FROM "registrationDate") <= $2
-      `, [fromYear, toYear])
-      bracket.count = Number(result.rows[0]?.count || 0)
-    }
-
-    // Total vehicles
-    const totalResult = await query(`
-      SELECT COALESCE(SUM(COALESCE(quantity, 1)), 0) as total
-      FROM ics."Vehicles"
-    `)
-
-    // Year distribution for charts (last 20 years)
-    const yearDistResult = await query(`
-      SELECT EXTRACT(YEAR FROM "registrationDate")::int as year,
-             SUM(COALESCE(quantity, 1)) as count
-      FROM ics."Vehicles"
-      WHERE EXTRACT(YEAR FROM "registrationDate") >= $1
-      GROUP BY year
-      ORDER BY year DESC
-    `, [currentYear - 20])
+    const age_distribution = AGE_MIX.map((b) => ({
+      bracket: b.bracket,
+      bracketHe: b.bracketHe,
+      minAge: b.minAge,
+      maxAge: b.maxAge,
+      count: Math.round(total * b.ratio),
+    }))
 
     const response = {
-      total_vehicles: Number(totalResult.rows[0]?.total || 0),
+      total_vehicles: total,
       manufacturers,
-      age_distribution: ageBrackets,
-      year_distribution: yearDistResult.rows.map((r: any) => ({
-        year: Number(r.year),
-        count: Number(r.count),
-      })),
+      age_distribution,
       cached_at: new Date().toISOString(),
     }
 
     await setCache(CACHE_KEY, response, CACHE_TTL)
-
     return NextResponse.json(response)
   } catch (error) {
     console.error('[Vehicle Population] Error:', error)

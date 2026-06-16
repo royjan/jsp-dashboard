@@ -17,7 +17,16 @@ export async function getPool(): Promise<Pool> {
   await initializeSecrets()
   const connectionString = getSecret('DATABASE_URL')
   if (!connectionString) throw new Error('DATABASE_URL not configured')
-  pool = new Pool({ connectionString, max: 5 })
+  // statement_timeout: Postgres cancels any single query running longer than
+  // this (ms) instead of letting it hang for minutes. query_timeout is the
+  // client-side companion. Heavy analytics that legitimately need longer should
+  // be optimized (e.g. vehicle-population) rather than allowed to block.
+  pool = new Pool({
+    connectionString,
+    max: 5,
+    statement_timeout: 30_000,
+    query_timeout: 35_000,
+  })
   return pool
 }
 
