@@ -19,7 +19,7 @@ import {
 } from 'recharts'
 import { NUMBER_FORMAT, formatNumber } from '@/lib/constants'
 
-type SortField = 'name' | 'total_qty' | 'quote_count'
+type SortField = 'name' | 'total_qty' | 'quote_count' | 'last_quoted' | 'stock_qty' | 'incoming_qty'
 type SortDir = 'asc' | 'desc'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -249,9 +249,15 @@ export default function GapAnalysisPage() {
                   <th className="text-end p-2 cursor-pointer" onClick={() => toggleSort('total_qty')}>
                     <span className="flex items-center justify-end gap-1">{t('quantity')} <ArrowUpDown className="h-3 w-3" /></span>
                   </th>
-                  <th className="text-end p-2">{t('lastQuoted')}</th>
-                  <th className="text-end p-2">{t('stockQty')}</th>
-                  <th className="text-end p-2">{t('incoming')}</th>
+                  <th className="text-end p-2 cursor-pointer" onClick={() => toggleSort('last_quoted')}>
+                    <span className="flex items-center justify-end gap-1">{t('lastQuoted')} <ArrowUpDown className="h-3 w-3" /></span>
+                  </th>
+                  <th className="text-end p-2 cursor-pointer" onClick={() => toggleSort('stock_qty')}>
+                    <span className="flex items-center justify-end gap-1">{t('stockQty')} <ArrowUpDown className="h-3 w-3" /></span>
+                  </th>
+                  <th className="text-end p-2 cursor-pointer" onClick={() => toggleSort('incoming_qty')}>
+                    <span className="flex items-center justify-end gap-1">{t('incoming')} <ArrowUpDown className="h-3 w-3" /></span>
+                  </th>
                 </tr>
               </thead>
               <tbody>

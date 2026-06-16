@@ -43,13 +43,6 @@ function MarginContent() {
     return sorted[Math.floor(sorted.length / 2)]
   }, [scatterData])
 
-  const categoryChart = useMemo(() => {
-    if (!data?.byCategory) return []
-    return data.byCategory.slice(0, 12).map((c) => ({
-      category: c.category.length > 16 ? c.category.slice(0, 15) + '…' : c.category,
-      revenue: Math.round(c.revenue),
-    }))
-  }, [data])
 
   // ── Loading ──
   if (isLoading) {
@@ -197,30 +190,6 @@ function MarginContent() {
                   ))}
                 </Scatter>
               </ScatterChart>
-            </ResponsiveContainer>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Category breakdown */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">{isHe ? 'הכנסה לפי קטגוריה' : 'Revenue by Category'}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="h-[300px] min-w-0">
-            <ResponsiveContainer width="100%" height="100%" minHeight={120}>
-              <BarChart data={categoryChart} margin={{ top: 10, right: 10, bottom: 40, left: 10 }}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                <XAxis dataKey="category" tick={{ fontSize: 10 }} angle={-30} textAnchor="end" interval={0} height={50} />
-                <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => formatNumber(v)} />
-                <Tooltip formatter={(v: any) => formatCurrency(v)} />
-                <Bar dataKey="revenue" radius={[4, 4, 0, 0]}>
-                  {categoryChart.map((_, i) => (
-                    <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
-                  ))}
-                </Bar>
-              </BarChart>
             </ResponsiveContainer>
           </div>
         </CardContent>
