@@ -75,8 +75,8 @@ export function DemandBarChart({ data, isLoading, mode, limit = 10, hoveredCode,
       </CardHeader>
       <CardContent>
         <div className="flex flex-col lg:flex-row items-center gap-3 sm:gap-4">
-          <div className="w-full lg:w-1/2 h-[220px] sm:h-[300px] lg:h-[350px]">
-            <ResponsiveContainer width="100%" height="100%">
+          <div className="w-full lg:w-1/2 min-w-0 h-[220px] sm:h-[300px] lg:h-[350px]">
+            <ResponsiveContainer width="100%" height="100%" minHeight={120}>
               <PieChart>
                 <Pie
                   data={chartData}
