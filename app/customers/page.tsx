@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { CustomersPageSkeleton } from '@/components/layout/PageSkeleton'
+import { SubTabs } from '@/components/shared/SubTabs'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
 import Link from 'next/link'
@@ -377,6 +378,12 @@ function CustomersPageContent() {
 
   return (
     <div className="space-y-4 md:space-y-6">
+      <SubTabs
+        tabs={[
+          { href: '/customers', label: t('customers') },
+          { href: '/customers/health-score', label: t('customerHealth') },
+        ]}
+      />
       <div className="flex justify-end">
         <div className="relative min-w-[180px] sm:max-w-xs">
           <Search className="absolute start-2.5 top-2.5 h-4 w-4 text-muted-foreground" />

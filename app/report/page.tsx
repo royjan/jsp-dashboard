@@ -11,6 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { useSortable, SortableTh } from '@/components/shared/sortable-table'
 import { ILS_FORMAT, NUMBER_FORMAT, formatNumber } from '@/lib/constants'
 import {
   TrendingUp, TrendingDown, AlertTriangle, Package, Users, FileText,
@@ -137,6 +138,26 @@ function ReportContent() {
     if (!data?.customer_retention) return []
     return data.customer_retention
   }, [data])
+
+  // Enriched, pre-computed rows for the sortable revenue table
+  const revenueRows = useMemo(() => {
+    return revenueChartData.map((r: any, i: number) => {
+      const prev = i > 0 ? revenueChartData[i - 1] : null
+      const change = prev ? Math.round((r.revenue - prev.revenue) / prev.revenue * 1000) / 10 : null
+      const avgValue = r.invoices > 0 ? Math.round(r.revenue / r.invoices) : 0
+      return { ...r, change, avgValue }
+    })
+  }, [revenueChartData])
+
+  const { sorted: sortedRevenue, sortKey: revSortKey, sortDir: revSortDir, toggleSort: revToggle } =
+    useSortable<any>(revenueRows)
+
+  const { sorted: sortedRetention, sortKey: retSortKey, sortDir: retSortDir, toggleSort: retToggle } =
+    useSortable<any>(retentionData)
+
+  const concentrationData = useMemo(() => data?.customer_concentration ?? [], [data])
+  const { sorted: sortedConcentration, sortKey: concSortKey, sortDir: concSortDir, toggleSort: concToggle } =
+    useSortable<any>(concentrationData)
 
   const dayOfWeekData = useMemo(() => {
     if (!data?.day_of_week) return []
@@ -279,35 +300,30 @@ function ReportContent() {
               <div className="overflow-x-auto -mx-4 md:mx-0">
                 <table className="w-full text-sm min-w-[600px]">
                   <thead>
-                    <tr className="border-b">
-                      <th className="pb-2 font-medium text-start ps-4 md:ps-0">{isHe ? 'שנה' : 'Year'}</th>
-                      <th className="pb-2 font-medium text-end">{isHe ? 'הכנסות' : 'Revenue'}</th>
-                      <th className="pb-2 font-medium text-end">{t('yearOverYear')}</th>
-                      <th className="pb-2 font-medium text-end">{t('invoiceCount')}</th>
-                      <th className="pb-2 font-medium text-end pe-4 md:pe-0">{t('avgInvoiceValue')}</th>
+                    <tr className="border-b [&>th]:pb-2">
+                      <th className="font-medium text-start ps-4 md:ps-0">{isHe ? 'שנה' : 'Year'}</th>
+                      <SortableTh<any> label={isHe ? 'הכנסות' : 'Revenue'} sortKey="revenue" align="end" activeKey={revSortKey} sortDir={revSortDir} onSort={revToggle} />
+                      <SortableTh<any> label={t('yearOverYear')} sortKey="change" align="end" activeKey={revSortKey} sortDir={revSortDir} onSort={revToggle} />
+                      <SortableTh<any> label={t('invoiceCount')} sortKey="invoices" align="end" activeKey={revSortKey} sortDir={revSortDir} onSort={revToggle} />
+                      <SortableTh<any> label={t('avgInvoiceValue')} sortKey="avgValue" align="end" activeKey={revSortKey} sortDir={revSortDir} onSort={revToggle} className="pe-4 md:pe-0" />
                     </tr>
                   </thead>
                   <tbody>
-                    {revenueChartData.map((r: any, i: number) => {
-                      const prev = i > 0 ? revenueChartData[i - 1] : null
-                      const change = prev ? Math.round((r.revenue - prev.revenue) / prev.revenue * 1000) / 10 : null
-                      const avgValue = r.invoices > 0 ? Math.round(r.revenue / r.invoices) : 0
-                      return (
-                        <tr key={r.year} className="border-b hover:bg-muted/50 transition-colors">
-                          <td className="py-2.5 ps-4 md:ps-0 font-medium">{r.year}</td>
-                          <td className="py-2.5 text-end font-mono tabular-nums">{ILS_FORMAT.format(r.revenue)}</td>
-                          <td className="py-2.5 text-end">
-                            {change !== null && (
-                              <Badge variant={change > 0 ? 'success' : 'destructive'}>
-                                {change > 0 ? '+' : ''}{change}%
-                              </Badge>
-                            )}
-                          </td>
-                          <td className="py-2.5 text-end tabular-nums">{NUMBER_FORMAT.format(r.invoices)}</td>
-                          <td className="py-2.5 text-end font-mono tabular-nums pe-4 md:pe-0">{ILS_FORMAT.format(avgValue)}</td>
-                        </tr>
-                      )
-                    })}
+                    {sortedRevenue.map((r: any) => (
+                      <tr key={r.year} className="border-b hover:bg-muted/50 transition-colors">
+                        <td className="py-2.5 ps-4 md:ps-0 font-medium">{r.year}</td>
+                        <td className="py-2.5 text-end font-mono tabular-nums">{ILS_FORMAT.format(r.revenue)}</td>
+                        <td className="py-2.5 text-end">
+                          {r.change !== null && (
+                            <Badge variant={r.change > 0 ? 'success' : 'destructive'}>
+                              {r.change > 0 ? '+' : ''}{r.change}%
+                            </Badge>
+                          )}
+                        </td>
+                        <td className="py-2.5 text-end tabular-nums">{NUMBER_FORMAT.format(r.invoices)}</td>
+                        <td className="py-2.5 text-end font-mono tabular-nums pe-4 md:pe-0">{ILS_FORMAT.format(r.avgValue)}</td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
@@ -848,17 +864,17 @@ function ReportContent() {
               <div className="overflow-x-auto -mx-4 md:mx-0">
                 <table className="w-full text-sm min-w-[600px]">
                   <thead>
-                    <tr className="border-b">
-                      <th className="pb-2 font-medium text-start ps-4 md:ps-0">{isHe ? 'שנה' : 'Year'}</th>
-                      <th className="pb-2 font-medium text-end">{isHe ? 'לקוחות' : 'Customers'}</th>
-                      <th className="pb-2 font-medium text-end">{t('newCustomers')}</th>
-                      <th className="pb-2 font-medium text-end">{t('returningCustomers')}</th>
-                      <th className="pb-2 font-medium text-end">{t('retentionRate')}</th>
-                      <th className="pb-2 font-medium text-end pe-4 md:pe-0">{isHe ? 'הכנסות' : 'Revenue'}</th>
+                    <tr className="border-b [&>th]:pb-2">
+                      <th className="font-medium text-start ps-4 md:ps-0">{isHe ? 'שנה' : 'Year'}</th>
+                      <SortableTh<any> label={isHe ? 'לקוחות' : 'Customers'} sortKey="total_customers" align="end" activeKey={retSortKey} sortDir={retSortDir} onSort={retToggle} />
+                      <SortableTh<any> label={t('newCustomers')} sortKey="new_customers" align="end" activeKey={retSortKey} sortDir={retSortDir} onSort={retToggle} />
+                      <SortableTh<any> label={t('returningCustomers')} sortKey="returning_customers" align="end" activeKey={retSortKey} sortDir={retSortDir} onSort={retToggle} />
+                      <SortableTh<any> label={t('retentionRate')} sortKey="retention_pct" align="end" activeKey={retSortKey} sortDir={retSortDir} onSort={retToggle} />
+                      <SortableTh<any> label={isHe ? 'הכנסות' : 'Revenue'} sortKey="total_revenue" align="end" activeKey={retSortKey} sortDir={retSortDir} onSort={retToggle} className="pe-4 md:pe-0" />
                     </tr>
                   </thead>
                   <tbody>
-                    {retentionData.map((r: any) => (
+                    {sortedRetention.map((r: any) => (
                       <tr key={r.year} className="border-b hover:bg-muted/50 transition-colors">
                         <td className="py-2.5 ps-4 md:ps-0 font-medium">{r.year}</td>
                         <td className="py-2.5 text-end tabular-nums">{formatNumber(r.total_customers)}</td>
@@ -891,15 +907,15 @@ function ReportContent() {
               <div className="overflow-x-auto -mx-4 md:mx-0">
                 <table className="w-full text-sm min-w-[500px]">
                   <thead>
-                    <tr className="border-b">
-                      <th className="pb-2 font-medium text-start ps-4 md:ps-0">{isHe ? 'שנה' : 'Year'}</th>
-                      <th className="pb-2 font-medium text-end">Top 5 %</th>
-                      <th className="pb-2 font-medium text-end">Top 10 %</th>
-                      <th className="pb-2 font-medium text-end pe-4 md:pe-0">{isHe ? 'סה"כ לקוחות' : 'Total Customers'}</th>
+                    <tr className="border-b [&>th]:pb-2">
+                      <th className="font-medium text-start ps-4 md:ps-0">{isHe ? 'שנה' : 'Year'}</th>
+                      <SortableTh<any> label="Top 5 %" sortKey="top5_pct" align="end" activeKey={concSortKey} sortDir={concSortDir} onSort={concToggle} />
+                      <SortableTh<any> label="Top 10 %" sortKey="top10_pct" align="end" activeKey={concSortKey} sortDir={concSortDir} onSort={concToggle} />
+                      <SortableTh<any> label={isHe ? 'סה"כ לקוחות' : 'Total Customers'} sortKey="total_customers" align="end" activeKey={concSortKey} sortDir={concSortDir} onSort={concToggle} className="pe-4 md:pe-0" />
                     </tr>
                   </thead>
                   <tbody>
-                    {data.customer_concentration.map((r: any) => (
+                    {sortedConcentration.map((r: any) => (
                       <tr key={r.year} className="border-b hover:bg-muted/50 transition-colors">
                         <td className="py-2.5 ps-4 md:ps-0 font-medium">{r.year}</td>
                         <td className="py-2.5 text-end">

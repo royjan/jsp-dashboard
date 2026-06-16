@@ -15,6 +15,7 @@ import { Tooltip as UITooltip, TooltipTrigger, TooltipContent, TooltipProvider }
 import { AnimatedCounter } from '@/components/shared/AnimatedCounter'
 import { EbayRecommendButton } from '@/components/shared/EbayRecommendButton'
 import { ItemLink } from '@/components/shared/ItemLink'
+import { SubTabs } from '@/components/shared/SubTabs'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
@@ -886,6 +887,12 @@ function StockPageContent() {
 
   return (
     <div className="space-y-6">
+      <SubTabs
+        tabs={[
+          { href: '/stock', label: t('stock') },
+          { href: '/stock/demand', label: t('demand') },
+        ]}
+      />
 
       {/* ── 2. Stock health cards ── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3 md:gap-4">

@@ -9,6 +9,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Search, Sparkles, Package, Clock, X, ArrowLeft, ExternalLink } from 'lucide-react'
+import { SubTabs } from '@/components/shared/SubTabs'
 import { ILS_FORMAT } from '@/lib/constants'
 
 interface SemanticResult {
@@ -169,6 +170,12 @@ export default function SearchPage() {
 
   return (
     <div className="space-y-6">
+      <SubTabs
+        tabs={[
+          { href: '/search', label: t('smartSearch') },
+          { href: '/stock/quick-check', label: t('stockCheck') },
+        ]}
+      />
       {/* Header */}
       <div className="flex items-center gap-3">
         <Sparkles className="h-6 w-6 text-primary" />

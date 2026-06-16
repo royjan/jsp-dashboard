@@ -14,6 +14,7 @@ import { DateRangePicker } from '@/components/shared/DateRangePicker'
 import { AnimatedCounter } from '@/components/shared/AnimatedCounter'
 import { HealthTransitions } from '@/components/customers/HealthTransitions'
 import { WinBackSuggestions } from '@/components/customers/WinBackSuggestions'
+import { SubTabs } from '@/components/shared/SubTabs'
 import { ILS_FORMAT, formatNumber } from '@/lib/constants'
 import { cn } from '@/lib/utils'
 import {
@@ -238,6 +239,12 @@ function HealthScoreContent() {
 
   return (
     <div className="space-y-4 md:space-y-6">
+      <SubTabs
+        tabs={[
+          { href: '/customers', label: t('customers') },
+          { href: '/customers/health-score', label: t('customerHealth') },
+        ]}
+      />
       {/* Top bar: search, health check button, date picker */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3 flex-1">

@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils'
 import { AlertTriangle, Clock, ShieldAlert, Eye, TrendingDown, ArrowLeft, Search, Filter, X } from 'lucide-react'
 import { EbayRecommendButton } from '@/components/shared/EbayRecommendButton'
 import { ItemLink } from '@/components/shared/ItemLink'
+import { useSortable, SortableTh } from '@/components/shared/sortable-table'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Area, AreaChart } from 'recharts'
 import { ILS_FORMAT, formatNumber } from '@/lib/constants'
 
@@ -144,6 +145,9 @@ export default function StockForecastPage() {
         (i.item_name || '').toLowerCase().includes(q)
     )
   }, [items, searchQuery])
+
+  // Click-to-sort over the filtered rows
+  const { sorted: sortedItems, sortKey, sortDir, toggleSort } = useSortable<any>(filteredItems)
 
   // KPI calculations
   const criticalCount = items.filter((i: any) => i.urgency === 'critical').length
@@ -306,20 +310,20 @@ export default function StockForecastPage() {
             <div className="overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0">
               <table className="w-full text-xs sm:text-sm min-w-[700px]">
                 <thead>
-                  <tr className="border-b text-muted-foreground">
-                    <th className="py-2 font-medium text-end">{he ? 'קוד' : 'Code'}</th>
-                    <th className="py-2 font-medium text-end">{he ? 'שם' : 'Name'}</th>
-                    <th className="py-2 font-medium text-center">{he ? 'מלאי' : 'Stock'}</th>
-                    <th className="py-2 font-medium text-center">{he ? 'ביקוש/חודש' : 'Demand/Mo'}</th>
-                    <th className="py-2 font-medium text-center">{he ? 'תאריך אזילה' : 'Stock-out Date'}</th>
-                    <th className="py-2 font-medium text-center">{he ? 'ימים' : 'Days'}</th>
-                    <th className="py-2 font-medium text-center">{he ? 'ביטחון' : 'Conf.'}</th>
-                    <th className="py-2 font-medium text-center">{he ? 'דחיפות' : 'Urgency'}</th>
+                  <tr className="border-b text-muted-foreground [&>th]:py-2">
+                    <SortableTh<any> label={he ? 'קוד' : 'Code'} sortKey="item_code" align="end" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                    <SortableTh<any> label={he ? 'שם' : 'Name'} sortKey="item_name" align="end" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                    <SortableTh<any> label={he ? 'מלאי' : 'Stock'} sortKey="current_stock" align="center" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                    <SortableTh<any> label={he ? 'ביקוש/חודש' : 'Demand/Mo'} sortKey="predicted_monthly_demand" align="center" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                    <SortableTh<any> label={he ? 'תאריך אזילה' : 'Stock-out Date'} sortKey="stock_out_date" align="center" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                    <SortableTh<any> label={he ? 'ימים' : 'Days'} sortKey="days_until_stockout" align="center" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                    <SortableTh<any> label={he ? 'ביטחון' : 'Conf.'} sortKey="confidence" align="center" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                    <SortableTh<any> label={he ? 'דחיפות' : 'Urgency'} sortKey="urgency" align="center" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                   </tr>
                 </thead>
                 <tbody>
                   <AnimatePresence>
-                    {filteredItems.map((item: any) => (
+                    {sortedItems.map((item: any) => (
                       <motion.tr
                         key={item.item_code}
                         initial={{ opacity: 0 }}

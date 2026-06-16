@@ -5,12 +5,12 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { useLocale } from '@/lib/locale-context'
-import { LayoutDashboard, Sun, Warehouse, Users, Trash2, FileBarChart, Receipt, SearchX, TrendingDown, Search, ShoppingCart, RotateCcw, MessageCircle, Car, CarFront, MoreHorizontal, X, ScanBarcode, BookOpen, Truck, Briefcase, PackageCheck } from 'lucide-react'
+import { LayoutDashboard, Sun, Warehouse, Users, Trash2, FileBarChart, Receipt, SearchX, TrendingDown, ShoppingCart, RotateCcw, Car, CarFront, MoreHorizontal, X, Sparkles, Percent, Truck, Briefcase, PackageCheck } from 'lucide-react'
 import type { TranslationKey } from '@/lib/i18n'
 
 const primaryNav: Array<{ href: string; labelKey: TranslationKey; icon: typeof LayoutDashboard }> = [
   { href: '/', labelKey: 'overview', icon: LayoutDashboard },
-  { href: '/stock/quick-check', labelKey: 'stockCheck', icon: ScanBarcode },
+  { href: '/search', labelKey: 'smartSearch', icon: Sparkles },
   { href: '/stock', labelKey: 'stock', icon: Warehouse },
   { href: '/customers', labelKey: 'customers', icon: Users },
 ]
@@ -20,13 +20,11 @@ const moreNav: Array<{ href: string; labelKey: TranslationKey; icon: typeof Layo
   { href: '/deliveries/driver', labelKey: 'deliveries', icon: Truck },
   { href: '/stock-forecast', labelKey: 'stockForecast', icon: TrendingDown },
   { href: '/receivables', labelKey: 'receivables', icon: Receipt },
-  { href: '/demand', labelKey: 'demand', icon: Search },
   { href: '/gap', labelKey: 'gapAnalysis', icon: SearchX },
   { href: '/scrap', labelKey: 'scrap', icon: Trash2 },
   { href: '/returns', labelKey: 'returns', icon: RotateCcw },
   { href: '/ebay', labelKey: 'ebay', icon: ShoppingCart },
-  { href: '/chat-insights', labelKey: 'chatInsights', icon: MessageCircle },
-  { href: '/catalog', labelKey: 'vinCatalog', icon: BookOpen },
+  { href: '/margin', labelKey: 'margin', icon: Percent },
   { href: '/suppliers', labelKey: 'suppliers', icon: PackageCheck },
   { href: '/vehicle-intelligence', labelKey: 'vehicleIntelligence', icon: CarFront },
   { href: '/market', labelKey: 'market', icon: Car },

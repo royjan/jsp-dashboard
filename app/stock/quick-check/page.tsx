@@ -7,6 +7,8 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { SubTabs } from '@/components/shared/SubTabs'
+import { useLocale } from '@/lib/locale-context'
 import { formatNumber } from '@/lib/constants'
 
 // ── Types ──
@@ -59,6 +61,7 @@ function addRecentSearch(code: string) {
 // ── Component ──
 
 export default function QuickCheckPage() {
+  const { t } = useLocale()
   const [query, setQuery] = useState('')
   const [state, setState] = useState<SearchState>('idle')
   const [result, setResult] = useState<QuickCheckResult | null>(null)
@@ -125,6 +128,14 @@ export default function QuickCheckPage() {
 
   return (
     <div className="min-h-dvh bg-background flex flex-col" dir="rtl">
+      <div className="px-4 pt-4">
+        <SubTabs
+          tabs={[
+            { href: '/search', label: t('smartSearch') },
+            { href: '/stock/quick-check', label: t('stockCheck') },
+          ]}
+        />
+      </div>
       {/* Header */}
       <header className="flex items-center gap-3 px-4 pt-4 pb-2 safe-area-top">
         <Link href="/" className="shrink-0">

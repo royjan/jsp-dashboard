@@ -11,7 +11,7 @@ import { useLocale } from '@/lib/locale-context'
 import { cn } from '@/lib/utils'
 
 // Pages that render their own full-screen layout (no sidebar/topbar/mobile-nav)
-const FULLSCREEN_PATHS = ['/stock/quick-check', '/deliveries/driver', '/sales-rep']
+const FULLSCREEN_PATHS = ['/deliveries/driver']
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false)

@@ -1,6 +1,6 @@
 'use client'
 
-import { use } from 'react'
+import { use, useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { useCustomerDetail } from '@/hooks/use-analytics'
 import { useLocale } from '@/lib/locale-context'
@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
+import { useSortable, SortableTh } from '@/components/shared/sortable-table'
 import Link from 'next/link'
 import {
   User, DollarSign, Clock, FileText, Receipt, ArrowLeft, AlertTriangle,
@@ -156,7 +157,31 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ code:
   )
 }
 
+interface DocRow {
+  doc: any
+  docNumber: string
+  docType: string
+  date: string
+  amount: number
+  itemCount: number
+}
+
 function DocumentTable({ items, t, isReceipt }: { items: any[]; t: (k: any) => string; isReceipt?: boolean }) {
+  const rows: DocRow[] = useMemo(
+    () =>
+      (items || []).slice(0, 50).map((doc: any) => ({
+        doc,
+        docNumber: String(doc.number || doc.doc_number || doc.receipt_number || ''),
+        docType: String(DOC_TYPE_NAMES[doc.format || doc.type] || doc.format_name || doc.type || ''),
+        date: doc.date || doc.created_at || '',
+        amount: doc.total || doc.amount || doc.sum || 0,
+        itemCount: doc.line_count || doc.items?.length || 0,
+      })),
+    [items]
+  )
+
+  const { sorted, sortKey, sortDir, toggleSort } = useSortable<DocRow>(rows)
+
   if (!items || items.length === 0) {
     return <p className="text-muted-foreground text-sm py-4 text-center">-</p>
   }
@@ -165,34 +190,35 @@ function DocumentTable({ items, t, isReceipt }: { items: any[]; t: (k: any) => s
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b text-muted-foreground">
-            <th className="text-start p-2">{t('docNumber')}</th>
-            <th className="text-start p-2">{t('docType')}</th>
-            <th className="text-start p-2">{t('date')}</th>
-            <th className="text-end p-2">{t('amount')}</th>
-            {!isReceipt && <th className="text-end p-2">{t('items')}</th>}
+          <tr className="border-b text-muted-foreground [&>th]:p-2">
+            <SortableTh<DocRow> label={t('docNumber')} sortKey="docNumber" align="start" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+            <SortableTh<DocRow> label={t('docType')} sortKey="docType" align="start" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+            <SortableTh<DocRow> label={t('date')} sortKey="date" align="start" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+            <SortableTh<DocRow> label={t('amount')} sortKey="amount" align="end" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+            {!isReceipt && <SortableTh<DocRow> label={t('items')} sortKey="itemCount" align="end" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />}
           </tr>
         </thead>
         <tbody>
-          {items.slice(0, 50).map((doc: any, i: number) => (
-            <motion.tr
-              key={`${doc.format || doc.type}-${doc.number || doc.doc_number}-${i}`}
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: Math.min(i * 0.02, 0.5), duration: 0.2 }}
-              className="border-b hover:bg-muted/50 transition-colors"
-            >
-              <td className="p-2 font-mono">{doc.number || doc.doc_number || doc.receipt_number || '-'}</td>
-              <td className="p-2">
-                <Badge variant="secondary">
-                  {DOC_TYPE_NAMES[doc.format || doc.type] || doc.format_name || doc.type || '-'}
-                </Badge>
-              </td>
-              <td className="p-2 text-muted-foreground">{doc.date || doc.created_at || '-'}</td>
-              <td className="p-2 text-end font-medium">{ILS_FORMAT.format(doc.total || doc.amount || doc.sum || 0)}</td>
-              {!isReceipt && <td className="p-2 text-end">{doc.line_count || doc.items?.length ? formatNumber(doc.line_count || doc.items?.length) : '-'}</td>}
-            </motion.tr>
-          ))}
+          {sorted.map((row: DocRow, i: number) => {
+            const doc = row.doc
+            return (
+              <motion.tr
+                key={`${doc.format || doc.type}-${doc.number || doc.doc_number}-${i}`}
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: Math.min(i * 0.02, 0.5), duration: 0.2 }}
+                className="border-b hover:bg-muted/50 transition-colors"
+              >
+                <td className="p-2 font-mono">{row.docNumber || '-'}</td>
+                <td className="p-2">
+                  <Badge variant="secondary">{row.docType || '-'}</Badge>
+                </td>
+                <td className="p-2 text-muted-foreground">{row.date || '-'}</td>
+                <td className="p-2 text-end font-medium">{ILS_FORMAT.format(row.amount)}</td>
+                {!isReceipt && <td className="p-2 text-end">{row.itemCount ? formatNumber(row.itemCount) : '-'}</td>}
+              </motion.tr>
+            )
+          })}
         </tbody>
       </table>
     </div>
