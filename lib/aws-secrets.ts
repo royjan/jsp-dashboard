@@ -1,10 +1,13 @@
 /**
- * AWS Secrets Manager — thin wrapper around @jan/aws-secrets
+ * AWS Secrets Manager loader (no @jan/aws-secrets / CodeArtifact).
  *
- * Keeps the same synchronous getSecret() signature used throughout the project.
- * Callers must await initializeSecrets() once at startup before using getSecret().
+ * Uses @aws-sdk/client-secrets-manager directly. Set APP_SECRETS_ID (or
+ * AWS_SECRETS_ID) to the Secrets Manager secret holding a JSON blob of app
+ * secrets; without it (e.g. the Dokploy deploy, which injects env vars
+ * directly) this is a no-op and getSecret() reads process.env.
  *
- * In local dev where @jan/aws-secrets is unavailable, falls back to process.env.
+ * getSecret() stays synchronous — callers await initializeSecrets() once at
+ * startup, then read synchronously.
  */
 
 interface AppSecrets {
@@ -14,22 +17,21 @@ interface AppSecrets {
   [key: string]: string | undefined
 }
 
-/** Local reference to the fetched secrets so getSecret() can remain synchronous. */
+/** Local reference to fetched secrets so getSecret() can stay synchronous. */
 let cachedSecrets: Record<string, string> = {}
 
-/** Dynamically import @jan/aws-secrets (only available in production via CodeArtifact). */
-async function loadAwsModule() {
-  try {
-    return await import('@jan/aws-secrets')
-  } catch {
-    return null
-  }
-}
-
 export async function loadFromSecretsManager(): Promise<AppSecrets> {
-  const mod = await loadAwsModule()
-  if (mod) {
-    cachedSecrets = await mod.getSecrets()
+  const secretId = process.env.APP_SECRETS_ID || process.env.AWS_SECRETS_ID
+  if (!secretId) return cachedSecrets as AppSecrets // env-only (no SM configured)
+  try {
+    const { SecretsManagerClient, GetSecretValueCommand } = await import('@aws-sdk/client-secrets-manager')
+    const client = new SecretsManagerClient({ region: process.env.AWS_REGION || 'eu-central-1' })
+    const res = await client.send(new GetSecretValueCommand({ SecretId: secretId }))
+    if (res.SecretString) {
+      cachedSecrets = { ...cachedSecrets, ...JSON.parse(res.SecretString) }
+    }
+  } catch (e) {
+    console.warn('[aws-secrets] Secrets Manager load failed, falling back to env:', e instanceof Error ? e.message : e)
   }
   return cachedSecrets as AppSecrets
 }
@@ -43,15 +45,6 @@ let secretsInitPromise: Promise<AppSecrets> | null = null
 
 export async function initializeSecrets(): Promise<AppSecrets> {
   if (secretsInitPromise) return secretsInitPromise
-
-  secretsInitPromise = (async () => {
-    const mod = await loadAwsModule()
-    if (mod) {
-      await mod.initSecrets()
-      cachedSecrets = await mod.getSecrets()
-    }
-    return cachedSecrets as AppSecrets
-  })()
-
+  secretsInitPromise = loadFromSecretsManager()
   return secretsInitPromise
 }

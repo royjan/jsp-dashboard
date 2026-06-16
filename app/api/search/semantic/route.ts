@@ -45,7 +45,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Batch enrich with stock and price data
-    const codes = items.map((i) => i.code)
+    const codes = items.map((i: any) => i.code)
 
     const [stockResult, priceResult] = await Promise.all([
       client.stock.batch(codes).catch(() => ({ items: [] as any[] })),
@@ -69,7 +69,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Merge results
-    const enriched: EnrichedSemanticResult[] = items.map((item) => {
+    const enriched: EnrichedSemanticResult[] = items.map((item: any) => {
       const uc = item.code.toUpperCase()
       const stock = stockMap.get(uc)
       return {

@@ -7,7 +7,8 @@ FROM base AS builder
 WORKDIR /app
 
 COPY package*.json ./
-RUN --mount=type=secret,id=npmrc,target=/app/.npmrc npm ci --legacy-peer-deps
+# No private @jan packages anymore → no CodeArtifact / npmrc secret needed.
+RUN npm ci --legacy-peer-deps
 
 COPY . .
 # data/ directory no longer bundled — SQLite is synced from PG at runtime

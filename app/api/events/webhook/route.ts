@@ -12,11 +12,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { deleteCache } from '@/lib/redis-client'
 import { revalidateTag } from 'next/cache'
-import type {
-  JanEvent,
-  SnsNotification,
-  SnsSubscriptionConfirmation,
-} from '@jan/finansit-sdk'
+// Local event/SNS shapes (was @jan/finansit-sdk — the dashboard no longer depends
+// on the SDK; the MCP server still does). Permissive on purpose.
+type JanEvent = { type?: string; entity?: string; id?: string; [k: string]: any }
+type SnsNotification = { Type?: string; Message: string; [k: string]: any }
+type SnsSubscriptionConfirmation = { Type?: string; SubscribeURL: string; [k: string]: any }
 
 // Redis cache key prefixes used by the dashboard (from analytics-service + cron)
 const CACHE_KEYS = {

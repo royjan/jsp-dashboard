@@ -1,12 +1,14 @@
 /**
- * Finansit ERP API Client — Thin wrapper over @jan/finansit-sdk.
+ * Finansit ERP API Client — thin wrapper over a direct FINAPI REST client.
  *
- * All HTTP transport, auth, and concurrency are handled by the SDK.
- * This module preserves the existing function signatures so consumer
- * files (analytics-service, API routes, cron) don't need changes.
+ * Transport/auth/concurrency live in ./finapi-rest (ported from the SDK's fetch
+ * wrapper) so the dashboard no longer depends on @jan/finansit-sdk / CodeArtifact.
+ * The MCP server still runs the real finansit-sdk; only the dashboard is detached.
+ * This module preserves the existing function signatures so consumer files
+ * (analytics-service, API routes, cron) don't need changes.
  */
 
-import { createClient } from '@jan/finansit-sdk'
+import { createClient } from './finapi-rest'
 import { getSecret, initializeSecrets } from './aws-secrets'
 import type {
   CreateDocumentParams,
