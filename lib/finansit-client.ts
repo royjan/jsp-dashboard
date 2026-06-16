@@ -98,16 +98,36 @@ export async function fetchStock(code: string, year?: string): Promise<any> {
   return client.stock.get(code, year ? { year } : undefined)
 }
 
+// FINAPI's batch endpoints reject >100 item_codes (HTTP 422). Chunk at 100.
+const BATCH_LIMIT = 100
+
 export async function fetchBatchStock(codes: string[]): Promise<any[]> {
   if (!codes.length) return []
-  const data = await client.stock.batch(codes)
-  return data.items || data || []
+  const out: any[] = []
+  for (let i = 0; i < codes.length; i += BATCH_LIMIT) {
+    try {
+      const data = await client.stock.batch(codes.slice(i, i + BATCH_LIMIT))
+      out.push(...((data as any).items || data || []))
+    } catch (e: any) {
+      console.warn('[FINAPI] fetchBatchStock chunk failed:', e?.message?.substring(0, 120))
+    }
+  }
+  return out
 }
 
 export async function fetchBatchStockGet(codes: string[]): Promise<any[]> {
   if (!codes.length) return []
-  const data = await client.stock.batchGet(codes.map(c => c.toUpperCase()).join(','))
-  return data.items || data || []
+  const out: any[] = []
+  for (let i = 0; i < codes.length; i += BATCH_LIMIT) {
+    try {
+      const chunk = codes.slice(i, i + BATCH_LIMIT).map(c => c.toUpperCase()).join(',')
+      const data = await client.stock.batchGet(chunk)
+      out.push(...((data as any).items || data || []))
+    } catch (e: any) {
+      console.warn('[FINAPI] fetchBatchStockGet chunk failed:', e?.message?.substring(0, 120))
+    }
+  }
+  return out
 }
 
 export async function refreshCache(table?: string): Promise<void> {
@@ -315,7 +335,7 @@ export async function createCustomer(params: Record<string, any>): Promise<any> 
 
 export async function fetchBatchPrices(codes: string[]): Promise<Record<string, number>> {
   if (!codes.length) return {}
-  const CHUNK = 200
+  const CHUNK = 100 // FINAPI /api/prices/batch rejects >100 item_codes (422)
   const result: Record<string, number> = {}
   for (let i = 0; i < codes.length; i += CHUNK) {
     const chunk = codes.slice(i, i + CHUNK)

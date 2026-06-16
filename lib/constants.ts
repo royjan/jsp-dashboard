@@ -27,7 +27,7 @@ export const MONTH_NAMES = [
 
 // Cache key versions — bump here when data shape changes, all consumers read from this single place
 export const CACHE_VERSIONS = {
-  ITEMS_ENRICHED: 'items:enriched:v12',
+  ITEMS_ENRICHED: 'items:enriched:v13',
 } as const
 
 // Redis cache TTLs (in seconds)

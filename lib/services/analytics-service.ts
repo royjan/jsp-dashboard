@@ -1118,7 +1118,7 @@ export async function getSeasonalData(dateFrom?: string, dateTo?: string): Promi
 // ── Dead Stock ──
 
 export async function getDeadStock(yearsThreshold: number = 1): Promise<DeadStockItem[]> {
-  const cacheKey = `analytics:dead-stock:${yearsThreshold}`
+  const cacheKey = `analytics:dead-stock:v2:${yearsThreshold}`
   const cached = await getCached<DeadStockItem[]>(cacheKey)
   if (cached) return cached
 
