@@ -1,53 +1,99 @@
-export const maxDuration = 120
+export const maxDuration = 60
 
 import { NextResponse } from 'next/server'
 import { initializeSecrets } from '@/lib/aws-secrets'
-import { client } from '@/lib/finansit-client'
+import { query } from '@/lib/db'
+import { fetchBatchStockGet } from '@/lib/finansit-client'
+import { getCached, setCache } from '@/lib/redis-client'
 
+/**
+ * Gap analysis — items quoted (format 31) in the last 12 months that are
+ * currently out of stock (and not incoming).
+ *
+ * FINAPI's own /api/analytics/gap does a full server-side quote scan that
+ * takes >60s and 504s. So we compute the "most-quoted" half from Neon
+ * (dashboard.document_lines — fast), then check CURRENT stock for just those
+ * top items via a single FINAPI batch-stock call (accurate, cheap).
+ */
 export async function GET(request: Request) {
   try {
     await initializeSecrets()
     const { searchParams } = new URL(request.url)
-    const limit = parseInt(searchParams.get('limit') || '200', 10)
-    const format = searchParams.get('format') || '31' // quotes by default
+    const limit = Math.min(parseInt(searchParams.get('limit') || '200', 10), 500)
+    const format = searchParams.get('format') || '31' // quotes
 
-    // Use the dedicated gap analysis endpoint (server-side Redis join)
-    // Returns: { filters, total_quoted_items, gap_count, items: GapItem[] }
-    // GapItem: { item_code, item_name, times_quoted, total_qty_quoted, last_quoted_date, stock_qty, ordered_qty, incoming_qty }
-    const data = await client.analytics.gap({
-      doc_format: format,
-      require_zero_stock: true,
-      require_zero_incoming: true,
-      limit,
-    })
+    const cacheKey = `analytics:gap:v2:${format}:${limit}`
+    const cached = await getCached<any>(cacheKey)
+    if (cached) return NextResponse.json(cached)
 
-    const raw = data as any
-    const gapItems: any[] = raw?.items || []
+    // 1) Most-quoted items in the last 12 months (Neon, fast). Over-fetch a bit
+    //    since many will turn out to be in stock and get filtered below.
+    const probe = Math.min(limit * 2, 300)
+    const res = await query(
+      `SELECT dl.item_code,
+              MAX(dl.item_name) AS item_name,
+              COUNT(DISTINCT dl.doc_number)::int AS times_quoted,
+              SUM(dl.quantity::numeric) AS total_qty_quoted,
+              MAX(d.doc_date)::text AS last_quoted_date
+       FROM dashboard.document_lines dl
+       JOIN dashboard.documents d
+         ON d.year=dl.year AND d.format=dl.format AND d.doc_number=dl.doc_number
+       WHERE dl.format = $1
+         AND length(dl.item_code) > 1
+         AND d.doc_date >= (CURRENT_DATE - INTERVAL '12 months')
+       GROUP BY dl.item_code
+       ORDER BY times_quoted DESC
+       LIMIT $2`,
+      [format, probe],
+    )
+    const quoted = res.rows
 
-    const items = gapItems.map((item: any) => ({
-      item_code: item.item_code,
-      name: item.item_name || item.item_code,
-      total_qty: item.total_qty_quoted ?? 0,
-      total_value: 0, // gap endpoint doesn't include price, just quantity
-      quote_count: item.times_quoted ?? 0,
-      customer_count: item.times_quoted ?? 0, // approximation: each quote line ~ 1 customer
-      last_quoted: item.last_quoted_date ?? '',
-      stock_qty: item.stock_qty ?? 0,
-      incoming_qty: item.incoming_qty ?? 0,
-      ordered_qty: item.ordered_qty ?? 0,
-    }))
+    // 2) Current stock for those items (one FINAPI batch — accurate).
+    const codes = quoted.map((r: any) => r.item_code)
+    const stockMap: Record<string, any> = {}
+    try {
+      const stock = await fetchBatchStockGet(codes)
+      for (const s of stock as any[]) {
+        const c = (s.code || s.item_code || '').toUpperCase()
+        if (c) stockMap[c] = s
+      }
+    } catch {
+      // FINAPI unavailable → stock unknown; items fall through as gap candidates.
+    }
 
-    return NextResponse.json({
+    // 3) Keep only out-of-stock + nothing incoming (the actual gap).
+    const items = quoted
+      .map((r: any) => {
+        const s = stockMap[String(r.item_code).toUpperCase()] || {}
+        return {
+          item_code: r.item_code,
+          name: r.item_name || r.item_code,
+          total_qty: Number(r.total_qty_quoted) || 0,
+          total_value: 0,
+          quote_count: r.times_quoted,
+          customer_count: r.times_quoted,
+          last_quoted: r.last_quoted_date || '',
+          stock_qty: Number(s.stock_qty ?? 0),
+          incoming_qty: Number(s.incoming_qty ?? 0),
+          ordered_qty: Number(s.ordered_qty ?? 0),
+        }
+      })
+      .filter((i: any) => i.stock_qty <= 0 && i.incoming_qty <= 0)
+      .slice(0, limit)
+
+    const payload = {
       items,
-      count: raw?.gap_count ?? items.length,
-      total_quoted_items: raw?.total_quoted_items ?? 0,
+      count: items.length,
+      total_quoted_items: quoted.length,
       total_lost_qty: items.reduce((s: number, i: any) => s + i.total_qty, 0),
-    })
+    }
+    await setCache(cacheKey, payload, 60 * 60) // 1h
+    return NextResponse.json(payload)
   } catch (error) {
     console.error('[gap] Error:', error)
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed' },
-      { status: 500 }
+      { error: error instanceof Error ? error.message : 'Failed', items: [], count: 0 },
+      { status: 500 },
     )
   }
 }
