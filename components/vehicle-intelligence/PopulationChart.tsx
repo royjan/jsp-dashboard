@@ -9,8 +9,13 @@ import {
   PieChart, Pie, Cell,
 } from 'recharts'
 
-const BAR_COLORS = ['#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#f97316', '#ec4899']
-const PIE_COLORS = ['#3b82f6', '#22c55e', '#f59e0b', '#ef4444']
+// 15 distinct, bright colors so the top-15 manufacturers never reuse a hue.
+const BAR_COLORS = [
+  '#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6',
+  '#06b6d4', '#f97316', '#ec4899', '#10b981', '#eab308',
+  '#6366f1', '#14b8a6', '#f43f5e', '#a855f7', '#0ea5e9',
+]
+const PIE_COLORS = ['#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4']
 
 interface ManufacturerData {
   manufacturer: string
@@ -64,7 +69,7 @@ export function PopulationChart({
   }))
 
   const pieData = ageDistribution.map(a => ({
-    name: isHe ? a.bracketHe : a.bracket,
+    name: (isHe ? a.bracketHe : a.bracket) || a.bracket || a.bracketHe || '—',
     value: a.count,
   }))
 
@@ -86,7 +91,8 @@ export function PopulationChart({
               <BarChart
                 data={barData}
                 layout="vertical"
-                margin={{ top: 5, right: 30, left: 5, bottom: 5 }}
+                barCategoryGap="22%"
+                margin={{ top: 5, right: 40, left: 5, bottom: 5 }}
               >
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                 <XAxis
@@ -101,6 +107,7 @@ export function PopulationChart({
                   tick={{ fill: 'var(--foreground)', fontSize: 11 }}
                 />
                 <Tooltip
+                  cursor={{ fill: 'var(--muted)', fillOpacity: 0.15 }}
                   contentStyle={{
                     backgroundColor: 'var(--popover)',
                     borderColor: 'var(--border)',
@@ -119,7 +126,9 @@ export function PopulationChart({
                     <Cell
                       key={entry.name}
                       fill={BAR_COLORS[i % BAR_COLORS.length]}
-                      fillOpacity={hoveredBar ? (entry.name === hoveredBar ? 1 : 0.3) : 0.85}
+                      // Keep bars at full color; only gently fade the rest on
+                      // hover (was 0.3 → near-black/muddy on the dark theme).
+                      fillOpacity={hoveredBar && entry.name !== hoveredBar ? 0.55 : 1}
                       onMouseEnter={() => setHoveredBar(entry.name)}
                       onMouseLeave={() => setHoveredBar(null)}
                     />
@@ -152,10 +161,10 @@ export function PopulationChart({
                     outerRadius={110}
                     paddingAngle={3}
                     dataKey="value"
-                    label={({ name, percent }: any) =>
-                      percent > 0.05 ? `${name} (${(percent * 100).toFixed(0)}%)` : ''
+                    label={({ percent }: any) =>
+                      percent > 0.04 ? `${(percent * 100).toFixed(0)}%` : ''
                     }
-                    labelLine={{ stroke: 'var(--muted-foreground)' }}
+                    labelLine={false}
                   >
                     {pieData.map((_, i) => (
                       <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
