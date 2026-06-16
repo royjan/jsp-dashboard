@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { useLocale } from '@/lib/locale-context'
+import { formatNumber } from '@/lib/constants'
 import { useUploadPriceList, usePriceUploads } from '@/hooks/use-suppliers'
 import { Upload, FileSpreadsheet, CheckCircle2, AlertCircle, Loader2, X } from 'lucide-react'
 
@@ -123,7 +124,7 @@ export function PriceUploader({ supplierCode }: PriceUploaderProps) {
                   {uploadResult.summary.validItems} / {uploadResult.summary.totalRows} {t('suppliers.itemsProcessed')}
                 </span>
                 {uploadResult.summary.errors > 0 && (
-                  <Badge variant="warning">{uploadResult.summary.errors} {t('suppliers.errors')}</Badge>
+                  <Badge variant="warning">{formatNumber(uploadResult.summary.errors)} {t('suppliers.errors')}</Badge>
                 )}
               </div>
               {uploadResult.summary.errorDetails?.length > 0 && (
@@ -155,7 +156,7 @@ export function PriceUploader({ supplierCode }: PriceUploaderProps) {
                       <tr key={i} className="border-t">
                         <td className="px-2 py-1 font-mono">{row.itemCode}</td>
                         <td className="px-2 py-1">{row.description}</td>
-                        <td className="px-2 py-1 text-end">{row.price}</td>
+                        <td className="px-2 py-1 text-end">{formatNumber(row.price)}</td>
                         <td className="px-2 py-1 text-end">{row.currency}</td>
                       </tr>
                     ))}
@@ -192,8 +193,8 @@ export function PriceUploader({ supplierCode }: PriceUploaderProps) {
                       <td className="px-2 py-1">
                         {new Date(upload.uploadDate).toLocaleDateString('he-IL')}
                       </td>
-                      <td className="px-2 py-1 text-end">{upload.itemsCount}</td>
-                      <td className="px-2 py-1 text-end">{upload.errorsCount}</td>
+                      <td className="px-2 py-1 text-end">{formatNumber(upload.itemsCount)}</td>
+                      <td className="px-2 py-1 text-end">{formatNumber(upload.errorsCount)}</td>
                       <td className="px-2 py-1 text-center">
                         <Badge
                           variant={upload.status === 'completed' ? 'success' : upload.status === 'error' ? 'destructive' : 'secondary'}

@@ -3,6 +3,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { useLocale } from '@/lib/locale-context'
+import { formatNumber } from '@/lib/constants'
 import { useSupplierDemand } from '@/hooks/use-suppliers'
 import { TrendingDown, AlertTriangle, Loader2 } from 'lucide-react'
 
@@ -64,11 +65,11 @@ export function DemandForecast({ supplierCode }: DemandForecastProps) {
                 <td className="px-3 py-2 text-xs max-w-[200px] truncate">{item.itemName}</td>
                 <td className="px-3 py-2 text-end text-xs">
                   <span className={item.currentStock === 0 ? 'text-destructive font-semibold' : ''}>
-                    {item.currentStock}
+                    {formatNumber(item.currentStock)}
                   </span>
                 </td>
-                <td className="px-3 py-2 text-end text-xs">{item.avgMonthlySales}</td>
-                <td className="px-3 py-2 text-end text-xs font-semibold">{item.suggestedQty}</td>
+                <td className="px-3 py-2 text-end text-xs">{formatNumber(item.avgMonthlySales)}</td>
+                <td className="px-3 py-2 text-end text-xs font-semibold">{formatNumber(item.suggestedQty)}</td>
                 <td className="px-3 py-2 text-center">
                   {getUrgencyBadge(item.urgencyScore, t)}
                 </td>

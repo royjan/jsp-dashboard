@@ -11,7 +11,7 @@ import {
   ShoppingCart, Package, CheckCircle, AlertTriangle, Clock,
   XCircle, DollarSign, ArrowRight,
 } from 'lucide-react'
-import { NUMBER_FORMAT } from '@/lib/constants'
+import { NUMBER_FORMAT, formatNumber } from '@/lib/constants'
 import { ItemLink } from '@/components/shared/ItemLink'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -77,7 +77,7 @@ function EbayContent() {
                 {t('ebay')} Listed
               </div>
               <div className="text-xl sm:text-2xl font-bold">{NUMBER_FORMAT.format(items.listed_count || 0)}</div>
-              <div className="text-xs text-muted-foreground">${(items.total_listed_value || 0).toFixed(0)} total value</div>
+              <div className="text-xs text-muted-foreground">${formatNumber(items.total_listed_value || 0)} total value</div>
             </CardContent>
           </Card>
         </motion.div>
@@ -90,7 +90,7 @@ function EbayContent() {
                 Pending
               </div>
               <div className="text-xl sm:text-2xl font-bold">{NUMBER_FORMAT.format(items.pending_count || 0)}</div>
-              <div className="text-xs text-muted-foreground">{items.error_count || 0} errors</div>
+              <div className="text-xs text-muted-foreground">{formatNumber(items.error_count || 0)} errors</div>
             </CardContent>
           </Card>
         </motion.div>
@@ -103,7 +103,7 @@ function EbayContent() {
                 Batches
               </div>
               <div className="text-xl sm:text-2xl font-bold">{NUMBER_FORMAT.format(batches.total_batches || 0)}</div>
-              <div className="text-xs text-muted-foreground">{batches.completed_batches || 0} completed</div>
+              <div className="text-xs text-muted-foreground">{formatNumber(batches.completed_batches || 0)} completed</div>
             </CardContent>
           </Card>
         </motion.div>
@@ -116,7 +116,7 @@ function EbayContent() {
                 Alerts
               </div>
               <div className="text-xl sm:text-2xl font-bold">{NUMBER_FORMAT.format(alerts.zero_stock_alerts || 0)}</div>
-              <div className="text-xs text-muted-foreground">{alerts.price_change_alerts || 0} price changes</div>
+              <div className="text-xs text-muted-foreground">{formatNumber(alerts.price_change_alerts || 0)} price changes</div>
             </CardContent>
           </Card>
         </motion.div>
@@ -142,7 +142,7 @@ function EbayContent() {
               ].map((step) => (
                 <div key={step.label} className="flex items-center justify-between">
                   <span className="text-sm text-muted-foreground">{step.label}</span>
-                  <span className={`text-lg font-bold ${step.color}`}>{step.value}</span>
+                  <span className={`text-lg font-bold ${step.color}`}>{formatNumber(step.value)}</span>
                 </div>
               ))}
               <div className="pt-2 border-t text-xs text-muted-foreground">
@@ -178,7 +178,7 @@ function EbayContent() {
                     <tr key={item.id} className="border-b border-muted/50 hover:bg-muted/30 transition-colors">
                       <td className="py-2 px-2 font-mono text-xs"><ItemLink code={item.sku} showCode /></td>
                       <td className="py-2 px-2 truncate max-w-[200px]" title={item.title}>{item.title || '-'}</td>
-                      <td className="py-2 px-2 text-end">{item.price ? `$${item.price.toFixed(2)}` : '-'}</td>
+                      <td className="py-2 px-2 text-end">{item.price ? `$${formatNumber(item.price, 2)}` : '-'}</td>
                       <td className="py-2 px-2 text-center">
                         <Badge className={`text-[10px] ${STATUS_COLORS[item.upload_status] || ''}`}>
                           {item.upload_status}

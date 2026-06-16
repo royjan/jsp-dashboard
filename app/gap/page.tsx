@@ -17,7 +17,7 @@ import {
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts'
-import { NUMBER_FORMAT } from '@/lib/constants'
+import { NUMBER_FORMAT, formatNumber } from '@/lib/constants'
 
 type SortField = 'name' | 'total_qty' | 'quote_count'
 type SortDir = 'asc' | 'desc'
@@ -270,7 +270,7 @@ export default function GapAnalysisPage() {
                       </div>
                     </td>
                     <td className="p-2"><ItemLink code={item.item_code} name={item.name} /></td>
-                    <td className="p-2 text-end font-medium">{item.quote_count}</td>
+                    <td className="p-2 text-end font-medium">{formatNumber(item.quote_count)}</td>
                     <td className="p-2 text-end">{NUMBER_FORMAT.format(item.total_qty)}</td>
                     <td className="p-2 text-end text-muted-foreground">{item.last_quoted || '-'}</td>
                     <td className="p-2 text-end">
@@ -278,7 +278,7 @@ export default function GapAnalysisPage() {
                     </td>
                     <td className="p-2 text-end">
                       {item.incoming_qty > 0
-                        ? <Badge variant="secondary">{item.incoming_qty}</Badge>
+                        ? <Badge variant="secondary">{formatNumber(item.incoming_qty)}</Badge>
                         : <span className="text-muted-foreground">0</span>
                       }
                     </td>

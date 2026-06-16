@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { SalesRepBottomNav } from '@/components/sales-rep/BottomNav'
 import { VisitLogger } from '@/components/sales-rep/VisitLogger'
+import { formatNumber } from '@/lib/constants'
 
 const OUTCOME_LABELS: Record<string, { label: string; color: string }> = {
   interested: { label: 'מעוניין', color: 'bg-blue-500/10 text-blue-700 dark:text-blue-400' },
@@ -111,7 +112,7 @@ export default function VisitHistoryPage() {
             <CardContent className="p-3 text-center">
               <CalendarCheck className="h-5 w-5 mx-auto text-blue-500 mb-1" />
               <p className="text-2xl font-bold">
-                {isLoading ? <Loader2 className="h-5 w-5 animate-spin mx-auto" /> : stats.thisWeek}
+                {isLoading ? <Loader2 className="h-5 w-5 animate-spin mx-auto" /> : formatNumber(stats.thisWeek)}
               </p>
               <p className="text-[11px] text-muted-foreground">השבוע</p>
             </CardContent>
@@ -129,7 +130,7 @@ export default function VisitHistoryPage() {
             <CardContent className="p-3 text-center">
               <Users className="h-5 w-5 mx-auto text-purple-500 mb-1" />
               <p className="text-2xl font-bold">
-                {isLoading ? <Loader2 className="h-5 w-5 animate-spin mx-auto" /> : stats.total}
+                {isLoading ? <Loader2 className="h-5 w-5 animate-spin mx-auto" /> : formatNumber(stats.total)}
               </p>
               <p className="text-[11px] text-muted-foreground">סה&quot;כ</p>
             </CardContent>
@@ -222,7 +223,7 @@ export default function VisitHistoryPage() {
                 <Card key={tv.code} className="shrink-0">
                   <CardContent className="p-3 text-center min-w-[100px]">
                     <p className="text-sm font-semibold truncate max-w-[100px]">{tv.name}</p>
-                    <p className="text-2xl font-bold text-primary">{tv.count}</p>
+                    <p className="text-2xl font-bold text-primary">{formatNumber(tv.count)}</p>
                     <p className="text-[10px] text-muted-foreground">ביקורים</p>
                   </CardContent>
                 </Card>

@@ -11,7 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { ILS_FORMAT, NUMBER_FORMAT } from '@/lib/constants'
+import { ILS_FORMAT, NUMBER_FORMAT, formatNumber } from '@/lib/constants'
 import {
   TrendingUp, TrendingDown, AlertTriangle, Package, Users, FileText,
   BarChart3, Calendar, Target, ArrowRight, RefreshCw,
@@ -232,7 +232,7 @@ function ReportContent() {
               sub={isHe ? 'יעד: 1.5M+' : 'Target: 1.5M+'}
               color={kpis.monthly_revenue >= 1500000 ? 'text-emerald-500' : 'text-destructive'} />
             <KPICard index={1} icon={Package} label={t('inventoryTurnover')}
-              value={kpis.turnover_ratio.toFixed(2)}
+              value={formatNumber(kpis.turnover_ratio, 2)}
               sub={isHe ? 'יעד: 1.0+' : 'Target: 1.0+'}
               color={kpis.turnover_ratio >= 1 ? 'text-emerald-500' : 'text-destructive'} />
             <KPICard index={2} icon={AlertTriangle} label={isHe ? 'מלאי מת 3+ שנים' : 'Dead Stock 3Y+'}
@@ -861,13 +861,13 @@ function ReportContent() {
                     {retentionData.map((r: any) => (
                       <tr key={r.year} className="border-b hover:bg-muted/50 transition-colors">
                         <td className="py-2.5 ps-4 md:ps-0 font-medium">{r.year}</td>
-                        <td className="py-2.5 text-end tabular-nums">{r.total_customers}</td>
+                        <td className="py-2.5 text-end tabular-nums">{formatNumber(r.total_customers)}</td>
                         <td className="py-2.5 text-end">
                           <Badge variant={r.new_customers >= 50 ? 'success' : r.new_customers >= 30 ? 'warning' : 'destructive'}>
-                            {r.new_customers}
+                            {formatNumber(r.new_customers)}
                           </Badge>
                         </td>
-                        <td className="py-2.5 text-end tabular-nums">{r.returning_customers}</td>
+                        <td className="py-2.5 text-end tabular-nums">{formatNumber(r.returning_customers)}</td>
                         <td className="py-2.5 text-end">
                           {r.retention_pct !== null ? (
                             <Badge variant={r.retention_pct >= 80 ? 'success' : 'warning'}>{r.retention_pct}%</Badge>
@@ -908,7 +908,7 @@ function ReportContent() {
                         <td className="py-2.5 text-end">
                           <Badge variant={r.top10_pct >= 80 ? 'destructive' : r.top10_pct >= 60 ? 'warning' : 'success'}>{r.top10_pct}%</Badge>
                         </td>
-                        <td className="py-2.5 text-end tabular-nums pe-4 md:pe-0">{r.total_customers}</td>
+                        <td className="py-2.5 text-end tabular-nums pe-4 md:pe-0">{formatNumber(r.total_customers)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1066,7 +1066,7 @@ function ReportContent() {
                       },
                       {
                         kpi: isHe ? 'מחזור מלאי שנתי' : 'Annual Inventory Turnover',
-                        current: kpis.turnover_ratio.toFixed(2),
+                        current: formatNumber(kpis.turnover_ratio, 2),
                         target: '1.0+',
                         met: kpis.turnover_ratio >= 1,
                       },

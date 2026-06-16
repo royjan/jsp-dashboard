@@ -14,7 +14,7 @@ import { AlertTriangle, Clock, ShieldAlert, Eye, TrendingDown, ArrowLeft, Search
 import { EbayRecommendButton } from '@/components/shared/EbayRecommendButton'
 import { ItemLink } from '@/components/shared/ItemLink'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Area, AreaChart } from 'recharts'
-import { ILS_FORMAT } from '@/lib/constants'
+import { ILS_FORMAT, formatNumber } from '@/lib/constants'
 
 type UrgencyLevel = 'critical' | 'warning' | 'watch' | 'ok'
 
@@ -68,11 +68,11 @@ function ForecastChart({ itemCode }: { itemCode: string }) {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="text-center">
           <div className="text-xs text-muted-foreground">{locale === 'he' ? 'מלאי נוכחי' : 'Current Stock'}</div>
-          <div className="text-lg font-bold">{data.current_stock}</div>
+          <div className="text-lg font-bold">{formatNumber(data.current_stock)}</div>
         </div>
         <div className="text-center">
           <div className="text-xs text-muted-foreground">{locale === 'he' ? 'ביקוש חודשי צפוי' : 'Predicted Monthly Demand'}</div>
-          <div className="text-lg font-bold">{data.predicted_monthly_demand}</div>
+          <div className="text-lg font-bold">{formatNumber(data.predicted_monthly_demand)}</div>
         </div>
         <div className="text-center">
           <div className="text-xs text-muted-foreground">{locale === 'he' ? 'תאריך אזילה' : 'Stock-out Date'}</div>
@@ -338,8 +338,8 @@ export default function StockForecastPage() {
                           </div>
                         </td>
                         <td className="py-2.5 max-w-[200px] truncate text-end" title={item.item_name}><ItemLink code={item.item_code} name={item.item_name || '-'} /></td>
-                        <td className="py-2.5 text-center tabular-nums">{item.current_stock}</td>
-                        <td className="py-2.5 text-center tabular-nums">{item.predicted_monthly_demand}</td>
+                        <td className="py-2.5 text-center tabular-nums">{formatNumber(item.current_stock)}</td>
+                        <td className="py-2.5 text-center tabular-nums">{formatNumber(item.predicted_monthly_demand)}</td>
                         <td className="py-2.5 text-center text-xs">{formatDate(item.stock_out_date, locale)}</td>
                         <td className="py-2.5 text-center tabular-nums">
                           {item.days_until_stockout != null ? (

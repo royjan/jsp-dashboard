@@ -15,7 +15,7 @@ import { ItemLink } from '@/components/shared/ItemLink'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts'
-import { NUMBER_FORMAT } from '@/lib/constants'
+import { NUMBER_FORMAT, formatNumber } from '@/lib/constants'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const cardVariants: any = {
@@ -300,11 +300,11 @@ export default function DemandPage() {
                     <tr key={item.code} className="border-b border-muted/50 hover:bg-muted/30 transition-colors">
                       <td className="py-2 px-2 font-mono text-xs"><ItemLink code={item.code} showCode /></td>
                       <td className="py-2 px-2 truncate max-w-[200px]" dir="rtl"><ItemLink code={item.code} name={item.name} /></td>
-                      <td className="py-2 px-2 text-end">{item.request_count}</td>
-                      <td className="py-2 px-2 text-end">{item.total_qty_requested}</td>
+                      <td className="py-2 px-2 text-end">{formatNumber(item.request_count)}</td>
+                      <td className="py-2 px-2 text-end">{formatNumber(item.total_qty_requested)}</td>
                       <td className="py-2 px-2 text-end">
                         <span className={item.stock_qty === 0 ? 'text-red-500 font-medium' : ''}>
-                          {item.stock_qty}
+                          {formatNumber(item.stock_qty)}
                         </span>
                       </td>
                       <td className="py-2 px-2 text-end">{item.price > 0 ? `₪${NUMBER_FORMAT.format(item.price)}` : '-'}</td>

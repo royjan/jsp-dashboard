@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { formatNumber } from '@/lib/constants'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -73,7 +74,7 @@ export default function SuppliersPage() {
             </div>
             <div>
               <p className="text-xs text-muted-foreground">{t('suppliers.totalSuppliers')}</p>
-              <p className="text-lg font-bold">{summary.total}</p>
+              <p className="text-lg font-bold">{formatNumber(summary.total)}</p>
             </div>
           </CardContent>
         </Card>
@@ -84,7 +85,7 @@ export default function SuppliersPage() {
             </div>
             <div>
               <p className="text-xs text-muted-foreground">{t('suppliers.activeSuppliers')}</p>
-              <p className="text-lg font-bold">{summary.active}</p>
+              <p className="text-lg font-bold">{formatNumber(summary.active)}</p>
             </div>
           </CardContent>
         </Card>
@@ -95,7 +96,7 @@ export default function SuppliersPage() {
             </div>
             <div>
               <p className="text-xs text-muted-foreground">{t('suppliers.pendingOrders')}</p>
-              <p className="text-lg font-bold">{summary.pendingOrders}</p>
+              <p className="text-lg font-bold">{formatNumber(summary.pendingOrders)}</p>
             </div>
           </CardContent>
         </Card>
@@ -106,7 +107,7 @@ export default function SuppliersPage() {
             </div>
             <div>
               <p className="text-xs text-muted-foreground">{t('suppliers.overdueDeliveries')}</p>
-              <p className="text-lg font-bold">{summary.overdueDeliveries}</p>
+              <p className="text-lg font-bold">{formatNumber(summary.overdueDeliveries)}</p>
             </div>
           </CardContent>
         </Card>

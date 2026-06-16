@@ -17,6 +17,7 @@ import {
   FileSpreadsheet,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { formatNumber } from '@/lib/constants'
 
 interface CatalogPart {
   globalPartId: string
@@ -180,7 +181,7 @@ export function PartsGrid({
               <Package className="h-4 w-4" />
               {categoryName || 'חלקים'}
               {data?.total !== undefined && (
-                <Badge variant="secondary" className="text-xs">{data.total}</Badge>
+                <Badge variant="secondary" className="text-xs">{formatNumber(data.total)}</Badge>
               )}
             </CardTitle>
             {/* Stock summary mini-badges */}
@@ -277,11 +278,11 @@ export function PartsGrid({
                           </span>
                         )}
                       </td>
-                      <td className="px-3 py-2 text-xs">{part.quantity}</td>
+                      <td className="px-3 py-2 text-xs">{formatNumber(part.quantity)}</td>
                       <td className="px-3 py-2">
                         {part.stockQty !== null ? (
                           <div className="text-xs">
-                            <span className="font-medium">{part.stockQty}</span>
+                            <span className="font-medium">{formatNumber(part.stockQty)}</span>
                             {part.incomingQty !== null && part.incomingQty > 0 && (
                               <span className="text-amber-600 dark:text-amber-400 ms-1">
                                 (+{part.incomingQty})

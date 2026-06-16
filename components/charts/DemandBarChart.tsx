@@ -4,6 +4,7 @@ import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recha
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useLocale } from '@/lib/locale-context'
+import { formatNumber } from '@/lib/constants'
 import type { DemandItem } from '@/lib/types'
 
 const COLORS = ['#60a5fa', '#34d399', '#fbbf24', '#a78bfa', '#fb7185', '#fb923c', '#38bdf8', '#4ade80', '#e879f9', '#f87171']
@@ -133,7 +134,7 @@ export function DemandBarChart({ data, isLoading, mode, limit = 10, hoveredCode,
                 >
                   <div className="w-3 h-3 rounded-sm shrink-0" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
                   <span className="flex-1 truncate text-foreground">{item.fullName}</span>
-                  <span className="text-muted-foreground font-mono text-xs">{item.value} ({pct}%)</span>
+                  <span className="text-muted-foreground font-mono text-xs">{formatNumber(item.value)} ({pct}%)</span>
                 </div>
               )
             })}

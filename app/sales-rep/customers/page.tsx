@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { SalesRepBottomNav } from '@/components/sales-rep/BottomNav'
 import { VisitLogger } from '@/components/sales-rep/VisitLogger'
-import { ILS_FORMAT } from '@/lib/constants'
+import { ILS_FORMAT, formatNumber } from '@/lib/constants'
 
 interface Customer {
   code: string
@@ -109,9 +109,9 @@ export default function SalesRepCustomersPage() {
         </div>
         {data?.summary && (
           <div className="mr-auto flex gap-2">
-            <Badge variant="destructive" className="text-xs">{data.summary.red}</Badge>
-            <Badge className="text-xs bg-amber-500/10 text-amber-700 dark:text-amber-400">{data.summary.yellow}</Badge>
-            <Badge variant="secondary" className="text-xs">{data.summary.green}</Badge>
+            <Badge variant="destructive" className="text-xs">{formatNumber(data.summary.red)}</Badge>
+            <Badge className="text-xs bg-amber-500/10 text-amber-700 dark:text-amber-400">{formatNumber(data.summary.yellow)}</Badge>
+            <Badge variant="secondary" className="text-xs">{formatNumber(data.summary.green)}</Badge>
           </div>
         )}
       </header>

@@ -16,7 +16,7 @@ import {
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from 'recharts'
-import { ILS_FORMAT, NUMBER_FORMAT } from '@/lib/constants'
+import { ILS_FORMAT, NUMBER_FORMAT, formatNumber } from '@/lib/constants'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const cardVariants: any = {
@@ -190,7 +190,7 @@ function DocumentTable({ items, t, isReceipt }: { items: any[]; t: (k: any) => s
               </td>
               <td className="p-2 text-muted-foreground">{doc.date || doc.created_at || '-'}</td>
               <td className="p-2 text-end font-medium">{ILS_FORMAT.format(doc.total || doc.amount || doc.sum || 0)}</td>
-              {!isReceipt && <td className="p-2 text-end">{doc.line_count || doc.items?.length || '-'}</td>}
+              {!isReceipt && <td className="p-2 text-end">{doc.line_count || doc.items?.length ? formatNumber(doc.line_count || doc.items?.length) : '-'}</td>}
             </motion.tr>
           ))}
         </tbody>

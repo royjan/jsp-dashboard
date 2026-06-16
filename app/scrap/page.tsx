@@ -10,7 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { ItemLink } from '@/components/shared/ItemLink'
 import { EbayRecommendButton } from '@/components/shared/EbayRecommendButton'
-import { ILS_FORMAT, NUMBER_FORMAT } from '@/lib/constants'
+import { ILS_FORMAT, NUMBER_FORMAT, formatNumber } from '@/lib/constants'
 import { Search, Trash2, AlertTriangle, Package, ArrowUpDown, Download, ShoppingCart, Loader2 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 
@@ -236,8 +236,8 @@ function ScrapContent() {
             {[
               { icon: Package, label: isHe ? 'סה"כ פריטים' : 'Total Items', value: NUMBER_FORMAT.format(summary.total_items), sub: `${NUMBER_FORMAT.format(summary.total_units)} ${isHe ? 'יחידות' : 'units'}`, color: 'text-primary' },
               { icon: AlertTriangle, label: isHe ? 'הון כלוא' : 'Capital Tied', value: ILS_FORMAT.format(Math.round(summary.total_capital)), color: 'text-destructive' },
-              { icon: Trash2, label: isHe ? 'מלאי מת (ללא מכירות שנה)' : 'Dead Stock (no sales 1Y)', value: `${summary.dead_items}`, sub: ILS_FORMAT.format(Math.round(summary.dead_capital)), color: 'text-amber-500' },
-              { icon: Trash2, label: isHe ? 'אף פעם לא נמכרו' : 'Never Sold', value: `${summary.never_sold_items}`, sub: ILS_FORMAT.format(Math.round(summary.never_sold_capital)), color: 'text-destructive' },
+              { icon: Trash2, label: isHe ? 'מלאי מת (ללא מכירות שנה)' : 'Dead Stock (no sales 1Y)', value: formatNumber(summary.dead_items), sub: ILS_FORMAT.format(Math.round(summary.dead_capital)), color: 'text-amber-500' },
+              { icon: Trash2, label: isHe ? 'אף פעם לא נמכרו' : 'Never Sold', value: formatNumber(summary.never_sold_items), sub: ILS_FORMAT.format(Math.round(summary.never_sold_capital)), color: 'text-destructive' },
             ].map((kpi, i) => (
               <motion.div key={kpi.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.06 }}>
                 <Card className="overflow-hidden h-full">

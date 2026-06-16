@@ -7,6 +7,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { formatNumber } from '@/lib/constants'
 
 // ── Types ──
 
@@ -319,7 +320,7 @@ function ResultCard({ result }: { result: QuickCheckResult }) {
             <div className="space-y-1">
               <p className="text-sm text-muted-foreground">במלאי</p>
               <p className={`text-3xl font-bold ${result.stock_qty > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
-                {result.stock_qty}
+                {formatNumber(result.stock_qty)}
               </p>
               {result.stock_qty === 0 && (
                 <Badge variant="destructive" className="text-xs">אזל</Badge>
@@ -330,7 +331,7 @@ function ResultCard({ result }: { result: QuickCheckResult }) {
             <div className="space-y-1">
               <p className="text-sm text-muted-foreground">בדרך</p>
               <p className={`text-3xl font-bold ${result.incoming_qty > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'}`}>
-                {result.incoming_qty}
+                {formatNumber(result.incoming_qty)}
               </p>
             </div>
 
@@ -338,7 +339,7 @@ function ResultCard({ result }: { result: QuickCheckResult }) {
             <div className="space-y-1">
               <p className="text-sm text-muted-foreground">הוזמן</p>
               <p className={`text-3xl font-bold ${result.ordered_qty > 0 ? 'text-blue-600 dark:text-blue-400' : 'text-muted-foreground'}`}>
-                {result.ordered_qty}
+                {formatNumber(result.ordered_qty)}
               </p>
             </div>
           </div>
@@ -356,13 +357,13 @@ function ResultCard({ result }: { result: QuickCheckResult }) {
                   <span className="text-base font-medium">{wh.warehouse}</span>
                   <div className="flex gap-4 text-base">
                     <span className={wh.stock_qty > 0 ? 'text-emerald-600 dark:text-emerald-400 font-bold' : 'text-muted-foreground'}>
-                      {wh.stock_qty}
+                      {formatNumber(wh.stock_qty)}
                     </span>
                     {wh.incoming_qty > 0 && (
-                      <span className="text-amber-600 dark:text-amber-400">+{wh.incoming_qty}</span>
+                      <span className="text-amber-600 dark:text-amber-400">+{formatNumber(wh.incoming_qty)}</span>
                     )}
                     {wh.ordered_qty > 0 && (
-                      <span className="text-blue-600 dark:text-blue-400">{wh.ordered_qty} הוזמן</span>
+                      <span className="text-blue-600 dark:text-blue-400">{formatNumber(wh.ordered_qty)} הוזמן</span>
                     )}
                   </div>
                 </div>
@@ -401,14 +402,14 @@ function ResultCard({ result }: { result: QuickCheckResult }) {
             {result.sold_this_year != null && (
               <div className="flex justify-between items-center">
                 <span className="text-sm text-muted-foreground">נמכר השנה</span>
-                <span className="text-base font-bold">{result.sold_this_year}</span>
+                <span className="text-base font-bold">{formatNumber(result.sold_this_year)}</span>
               </div>
             )}
 
             {result.sold_last_year != null && (
               <div className="flex justify-between items-center">
                 <span className="text-sm text-muted-foreground">נמכר שנה שעברה</span>
-                <span className="text-base">{result.sold_last_year}</span>
+                <span className="text-base">{formatNumber(result.sold_last_year)}</span>
               </div>
             )}
           </CardContent>

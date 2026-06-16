@@ -14,7 +14,7 @@ import {
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts'
-import { NUMBER_FORMAT } from '@/lib/constants'
+import { NUMBER_FORMAT, formatNumber } from '@/lib/constants'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const cardVariants: any = {
@@ -154,7 +154,7 @@ function ChatInsightsContent() {
                     </div>
                   </div>
                   <Badge variant="outline" className="shrink-0 text-xs">
-                    {intent.count}
+                    {formatNumber(intent.count)}
                   </Badge>
                 </div>
               ))}
@@ -222,7 +222,7 @@ function ChatInsightsContent() {
                           <div className="text-[11px] text-muted-foreground">{u.email}</div>
                         )}
                       </td>
-                      <td className="py-2 px-2 text-end font-bold">{u.conversation_count}</td>
+                      <td className="py-2 px-2 text-end font-bold">{formatNumber(u.conversation_count)}</td>
                       <td className="py-2 px-2 text-end text-xs text-muted-foreground">
                         {u.last_active ? new Date(u.last_active).toLocaleDateString() : '-'}
                       </td>

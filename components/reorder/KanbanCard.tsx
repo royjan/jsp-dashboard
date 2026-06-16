@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import type { ReorderQueueItem } from '@/lib/db/schema'
 import type { ReorderStage } from '@/hooks/use-reorder-queue'
 import { useUpdateItem, useDeleteItem } from '@/hooks/use-reorder-queue'
+import { formatNumber } from '@/lib/constants'
 import { format } from 'date-fns'
 
 interface KanbanCardProps {
@@ -108,10 +109,10 @@ export function KanbanCard({ item, stage }: KanbanCardProps) {
         </span>
         <span className="flex items-center gap-1">
           <TrendingUp className="h-3 w-3" />
-          {item.avgMonthlySales ? `${Number(item.avgMonthlySales).toFixed(1)}/חודש` : '—'}
+          {item.avgMonthlySales ? `${formatNumber(Number(item.avgMonthlySales), 1)}/חודש` : '—'}
         </span>
         {item.price && Number(item.price) > 0 && (
-          <span className="mr-auto">₪{Number(item.price).toFixed(0)}</span>
+          <span className="mr-auto">₪{formatNumber(Number(item.price))}</span>
         )}
       </div>
 

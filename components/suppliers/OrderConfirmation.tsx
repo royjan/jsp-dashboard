@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { useLocale } from '@/lib/locale-context'
+import { formatNumber } from '@/lib/constants'
 import { useConfirmOrder } from '@/hooks/use-suppliers'
 import { CheckCircle2, Truck, Package, Clock, Loader2 } from 'lucide-react'
 
@@ -111,7 +112,7 @@ export function OrderConfirmation({ supplierCode, order }: OrderConfirmationProp
                       <tr key={i} className="border-t">
                         <td className="px-2 py-1 font-mono">{line.item_code}</td>
                         <td className="px-2 py-1">{line.item_name}</td>
-                        <td className="px-2 py-1 text-end">{line.quantity}</td>
+                        <td className="px-2 py-1 text-end">{formatNumber(line.quantity)}</td>
                         <td className="px-2 py-1 text-end">
                           {(line.total || 0).toLocaleString('he-IL', { style: 'currency', currency: 'ILS' })}
                         </td>

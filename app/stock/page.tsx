@@ -23,7 +23,7 @@ import { StockPageSkeleton } from '@/components/layout/PageSkeleton'
 import { cn } from '@/lib/utils'
 import { ArrowUpDown, Search, Crown, TrendingUp, Layers, AlertTriangle, Sparkles, RefreshCw, TableIcon, LayoutGrid, ChevronDown, ChevronLeft, ChevronRight, Filter, Target, FileText, TrendingDown, Clock, ArrowRightLeft } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from 'recharts'
-import { ILS_FORMAT } from '@/lib/constants'
+import { ILS_FORMAT, formatNumber } from '@/lib/constants'
 import { incrementStreaming, decrementStreaming } from '@/lib/streaming-counter'
 
 // ── Types ──
@@ -589,8 +589,8 @@ function ConversionSection({ searchQuery }: { searchQuery: string }) {
                             <div className="font-medium truncate max-w-[200px] md:max-w-none"><ItemLink code={item.code} name={item.name} /></div>
                             {item.code && <div className="text-xs text-muted-foreground font-mono"><ItemLink code={item.code} showCode className="text-muted-foreground hover:text-primary" /></div>}
                           </td>
-                          <td className="py-2.5 text-end tabular-nums">{item.timesQuoted}</td>
-                          <td className="py-2.5 text-end tabular-nums">{item.timesSold}</td>
+                          <td className="py-2.5 text-end tabular-nums">{formatNumber(item.timesQuoted)}</td>
+                          <td className="py-2.5 text-end tabular-nums">{formatNumber(item.timesSold)}</td>
                           <td className="py-2.5 text-end font-mono text-destructive">{ILS_FORMAT.format(item.lostValue)}</td>
                           <td className="py-2.5 text-end text-muted-foreground pe-4 md:pe-0">{item.lastQuoted?.substring(0, 10)}</td>
                         </motion.tr>
@@ -619,8 +619,8 @@ function ConversionSection({ searchQuery }: { searchQuery: string }) {
                           <td className="py-2.5 ps-4 md:ps-0">
                             <div className="font-medium truncate max-w-[200px] md:max-w-none">{cust.name}</div>
                           </td>
-                          <td className="py-2.5 text-end tabular-nums">{cust.quotesCount}</td>
-                          <td className="py-2.5 text-end tabular-nums">{cust.convertedCount}</td>
+                          <td className="py-2.5 text-end tabular-nums">{formatNumber(cust.quotesCount)}</td>
+                          <td className="py-2.5 text-end tabular-nums">{formatNumber(cust.convertedCount)}</td>
                           <td className="py-2.5 text-end">
                             <Badge variant={cust.rate >= 70 ? 'success' : cust.rate >= 40 ? 'warning' : 'destructive'}>{cust.rate}%</Badge>
                           </td>
@@ -1275,21 +1275,21 @@ function StockPageContent() {
 
                           {/* מלאי */}
                           <td className="py-2 text-end font-mono tabular-nums border-l border-muted/30 px-2">
-                            <span>{item.stock_qty}</span>
+                            <span>{formatNumber(item.stock_qty)}</span>
                             {item.incoming_qty > 0 && (
                               <UITooltip>
                                 <TooltipTrigger asChild>
-                                  <span className="ms-1 text-[10px] text-emerald-500 cursor-help">+{item.incoming_qty}↓</span>
+                                  <span className="ms-1 text-[10px] text-emerald-500 cursor-help">+{formatNumber(item.incoming_qty)}↓</span>
                                 </TooltipTrigger>
-                                <TooltipContent side="top" className="text-xs">בדרך למחסן: {item.incoming_qty}</TooltipContent>
+                                <TooltipContent side="top" className="text-xs">בדרך למחסן: {formatNumber(item.incoming_qty)}</TooltipContent>
                               </UITooltip>
                             )}
                             {item.ordered_qty > 0 && (
                               <UITooltip>
                                 <TooltipTrigger asChild>
-                                  <span className="ms-1 text-[10px] text-blue-400 cursor-help">+{item.ordered_qty}⏳</span>
+                                  <span className="ms-1 text-[10px] text-blue-400 cursor-help">+{formatNumber(item.ordered_qty)}⏳</span>
                                 </TooltipTrigger>
-                                <TooltipContent side="top" className="text-xs">הוזמן מספק: {item.ordered_qty}</TooltipContent>
+                                <TooltipContent side="top" className="text-xs">הוזמן מספק: {formatNumber(item.ordered_qty)}</TooltipContent>
                               </UITooltip>
                             )}
                           </td>
@@ -1487,7 +1487,7 @@ function StockPageContent() {
                                   <div className="text-[10px] text-muted-foreground/70">{t('alsoKnownAs')}: {item.alias_codes.join(', ')}</div>
                                 )}
                               </td>
-                              <td className="py-2 text-end">{item.stock_qty}</td>
+                              <td className="py-2 text-end">{formatNumber(item.stock_qty)}</td>
                               <td className="py-2 text-end font-mono">&#8362;{item.price.toLocaleString()}</td>
                               <td className="py-2 text-end font-mono font-semibold">&#8362;{item.capital_tied.toLocaleString()}</td>
                               <td className="py-2 text-end text-xs text-muted-foreground">{item.sale_date ? item.sale_date.substring(0, 10) : t('neverSold')}</td>

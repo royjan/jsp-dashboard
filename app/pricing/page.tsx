@@ -12,7 +12,7 @@ import {
   ArrowUpDown,
   Info,
 } from 'lucide-react'
-import { ILS_FORMAT } from '@/lib/constants'
+import { ILS_FORMAT, formatNumber } from '@/lib/constants'
 import { cn } from '@/lib/utils'
 import { useLocale } from '@/lib/locale-context'
 import type { TranslationKey } from '@/lib/i18n'
@@ -61,11 +61,11 @@ function TierCell({ tier, maxQty }: { tier: ElasticityTier; maxQty: number }) {
       />
       <div className="relative z-10">
         <div className="text-xs font-mono font-semibold tabular-nums">
-          {tier.avg_qty > 0 ? tier.avg_qty.toFixed(1) : '—'}
+          {tier.avg_qty > 0 ? formatNumber(tier.avg_qty, 1) : '—'}
         </div>
         <div className="text-[10px] text-muted-foreground mt-0.5">
-          {tier.months}mo · ₪{tier.price_range[0].toFixed(0)}-
-          ₪{tier.price_range[1].toFixed(0)}
+          {tier.months}mo · ₪{formatNumber(tier.price_range[0])}-
+          ₪{formatNumber(tier.price_range[1])}
         </div>
       </div>
     </td>

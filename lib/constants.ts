@@ -53,3 +53,30 @@ export const NUMBER_FORMAT = new Intl.NumberFormat('en-IL', {
   minimumFractionDigits: 0,
   maximumFractionDigits: 0,
 })
+
+/**
+ * Format a number with thousands separators (1,234,567).
+ * Use everywhere a magnitude/quantity/count/currency is shown to the user.
+ * NOTE: do NOT use for years (2026), item codes, doc numbers or indices —
+ * those must stay un-grouped.
+ */
+export function formatNumber(value: number | null | undefined, decimals = 0): string {
+  const n = Number(value)
+  if (!Number.isFinite(n)) return '0'
+  return n.toLocaleString('en-US', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  })
+}
+
+/** Format as ILS currency with thousands separators (₪1,234,567). */
+export function formatCurrency(value: number | null | undefined, decimals = 0): string {
+  const n = Number(value)
+  if (!Number.isFinite(n)) return '₪0'
+  return n.toLocaleString('he-IL', {
+    style: 'currency',
+    currency: 'ILS',
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  })
+}

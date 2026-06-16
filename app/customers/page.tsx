@@ -22,7 +22,7 @@ import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend,
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
 } from 'recharts'
-import { ILS_FORMAT, NUMBER_FORMAT } from '@/lib/constants'
+import { ILS_FORMAT, NUMBER_FORMAT, formatNumber } from '@/lib/constants'
 
 type CustomerSortField = 'name' | 'total_revenue' | 'gross_invoices' | 'total_credits' | 'invoice_count' | 'avg_order_value' | 'trend' | 'last_purchase'
 type ChurnSortField = 'name' | 'last_year_revenue' | 'last_purchase'
@@ -232,7 +232,7 @@ function CustomersSection({ searchQuery }: { searchQuery: string }) {
                       <span className="hidden sm:inline">{t('churnAlert')}</span>
                       <span className="sm:hidden">{t('churnedCustomers')}</span>
                       {data.summary.churned_count > 0 && (
-                        <Badge variant="destructive" className="h-5 min-w-5 px-1 text-[10px]">{data.summary.churned_count}</Badge>
+                        <Badge variant="destructive" className="h-5 min-w-5 px-1 text-[10px]">{formatNumber(data.summary.churned_count)}</Badge>
                       )}
                     </TabsTrigger>
                   </TabsList>
@@ -274,7 +274,7 @@ function CustomersSection({ searchQuery }: { searchQuery: string }) {
                               <td className="py-2.5 text-end font-mono tabular-nums">{ILS_FORMAT.format(cust.gross_invoices)}</td>
                               <td className="py-2.5 text-end font-mono tabular-nums text-destructive">{cust.total_credits > 0 ? `-${ILS_FORMAT.format(cust.total_credits)}` : '—'}</td>
                               <td className="py-2.5 text-end font-mono tabular-nums font-semibold">{ILS_FORMAT.format(cust.total_revenue)}</td>
-                              <td className="py-2.5 text-end tabular-nums">{cust.invoice_count}</td>
+                              <td className="py-2.5 text-end tabular-nums">{formatNumber(cust.invoice_count)}</td>
                               <td className="py-2.5 text-center"><TrendIcon trend={cust.trend} /></td>
                               <td className="py-2.5 text-end text-muted-foreground pe-4 md:pe-0">{cust.last_purchase?.substring(0, 10)}</td>
                             </motion.tr>

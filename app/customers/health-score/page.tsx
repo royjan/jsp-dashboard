@@ -14,7 +14,7 @@ import { DateRangePicker } from '@/components/shared/DateRangePicker'
 import { AnimatedCounter } from '@/components/shared/AnimatedCounter'
 import { HealthTransitions } from '@/components/customers/HealthTransitions'
 import { WinBackSuggestions } from '@/components/customers/WinBackSuggestions'
-import { ILS_FORMAT } from '@/lib/constants'
+import { ILS_FORMAT, formatNumber } from '@/lib/constants'
 import { cn } from '@/lib/utils'
 import {
   HeartPulse,
@@ -306,7 +306,7 @@ function HealthScoreContent() {
                 <AnimatedCounter value={data.avgScore} />
               </div>
               <div className="text-[11px] md:text-xs text-muted-foreground mt-1">
-                avg / {total} {t('total').toLowerCase()}
+                avg / {formatNumber(total)} {t('total').toLowerCase()}
               </div>
             </CardContent>
           </Card>
@@ -377,18 +377,18 @@ function HealthScoreContent() {
       {/* Band filter tabs */}
       <Tabs value={bandFilter} onValueChange={v => setBandFilter(v as Band)}>
         <TabsList>
-          <TabsTrigger value="all">All ({total})</TabsTrigger>
+          <TabsTrigger value="all">All ({formatNumber(total)})</TabsTrigger>
           <TabsTrigger value="red" className="gap-1.5">
             <AlertCircle className="h-3.5 w-3.5 text-red-500" />
-            {t('atRisk')} ({dist.red})
+            {t('atRisk')} ({formatNumber(dist.red)})
           </TabsTrigger>
           <TabsTrigger value="yellow" className="gap-1.5">
             <Eye className="h-3.5 w-3.5 text-amber-500" />
-            {t('watchList')} ({dist.yellow})
+            {t('watchList')} ({formatNumber(dist.yellow)})
           </TabsTrigger>
           <TabsTrigger value="green" className="gap-1.5">
             <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />
-            {t('healthyCustomers')} ({dist.green})
+            {t('healthyCustomers')} ({formatNumber(dist.green)})
           </TabsTrigger>
         </TabsList>
       </Tabs>
@@ -398,7 +398,7 @@ function HealthScoreContent() {
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">
             <CardTitle className="text-base">
-              {t('customers')} ({filtered.length})
+              {t('customers')} ({formatNumber(filtered.length)})
             </CardTitle>
           </div>
         </CardHeader>
@@ -506,7 +506,7 @@ function HealthScoreContent() {
           </div>
           {filtered.length > 200 && (
             <div className="text-xs text-muted-foreground text-center pt-3 border-t mt-3">
-              Showing first 200 / {filtered.length}
+              Showing first 200 / {formatNumber(filtered.length)}
             </div>
           )}
         </CardContent>
