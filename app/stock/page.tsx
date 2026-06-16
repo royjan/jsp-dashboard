@@ -898,21 +898,21 @@ function StockPageContent() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3 md:gap-4">
         <Card>
           <CardContent className="p-4 text-center space-y-1">
-            <p className="text-xl sm:text-2xl font-bold text-foreground">{totalStockItems}</p>
+            <p className="text-xl sm:text-2xl font-bold text-foreground">{formatNumber(totalStockItems)}</p>
             <p className="text-xs text-muted-foreground">סה״כ פריטים במלאי</p>
             <Badge variant="outline" className="text-[10px]">עם מלאי</Badge>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4 text-center space-y-1">
-            <p className="text-xl sm:text-2xl font-bold text-emerald-500">{healthyItems}</p>
+            <p className="text-xl sm:text-2xl font-bold text-emerald-500">{formatNumber(healthyItems)}</p>
             <p className="text-xs text-muted-foreground">{t('healthy')}</p>
             <Badge variant="success" className="text-[10px]">{t('soldYear')}</Badge>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4 text-center space-y-1">
-            <p className="text-xl sm:text-2xl font-bold text-amber-500">{slowMoving}</p>
+            <p className="text-xl sm:text-2xl font-bold text-amber-500">{formatNumber(slowMoving)}</p>
             <p className="text-xs text-muted-foreground">תנועה איטית</p>
             <Badge variant="warning" className="text-[10px]">שנה שעברה בלבד</Badge>
           </CardContent>

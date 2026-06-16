@@ -18,7 +18,12 @@ export async function GET() {
     const stats = await res.json()
 
     const overview = stats.overview || {}
-    const fuelTypes = (stats.fuelTypes || []).filter((f: any) => f.count > 100)
+    // ICS returns { type: "בנזין", count }. Normalize to `fuel`/`name` so the
+    // market pie (nameKey="fuel") and bar (dataKey="name") render real labels
+    // instead of "undefined".
+    const fuelTypes = (stats.fuelTypes || [])
+      .filter((f: any) => f.count > 100)
+      .map((f: any) => ({ fuel: f.type ?? f.fuel ?? f.name, name: f.type ?? f.fuel ?? f.name, count: f.count }))
     const topModels = stats.topModels || []
     const monthlyTrend = stats.monthlyTrend || []
 

@@ -76,6 +76,43 @@ const CHECKS = [
     detail: (d) => `items=${arr(d?.items ?? d).length}${d?.error ? ' ERROR:' + d.error : ''}`,
     soft: true, // empty is allowed; only fail on error
   },
+  {
+    name: 'Gap analysis (quoted, no stock)',
+    path: '/api/analytics/gap?format=31&limit=50',
+    ok: (d) => !d?.error && Array.isArray(d?.items ?? d),
+    detail: (d) => d?.error ? 'ERROR:' + d.error : `items=${arr(d?.items ?? d).length}`,
+  },
+  {
+    name: 'Vehicle population lifecycle',
+    path: '/api/analytics/vehicle-population/lifecycle',
+    ok: (d) => !d?.error,
+    detail: (d) => d?.error ? 'ERROR:' + d.error : 'ok',
+  },
+  {
+    name: 'Price elasticity',
+    path: '/api/analytics/price-elasticity?top_n=20&min_months=6',
+    ok: (d) => !d?.error,
+    detail: (d) => d?.error ? 'ERROR:' + d.error : `items=${arr(d?.items ?? d).length}`,
+  },
+  {
+    name: 'Margin (revenue/qty)',
+    path: '/api/analytics/margin',
+    ok: (d) => !d?.error && num(d?.summary?.total_revenue) > 0,
+    detail: (d) => d?.error ? 'ERROR:' + d.error : `revenue=${d?.summary?.total_revenue}`,
+  },
+  {
+    name: 'Market — fuel labels (not undefined)',
+    path: '/api/analytics/market',
+    ok: (d) => arr(d?.fuel_breakdown).length > 0 && !!d.fuel_breakdown[0]?.fuel,
+    detail: (d) => `fuels=${arr(d?.fuel_breakdown).length} first=${d?.fuel_breakdown?.[0]?.fuel}`,
+  },
+  {
+    name: 'Receivables (no 404)',
+    path: '/api/analytics/receivables?limit=20',
+    ok: (d) => d != null && !d.error && d.totals !== undefined,
+    detail: (d) => d?.error ? 'ERROR:' + d.error : `customers=${arr(d?.customers).length} balance=${d?.totals?.total_balance}`,
+    soft: true, // AR balances need FINAPI; empty is acceptable for now, only fail on error
+  },
 ];
 
 const num = (v) => (typeof v === 'number' ? v : Number(v) || 0);
