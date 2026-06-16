@@ -919,7 +919,7 @@ function StockPageContent() {
         </Card>
         <Card>
           <CardContent className="p-4 text-center space-y-1">
-            <p className="text-xl sm:text-2xl font-bold text-red-500">{deadCount}</p>
+            <p className="text-xl sm:text-2xl font-bold text-red-500">{formatNumber(deadCount)}</p>
             <p className="text-xs text-muted-foreground">{t('deadStock')}</p>
             <Badge variant="destructive" className="text-[10px]">ללא מכירות 2+ שנים</Badge>
           </CardContent>
@@ -1097,7 +1097,7 @@ function StockPageContent() {
                 </div>
 
                 <span className="text-xs text-muted-foreground whitespace-nowrap">
-                  {filteredUnified.length} / {unifiedItems.length} פריטים
+                  {formatNumber(filteredUnified.length)} / {formatNumber(unifiedItems.length)} פריטים
                 </span>
               </div>
 
@@ -1387,7 +1387,7 @@ function StockPageContent() {
               {filteredUnified.length > PAGE_SIZE && (
                 <div className="mt-4 flex items-center justify-between gap-2">
                   <span className="text-xs text-muted-foreground">
-                    {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, filteredUnified.length)} מתוך {filteredUnified.length} פריטים
+                    {formatNumber(page * PAGE_SIZE + 1)}–{formatNumber(Math.min((page + 1) * PAGE_SIZE, filteredUnified.length))} מתוך {formatNumber(filteredUnified.length)} פריטים
                   </span>
                   <div className="flex items-center gap-1">
                     <button
@@ -1428,7 +1428,7 @@ function StockPageContent() {
               )}
               {filteredUnified.length <= PAGE_SIZE && (
                 <div className="mt-3 text-xs text-muted-foreground text-end">
-                  {filteredUnified.length} פריטים
+                  {formatNumber(filteredUnified.length)} פריטים
                 </div>
               )}
 

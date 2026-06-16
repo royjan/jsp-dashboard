@@ -402,37 +402,47 @@ async function _getItemsImpl(cacheKey: string, staleCacheKey?: string): Promise<
     const zeroPriceCodes = items.filter(i => i.price === 0 && i.stock_qty > 0).map(i => i.code)
     if (zeroPriceCodes.length > 0) {
       try {
-        const priceCacheKey = 'items:prices:v3'
+        const priceCacheKey = 'items:prices:v4'
         let priceMap = await getCached<Record<string, number>>(priceCacheKey)
         if (!priceMap) {
           console.log(`[Analytics] Batch-fetching prices for ${zeroPriceCodes.length} items...`)
           priceMap = await fetchBatchPrices(zeroPriceCodes).catch(() => ({} as Record<string, number>))
 
-          // Always fall back to SQLite item_snapshot for any remaining zero-price items
+          // Fall back to the latest dashboard.item_snapshots for any remaining
+          // zero-price items. (Table is item_snapshots / column `price` — NOT the
+          // old item_snapshot/retail_price, which silently errored and filled 0.)
           const stillMissing = zeroPriceCodes.filter(c => !priceMap![c.toUpperCase()])
           if (stillMissing.length > 0) {
             try {
-              // Query in batches to avoid SQLite variable limit
               const BATCH = 500
               for (let i = 0; i < stillMissing.length; i += BATCH) {
                 const batch = stillMissing.slice(i, i + BATCH)
                 const pgResult = await readQueryAsync(
-                  `SELECT item_code, retail_price AS price
-                   FROM item_snapshot
-                   WHERE item_code IN (${batch.map(() => '?').join(',')}) AND retail_price > 0`,
+                  `SELECT item_code, price
+                   FROM item_snapshots
+                   WHERE snapshot_date = (SELECT MAX(snapshot_date) FROM item_snapshots)
+                     AND item_code IN (${batch.map(() => '?').join(',')}) AND price > 0`,
                   batch
                 )
                 for (const row of pgResult.rows) {
                   priceMap![row.item_code.toUpperCase()] = parseFloat(row.price)
                 }
               }
-              console.log(`[Analytics] SQLite item_snapshot prices fallback: filled ${zeroPriceCodes.length - stillMissing.length + Object.keys(priceMap!).length} of ${zeroPriceCodes.length}`)
             } catch (e) {
-              console.warn('[Analytics] SQLite prices fallback failed:', e)
+              console.warn('[Analytics] item_snapshots prices fallback failed:', e)
             }
           }
-          await setCache(priceCacheKey, priceMap, 12 * 60 * 60) // 12h TTL
-          console.log(`[Analytics] Got prices for ${Object.keys(priceMap).length} items`)
+
+          // Only cache when the map is meaningfully populated. A near-empty map
+          // (e.g. FINAPI was briefly busy/wedged) must NOT be frozen for 12h —
+          // that's what made הון כלוא collapse to a fraction of the real value.
+          const coverage = zeroPriceCodes.length ? Object.keys(priceMap).length / zeroPriceCodes.length : 1
+          if (coverage >= 0.3) {
+            await setCache(priceCacheKey, priceMap, 12 * 60 * 60) // 12h TTL
+          } else {
+            console.warn(`[Analytics] price coverage only ${(coverage * 100).toFixed(0)}% — NOT caching, will retry next request`)
+          }
+          console.log(`[Analytics] Got prices for ${Object.keys(priceMap).length}/${zeroPriceCodes.length} items`)
         }
         for (const item of items) {
           if (item.price === 0 && priceMap[item.code.toUpperCase()]) {

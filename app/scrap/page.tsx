@@ -269,7 +269,7 @@ function ScrapContent() {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <CardTitle className="text-base">
                   {isHe ? `תוצאות חיפוש: "${query}"` : `Search results: "${query}"`}
-                  <Badge variant="secondary" className="ms-2">{sortedItems.length}</Badge>
+                  <Badge variant="secondary" className="ms-2">{formatNumber(sortedItems.length)}</Badge>
                   {isFetching && <span className="text-xs text-muted-foreground ms-2 animate-pulse">{isHe ? 'טוען...' : 'Loading...'}</span>}
                 </CardTitle>
                 <div className="flex items-center gap-2 shrink-0">
@@ -365,7 +365,7 @@ function ScrapContent() {
                     <tfoot>
                       <tr className="border-t-2 font-semibold">
                         <td colSpan={3} className="py-2 ps-4 md:ps-0">
-                          {isHe ? `סה"כ ${sortedItems.length} פריטים` : `Total ${sortedItems.length} items`}
+                          {isHe ? `סה"כ ${formatNumber(sortedItems.length)} פריטים` : `Total ${formatNumber(sortedItems.length)} items`}
                         </td>
                         <td className="py-2 text-end tabular-nums">{NUMBER_FORMAT.format(sortedItems.reduce((s: number, i: any) => s + i.qty, 0))}</td>
                         <td className="py-2" />
