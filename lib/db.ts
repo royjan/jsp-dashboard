@@ -1,7 +1,13 @@
-import { Pool } from 'pg'
+import { Pool, types } from 'pg'
 import { drizzle, NodePgDatabase } from 'drizzle-orm/node-postgres'
 import { getSecret, initializeSecrets } from './aws-secrets'
 import * as schema from './db/schema'
+
+// Return DATE columns (OID 1082) as raw 'YYYY-MM-DD' strings instead of JS Date
+// objects. The dashboard (and the former SQLite mirror) treat date columns as
+// 'YYYY-MM-DD' strings — without this, pg yields Date objects that serialize to
+// full ISO timestamps, breaking `new Date(dateStr + 'T00:00:00')` → Invalid Date.
+types.setTypeParser(1082, (v) => v)
 
 let pool: Pool | null = null
 let _db: NodePgDatabase<typeof schema> | null = null
