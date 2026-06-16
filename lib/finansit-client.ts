@@ -24,7 +24,11 @@ const client = createClient({
     await initializeSecrets()
     return getSecret('FINANSIT_API_CREDENTIALS', '')
   },
-  concurrency: 10,
+  // FINAPI is a single uvicorn worker with a 20-seat concurrency limiter; a
+  // cold cache turns /api/dashboard + analytics into 60-90s Btrieve scans. Keep
+  // our fan-out small so the dashboard can never fill all 20 seats and wedge it
+  // (the 503 "Server busy" storm). Warm responses are fast enough at 4 in-flight.
+  concurrency: 4,
   timeout: 15000,
 })
 

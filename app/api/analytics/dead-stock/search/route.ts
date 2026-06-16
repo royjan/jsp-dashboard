@@ -32,20 +32,23 @@ export async function GET(request: Request) {
   const params = terms.map(t => `%${t}%`)
 
   try {
-    // Step 1: Search SQLite for matching items
+    // Step 1: Search the latest item_snapshots for matching items.
+    // (Schema: stock_qty, price, sold_this_year, sold_last_year — there is no
+    // 2y/3y-ago column in dashboard.item_snapshots, so those are 0 here.)
     const rawItems = (await readQueryAsync(`
       SELECT
         item_code,
         item_name,
-        CAST(qty AS INT) as qty,
-        retail_price as price,
-        ROUND(qty * retail_price) as capital_tied,
+        CAST(stock_qty AS INT) as qty,
+        price as price,
+        ROUND(stock_qty * price) as capital_tied,
         CAST(sold_this_year AS INT) as sold_this_year,
         CAST(sold_last_year AS INT) as sold_last_year,
-        CAST(sold_2y_ago AS INT) as sold_2y_ago,
-        CAST(sold_3y_ago AS INT) as sold_3y_ago
-      FROM item_snapshot
-      WHERE qty > 0
+        0 as sold_2y_ago,
+        0 as sold_3y_ago
+      FROM item_snapshots
+      WHERE snapshot_date = (SELECT MAX(snapshot_date) FROM item_snapshots)
+        AND stock_qty > 0
         AND (${whereClause})
     `, params)).rows as any[]
 
@@ -68,15 +71,16 @@ export async function GET(request: Request) {
           const chainPlaceholders = chain.chain_codes.map(() => '?').join(',')
           const chainResult = (await readQueryAsync(`
             SELECT
-              CAST(qty AS INT) as qty,
-              retail_price as price,
-              ROUND(qty * retail_price) as capital_tied,
+              CAST(stock_qty AS INT) as qty,
+              price as price,
+              ROUND(stock_qty * price) as capital_tied,
               CAST(sold_this_year AS INT) as sold_this_year,
               CAST(sold_last_year AS INT) as sold_last_year,
-              CAST(sold_2y_ago AS INT) as sold_2y_ago,
-              CAST(sold_3y_ago AS INT) as sold_3y_ago
-            FROM item_snapshot
-            WHERE item_code IN (${chainPlaceholders})
+              0 as sold_2y_ago,
+              0 as sold_3y_ago
+            FROM item_snapshots
+            WHERE snapshot_date = (SELECT MAX(snapshot_date) FROM item_snapshots)
+              AND item_code IN (${chainPlaceholders})
           `, chain.chain_codes)).rows as any[]
 
           const totalQty = chainResult.reduce((s: number, r: any) => s + (r.qty || 0), 0)

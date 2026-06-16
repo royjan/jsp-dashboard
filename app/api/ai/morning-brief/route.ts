@@ -210,36 +210,52 @@ ${stockAlerts.length > 0
 החזר את התשובה כ-JSON בפורמט הבא בלבד (ללא markdown):
 {"summary": "משפט סיכום כללי קצר", "bullets": ["נקודה 1", "נקודה 2", "נקודה 3"]}`
 
-    const result = await generateText({
-      model: getGeminiFlash(),
-      system: SYSTEM_PROMPT_HE,
-      prompt,
-      maxOutputTokens: 500,
-    })
-
-    // Parse the response
     let parsed: { summary: string; bullets: string[] }
     try {
-      // Try to extract JSON from the response (Gemini might wrap it in markdown)
-      const text = result.text.trim()
-      const jsonMatch = text.match(/\{[\s\S]*\}/)
-      if (!jsonMatch) throw new Error('No JSON found')
-      const raw = JSON.parse(jsonMatch[0])
-      parsed = {
-        summary: typeof raw.summary === 'string' ? raw.summary : 'תקציר בוקר',
-        bullets: Array.isArray(raw.bullets) ? raw.bullets.map(String) : [],
-      }
-    } catch {
-      // Fallback: use the raw text as bullets, stripping any JSON wrapper
-      const text = result.text.trim()
-      let lines: string[]
+      const result = await generateText({
+        model: getGeminiFlash(),
+        system: SYSTEM_PROMPT_HE,
+        prompt,
+        maxOutputTokens: 500,
+      })
+
+      // Parse the response
       try {
-        const obj = JSON.parse(text)
-        lines = Array.isArray(obj.bullets) ? obj.bullets : [obj.summary || text]
+        // Try to extract JSON from the response (Gemini might wrap it in markdown)
+        const text = result.text.trim()
+        const jsonMatch = text.match(/\{[\s\S]*\}/)
+        if (!jsonMatch) throw new Error('No JSON found')
+        const raw = JSON.parse(jsonMatch[0])
+        parsed = {
+          summary: typeof raw.summary === 'string' ? raw.summary : 'תקציר בוקר',
+          bullets: Array.isArray(raw.bullets) ? raw.bullets.map(String) : [],
+        }
       } catch {
-        lines = text.split('\n').map(l => l.replace(/^[-•*]\s*/, '').trim()).filter(Boolean)
+        // Fallback: use the raw text as bullets, stripping any JSON wrapper
+        const text = result.text.trim()
+        let lines: string[]
+        try {
+          const obj = JSON.parse(text)
+          lines = Array.isArray(obj.bullets) ? obj.bullets : [obj.summary || text]
+        } catch {
+          lines = text.split('\n').map(l => l.replace(/^[-•*]\s*/, '').trim()).filter(Boolean)
+        }
+        parsed = { summary: lines[0] || 'תקציר בוקר', bullets: lines.slice(1).length > 0 ? lines.slice(1) : lines }
       }
-      parsed = { summary: lines[0] || 'תקציר בוקר', bullets: lines.slice(1).length > 0 ? lines.slice(1) : lines }
+    } catch (aiErr) {
+      // AI unavailable (e.g. GEMINI_API_KEY not set, or generation failed) —
+      // degrade gracefully to a deterministic, data-driven brief (HTTP 200)
+      // instead of 500-ing the whole overview page.
+      console.warn('[morning-brief] AI unavailable, using templated brief:', aiErr instanceof Error ? aiErr.message : aiErr)
+      const fmt = (n: number) => `₪${Math.round(n).toLocaleString()}`
+      const bullets: string[] = []
+      bullets.push(`מכירות החודש: ${fmt(salesKpis.monthSales.total)} (${salesKpis.monthSales.count} עסקאות)${salesKpis.yoyChange !== null ? `, שינוי שנתי ${salesKpis.yoyChange > 0 ? '+' : ''}${salesKpis.yoyChange}%` : ''}`)
+      bullets.push(`מכירות היום: ${fmt(salesKpis.todaySales.total)} · השבוע: ${fmt(salesKpis.weekSales.total)}`)
+      if (dashboardData?.open_quotes?.count) bullets.push(`הצעות מחיר פתוחות: ${dashboardData.open_quotes.count}${dashboardData.open_quotes.total ? ` (${fmt(dashboardData.open_quotes.total)})` : ''}`)
+      if (gapData.count) bullets.push(`פערי מלאי: ${gapData.count} פריטים שצוטטו אך אינם במלאי`)
+      if (stockAlerts.length) bullets.push(`${stockAlerts.length} פריטים עם מלאי קריטי ומכירות פעילות — לבדוק חידוש מלאי`)
+      if (overdueCustomers.length) bullets.push(`${overdueCustomers.length} לקוחות עם יתרת חוב גבוהה, מובילם: ${overdueCustomers[0].name} (${fmt(overdueCustomers[0].balance)})`)
+      parsed = { summary: 'תקציר בוקר (ללא AI — מבוסס נתונים בלבד)', bullets }
     }
 
     const briefData: MorningBriefCache = {
