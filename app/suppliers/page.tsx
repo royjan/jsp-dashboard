@@ -15,14 +15,14 @@ import {
 
 export default function SuppliersPage() {
   const { t } = useLocale()
-  const { data, isLoading, isError, refetch } = useSuppliers(search)
-  const createMutation = useCreateSupplier()
   const [search, setSearch] = useState('')
   // Allow deep-linking from an inbound shipment: /suppliers?q=08 pre-filters.
   useEffect(() => {
     const q = new URLSearchParams(window.location.search).get('q')
     if (q) setSearch(q)
   }, [])
+  const { data, isLoading, isError, refetch } = useSuppliers(search)
+  const createMutation = useCreateSupplier()
   const [showAdd, setShowAdd] = useState(false)
   const [form, setForm] = useState({
     supplierCode: '',
