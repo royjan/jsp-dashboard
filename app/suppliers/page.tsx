@@ -15,7 +15,7 @@ import {
 
 export default function SuppliersPage() {
   const { t } = useLocale()
-  const { data, isLoading, isError, refetch } = useSuppliers()
+  const { data, isLoading, isError, refetch } = useSuppliers(search)
   const createMutation = useCreateSupplier()
   const [search, setSearch] = useState('')
   // Allow deep-linking from an inbound shipment: /suppliers?q=08 pre-filters.
@@ -37,19 +37,8 @@ export default function SuppliersPage() {
   const suppliers = data?.suppliers || []
   const summary = data?.summary || { total: 0, active: 0, pendingOrders: 0, overdueDeliveries: 0 }
 
-  const filtered = search
-    ? suppliers
-        .filter((s: any) =>
-          s.supplierName.toLowerCase().includes(search.toLowerCase()) ||
-          s.supplierCode.toLowerCase().includes(search.toLowerCase()) ||
-          (s.supplierNumber || '').includes(search)
-        )
-        .sort((a: any, b: any) => {
-          const rank = (s: any) =>
-            s.supplierNumber === search ? 0 : (s.supplierNumber || '').includes(search) ? 1 : 2
-          return rank(a) - rank(b)
-        })
-    : suppliers
+  // Filtering + sorting is server-side (API accepts ?q=). Client just renders.
+  const filtered = suppliers
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

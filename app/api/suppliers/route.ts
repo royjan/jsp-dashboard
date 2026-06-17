@@ -19,7 +19,7 @@ function supplierNumberFromName(name: string): string | null {
   return null
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     await initializeSecrets()
     const db = await getDb()
@@ -79,8 +79,19 @@ export async function GET() {
       }
     }
 
+    // If a search query is provided, sort: exact number match first, partial
+    // number match second, the rest in original order.
+    const q = new URL(request.url).searchParams.get('q') || ''
+    const sorted = q
+      ? [...suppliers].sort((a, b) => {
+          const rank = (s: typeof suppliers[0]) =>
+            s.supplierNumber === q ? 0 : (s.supplierNumber || '').includes(q) ? 1 : 2
+          return rank(a) - rank(b)
+        })
+      : suppliers
+
     return NextResponse.json({
-      suppliers,
+      suppliers: sorted,
       summary: {
         total: suppliers.length,
         active: suppliers.filter((s) => s.active).length,

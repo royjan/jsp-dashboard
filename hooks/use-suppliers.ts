@@ -4,11 +4,13 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 
 // ── Supplier list ──
 
-export function useSuppliers() {
+export function useSuppliers(search?: string) {
+  const q = search?.trim() || ''
   return useQuery({
-    queryKey: ['suppliers'],
+    queryKey: ['suppliers', q],
     queryFn: async () => {
-      const res = await fetch('/api/suppliers')
+      const url = q ? `/api/suppliers?q=${encodeURIComponent(q)}` : '/api/suppliers'
+      const res = await fetch(url)
       if (!res.ok) throw new Error('Failed to fetch suppliers')
       return res.json()
     },
