@@ -86,7 +86,9 @@ export async function GET(request: Request) {
       ? [...suppliers].sort((a, b) => {
           const rank = (s: typeof suppliers[0]) =>
             s.supplierNumber === q ? 0 : (s.supplierNumber || '').includes(q) ? 1 : 2
-          return rank(a) - rank(b)
+          const rd = rank(a) - rank(b)
+          if (rd !== 0) return rd
+          return (b.totalOrders ?? 0) - (a.totalOrders ?? 0)
         })
       : suppliers
 
