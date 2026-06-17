@@ -37,7 +37,7 @@ export function SupplierCard({ supplier }: SupplierCardProps) {
                     #{supplier.supplierNumber}
                   </Badge>
                 )}
-                <h3 className="font-semibold text-sm truncate">{supplier.supplierName}</h3>
+                <h3 className="font-semibold text-sm truncate" title={supplier.supplierName}>{supplier.supplierName}</h3>
               </div>
               <p className="text-xs text-muted-foreground font-mono">{supplier.supplierCode}</p>
             </div>
