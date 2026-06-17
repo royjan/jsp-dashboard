@@ -38,11 +38,17 @@ export default function SuppliersPage() {
   const summary = data?.summary || { total: 0, active: 0, pendingOrders: 0, overdueDeliveries: 0 }
 
   const filtered = search
-    ? suppliers.filter((s: any) =>
-        s.supplierName.toLowerCase().includes(search.toLowerCase()) ||
-        s.supplierCode.toLowerCase().includes(search.toLowerCase()) ||
-        (s.supplierNumber || '').includes(search)
-      )
+    ? suppliers
+        .filter((s: any) =>
+          s.supplierName.toLowerCase().includes(search.toLowerCase()) ||
+          s.supplierCode.toLowerCase().includes(search.toLowerCase()) ||
+          (s.supplierNumber || '').includes(search)
+        )
+        .sort((a: any, b: any) => {
+          const rank = (s: any) =>
+            s.supplierNumber === search ? 0 : (s.supplierNumber || '').includes(search) ? 1 : 2
+          return rank(a) - rank(b)
+        })
     : suppliers
 
   const handleSubmit = async (e: React.FormEvent) => {

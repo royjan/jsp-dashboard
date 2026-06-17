@@ -33,7 +33,9 @@ export function SupplierCard({ supplier }: SupplierCardProps) {
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5">
                 {supplier.supplierNumber && (
-                  <Badge variant="outline" className="text-[10px] font-mono shrink-0">#{supplier.supplierNumber}</Badge>
+                  <Badge variant="outline" className="text-[10px] font-mono shrink-0" title={supplier.supplierName}>
+                    #{supplier.supplierNumber}
+                  </Badge>
                 )}
                 <h3 className="font-semibold text-sm truncate">{supplier.supplierName}</h3>
               </div>
