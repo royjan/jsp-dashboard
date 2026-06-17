@@ -16,6 +16,7 @@ export const translations = {
     ai: 'AI',
     more: 'עוד',
     deliveries: 'משלוחים',
+    inboundShipments: 'משלוחים נכנסים',
 
     // Page titles
     'page.overview': 'סקירת לוח בקרה',
@@ -573,6 +574,7 @@ export const translations = {
     ai: 'AI',
     more: 'More',
     deliveries: 'Deliveries',
+    inboundShipments: 'Inbound Shipments',
 
     'page.overview': 'Dashboard Overview',
     'page.demand': 'Demand Analysis',

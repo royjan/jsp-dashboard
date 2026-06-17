@@ -27,6 +27,7 @@ import {
   Truck,
   Briefcase,
   PackageCheck,
+  Container,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
@@ -51,6 +52,7 @@ const navItems: Array<{ href: string; labelKey: TranslationKey; icon: typeof Lay
   { href: '/pricing', labelKey: 'pricing', icon: DollarSign },
   { href: '/suppliers', labelKey: 'suppliers', icon: PackageCheck },
   { href: '/deliveries', labelKey: 'deliveries', icon: Truck },
+  { href: '/shipments', labelKey: 'inboundShipments', icon: Container },
   { href: '/sales-rep', labelKey: 'salesRep', icon: Briefcase },
   { href: '/report', labelKey: 'report', icon: FileBarChart },
 ]

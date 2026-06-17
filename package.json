@@ -43,6 +43,7 @@
     "cmdk": "^1.1.1",
     "date-fns": "^4.1.0",
     "drizzle-orm": "^0.45.2",
+    "firebase-admin": "^14.0.0",
     "framer-motion": "^12.36.0",
     "google-auth-library": "^9.15.0",
     "ioredis": "^5.11.1",
