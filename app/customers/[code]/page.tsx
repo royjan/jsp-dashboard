@@ -186,7 +186,7 @@ function PurchasesTable({
   data: any; isLoading: boolean; days: number; onDaysChange: (d: number) => void
 }) {
   const items: PurchaseItem[] = data?.items ?? []
-  const { sorted, sortKey, sortDir, toggleSort } = useSortable<PurchaseItem>(items)
+  const { sorted, sortKey, sortDir, toggleSort } = useSortable<PurchaseItem>(items, { key: 'last_purchased', dir: 'desc' })
   const DAY_OPTIONS = [30, 60, 90, 180, 365]
 
   return (
