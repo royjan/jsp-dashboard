@@ -18,20 +18,24 @@ export async function GET(request: Request) {
     const supplier = searchParams.get('supplier') || undefined
     const date = searchParams.get('date') || undefined
     const limit = Math.min(Number(searchParams.get('limit')) || 30, 100)
+    const offset = Math.max(0, Number(searchParams.get('offset')) || 0)
 
     const db = await getShipmentsFirestore()
-    let q: FirebaseFirestore.Query = db.collection('shipments').orderBy('shipmentDate', 'desc').limit(limit * 3)
+    // Fetch one extra to detect whether there's a next page.
+    let q: FirebaseFirestore.Query = db.collection('shipments').orderBy('shipmentDate', 'desc')
     if (date) {
       q = db
         .collection('shipments')
         .where('shipmentDate', '>=', `${date}T00:00:00.000`)
         .where('shipmentDate', '<', `${date}T23:59:59.999`)
-        .limit(limit * 3)
     }
+    q = q.offset(offset).limit(limit + 1)
 
     const snap = await q.get()
+    const hasMore = snap.docs.length > limit
+    const pageDocs = snap.docs.slice(0, limit)
     const shipments: any[] = []
-    for (const doc of snap.docs) {
+    for (const doc of pageDocs) {
       const data = doc.data() as Record<string, any>
       const sup = extractSupplier(data.name)
       if (supplier && sup?.toLowerCase() !== supplier.toLowerCase()) continue
@@ -53,7 +57,6 @@ export async function GET(request: Request) {
         totalScanned, totalExpected, missing, faulty,
         uniqueProducts: prodSnap.size,
       })
-      if (shipments.length >= limit) break
     }
 
     // Distinct-supplier roll-up
@@ -72,6 +75,9 @@ export async function GET(request: Request) {
     return NextResponse.json({
       shipments,
       suppliers,
+      hasMore,
+      offset,
+      limit,
       summary: {
         total: shipments.length,
         suppliers: suppliers.length,
