@@ -442,3 +442,17 @@ export function useItemStockForecast(itemCode: string | null) {
     retry: 2,
   })
 }
+
+export function useCustomerPurchases(code: string | null, days = 90) {
+  return useQuery({
+    queryKey: ['customer-purchases', code, days],
+    queryFn: async () => {
+      const res = await fetch(`/api/customers/${encodeURIComponent(code!)}/purchases?days=${days}`)
+      if (!res.ok) throw new Error('Failed')
+      return res.json()
+    },
+    enabled: !!code,
+    staleTime: 5 * 60 * 1000,
+    retry: 2,
+  })
+}

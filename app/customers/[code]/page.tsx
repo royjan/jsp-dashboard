@@ -1,8 +1,8 @@
 'use client'
 
-import { use, useMemo } from 'react'
+import { use, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { useCustomerDetail } from '@/hooks/use-analytics'
+import { useCustomerDetail, useCustomerPurchases } from '@/hooks/use-analytics'
 import { useLocale } from '@/lib/locale-context'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -12,7 +12,7 @@ import { cn } from '@/lib/utils'
 import { useSortable, SortableTh } from '@/components/shared/sortable-table'
 import Link from 'next/link'
 import {
-  User, DollarSign, Clock, FileText, Receipt, ArrowLeft, AlertTriangle,
+  User, DollarSign, Clock, FileText, Receipt, ArrowLeft, AlertTriangle, ShoppingCart,
 } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
@@ -56,6 +56,8 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ code:
   const { code } = use(params)
   const { t } = useLocale()
   const { data, isLoading, error } = useCustomerDetail(code)
+  const [purchaseDays, setPurchaseDays] = useState(90)
+  const { data: purchasesData, isLoading: purchasesLoading } = useCustomerPurchases(code, purchaseDays)
 
   if (isLoading) return <LoadingSkeleton />
   if (error) return <div className="text-destructive p-4">Error: {(error as Error).message}</div>
@@ -130,17 +132,26 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ code:
         </Card>
       )}
 
-      {/* Tabs: Orders / Receipts / Documents */}
+      {/* Tabs: Orders / Receipts / Documents / Purchases */}
       <Card>
-        <Tabs defaultValue="orders">
+        <Tabs defaultValue="purchases">
           <CardHeader>
-            <TabsList>
+            <TabsList className="flex-wrap h-auto gap-1">
+              <TabsTrigger value="purchases" className="gap-1"><ShoppingCart className="h-3.5 w-3.5" />קניות אחרונות ({purchasesData?.item_count ?? 0})</TabsTrigger>
               <TabsTrigger value="orders">{t('recentOrders')} ({orders?.length ?? 0})</TabsTrigger>
               <TabsTrigger value="receipts">{t('recentReceipts')} ({receipts?.length ?? 0})</TabsTrigger>
               <TabsTrigger value="documents">{t('invoices')} ({documents?.length ?? 0})</TabsTrigger>
             </TabsList>
           </CardHeader>
           <CardContent>
+            <TabsContent value="purchases">
+              <PurchasesTable
+                data={purchasesData}
+                isLoading={purchasesLoading}
+                days={purchaseDays}
+                onDaysChange={setPurchaseDays}
+              />
+            </TabsContent>
             <TabsContent value="orders">
               <DocumentTable items={orders} t={t} />
             </TabsContent>
@@ -156,6 +167,93 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ code:
     </div>
   )
 }
+
+// ── Recent purchases table ────────────────────────────────────────────────────
+
+interface PurchaseItem {
+  item_code: string
+  item_name: string
+  total_qty: number
+  total_value: number
+  line_count: number
+  last_purchased: string
+  returned_qty: number
+}
+
+function PurchasesTable({
+  data, isLoading, days, onDaysChange,
+}: {
+  data: any; isLoading: boolean; days: number; onDaysChange: (d: number) => void
+}) {
+  const items: PurchaseItem[] = data?.items ?? []
+  const { sorted, sortKey, sortDir, toggleSort } = useSortable<PurchaseItem>(items)
+  const DAY_OPTIONS = [30, 60, 90, 180, 365]
+
+  return (
+    <div className="space-y-3">
+      {/* Period selector + summary */}
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex gap-1">
+          {DAY_OPTIONS.map(d => (
+            <button
+              key={d}
+              onClick={() => onDaysChange(d)}
+              className={cn(
+                'px-2 py-0.5 rounded text-xs font-medium transition-colors',
+                d === days
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-muted text-muted-foreground hover:bg-accent'
+              )}
+            >{d} יום</button>
+          ))}
+        </div>
+        {data && (
+          <span className="text-xs text-muted-foreground">
+            {formatNumber(data.item_count ?? 0)} פריטים · {ILS_FORMAT.format(data.total_value ?? 0)} סה״כ
+          </span>
+        )}
+      </div>
+
+      {isLoading ? (
+        <div className="space-y-2">{[...Array(5)].map((_, i) => <Skeleton key={i} className="h-9 w-full" />)}</div>
+      ) : sorted.length === 0 ? (
+        <p className="text-sm text-muted-foreground text-center py-6">אין קניות בתקופה זו</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs sm:text-sm">
+            <thead>
+              <tr className="border-b text-muted-foreground [&>th]:p-2">
+                <SortableTh<PurchaseItem> label="קוד" sortKey="item_code" align="start" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                <SortableTh<PurchaseItem> label="שם פריט" sortKey="item_name" align="start" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                <SortableTh<PurchaseItem> label="כמות" sortKey="total_qty" align="end" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                <SortableTh<PurchaseItem> label="שווי" sortKey="total_value" align="end" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                <SortableTh<PurchaseItem> label="חשבוניות" sortKey="line_count" align="end" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                <SortableTh<PurchaseItem> label="אחרון" sortKey="last_purchased" align="end" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+              </tr>
+            </thead>
+            <tbody>
+              {sorted.map(item => (
+                <tr key={item.item_code} className="border-b last:border-0 hover:bg-accent/40">
+                  <td className="p-2 font-mono text-xs">{item.item_code}</td>
+                  <td className="p-2 max-w-[220px] truncate" title={item.item_name}>{item.item_name}</td>
+                  <td className="p-2 text-end tabular-nums">
+                    {formatNumber(item.total_qty)}
+                    {item.returned_qty > 0 && <span className="text-red-500 text-[10px] ms-1">(-{formatNumber(item.returned_qty)})</span>}
+                  </td>
+                  <td className="p-2 text-end tabular-nums font-medium">{ILS_FORMAT.format(item.total_value)}</td>
+                  <td className="p-2 text-end tabular-nums text-muted-foreground">{formatNumber(item.line_count)}</td>
+                  <td className="p-2 text-end tabular-nums text-muted-foreground">{item.last_purchased?.slice(0, 10) || '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Document table ─────────────────────────────────────────────────────────────
 
 interface DocRow {
   doc: any
