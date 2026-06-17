@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { useLocale } from '@/lib/locale-context'
 import { Truck, Clock, Package, CheckCircle2 } from 'lucide-react'
 
@@ -31,14 +32,23 @@ export function SupplierCard({ supplier }: SupplierCardProps) {
           {/* Header */}
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1.5">
-                {supplier.supplierNumber && (
-                  <Badge variant="outline" className="text-[10px] font-mono shrink-0" title={supplier.supplierName}>
-                    #{supplier.supplierNumber}
-                  </Badge>
-                )}
-                <h3 className="font-semibold text-sm truncate" title={supplier.supplierName}>{supplier.supplierName}</h3>
-              </div>
+              <TooltipProvider delayDuration={100}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      {supplier.supplierNumber && (
+                        <Badge variant="outline" className="text-[10px] font-mono shrink-0">
+                          #{supplier.supplierNumber}
+                        </Badge>
+                      )}
+                      <h3 className="font-semibold text-sm truncate">{supplier.supplierName}</h3>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-[260px] text-xs">
+                    {supplier.supplierName}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
               <p className="text-xs text-muted-foreground font-mono">{supplier.supplierCode}</p>
             </div>
             <Badge variant={supplier.active ? 'success' : 'secondary'}>
