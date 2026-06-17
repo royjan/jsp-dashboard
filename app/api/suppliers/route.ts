@@ -6,6 +6,19 @@ import { supplierProfiles } from '@/lib/db/schema'
 import { desc } from 'drizzle-orm'
 import { initializeSecrets } from '@/lib/aws-secrets'
 
+// The shipments-app tags suppliers by a short number (e.g. "08"); Finansit
+// embeds that number in the vendor name ("PCEX AUTOMOTIVE 08", "04 SP - P",
+// "70 נשלח אושר"). Pull it out so a supplier is findable by its number and can
+// be linked from inbound shipments.
+function supplierNumberFromName(name: string): string | null {
+  if (!name) return null
+  const lead = name.trim().match(/^(\d{1,3})(?=\s|$)/)
+  if (lead) return lead[1].padStart(2, '0')
+  const trail = name.trim().match(/(?:^|\s)(\d{1,3})\s*$/)
+  if (trail) return trail[1].padStart(2, '0')
+  return null
+}
+
 export async function GET() {
   try {
     await initializeSecrets()
@@ -35,6 +48,7 @@ export async function GET() {
       return {
         supplierCode: r.code,
         supplierName: r.name || p?.supplierName || r.code,
+        supplierNumber: supplierNumberFromName(r.name || ''),
         active: p?.active ?? true,
         leadTimeDays: p?.leadTimeDays ?? null,
         contactEmail: p?.contactEmail ?? null,
@@ -52,6 +66,7 @@ export async function GET() {
         suppliers.push({
           supplierCode: p.supplierCode,
           supplierName: p.supplierName,
+          supplierNumber: supplierNumberFromName(p.supplierName || ''),
           active: p.active ?? true,
           leadTimeDays: p.leadTimeDays ?? null,
           contactEmail: p.contactEmail ?? null,

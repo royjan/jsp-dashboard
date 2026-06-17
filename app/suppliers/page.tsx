@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { formatNumber } from '@/lib/constants'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -18,6 +18,11 @@ export default function SuppliersPage() {
   const { data, isLoading, isError, refetch } = useSuppliers()
   const createMutation = useCreateSupplier()
   const [search, setSearch] = useState('')
+  // Allow deep-linking from an inbound shipment: /suppliers?q=08 pre-filters.
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get('q')
+    if (q) setSearch(q)
+  }, [])
   const [showAdd, setShowAdd] = useState(false)
   const [form, setForm] = useState({
     supplierCode: '',
@@ -35,7 +40,8 @@ export default function SuppliersPage() {
   const filtered = search
     ? suppliers.filter((s: any) =>
         s.supplierName.toLowerCase().includes(search.toLowerCase()) ||
-        s.supplierCode.toLowerCase().includes(search.toLowerCase())
+        s.supplierCode.toLowerCase().includes(search.toLowerCase()) ||
+        (s.supplierNumber || '').includes(search)
       )
     : suppliers
 

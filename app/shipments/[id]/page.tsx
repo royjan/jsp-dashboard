@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -70,7 +71,13 @@ export default function ShipmentDetailPage() {
               <Container className="h-6 w-6 text-primary" />{sh.name || sh.id}
             </h1>
             <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
-              <Badge variant="outline">{t('ספק', 'Supplier')} {sh.supplier || '—'}</Badge>
+              {sh.supplier ? (
+                <Link href={`/suppliers?q=${encodeURIComponent(sh.supplier)}`}>
+                  <Badge variant="outline" className="cursor-pointer hover:bg-accent">{t('ספק', 'Supplier')} {sh.supplier} ↗</Badge>
+                </Link>
+              ) : (
+                <Badge variant="outline">{t('ספק', 'Supplier')} —</Badge>
+              )}
               <span>{(sh.shipmentDate || '').slice(0, 10)}</span>
             </div>
           </div>

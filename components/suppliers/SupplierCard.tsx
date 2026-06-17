@@ -10,6 +10,7 @@ interface SupplierCardProps {
   supplier: {
     supplierCode: string
     supplierName: string
+    supplierNumber?: string | null
     active: boolean
     leadTimeDays: number | null
     pendingOrders: number
@@ -30,7 +31,12 @@ export function SupplierCard({ supplier }: SupplierCardProps) {
           {/* Header */}
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0 flex-1">
-              <h3 className="font-semibold text-sm truncate">{supplier.supplierName}</h3>
+              <div className="flex items-center gap-1.5">
+                {supplier.supplierNumber && (
+                  <Badge variant="outline" className="text-[10px] font-mono shrink-0">#{supplier.supplierNumber}</Badge>
+                )}
+                <h3 className="font-semibold text-sm truncate">{supplier.supplierName}</h3>
+              </div>
               <p className="text-xs text-muted-foreground font-mono">{supplier.supplierCode}</p>
             </div>
             <Badge variant={supplier.active ? 'success' : 'secondary'}>
