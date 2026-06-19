@@ -11,11 +11,24 @@ export async function GET(
 
   try {
     await initializeSecrets()
-    // Fetch full item data (stock, price, sales) and history chain in parallel
-    const [item, history] = await Promise.all([
-      client.items.get(code.toUpperCase()),
-      client.items.getHistory(code.toUpperCase()).catch(() => null),
+    const upper = code.toUpperCase()
+
+    // Try direct fetch and history in parallel; if the direct fetch fails (e.g.
+    // the code is a historical/superseded alias), fall back to the canonical code.
+    const [itemOrNull, history] = await Promise.all([
+      client.items.get(upper).catch(() => null),
+      client.items.getHistory(upper).catch(() => null),
     ])
+
+    let item = itemOrNull
+    if (!item) {
+      const canonical = history?.canonical_code
+      if (!canonical || canonical === upper) {
+        return NextResponse.json({ error: 'Item not found' }, { status: 404 })
+      }
+      item = await client.items.get(canonical)
+    }
+
     return NextResponse.json({
       ...item,
       canonical_code: history?.canonical_code || item.code,
