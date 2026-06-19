@@ -61,7 +61,7 @@ function useDebounceLocal(value: string, delay: number) {
 
 export default function CatalogLinksPage() {
   const qc = useQueryClient()
-  const [status, setStatus] = useState<Status>('all')
+  const [status, setStatus] = useState<Status>('unmatched')
   const [page, setPage] = useState(1)
   const [searchRaw, setSearchRaw] = useState('')
   const { debounced: search, handler: onSearchChange } = useDebounceLocal('', 400)
@@ -137,6 +137,16 @@ export default function CatalogLinksPage() {
           חלקים מקטלוג Partly — קשר חלקים שאינם בפינאנסיט לקוד מקביל
         </p>
       </div>
+
+      {stats && stats.unmatched > 0 && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 flex items-center gap-3">
+          <span className="text-lg">⚠️</span>
+          <span>
+            <span className="font-bold">{stats.unmatched.toLocaleString('he-IL')} חלקים</span> ממתינים לקישור —
+            כל קישור שתשלים יופיע מיד בפורטל הלקוח עם מחיר ומלאי.
+          </span>
+        </div>
+      )}
 
       {/* Stats */}
       {stats && (
