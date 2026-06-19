@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { client } from '@/lib/finansit-client'
 import { initializeSecrets } from '@/lib/aws-secrets'
+import { query } from '@/lib/db'
 
 export async function GET(
   _req: Request,
@@ -22,11 +23,25 @@ export async function GET(
 
     let item = itemOrNull
     if (!item) {
+      // Try history chain first
       const canonical = history?.canonical_code
-      if (!canonical || canonical === upper) {
-        return NextResponse.json({ error: 'Item not found' }, { status: 404 })
+      if (canonical && canonical !== upper) {
+        item = await client.items.get(canonical).catch(() => null)
       }
-      item = await client.items.get(canonical)
+    }
+    if (!item) {
+      // Try partly.finansit_links mapping (partly code → finansit code)
+      const linkResult = await query(
+        `SELECT finansit_code FROM partly.finansit_links WHERE partly_item_number = $1 LIMIT 1`,
+        [upper]
+      ).catch(() => null)
+      const linkedCode = (linkResult?.rows[0] as any)?.finansit_code
+      if (linkedCode) {
+        item = await client.items.get(linkedCode).catch(() => null)
+      }
+    }
+    if (!item) {
+      return NextResponse.json({ error: 'Item not found' }, { status: 404 })
     }
 
     return NextResponse.json({

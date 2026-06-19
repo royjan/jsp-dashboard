@@ -17,6 +17,7 @@ export const translations = {
     more: 'עוד',
     deliveries: 'משלוחים',
     inboundShipments: 'משלוחים נכנסים',
+    catalogLinks: 'חיבורי קטלוג',
 
     // Page titles
     'page.overview': 'סקירת לוח בקרה',
@@ -575,6 +576,7 @@ export const translations = {
     more: 'More',
     deliveries: 'Deliveries',
     inboundShipments: 'Inbound Shipments',
+    catalogLinks: 'Catalog Links',
 
     'page.overview': 'Dashboard Overview',
     'page.demand': 'Demand Analysis',
