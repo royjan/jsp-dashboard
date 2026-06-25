@@ -22,12 +22,22 @@ const cardVariants: any = {
   }),
 }
 
-function excelDateToString(serial: string | number | undefined): string {
-  if (!serial) return '-'
-  const n = typeof serial === 'string' ? parseInt(serial, 10) : serial
-  if (isNaN(n) || n < 1000) return String(serial)
-  const date = new Date((n - 25569) * 86400000)
-  return date.toLocaleDateString('he-IL')
+function formatErpDate(value: string | number | undefined | null): string {
+  if (value == null || value === '' || value === '0') return '-'
+  const s = String(value).trim()
+  // FINAPI returns ISO date strings (e.g. "2017-10-26") — format them directly.
+  // (The old code ran these through an Excel-serial conversion: parseInt("2017-
+  // 10-26")=2017 → ~1905, which is why every date showed 1905.)
+  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (iso) {
+    const d = new Date(`${iso[0]}T00:00:00`)
+    return isNaN(d.getTime()) ? '-' : d.toLocaleDateString('he-IL')
+  }
+  // Legacy fallback: a genuine Excel serial number.
+  const n = Number(s)
+  if (!Number.isFinite(n) || n < 1000) return '-'
+  const d = new Date((n - 25569) * 86400000)
+  return isNaN(d.getTime()) ? '-' : d.toLocaleDateString('he-IL')
 }
 
 function LoadingSkeleton() {
@@ -211,11 +221,11 @@ export default function ItemDetailPage({ params }: { params: Promise<{ code: str
                 </>
               )}
               <dt className="text-muted-foreground">{isHe ? 'מכירה אחרונה' : 'Last Sale'}</dt>
-              <dd>{excelDateToString(data.sale_date)}</dd>
+              <dd>{formatErpDate(data.sale_date)}</dd>
               <dt className="text-muted-foreground">{isHe ? 'קניה אחרונה' : 'Last Purchase'}</dt>
-              <dd>{excelDateToString(data.purchase_date)}</dd>
+              <dd>{formatErpDate(data.purchase_date)}</dd>
               <dt className="text-muted-foreground">{isHe ? 'ספירה אחרונה' : 'Last Count'}</dt>
-              <dd>{excelDateToString(data.count_date)}</dd>
+              <dd>{formatErpDate(data.count_date)}</dd>
               {data.inquiry_count > 0 && (
                 <>
                   <dt className="text-muted-foreground">{isHe ? 'פניות' : 'Inquiries'}</dt>
