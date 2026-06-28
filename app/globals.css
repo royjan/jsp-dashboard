@@ -94,6 +94,30 @@
   }
 }
 
+/* Chat-admin scope: the ported chat-js components reference these --color-* vars
+   (which don't exist in this project) — without these, undefined vars fall back to
+   currentColor (e.g. borders inherit text color). Map them onto the dashboard's
+   shadcn tokens so the integrated /chat/* pages share one consistent palette. */
+.chat-admin {
+  color-scheme: dark;
+  --color-bg-base: var(--background);
+  --color-bg-surface: var(--card);
+  --color-bg-elevated: var(--popover);
+  --color-bg-hover: var(--accent);
+  --color-text-primary: var(--foreground);
+  --color-text-secondary: var(--muted-foreground);
+  --color-text-tertiary: var(--muted-foreground);
+  --color-text-muted: var(--muted-foreground);
+  --color-border-default: var(--border);
+  --color-border-muted: var(--border);
+  --color-border-subtle: var(--border);
+  --color-border-emphasis: var(--ring);
+  --color-error: var(--destructive);
+  --color-error-text: var(--destructive);
+  --color-error-soft-bg: color-mix(in srgb, var(--destructive) 12%, transparent);
+  --color-error-soft-border: color-mix(in srgb, var(--destructive) 30%, transparent);
+}
+
 /* RTL support */
 [dir="rtl"] .prose {
   text-align: right;

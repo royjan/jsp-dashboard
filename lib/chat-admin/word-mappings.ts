@@ -119,8 +119,8 @@ export async function getAllMappings(filters: FilterOptions = {}): Promise<{
   pageSize: number
 }> {
   const db = await getDb()
-  const page = filters.page || 1
-  const pageSize = filters.pageSize || 50
+  const page = Math.max(1, filters.page || 1)
+  const pageSize = Math.min(2000, Math.max(1, filters.pageSize || 50))
   const offset = (page - 1) * pageSize
 
   const conds = []
@@ -310,9 +310,11 @@ export async function approveSuggestion(suggestionId: string, reviewedBy = 'admi
     await tx
       .insert(wordMappings)
       .values({
-        sourceWord: s.sourceWord,
+        // Normalize (English → lowercase) to match createMapping, so an approved
+        // suggestion can't create a case-variant duplicate of an existing mapping.
+        sourceWord: normalizeWord(s.sourceWord, s.sourceLanguage),
         sourceLanguage: s.sourceLanguage,
-        targetWord: s.targetWord,
+        targetWord: normalizeWord(s.targetWord, s.targetLanguage),
         targetLanguage: s.targetLanguage,
         mappingType: s.mappingType,
         confidence: s.confidence,

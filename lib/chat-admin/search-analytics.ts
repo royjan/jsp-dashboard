@@ -159,7 +159,9 @@ export async function getPartsBotMetrics(
     const prevStart = startDate && span ? new Date(startDate.getTime() - span) : undefined
     let prev = { ...EMPTY_PREV }
     if (prevStart && prevEnd) {
-      const fp = botFilter(prevStart, prevEnd, opts, { excludeIntentOnly: false, endExclusive: true })
+      // Match the current window's population (intent_only excluded) so the
+      // current-vs-previous deltas compare like with like.
+      const fp = botFilter(prevStart, prevEnd, opts, { excludeIntentOnly: true, endExclusive: true })
       const pRes = await query(
         `SELECT COUNT(*) total,
                 COUNT(*) FILTER (WHERE has_results=false) notfound,

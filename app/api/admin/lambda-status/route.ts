@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
     const { serviceName } = await request.json()
     if (!serviceName || !VALID.includes(serviceName)) {
       return NextResponse.json(
-        { success: false, error: 'Invalid serviceName. Must be one of: psa, partslink, vin17, qipei' },
+        { success: false, error: `Invalid serviceName. Must be one of: ${VALID.join(', ')}` },
         { status: 400 },
       )
     }
@@ -65,7 +65,7 @@ export async function PATCH(request: NextRequest) {
     const { serviceName, enabled } = await request.json()
     if (!serviceName || !VALID.includes(serviceName)) {
       return NextResponse.json(
-        { success: false, error: 'Invalid serviceName. Must be one of: psa, partslink, vin17, qipei' },
+        { success: false, error: `Invalid serviceName. Must be one of: ${VALID.join(', ')}` },
         { status: 400 },
       )
     }
