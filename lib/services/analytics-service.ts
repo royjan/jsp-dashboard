@@ -1,7 +1,7 @@
 import { client, fetchItems, fetchDocuments, fetchDocumentDetail, fetchBatchStock, searchDocuments, fetchAllStockItems, fetchBatchPrices, fetchAllCustomers } from '../finansit-client'
 import { getCached, setCache, deleteCache } from '../redis-client'
 import { query as dbQuery } from '../db'
-import { readQueryAsync } from '../sqlite'
+import { readQueryAsync } from '../neon-read'
 import { CACHE_TTL, CACHE_VERSIONS, DOC_FORMATS, MONTH_NAMES } from '../constants'
 import type { DemandItem, SalesDataPoint, SeasonalDataPoint, DeadStockItem, ReorderItem, FinansitItem, DashboardData, TopSellingItem } from '../types'
 import { fixRtlItemName } from '../rtl-fix'

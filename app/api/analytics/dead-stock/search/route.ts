@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { readQueryAsync } from '@/lib/sqlite'
+import { readQueryAsync } from '@/lib/neon-read'
 import { client } from '@/lib/finansit-client'
 
 export const dynamic = 'force-dynamic'

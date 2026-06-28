@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { getDashboardData } from '@/lib/services/analytics-service'
 import { initializeSecrets } from '@/lib/aws-secrets'
 import { query as dbQuery } from '@/lib/db'
-import { readQueryAsync } from '@/lib/sqlite'
+import { readQueryAsync } from '@/lib/neon-read'
 
 /** Compute this-month sales from the DB (same source as sales chart). */
 async function getMonthSalesFromDb(): Promise<{ total: number; count: number }> {

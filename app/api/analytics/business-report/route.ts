@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
-import { readQueryAsync } from '@/lib/sqlite'
+import { readQueryAsync } from '@/lib/neon-read'
+import { initializeSecrets } from '@/lib/aws-secrets'
+import { getItems } from '@/lib/services/analytics-service'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,6 +21,8 @@ async function safeQueryOne(sql: string, params?: any[]): Promise<any> {
 
 export async function GET() {
   try {
+    await initializeSecrets() // FINAPI creds for getItems() (dead-stock source)
+
     // 1. Revenue by year
     const revenueByYear = await safeQuery(`
       SELECT
@@ -106,41 +110,50 @@ export async function GET() {
       { day_name: 'Friday', day_num: 5, avg_revenue: Math.round(thuFriAvgPerDay * 0.85), avg_invoices: Math.round(thuFriInvPerDay * 0.85), total_days: endOfWeek?.num_weeks || 0 },
     ]
 
-    // 5. Dead stock summary from item_snapshot
-    const deadStockSummary = await safeQueryOne(`
-      SELECT
-        COUNT(*) as total_items_with_stock,
-        SUM(qty * retail_price) as total_inventory_value,
-        SUM(CASE WHEN sold_this_year = 0 THEN qty * retail_price ELSE 0 END) as no_sales_this_year,
-        SUM(CASE WHEN sold_this_year = 0 AND sold_last_year = 0 THEN qty * retail_price ELSE 0 END) as no_sales_2y,
-        SUM(CASE WHEN sold_this_year = 0 AND sold_last_year = 0 AND sold_2y_ago = 0 THEN qty * retail_price ELSE 0 END) as no_sales_3y,
-        SUM(CASE WHEN sold_this_year = 0 THEN 1 ELSE 0 END) as items_no_sales_this_year,
-        SUM(CASE WHEN sold_this_year = 0 AND sold_last_year = 0 THEN 1 ELSE 0 END) as items_no_sales_2y,
-        SUM(CASE WHEN sold_this_year = 0 AND sold_last_year = 0 AND sold_2y_ago = 0 THEN 1 ELSE 0 END) as items_no_sales_3y
-      FROM item_snapshot
-      WHERE qty > 0
-    `)
+    // 5 + 6. Dead stock — sourced from the live FINAPI catalog (getItems), which
+    // carries real current stock, prices (zero-price items enriched via FINAPI
+    // batch) and 4 years of per-item sales. The old item_snapshot/SQLite source
+    // was empty in prod and had no cost/multi-year columns. "3+ years" = no sales
+    // this year, last year, or 2 years ago (matches the original definition).
+    let deadStockSummary: any = null
+    let topDeadStock: any[] = []
+    try {
+      const allItems = await getItems()
+      const stocked = allItems.filter((it) => (it.stock_qty || 0) > 0)
+      const val = (it: any) => (it.stock_qty || 0) * (it.price || 0)
+      const noCur = (it: any) => (it.sold_this_year || 0) === 0
+      const no2y = (it: any) => noCur(it) && (it.sold_last_year || 0) === 0
+      const no3y = (it: any) => no2y(it) && (it.sold_2y_ago || 0) === 0
 
-    // 6. Top dead stock items
-    const topDeadStock = await safeQuery(`
-      SELECT
-        item_code,
-        item_name,
-        qty,
-        retail_price,
-        qty * retail_price as capital_tied,
-        sold_this_year,
-        sold_last_year,
-        sold_2y_ago,
-        sold_3y_ago
-      FROM item_snapshot
-      WHERE qty > 0
-        AND sold_this_year = 0
-        AND sold_last_year = 0
-        AND sold_2y_ago = 0
-      ORDER BY qty * retail_price DESC
-      LIMIT 50
-    `)
+      deadStockSummary = {
+        total_items_with_stock: stocked.length,
+        total_inventory_value: stocked.reduce((s, it) => s + val(it), 0),
+        no_sales_this_year: stocked.filter(noCur).reduce((s, it) => s + val(it), 0),
+        no_sales_2y: stocked.filter(no2y).reduce((s, it) => s + val(it), 0),
+        no_sales_3y: stocked.filter(no3y).reduce((s, it) => s + val(it), 0),
+        items_no_sales_this_year: stocked.filter(noCur).length,
+        items_no_sales_2y: stocked.filter(no2y).length,
+        items_no_sales_3y: stocked.filter(no3y).length,
+      }
+
+      topDeadStock = stocked
+        .filter(no3y)
+        .map((it: any) => ({
+          item_code: it.code,
+          item_name: it.name,
+          qty: it.stock_qty || 0,
+          retail_price: it.price || 0,
+          capital_tied: val(it),
+          sold_this_year: it.sold_this_year || 0,
+          sold_last_year: it.sold_last_year || 0,
+          sold_2y_ago: it.sold_2y_ago || 0,
+          sold_3y_ago: it.sold_3y_ago || 0,
+        }))
+        .sort((a, b) => b.capital_tied - a.capital_tied)
+        .slice(0, 50)
+    } catch (e: any) {
+      console.warn('[business-report] dead stock (getItems) failed:', e?.message?.substring(0, 120))
+    }
 
     // 7. Customer retention analysis
     const customerRetention = await safeQuery(`

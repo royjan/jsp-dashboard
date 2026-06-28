@@ -6,7 +6,7 @@ import { getCached, setCache } from '@/lib/redis-client'
 import { getDashboardData } from '@/lib/services/analytics-service'
 import { client } from '@/lib/finansit-client'
 import { query as dbQuery } from '@/lib/db'
-import { readQueryAsync } from '@/lib/sqlite'
+import { readQueryAsync } from '@/lib/neon-read'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60

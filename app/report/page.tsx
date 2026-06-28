@@ -1,6 +1,7 @@
 'use client'
 
 import { Suspense, useState, useMemo } from 'react'
+import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { useBusinessReport } from '@/hooks/use-analytics'
 import { useQueryClient } from '@tanstack/react-query'
@@ -83,7 +84,23 @@ function ReportContent() {
   const monthLabels = isHe ? MONTH_LABELS_HE : MONTH_LABELS_EN
   const { data, isLoading, isFetching, dataUpdatedAt } = useBusinessReport()
   const queryClient = useQueryClient()
-  const [section, setSection] = useState<Section>('summary')
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+
+  const SECTIONS: Section[] = ['summary', 'deadstock', 'revenue', 'seasonal', 'credits', 'customers', 'recommendations']
+  const urlSection = searchParams.get('section') as Section | null
+  const [section, setSection] = useState<Section>(
+    urlSection && SECTIONS.includes(urlSection) ? urlSection : 'summary'
+  )
+
+  // Keep the active tab in the URL so each section is deep-linkable / bookmarkable.
+  const changeSection = (v: Section) => {
+    setSection(v)
+    const params = new URLSearchParams(searchParams.toString())
+    params.set('section', v)
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false })
+  }
 
   const handleRefresh = () => {
     queryClient.invalidateQueries({ queryKey: ['business-report'] })
@@ -192,7 +209,7 @@ function ReportContent() {
     <div className="space-y-4 md:space-y-6">
       {/* Section tabs + refresh */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-      <Tabs value={section} onValueChange={(v) => setSection(v as Section)}>
+      <Tabs value={section} onValueChange={(v) => changeSection(v as Section)}>
         <TabsList className="flex-wrap h-auto gap-1 p-1">
           <TabsTrigger value="summary" className="gap-1.5 text-xs">
             <BarChart3 className="h-3.5 w-3.5" />

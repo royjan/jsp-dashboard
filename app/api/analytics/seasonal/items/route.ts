@@ -1,7 +1,7 @@
 export const maxDuration = 60
 
 import { NextResponse } from 'next/server'
-import { readQueryAsync } from '@/lib/sqlite'
+import { readQueryAsync } from '@/lib/neon-read'
 import { query as pgQuery } from '@/lib/db'
 import { initializeSecrets, getSecret } from '@/lib/aws-secrets'
 import { getCached, setCache } from '@/lib/redis-client'
