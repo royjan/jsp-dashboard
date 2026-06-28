@@ -1,0 +1,28 @@
+{
+  "lambdaConcurrency": {
+    "psa": 10,
+    "vin17": 10,
+    "partslink": 1,
+    "qipei": 10
+  },
+  "estimatedDurationMs": {
+    "psa": 30000,
+    "vin17": 25000,
+    "partslink": 45000,
+    "qipei": 30000
+  },
+  "redis": {
+    "keyPrefix": "search:",
+    "activePrefix": "search:active:",
+    "queuePrefix": "search:queue:",
+    "searchPrefix": "search:data:",
+    "userPrefix": "search:user:",
+    "statsKey": "search:stats",
+    "searchTTLSeconds": 3600,
+    "statsTTLSeconds": 86400,
+    "completedTTLSeconds": 300
+  },
+  "staleSearchTimeoutMs": 300000,
+  "cleanupIntervalMs": 60000,
+  "maxQueueSize": 50
+}

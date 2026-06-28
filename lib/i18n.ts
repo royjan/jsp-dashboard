@@ -19,6 +19,13 @@ export const translations = {
     inboundShipments: 'משלוחים נכנסים',
     catalogLinks: 'חיבורי קטלוג',
 
+    // Chat admin
+    chatFlowDecisions: 'החלטות זרימה',
+    chatWordMappings: 'מיפוי מילים',
+    chatMonitoring: 'ניטור מערכת',
+    chatAnalytics: 'אנליטיקת צ׳אט',
+    chatPartsAnalytics: 'אנליטיקת בוט',
+
     // Page titles
     'page.overview': 'סקירת לוח בקרה',
     'page.demand': 'ניתוח ביקוש',
@@ -577,6 +584,13 @@ export const translations = {
     deliveries: 'Deliveries',
     inboundShipments: 'Inbound Shipments',
     catalogLinks: 'Catalog Links',
+
+    // Chat admin
+    chatFlowDecisions: 'Flow Decisions',
+    chatWordMappings: 'Word Mappings',
+    chatMonitoring: 'System Monitoring',
+    chatAnalytics: 'Chat Analytics',
+    chatPartsAnalytics: 'Bot Analytics',
 
     'page.overview': 'Dashboard Overview',
     'page.demand': 'Demand Analysis',

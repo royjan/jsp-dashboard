@@ -11,7 +11,10 @@ export async function GET(request: Request) {
     const days = parseInt(searchParams.get('days') || '30', 10)
     const cutoff = new Date(Date.now() - days * 86400000).toISOString()
 
-    const [conversationStats, feedbackStats, intentBreakdown, dailyActivity, topUsers] = await Promise.all([
+    const [
+      conversationStats, feedbackStats, intentBreakdown, dailyActivity, topUsers,
+      partsBot, topNotFound, byLambda, flowDecisionStats, recentPins,
+    ] = await Promise.all([
       // Conversation KPIs
       query(`
         SELECT
@@ -35,7 +38,7 @@ export async function GET(request: Request) {
         WHERE created_at >= $1
       `, [cutoff]),
 
-      // Intent distribution from search analytics
+      // Intent distribution from search analytics (the LLM router's classification)
       query(`
         SELECT
           intent,
@@ -82,6 +85,56 @@ export async function GET(request: Request) {
         ORDER BY conversation_count DESC
         LIMIT 20
       `, [cutoff]),
+
+      // ── Diego parts-bot search stats (source='telegram_bot') ──
+      query(`
+        SELECT
+          COUNT(*)::int AS total,
+          COUNT(*) FILTER (WHERE has_results = false)::int AS not_found,
+          COUNT(*) FILTER (WHERE has_results = true AND metadata->>'oos' = 'true')::int AS oos,
+          COUNT(*) FILTER (WHERE has_results = true AND COALESCE(metadata->>'oos','') <> 'true')::int AS in_stock,
+          COUNT(*) FILTER (WHERE metadata->>'flow_decision_source' = 'pg')::int AS deterministic,
+          COUNT(DISTINCT user_id)::int AS users,
+          PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY response_time_ms)::int AS p50,
+          PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY response_time_ms)::int AS p95
+        FROM search_analytics
+        WHERE source = 'telegram_bot' AND created_at >= $1
+      `, [cutoff]),
+
+      // Top not-found queries (Diego)
+      query(`
+        SELECT query, COUNT(*)::int AS count
+        FROM search_analytics
+        WHERE source = 'telegram_bot' AND has_results = false AND created_at >= $1
+        GROUP BY query ORDER BY count DESC LIMIT 15
+      `, [cutoff]),
+
+      // Per-portal (lambda) breakdown
+      query(`
+        SELECT
+          COALESCE(metadata->>'lambda_type', 'unknown') AS lambda,
+          COUNT(*)::int AS count,
+          COUNT(*) FILTER (WHERE has_results = false)::int AS not_found
+        FROM search_analytics
+        WHERE source = 'telegram_bot' AND created_at >= $1
+        GROUP BY 1 ORDER BY count DESC
+      `, [cutoff]),
+
+      // Flow decisions (learned pins) — counts by source + status
+      query(`
+        SELECT source, status, COUNT(*)::int AS count
+        FROM flow_decisions_v2
+        GROUP BY source, status ORDER BY count DESC
+      `),
+
+      // Recent approved flow decisions
+      query(`
+        SELECT part_description, schema, lambda_target, source, status,
+               vehicle_model, created_at::text
+        FROM flow_decisions_v2
+        WHERE status = 'approved'
+        ORDER BY created_at DESC LIMIT 20
+      `),
     ])
 
     return NextResponse.json({
@@ -90,6 +143,11 @@ export async function GET(request: Request) {
       intents: intentBreakdown.rows,
       daily_activity: dailyActivity.rows,
       top_users: topUsers.rows,
+      parts_bot: partsBot.rows[0],
+      top_not_found: topNotFound.rows,
+      by_lambda: byLambda.rows,
+      flow_decisions: flowDecisionStats.rows,
+      recent_pins: recentPins.rows,
     })
   } catch (error) {
     console.error('[Chat Insights] Error:', error)
