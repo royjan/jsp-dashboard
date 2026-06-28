@@ -17,16 +17,23 @@ export async function GET(req: Request) {
       : ''
     const searchParam = search ? [`%${search}%`] : []
 
+    // Match rules. Partly and Finansit (ERP) item ids are otherwise identical;
+    // MG-brand parts carry an extra "MG" prefix on the Finansit side only
+    // (e.g. partly 11380247 = ERP MG11380247), so that's a real match too.
+    const EXACT = `EXISTS (SELECT 1 FROM erp.items e WHERE e.code = gp.item_number)`
+    const MG = `EXISTS (SELECT 1 FROM erp.items e WHERE e.code = 'MG' || gp.item_number)`
+    const LINKED = `EXISTS (SELECT 1 FROM partly.finansit_links fl WHERE fl.partly_item_number = gp.item_number)`
+
     // Determine which partly parts to show based on status filter
     let statusCondition = ''
     if (status === 'exact') {
-      statusCondition = `AND EXISTS (SELECT 1 FROM erp.items ei WHERE ei.code = gp.item_number)`
+      statusCondition = `AND ${EXACT}`
+    } else if (status === 'mg') {
+      statusCondition = `AND NOT ${EXACT} AND ${MG}`
     } else if (status === 'linked') {
-      statusCondition = `AND NOT EXISTS (SELECT 1 FROM erp.items ei WHERE ei.code = gp.item_number)
-        AND EXISTS (SELECT 1 FROM partly.finansit_links fl WHERE fl.partly_item_number = gp.item_number)`
+      statusCondition = `AND NOT ${EXACT} AND NOT ${MG} AND ${LINKED}`
     } else if (status === 'unmatched') {
-      statusCondition = `AND NOT EXISTS (SELECT 1 FROM erp.items ei WHERE ei.code = gp.item_number)
-        AND NOT EXISTS (SELECT 1 FROM partly.finansit_links fl WHERE fl.partly_item_number = gp.item_number)`
+      statusCondition = `AND NOT ${EXACT} AND NOT ${MG} AND NOT ${LINKED}`
     }
 
     const paramOffset = search ? 2 : 1
@@ -39,22 +46,25 @@ export async function GET(req: Request) {
           gp.hebrew_description,
           CASE
             WHEN ei.code IS NOT NULL THEN 'exact'
+            WHEN ei_mg.code IS NOT NULL THEN 'mg'
             WHEN fl.finansit_code IS NOT NULL THEN 'linked'
             ELSE 'unmatched'
           END AS status,
-          COALESCE(ei.code, fl.finansit_code) AS finansit_code,
-          COALESCE(ei.name, ei2.name) AS finansit_name,
+          COALESCE(ei.code, ei_mg.code, fl.finansit_code) AS finansit_code,
+          COALESCE(ei.name, ei_mg.name, ei2.name) AS finansit_name,
           fl.id AS link_id,
           fl.notes
         FROM partly.global_parts gp
         LEFT JOIN erp.items ei ON ei.code = gp.item_number
+        LEFT JOIN erp.items ei_mg ON ei_mg.code = 'MG' || gp.item_number
         LEFT JOIN partly.finansit_links fl ON fl.partly_item_number = gp.item_number
         LEFT JOIN erp.items ei2 ON ei2.code = fl.finansit_code
         WHERE 1=1
         ${searchCondition}
         ${statusCondition}
         ORDER BY
-          CASE WHEN ei.code IS NOT NULL THEN 2
+          CASE WHEN ei.code IS NOT NULL THEN 3
+               WHEN ei_mg.code IS NOT NULL THEN 2
                WHEN fl.finansit_code IS NOT NULL THEN 1
                ELSE 0 END DESC,
           gp.item_number
@@ -71,15 +81,10 @@ export async function GET(req: Request) {
 
       query(`
         SELECT
-          COUNT(*) FILTER (WHERE EXISTS (SELECT 1 FROM erp.items e WHERE e.code = gp.item_number))::int AS exact,
-          COUNT(*) FILTER (
-            WHERE NOT EXISTS (SELECT 1 FROM erp.items e WHERE e.code = gp.item_number)
-            AND EXISTS (SELECT 1 FROM partly.finansit_links fl WHERE fl.partly_item_number = gp.item_number)
-          )::int AS linked,
-          COUNT(*) FILTER (
-            WHERE NOT EXISTS (SELECT 1 FROM erp.items e WHERE e.code = gp.item_number)
-            AND NOT EXISTS (SELECT 1 FROM partly.finansit_links fl WHERE fl.partly_item_number = gp.item_number)
-          )::int AS unmatched
+          COUNT(*) FILTER (WHERE ${EXACT})::int AS exact,
+          COUNT(*) FILTER (WHERE NOT ${EXACT} AND ${MG})::int AS mg,
+          COUNT(*) FILTER (WHERE NOT ${EXACT} AND NOT ${MG} AND ${LINKED})::int AS linked,
+          COUNT(*) FILTER (WHERE NOT ${EXACT} AND NOT ${MG} AND NOT ${LINKED})::int AS unmatched
         FROM partly.global_parts gp
       `, []),
     ])
@@ -89,7 +94,7 @@ export async function GET(req: Request) {
       total: (countResult.rows[0] as any)?.total ?? 0,
       page,
       limit,
-      stats: statsResult.rows[0] ?? { exact: 0, linked: 0, unmatched: 0 },
+      stats: statsResult.rows[0] ?? { exact: 0, mg: 0, linked: 0, unmatched: 0 },
     })
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'error' }, { status: 500 })

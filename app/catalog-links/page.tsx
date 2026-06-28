@@ -12,13 +12,13 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Search, Link2, Unlink, CheckCircle, ExternalLink } from 'lucide-react'
-type Status = 'all' | 'exact' | 'linked' | 'unmatched'
+type Status = 'all' | 'exact' | 'mg' | 'linked' | 'unmatched'
 
 interface CatalogItem {
   item_number: string
   description: string
   hebrew_description: string | null
-  status: 'exact' | 'linked' | 'unmatched'
+  status: 'exact' | 'mg' | 'linked' | 'unmatched'
   finansit_code: string | null
   finansit_name: string | null
   link_id: string | null
@@ -27,6 +27,7 @@ interface CatalogItem {
 
 interface Stats {
   exact: number
+  mg: number
   linked: number
   unmatched: number
 }
@@ -39,12 +40,14 @@ interface FinansitItem {
 const STATUS_LABELS: Record<Status, string> = {
   all: 'הכל',
   exact: 'קוד זהה',
+  mg: 'קוד MG',
   linked: 'מקושר',
   unmatched: 'לא נמצא',
 }
 
 const STATUS_BADGE: Record<CatalogItem['status'], { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
   exact: { label: 'קוד זהה', variant: 'default' },
+  mg: { label: 'קוד MG', variant: 'outline' },
   linked: { label: 'מקושר', variant: 'secondary' },
   unmatched: { label: 'לא נמצא', variant: 'destructive' },
 }
@@ -150,13 +153,20 @@ export default function CatalogLinksPage() {
 
       {/* Stats */}
       {stats && (
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div
             className={`rounded-lg border p-4 cursor-pointer transition-colors ${status === 'exact' ? 'bg-primary/10 border-primary' : 'hover:bg-muted'}`}
             onClick={() => handleStatusChange('exact')}
           >
             <div className="text-2xl font-bold text-green-600">{stats.exact.toLocaleString()}</div>
             <div className="text-sm text-muted-foreground mt-1">קוד זהה בפינאנסיט</div>
+          </div>
+          <div
+            className={`rounded-lg border p-4 cursor-pointer transition-colors ${status === 'mg' ? 'bg-primary/10 border-primary' : 'hover:bg-muted'}`}
+            onClick={() => handleStatusChange('mg')}
+          >
+            <div className="text-2xl font-bold text-teal-600">{stats.mg.toLocaleString()}</div>
+            <div className="text-sm text-muted-foreground mt-1">קוד MG (תחילית MG)</div>
           </div>
           <div
             className={`rounded-lg border p-4 cursor-pointer transition-colors ${status === 'linked' ? 'bg-primary/10 border-primary' : 'hover:bg-muted'}`}
@@ -178,7 +188,7 @@ export default function CatalogLinksPage() {
       {/* Filters */}
       <div className="flex items-center gap-3 flex-wrap">
         <div className="flex gap-1 border rounded-lg p-1">
-          {(['all', 'exact', 'linked', 'unmatched'] as Status[]).map(s => (
+          {(['all', 'exact', 'mg', 'linked', 'unmatched'] as Status[]).map(s => (
             <button
               key={s}
               onClick={() => handleStatusChange(s)}
@@ -286,8 +296,8 @@ export default function CatalogLinksPage() {
                       </Button>
                     </div>
                   )}
-                  {item.status === 'exact' && (
-                    <CheckCircle className="h-4 w-4 text-green-500 mx-auto" />
+                  {(item.status === 'exact' || item.status === 'mg') && (
+                    <CheckCircle className={`h-4 w-4 mx-auto ${item.status === 'mg' ? 'text-teal-500' : 'text-green-500'}`} />
                   )}
                 </td>
               </tr>
