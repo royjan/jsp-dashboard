@@ -82,7 +82,7 @@ export default function SearchAnalyticsTab() {
           {DAY_OPTIONS.map(d => (
             <button key={d} onClick={() => setDays(d)}
               className={`rounded-md px-3 py-1 text-sm transition-colors ${d === days
-                ? 'bg-blue-600 text-white'
+                ? 'bg-primary text-primary-foreground'
                 : 'border border-[var(--color-border-default)] bg-[var(--color-bg-elevated,#1b1b1f)] text-[var(--color-text-secondary,#c7c7cc)]'}`}>
               {d}d
             </button>
@@ -127,7 +127,7 @@ export default function SearchAnalyticsTab() {
         <div className="rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-elevated,#1b1b1f)] p-10 text-center">
           <p className="text-sm text-[var(--color-text-secondary,#c7c7cc)]">No bot activity in this period.</p>
           <button onClick={() => setDays(90)}
-            className="mt-3 rounded-md bg-blue-600 px-3 py-1.5 text-sm text-white hover:bg-blue-500">
+            className="mt-3 rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground hover:bg-primary/90">
             Try 90 days
           </button>
         </div>

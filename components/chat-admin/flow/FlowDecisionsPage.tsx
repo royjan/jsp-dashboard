@@ -185,7 +185,7 @@ export default function FlowDecisionsPage({ initialEditId }: FlowDecisionsPagePr
             </ToolbarButton>
             <button
               onClick={handleCreate}
-              className="group relative inline-flex h-9 items-center gap-1.5 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white ring-1 ring-inset ring-white/10 transition-colors hover:bg-blue-500"
+              className="group relative inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground ring-1 ring-inset ring-white/10 transition-colors hover:bg-primary/90"
             >
               <Plus className="relative h-4 w-4" />
               <span className="relative">New rule</span>

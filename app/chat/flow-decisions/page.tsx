@@ -6,7 +6,7 @@ import FlowDecisionsPage from '@/components/chat-admin/flow/FlowDecisionsPage'
 export default function Page() {
   return (
     <div dir="ltr" className="chat-admin">
-      <Suspense fallback={<div className="p-8 text-slate-400">Loading flow decisions…</div>}>
+      <Suspense fallback={<div className="p-8 text-muted-foreground">Loading flow decisions…</div>}>
         <FlowDecisionsPage />
       </Suspense>
     </div>

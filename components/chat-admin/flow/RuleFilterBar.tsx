@@ -56,7 +56,7 @@ export function RuleFilterBar({ filters, onChange, onReset }: Props) {
             value={filters.search}
             onChange={e => set('search', e.target.value)}
             placeholder="Search by part description, category, schema..."
-            className="w-full rounded-lg border border-white/10 bg-white/5 py-1.5 pl-9 pr-3 text-sm text-slate-100 placeholder:text-slate-500 focus:border-cyan-400/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/30"
+            className="w-full rounded-lg border border-white/10 bg-white/5 py-1.5 pl-9 pr-3 text-sm text-slate-100 placeholder:text-slate-500 focus:border-cyan-400/50 focus:outline-none focus:ring-2 focus:ring-ring"
           />
         </div>
 
@@ -156,7 +156,7 @@ function SelectChip({
     <select
       value={value}
       onChange={e => onChange(e.target.value)}
-      className="rounded-full border-0 bg-white/5 px-2.5 py-1 text-xs font-medium text-slate-300 ring-1 ring-inset ring-white/10 hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-cyan-500/40 [&>option]:bg-slate-900 [&>option]:text-slate-100"
+      className="rounded-full border-0 bg-white/5 px-2.5 py-1 text-xs font-medium text-slate-300 ring-1 ring-inset ring-white/10 hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-ring [&>option]:bg-slate-900 [&>option]:text-slate-100"
     >
       {options.map(o => (
         <option key={o.v} value={o.v}>
@@ -175,7 +175,7 @@ function NumberField({ value, onChange, placeholder }: { value: string; onChange
       value={value}
       onChange={e => onChange(e.target.value)}
       placeholder={placeholder}
-      className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-xs text-slate-100 placeholder:text-slate-500 focus:border-cyan-400/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/30"
+      className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-xs text-slate-100 placeholder:text-slate-500 focus:border-cyan-400/50 focus:outline-none focus:ring-2 focus:ring-ring"
     />
   )
 }
@@ -187,7 +187,7 @@ function TextField({ value, onChange, placeholder }: { value: string; onChange: 
       value={value}
       onChange={e => onChange(e.target.value)}
       placeholder={placeholder}
-      className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-xs text-slate-100 placeholder:text-slate-500 focus:border-cyan-400/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/30"
+      className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-xs text-slate-100 placeholder:text-slate-500 focus:border-cyan-400/50 focus:outline-none focus:ring-2 focus:ring-ring"
     />
   )
 }

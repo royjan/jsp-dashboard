@@ -146,7 +146,7 @@ export function VinDecodeSection({
               disabled={vin.length !== 17 || vinStatus === 'decoding'}
               className={`px-6 py-3 rounded-lg font-medium flex items-center gap-2 transition-all
                 ${vin.length === 17 && vinStatus !== 'decoding'
-                  ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                  ? 'bg-primary hover:bg-primary/90 text-primary-foreground'
                   : 'bg-gray-100 dark:bg-gray-700 text-gray-400 cursor-not-allowed'
                 }`}
             >

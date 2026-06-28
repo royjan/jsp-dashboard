@@ -58,8 +58,8 @@ export function RulesTable({ rules, loading, selectedIds, onSelectionChange, onR
 
   if (loading && rules.length === 0) {
     return (
-      <div className="flex items-center justify-center py-20 text-slate-400">
-        <Loader2 className="mr-2 h-5 w-5 animate-spin text-cyan-400" />
+      <div className="flex items-center justify-center py-20 text-muted-foreground">
+        <Loader2 className="mr-2 h-5 w-5 animate-spin text-primary" />
         Loading rules...
       </div>
     )
@@ -67,10 +67,10 @@ export function RulesTable({ rules, loading, selectedIds, onSelectionChange, onR
 
   if (sorted.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 text-center text-slate-400">
-        <Package className="mb-3 h-10 w-10 text-slate-600" />
-        <p className="font-medium text-slate-200">No rules match these filters</p>
-        <p className="text-sm text-slate-500">Adjust filters or create a new rule.</p>
+      <div className="flex flex-col items-center justify-center py-20 text-center text-muted-foreground">
+        <Package className="mb-3 h-10 w-10 text-muted-foreground/60" />
+        <p className="font-medium text-foreground">No rules match these filters</p>
+        <p className="text-sm text-muted-foreground">Adjust filters or create a new rule.</p>
       </div>
     )
   }
@@ -87,7 +87,7 @@ export function RulesTable({ rules, loading, selectedIds, onSelectionChange, onR
                 ref={el => { if (el) el.indeterminate = !allSelected && someSelected }}
                 onChange={toggleAll}
                 aria-label="Select all rules"
-                className="rounded border-white/20 bg-white/5 accent-indigo-500"
+                className="rounded border-white/20 bg-white/5 accent-primary"
               />
             </th>
             <SortHeader currentKey={sortKey} dir={sortDir} keyName="status" onSort={onSort} className="w-28">Status</SortHeader>
@@ -119,9 +119,9 @@ export function RulesTable({ rules, loading, selectedIds, onSelectionChange, onR
                 onClick={() => onRowClick(rule.id)}
                 className={`cursor-pointer transition-colors ${
                   active
-                    ? 'bg-indigo-500/15 ring-1 ring-inset ring-indigo-400/30'
+                    ? 'bg-primary/15 ring-1 ring-inset ring-primary/30'
                     : selected
-                    ? 'bg-cyan-500/10'
+                    ? 'bg-primary/10'
                     : 'hover:bg-white/[0.04]'
                 }`}
               >
@@ -132,7 +132,7 @@ export function RulesTable({ rules, loading, selectedIds, onSelectionChange, onR
                     onChange={() => toggleOne(rule.id)}
                     onClick={e => e.stopPropagation()}
                     aria-label={`Select ${rule.partDescription}`}
-                    className="rounded border-white/20 bg-white/5 accent-indigo-500"
+                    className="rounded border-white/20 bg-white/5 accent-primary"
                   />
                 </td>
                 <td className="px-3 py-2.5"><StatusPill status={rule.status} /></td>
@@ -201,7 +201,7 @@ function SortHeader({
 }) {
   const isActive = currentKey === keyName
   return (
-    <th className={`px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide ${isActive ? 'text-cyan-300' : 'text-slate-400'} ${className || ''}`}>
+    <th className={`px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide ${isActive ? 'text-primary' : 'text-slate-400'} ${className || ''}`}>
       <button onClick={() => onSort(keyName)} className="inline-flex items-center gap-1 transition-colors hover:text-slate-100">
         {children}
         {isActive && (dir === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}

@@ -52,10 +52,10 @@ export function AdminStatCard({
       {/* Main Content */}
       <div style={{ padding: compact ? '20px 24px' : '24px 28px' }}>
         <div className="flex items-start" style={{ gap: '20px' }}>
-          {/* Icon Badge - frosted glass with glow */}
+          {/* Icon Badge */}
           <div
-            className={`${colors.iconBg} rounded-xl border border-white/[0.06] transition-all duration-300 group-hover:scale-105`}
-            style={{ padding: compact ? '14px' : '18px', backdropFilter: 'blur(8px)' }}
+            className={`${colors.iconBg} rounded-xl border border-border transition-all duration-300 group-hover:scale-105`}
+            style={{ padding: compact ? '14px' : '18px' }}
           >
             <div className={`${compact ? 'w-5 h-5' : 'w-7 h-7'} ${colors.iconColor} transition-colors duration-300`}>
               {icon}
@@ -64,14 +64,14 @@ export function AdminStatCard({
 
           {/* Text Content */}
           <div className="flex-1 min-w-0" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <p className="text-sm font-medium text-slate-600 dark:text-slate-400 truncate">
+            <p className="text-sm font-medium text-muted-foreground truncate">
               {title}
             </p>
             <p className={`${compact ? 'text-2xl' : 'text-3xl'} font-semibold tracking-tight ${colors.valueColor}`}>
               {typeof value === 'number' ? value.toLocaleString() : value}
             </p>
             {subtitle && (
-              <p className="text-sm text-slate-500 dark:text-slate-400 truncate" style={{ marginTop: '4px' }}>
+              <p className="text-sm text-muted-foreground truncate" style={{ marginTop: '4px' }}>
                 {subtitle}
               </p>
             )}
@@ -81,13 +81,13 @@ export function AdminStatCard({
         {/* Progress Bar with shimmer */}
         {progress !== undefined && (
           <div className="flex items-center" style={{ marginTop: '20px', gap: '16px' }}>
-            <div className="flex-1 h-2 bg-slate-100 dark:bg-slate-700/30 rounded-full overflow-hidden">
+            <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
               <div
                 className={`h-full ${colors.progressBar} rounded-full transition-all duration-500`}
                 style={{ width: `${Math.min(100, Math.max(0, progress))}%` }}
               />
             </div>
-            <span className="text-sm text-slate-500 dark:text-slate-400 min-w-[3.5rem] text-right tabular-nums">
+            <span className="text-sm text-muted-foreground min-w-[3.5rem] text-right tabular-nums">
               {progress.toFixed(0)}%
             </span>
           </div>

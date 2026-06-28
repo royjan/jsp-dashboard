@@ -244,7 +244,7 @@ export default function WordMappingForm({ mapping, onClose, initialData }: WordM
                   value={sourceWord}
                   onChange={(e) => setSourceWord(e.target.value)}
                   placeholder="e.g., פילטר שמן"
-                  className="bg-white/5 border border-white/10 text-slate-100 placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-cyan-500/40"
+                  className="bg-white/5 border border-white/10 text-slate-100 placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-ring"
                   style={{ height: '40px', fontSize: '14px' }}
                   required
                 />
@@ -257,7 +257,7 @@ export default function WordMappingForm({ mapping, onClose, initialData }: WordM
                   id="sourceLanguage"
                   value={sourceLanguage}
                   onChange={(e) => setSourceLanguage(e.target.value as Language)}
-                  className="w-full rounded-md bg-white/5 border border-white/10 text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500/40 focus:border-cyan-400/50 [&>option]:bg-slate-900 [&>option]:text-slate-100"
+                  className="w-full rounded-md bg-white/5 border border-white/10 text-slate-100 focus:outline-none focus:ring-2 focus:ring-ring focus:border-cyan-400/50 [&>option]:bg-slate-900 [&>option]:text-slate-100"
                   style={{ height: '40px', fontSize: '14px', padding: '0 12px' }}
                   required
                 >
@@ -274,7 +274,7 @@ export default function WordMappingForm({ mapping, onClose, initialData }: WordM
                 type="button"
                 onClick={handleTranslate}
                 disabled={translating || !sourceWord.trim()}
-                className="flex items-center text-sm font-medium text-cyan-300 bg-cyan-500/10 border border-cyan-500/30 rounded-xl hover:bg-cyan-500/20 transition-colors disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-cyan-500/40"
+                className="flex items-center text-sm font-medium text-cyan-300 bg-cyan-500/10 border border-cyan-500/30 rounded-xl hover:bg-cyan-500/20 transition-colors disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-ring"
                 style={{ gap: '10px', padding: '14px 20px', minHeight: '52px' }}
               >
                 {translating ? (
@@ -323,7 +323,7 @@ export default function WordMappingForm({ mapping, onClose, initialData }: WordM
                   value={targetWord}
                   onChange={(e) => setTargetWord(e.target.value)}
                   placeholder="e.g., oil filter"
-                  className="bg-white/5 border border-white/10 text-slate-100 placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-cyan-500/40"
+                  className="bg-white/5 border border-white/10 text-slate-100 placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-ring"
                   style={{ height: '40px', fontSize: '14px' }}
                   required
                 />
@@ -336,7 +336,7 @@ export default function WordMappingForm({ mapping, onClose, initialData }: WordM
                   id="targetLanguage"
                   value={targetLanguage}
                   onChange={(e) => setTargetLanguage(e.target.value as Language)}
-                  className="w-full rounded-md bg-white/5 border border-white/10 text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500/40 focus:border-cyan-400/50 [&>option]:bg-slate-900 [&>option]:text-slate-100"
+                  className="w-full rounded-md bg-white/5 border border-white/10 text-slate-100 focus:outline-none focus:ring-2 focus:ring-ring focus:border-cyan-400/50 [&>option]:bg-slate-900 [&>option]:text-slate-100"
                   style={{ height: '40px', fontSize: '14px', padding: '0 12px' }}
                   required
                 >
@@ -368,7 +368,7 @@ export default function WordMappingForm({ mapping, onClose, initialData }: WordM
                   id="mappingType"
                   value={mappingType}
                   onChange={(e) => setMappingType(e.target.value as 'translation' | 'synonym')}
-                  className="w-full rounded-md bg-white/5 border border-white/10 text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500/40 focus:border-cyan-400/50 disabled:opacity-60 [&>option]:bg-slate-900 [&>option]:text-slate-100"
+                  className="w-full rounded-md bg-white/5 border border-white/10 text-slate-100 focus:outline-none focus:ring-2 focus:ring-ring focus:border-cyan-400/50 disabled:opacity-60 [&>option]:bg-slate-900 [&>option]:text-slate-100"
                   style={{ height: '40px', fontSize: '14px', padding: '0 12px' }}
                   required
                   disabled={mappingTypeLocked}
@@ -395,7 +395,7 @@ export default function WordMappingForm({ mapping, onClose, initialData }: WordM
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
                   placeholder="e.g., filters, brakes"
-                  className="bg-white/5 border border-white/10 text-slate-100 placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-cyan-500/40"
+                  className="bg-white/5 border border-white/10 text-slate-100 placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-ring"
                   style={{ height: '40px', fontSize: '14px' }}
                 />
               </div>
@@ -446,7 +446,7 @@ export default function WordMappingForm({ mapping, onClose, initialData }: WordM
             <Button type="button" variant="outline" onClick={() => onClose()} disabled={loading} className="rounded-xl border-white/10 bg-white/5 text-slate-200 hover:bg-white/10 hover:text-slate-100" style={{ padding: '14px 24px', minHeight: '52px' }}>
               Cancel
             </Button>
-            <Button type="submit" disabled={loading} className="rounded-xl bg-indigo-600 text-white hover:bg-indigo-500 shadow-lg shadow-indigo-500/30 ring-1 ring-inset ring-white/20" style={{ padding: '14px 28px', minHeight: '52px' }}>
+            <Button type="submit" disabled={loading} className="rounded-xl bg-primary text-primary-foreground hover:bg-primary/90" style={{ padding: '14px 28px', minHeight: '52px' }}>
               {loading ? 'Saving...' : mapping ? 'Update Mapping' : 'Create Mapping'}
             </Button>
           </DialogFooter>

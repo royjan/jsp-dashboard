@@ -463,18 +463,16 @@ export default function WordMappingDashboard() {
         <button
           onClick={handleGenerateSuggestions}
           disabled={loading}
-          className="flex items-center text-sm font-medium text-slate-200 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 hover:border-white/20 transition-colors disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-cyan-500/40"
-          style={{ gap: '12px', padding: '14px 24px', minHeight: '52px' }}
+          className="flex h-10 items-center gap-2 px-4 text-sm font-medium text-foreground bg-card border border-border rounded-xl hover:bg-accent transition-colors disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-ring"
         >
-          <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           Generate Suggestions
         </button>
         <button
           onClick={handleCreateMapping}
-          className="flex items-center text-sm font-medium text-white bg-indigo-600 rounded-xl hover:bg-indigo-500 transition-colors shadow-lg shadow-indigo-500/30 ring-1 ring-inset ring-white/20 focus:outline-none focus:ring-2 focus:ring-cyan-500/40"
-          style={{ gap: '12px', padding: '14px 24px', minHeight: '52px' }}
+          className="flex h-10 items-center gap-2 px-4 text-sm font-medium bg-primary text-primary-foreground rounded-xl hover:bg-primary/90 transition-colors focus:outline-none focus:ring-2 focus:ring-ring"
         >
-          <Plus className="w-5 h-5" />
+          <Plus className="w-4 h-4" />
           Add Mapping
         </button>
       </div>
@@ -483,13 +481,13 @@ export default function WordMappingDashboard() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
         {/* Suggestions Section */}
         {suggestions.length > 0 && (
-          <div className="bg-white/[0.03] backdrop-blur rounded-2xl border border-white/10 shadow-lg shadow-black/20" style={{ padding: '28px 32px' }}>
+          <div className="bg-card rounded-2xl border border-border" style={{ padding: '28px 32px' }}>
             {/* Header with bulk actions */}
             <div className="flex items-center justify-between" style={{ marginBottom: '24px' }}>
               <div className="flex items-center" style={{ gap: '16px' }}>
                 <button
                   onClick={toggleSelectAllSuggestions}
-                  className="text-slate-400 hover:text-slate-100 transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-500/40 rounded"
+                  className="text-slate-400 hover:text-slate-100 transition-colors focus:outline-none focus:ring-2 focus:ring-ring rounded"
                   aria-label={selectedSuggestions.size === suggestions.length ? "Deselect all suggestions" : "Select all suggestions"}
                   title={selectedSuggestions.size === suggestions.length ? "Deselect all" : "Select all"}
                 >
@@ -513,7 +511,7 @@ export default function WordMappingDashboard() {
                   <button
                     onClick={handleBulkApprove}
                     disabled={bulkProcessing}
-                    className="flex items-center text-sm font-medium text-white bg-emerald-600 rounded-xl hover:bg-emerald-500 transition-colors disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-cyan-500/40"
+                    className="flex items-center text-sm font-medium text-white bg-emerald-600 rounded-xl hover:bg-emerald-500 transition-colors disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-ring"
                     style={{ gap: '8px', padding: '12px 20px', minHeight: '48px' }}
                   >
                     <CheckCircle className="w-4 h-4" />
@@ -522,7 +520,7 @@ export default function WordMappingDashboard() {
                   <button
                     onClick={() => setShowRejectModal(true)}
                     disabled={bulkProcessing}
-                    className="flex items-center text-sm font-medium text-rose-300 border border-rose-500/40 rounded-xl hover:bg-rose-500/15 transition-colors disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-cyan-500/40"
+                    className="flex items-center text-sm font-medium text-rose-300 border border-rose-500/40 rounded-xl hover:bg-rose-500/15 transition-colors disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-ring"
                     style={{ gap: '8px', padding: '12px 20px', minHeight: '48px' }}
                   >
                     <XCircle className="w-4 h-4" />
@@ -538,7 +536,7 @@ export default function WordMappingDashboard() {
                   {/* Checkbox */}
                   <button
                     onClick={() => toggleSuggestionSelection(suggestion.id)}
-                    className="text-slate-400 hover:text-slate-100 transition-colors mr-4 focus:outline-none focus:ring-2 focus:ring-cyan-500/40 rounded"
+                    className="text-slate-400 hover:text-slate-100 transition-colors mr-4 focus:outline-none focus:ring-2 focus:ring-ring rounded"
                     aria-label={selectedSuggestions.has(suggestion.id) ? "Deselect suggestion" : "Select suggestion"}
                   >
                     {selectedSuggestions.has(suggestion.id) ? (
@@ -566,14 +564,14 @@ export default function WordMappingDashboard() {
                   <div className="flex" style={{ gap: '12px' }}>
                     <button
                       onClick={() => handleApproveSuggestion(suggestion.id)}
-                      className="text-sm font-medium text-white bg-indigo-600 rounded-xl hover:bg-indigo-500 transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-500/40"
+                      className="text-sm font-medium bg-primary text-primary-foreground rounded-xl hover:bg-primary/90 transition-colors focus:outline-none focus:ring-2 focus:ring-ring"
                       style={{ padding: '12px 20px', minHeight: '44px' }}
                     >
                       Approve
                     </button>
                     <button
                       onClick={() => handleRejectSuggestion(suggestion.id)}
-                      className="text-sm font-medium text-slate-200 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 hover:border-white/20 transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-500/40"
+                      className="text-sm font-medium text-foreground bg-card border border-border rounded-xl hover:bg-accent transition-colors focus:outline-none focus:ring-2 focus:ring-ring"
                       style={{ padding: '12px 20px', minHeight: '44px' }}
                     >
                       Reject
@@ -586,14 +584,13 @@ export default function WordMappingDashboard() {
         )}
 
         {/* Filters */}
-        <div dir="ltr" className="bg-white/[0.03] backdrop-blur rounded-2xl border border-white/10 shadow-lg shadow-black/20" style={{ padding: '24px 28px' }}>
+        <div dir="ltr" className="bg-card rounded-2xl border border-border" style={{ padding: '20px 24px' }}>
           <div className="flex flex-wrap" style={{ gap: '16px' }}>
             <div className="flex flex-1 min-w-[300px]">
               <select
                 value={searchField}
                 onChange={(e) => handleSearchFieldChange(e.target.value as 'all' | 'source' | 'target')}
-                className="bg-white/5 border border-r-0 border-white/10 rounded-l-xl text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-400/50 [&>option]:bg-slate-900 [&>option]:text-slate-100"
-                style={{ padding: '14px 16px', minHeight: '52px' }}
+                className="h-10 px-4 bg-input border border-r-0 border-border rounded-l-xl text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring [&>option]:bg-popover [&>option]:text-foreground"
               >
                 <option value="all">All</option>
                 <option value="source">Source</option>
@@ -603,15 +600,13 @@ export default function WordMappingDashboard() {
                 placeholder={`Search ${searchField === 'all' ? 'mappings' : searchField}...`}
                 value={search}
                 onChange={(e) => handleSearchChange(e.target.value)}
-                className="flex-1 rounded-l-none rounded-r-xl bg-white/5 border border-white/10 text-slate-100 placeholder:text-slate-500 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-400/50"
-                style={{ minHeight: '52px' }}
+                className="h-10 flex-1 rounded-l-none rounded-r-xl bg-input border border-border text-foreground placeholder:text-muted-foreground px-4 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
             <select
               value={languageFilter}
               onChange={(e) => handleLanguageChange(e.target.value as '' | 'en' | 'he' | 'ar' | 'zh')}
-              className="bg-white/5 border border-white/10 rounded-xl text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-400/50 [&>option]:bg-slate-900 [&>option]:text-slate-100"
-              style={{ padding: '14px 20px', minHeight: '52px' }}
+              className="h-10 px-4 bg-input border border-border rounded-xl text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring [&>option]:bg-popover [&>option]:text-foreground"
             >
               <option value="">All Languages</option>
               <option value="en">English</option>
@@ -621,8 +616,7 @@ export default function WordMappingDashboard() {
             <select
               value={mappingTypeFilter}
               onChange={(e) => handleMappingTypeChange(e.target.value as '' | 'translation' | 'synonym')}
-              className="bg-white/5 border border-white/10 rounded-xl text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-400/50 [&>option]:bg-slate-900 [&>option]:text-slate-100"
-              style={{ padding: '14px 20px', minHeight: '52px' }}
+              className="h-10 px-4 bg-input border border-border rounded-xl text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring [&>option]:bg-popover [&>option]:text-foreground"
             >
               <option value="">All Types</option>
               <option value="translation">Translation</option>
@@ -632,7 +626,7 @@ export default function WordMappingDashboard() {
         </div>
 
         {/* Mappings Table */}
-        <div dir="ltr" className="bg-white/[0.03] backdrop-blur rounded-2xl border border-white/10 shadow-lg shadow-black/20 overflow-hidden">
+        <div dir="ltr" className="bg-card rounded-2xl border border-border overflow-hidden">
           <Table className="divide-y divide-white/10">
             <TableHeader className="sticky top-0 z-10 border-white/10 bg-white/[0.04]">
               <TableRow className="border-white/10 bg-transparent hover:bg-transparent hover:translate-y-0 hover:shadow-none">
@@ -742,7 +736,7 @@ export default function WordMappingDashboard() {
                         {!mapping.isDefault && (
                           <button
                             onClick={() => handleSetDefault(mapping.id)}
-                            className="grid place-items-center h-11 w-11 text-amber-300 hover:text-amber-200 hover:bg-amber-500/15 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-500/40"
+                            className="grid place-items-center h-11 w-11 text-amber-300 hover:text-amber-200 hover:bg-amber-500/15 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-ring"
                             aria-label="Set as default mapping"
                             title="Set as default mapping"
                           >
@@ -751,7 +745,7 @@ export default function WordMappingDashboard() {
                         )}
                         <button
                           onClick={() => handleEditMapping(mapping)}
-                          className="grid place-items-center h-11 w-11 text-cyan-300 hover:text-cyan-200 hover:bg-cyan-500/15 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-500/40"
+                          className="grid place-items-center h-11 w-11 text-cyan-300 hover:text-cyan-200 hover:bg-cyan-500/15 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-ring"
                           aria-label="Edit mapping"
                           title="Edit mapping"
                         >
@@ -759,7 +753,7 @@ export default function WordMappingDashboard() {
                         </button>
                         <button
                           onClick={() => handleDeleteMapping(mapping.id)}
-                          className="grid place-items-center h-11 w-11 text-rose-300 hover:text-rose-200 hover:bg-rose-500/15 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-500/40"
+                          className="grid place-items-center h-11 w-11 text-rose-300 hover:text-rose-200 hover:bg-rose-500/15 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-ring"
                           aria-label="Delete mapping"
                           title="Delete mapping"
                         >
@@ -806,7 +800,7 @@ export default function WordMappingDashboard() {
             value={rejectReason}
             onChange={(e) => setRejectReason(e.target.value)}
             placeholder="Enter rejection reason..."
-            className="w-full h-24 px-3 py-2 bg-slate-900 border border-white/10 rounded-md text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/40 focus:border-cyan-400/50"
+            className="w-full h-24 px-3 py-2 bg-slate-900 border border-white/10 rounded-md text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-ring focus:border-cyan-400/50"
           />
           <div className="flex justify-end gap-2">
             <Button

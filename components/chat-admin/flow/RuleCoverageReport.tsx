@@ -120,7 +120,7 @@ export function RuleCoverageReport({ existingRules, onSeedRule }: Props) {
                     {!row.hasRule && (
                       <button
                         onClick={() => onSeedRule(row.description)}
-                        className="inline-flex items-center gap-1 rounded-md bg-indigo-600 px-2 py-1 text-xs font-medium text-white hover:bg-indigo-700"
+                        className="inline-flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90"
                       >
                         <Plus className="h-3 w-3" />
                         Create rule

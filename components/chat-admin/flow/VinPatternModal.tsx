@@ -414,7 +414,7 @@ export function VinPatternModal({ isOpen, onClose, initialPattern, onSave }: Vin
             </button>
             <button
               onClick={handleSave}
-              className="px-4 py-1.5 bg-blue-500 text-white hover:bg-blue-600 rounded flex items-center gap-1 text-sm"
+              className="px-4 py-1.5 bg-primary text-primary-foreground hover:bg-primary/90 rounded flex items-center gap-1 text-sm"
             >
               <Check className="w-3 h-3" />
               Apply & Close

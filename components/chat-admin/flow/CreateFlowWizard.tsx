@@ -393,7 +393,7 @@ export default function CreateFlowWizard({ seedDescription, existingRules = [], 
         <header className="relative shrink-0 overflow-hidden border-b border-white/10">
           <div className="relative flex items-center justify-between gap-4 px-6 py-4">
             <div className="flex items-center gap-3">
-              <div className="grid h-11 w-11 place-items-center rounded-2xl bg-blue-600 ring-1 ring-inset ring-white/10">
+              <div className="grid h-11 w-11 place-items-center rounded-2xl bg-primary ring-1 ring-inset ring-white/10">
                 <Sparkles className="h-5 w-5 text-white" />
               </div>
               <div>
@@ -488,7 +488,7 @@ export default function CreateFlowWizard({ seedDescription, existingRules = [], 
               <button
                 onClick={next}
                 disabled={saving}
-                className="inline-flex h-11 items-center gap-1.5 rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white transition-colors hover:bg-blue-500 disabled:opacity-50"
+                className="inline-flex h-11 items-center gap-1.5 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
               >
                 Continue
                 <ArrowRight className="h-4 w-4" />
@@ -552,7 +552,7 @@ function Stepper({
               <span
                 className={`relative grid h-9 w-9 place-items-center rounded-full border text-sm font-semibold transition-all ${
                   active
-                    ? 'border-blue-400/70 bg-blue-600 text-white'
+                    ? 'border-primary bg-primary text-primary-foreground'
                     : done
                       ? 'border-emerald-400/50 bg-emerald-500/20 text-emerald-300'
                       : 'border-white/15 bg-white/5 text-slate-400'
@@ -1183,7 +1183,7 @@ function DarkInput({
       onChange={e => onChange(e.target.value)}
       placeholder={placeholder}
       dir="auto"
-      className={`h-11 w-full rounded-xl border border-white/15 bg-white/5 px-3 text-sm text-slate-100 placeholder:text-slate-500 focus:border-cyan-400/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/30 ${
+      className={`h-11 w-full rounded-xl border border-white/15 bg-white/5 px-3 text-sm text-slate-100 placeholder:text-slate-500 focus:border-cyan-400/50 focus:outline-none focus:ring-2 focus:ring-ring ${
         mono ? 'font-mono tracking-wider' : ''
       }`}
     />

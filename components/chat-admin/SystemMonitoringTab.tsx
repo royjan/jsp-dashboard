@@ -86,7 +86,7 @@ interface QueueStats {
 }
 
 // Professional neutral card styling - color is only in the status badge
-const LAMBDA_CARD_STYLES = 'bg-white dark:bg-slate-800/50 border-slate-200 dark:border-slate-700'
+const LAMBDA_CARD_STYLES = 'bg-card border-border'
 
 // Helper to get partsFound (workaround for Turbopack minification bug)
 function getPartsFound(search: TrackedSearch): string {
@@ -378,7 +378,7 @@ export function SystemMonitoringTab() {
         <button
           onClick={() => fetchData(true)}
           disabled={refreshing}
-          className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors disabled:opacity-50 shadow-sm"
+          className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground transition-colors disabled:opacity-50 shadow-sm"
         >
           <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
           Refresh
@@ -538,7 +538,7 @@ export function SystemMonitoringTab() {
       </div>
 
       {/* Active Searches Table */}
-      <div className="rounded-xl bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 overflow-hidden">
+      <div className="rounded-xl bg-card border border-border overflow-hidden">
         <div className="px-6 py-5 border-b border-slate-200 dark:border-slate-700 flex items-center gap-3">
           <div className="p-2.5 bg-emerald-50 dark:bg-emerald-900/30 rounded-lg">
             <Loader2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 animate-spin" />
@@ -547,7 +547,7 @@ export function SystemMonitoringTab() {
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/50">
+            <thead className="text-muted-foreground bg-muted/40">
               <tr>
                 <th className="px-3 sm:px-6 py-4 text-left font-medium text-xs uppercase tracking-wider whitespace-nowrap">User</th>
                 <th className="px-3 sm:px-6 py-4 text-left font-medium text-xs uppercase tracking-wider whitespace-nowrap">VIN</th>
@@ -679,7 +679,7 @@ export function SystemMonitoringTab() {
         )
 
         return (
-          <div className="rounded-xl bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 overflow-hidden">
+          <div className="rounded-xl bg-card border border-border overflow-hidden">
             <div className="px-6 py-5 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="p-2.5 bg-slate-100 dark:bg-slate-700/50 rounded-lg">
@@ -711,7 +711,7 @@ export function SystemMonitoringTab() {
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead className="text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/50">
+                <thead className="text-muted-foreground bg-muted/40">
                   <tr>
                     <th className="px-6 py-4 text-left font-medium text-xs uppercase tracking-wider">Time</th>
                     <th className="px-6 py-4 text-left font-medium text-xs uppercase tracking-wider">User</th>
