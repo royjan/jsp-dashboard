@@ -12,6 +12,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useSortable, SortableTh } from '@/components/shared/sortable-table'
+import { ActionPlaybook } from '@/components/report/ActionPlaybook'
 import { ILS_FORMAT, NUMBER_FORMAT, formatNumber } from '@/lib/constants'
 import {
   TrendingUp, TrendingDown, AlertTriangle, Package, Users, FileText,
@@ -1000,9 +1001,11 @@ function ReportContent() {
                       { action: 'Win-back top 5 declining customers', impact: 'Potential 500K-1M ILS' },
                     ]).map((r, i) => (
                       <tr key={i} className="border-b hover:bg-muted/50 transition-colors">
-                        <td className="py-2.5 ps-4 md:ps-0 font-bold text-destructive">{i + 1}</td>
-                        <td className="py-2.5">{r.action}</td>
-                        <td className="py-2.5 text-end font-semibold pe-4 md:pe-0">{r.impact}</td>
+                        <td className="py-2.5 ps-4 md:ps-0 font-bold text-destructive align-top">{i + 1}</td>
+                        <td className="py-2.5">
+                          <ActionPlaybook action={r.action} impact={r.impact} isHe={isHe}>{r.action}</ActionPlaybook>
+                        </td>
+                        <td className="py-2.5 text-end font-semibold pe-4 md:pe-0 align-top">{r.impact}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1042,9 +1045,11 @@ function ReportContent() {
                       { action: 'Data-driven ordering policy', impact: 'Prevent future stock buildup' },
                     ]).map((r, i) => (
                       <tr key={i} className="border-b hover:bg-muted/50 transition-colors">
-                        <td className="py-2.5 ps-4 md:ps-0 font-bold text-amber-500">{i + 5}</td>
-                        <td className="py-2.5">{r.action}</td>
-                        <td className="py-2.5 text-end font-semibold pe-4 md:pe-0">{r.impact}</td>
+                        <td className="py-2.5 ps-4 md:ps-0 font-bold text-amber-500 align-top">{i + 5}</td>
+                        <td className="py-2.5">
+                          <ActionPlaybook action={r.action} impact={r.impact} isHe={isHe}>{r.action}</ActionPlaybook>
+                        </td>
+                        <td className="py-2.5 text-end font-semibold pe-4 md:pe-0 align-top">{r.impact}</td>
                       </tr>
                     ))}
                   </tbody>
