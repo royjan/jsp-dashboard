@@ -2,6 +2,7 @@
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ThemeProvider } from 'next-themes'
+import { Toaster } from 'sonner'
 import { LocaleProvider } from '@/lib/locale-context'
 import { useState, useEffect } from 'react'
 
@@ -28,6 +29,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <LocaleProvider>
         <QueryClientProvider client={queryClient}>
           {children}
+          <Toaster richColors position="top-center" />
         </QueryClientProvider>
       </LocaleProvider>
     </ThemeProvider>

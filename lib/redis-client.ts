@@ -3,7 +3,7 @@ import { getSecret } from './aws-secrets'
 
 // ---------------------------------------------------------------------------
 // Local Redis (TCP) client with in-memory Map fallback.
-// FINAPI and the dashboard share the local Proxmox Redis (192.168.0.160);
+// FINAPI and the dashboard share the local Proxmox Redis (192.168.0.188);
 // Upstash is reserved for partly/lambdas. Set REDIS_URL=redis://:<pw>@host:6379.
 // (Was @upstash/redis — a REST client that can't talk to a normal Redis.)
 // ---------------------------------------------------------------------------

@@ -17,10 +17,17 @@ import type {
   UpdateDocumentParams,
 } from './types'
 
+// FINANSIT_BASE_URL = primary FINAPI box; FINANSIT_BASE_URL_FALLBACK = secondary.
+// The client tries primary first and fails over to the fallback on
+// connection/timeout/5xx errors (sticky once one works). Falls back to the
+// prod default when neither env var is set.
+const finansitBaseUrls = [
+  process.env.FINANSIT_BASE_URL,
+  process.env.FINANSIT_BASE_URL_FALLBACK,
+].filter(Boolean) as string[]
+
 const client = createClient({
-  // Point at FINANSIT_BASE_URL when set (e.g. the LAN FINAPI on the internal
-  // box); falls back to the SDK default (prod) when unset. createClient does
-  // NOT read this env var itself — only the SDK's MCP CLI does — so pass it here.
+  baseUrls: finansitBaseUrls.length ? finansitBaseUrls : undefined,
   baseUrl: process.env.FINANSIT_BASE_URL || undefined,
   credentials: async () => {
     await initializeSecrets()

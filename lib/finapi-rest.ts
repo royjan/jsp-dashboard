@@ -48,17 +48,24 @@ function chunk<T>(arr: T[], n: number): T[][] {
 }
 
 export interface FinapiClientConfig {
+  /** Single base URL. Ignored when `baseUrls` is provided. */
   baseUrl?: string
+  /** Ordered base URLs: primary first, then fallbacks. Overrides `baseUrl`. */
+  baseUrls?: string[]
   credentials: string | (() => Promise<string> | string)
   concurrency?: number
   timeout?: number
 }
 
 export function createClient(config: FinapiClientConfig) {
-  const baseUrl = (config.baseUrl ?? 'https://finansit.jan.parts').replace(/\/$/, '')
+  // Primary first, then fallbacks. Failover triggers on connection-level failures
+  // (timeout/abort, refused, DNS, reset) and 5xx — NOT on 4xx (the box answered).
+  const baseUrls = (config.baseUrls?.length ? config.baseUrls : [config.baseUrl ?? 'https://finansit.jan.parts'])
+    .map((u) => u.replace(/\/$/, ''))
   const timeout = config.timeout ?? 15000
   const semaphore = config.concurrency ? new Semaphore(config.concurrency) : null
   let cachedAuthHeader: string | null = null
+  let activeIdx = 0 // sticky: stay on the last base URL that worked
 
   async function getAuthHeader(): Promise<string> {
     if (cachedAuthHeader) return cachedAuthHeader
@@ -67,8 +74,8 @@ export function createClient(config: FinapiClientConfig) {
     return cachedAuthHeader
   }
 
-  function buildUrl(path: string, params?: Record<string, any>): string {
-    const url = new URL(path, baseUrl)
+  function buildUrl(base: string, path: string, params?: Record<string, any>): string {
+    const url = new URL(path, base)
     if (params) {
       for (const [k, v] of Object.entries(params)) {
         if (v !== undefined && v !== null) url.searchParams.set(k, String(v))
@@ -77,59 +84,84 @@ export function createClient(config: FinapiClientConfig) {
     return url.toString()
   }
 
-  async function request(method: string, path: string, params?: Record<string, any>, body?: any): Promise<any> {
+  function shouldFailover(e: any): boolean {
+    if (e instanceof FinansitApiError) return e.status >= 502 // 502/503/504 → try next box
+    const code = e?.code
+    return (
+      e?.name === 'AbortError' || // our timeout fired
+      e instanceof TypeError || // fetch() network failure (refused, DNS, etc.)
+      code === 'ECONNREFUSED' || code === 'ENOTFOUND' ||
+      code === 'EHOSTUNREACH' || code === 'ECONNRESET' || code === 'ETIMEDOUT'
+    )
+  }
+
+  // Run `attempt` against the active base URL; on a connection-level error fail
+  // over to the remaining base URLs in order. Each attempt gets its own timeout.
+  async function withFailover<T>(attempt: (base: string, signal: AbortSignal) => Promise<T>): Promise<T> {
     if (semaphore) await semaphore.acquire()
     try {
-      const controller = new AbortController()
-      const timer = setTimeout(() => controller.abort(), timeout)
-      try {
-        const auth = await getAuthHeader()
-        const url = method === 'GET' ? buildUrl(path, params) : buildUrl(path)
-        const res = await fetch(url, {
-          method,
-          headers: {
-            Authorization: auth,
-            ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
-          },
-          signal: controller.signal,
-          ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-        })
-        if (!res.ok) {
-          const text = await res.text().catch(() => '')
-          throw new FinansitApiError(res.status, text, path)
+      const order = [activeIdx, ...baseUrls.map((_, i) => i).filter((i) => i !== activeIdx)]
+      let lastErr: any
+      for (let n = 0; n < order.length; n++) {
+        const idx = order[n]
+        const controller = new AbortController()
+        const timer = setTimeout(() => controller.abort(), timeout)
+        try {
+          const out = await attempt(baseUrls[idx], controller.signal)
+          activeIdx = idx // stick to the box that worked
+          return out
+        } catch (e: any) {
+          lastErr = e
+          if (n < order.length - 1 && shouldFailover(e)) {
+            console.warn(`[finapi] ${baseUrls[idx]} failed (${e?.name || e?.code || e?.status || 'error'}); failing over to ${baseUrls[order[n + 1]]}`)
+            continue
+          }
+          throw e
+        } finally {
+          clearTimeout(timer)
         }
-        return await res.json()
-      } finally {
-        clearTimeout(timer)
       }
+      throw lastErr
     } finally {
       if (semaphore) semaphore.release()
     }
   }
 
-  async function requestRaw(path: string, params?: Record<string, any>): Promise<Response> {
-    if (semaphore) await semaphore.acquire()
-    try {
-      const controller = new AbortController()
-      const timer = setTimeout(() => controller.abort(), timeout)
-      try {
-        const auth = await getAuthHeader()
-        const res = await fetch(buildUrl(path, params), {
-          method: 'GET',
-          headers: { Authorization: auth },
-          signal: controller.signal,
-        })
-        if (!res.ok) {
-          const text = await res.text().catch(() => '')
-          throw new FinansitApiError(res.status, text, path)
-        }
-        return res
-      } finally {
-        clearTimeout(timer)
+  async function request(method: string, path: string, params?: Record<string, any>, body?: any): Promise<any> {
+    return withFailover(async (base, signal) => {
+      const auth = await getAuthHeader()
+      const url = method === 'GET' ? buildUrl(base, path, params) : buildUrl(base, path)
+      const res = await fetch(url, {
+        method,
+        headers: {
+          Authorization: auth,
+          ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+        },
+        signal,
+        ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+      })
+      if (!res.ok) {
+        const text = await res.text().catch(() => '')
+        throw new FinansitApiError(res.status, text, path)
       }
-    } finally {
-      if (semaphore) semaphore.release()
-    }
+      return res.json()
+    })
+  }
+
+  async function requestRaw(path: string, params?: Record<string, any>): Promise<Response> {
+    return withFailover(async (base, signal) => {
+      const auth = await getAuthHeader()
+      const res = await fetch(buildUrl(base, path, params), {
+        method: 'GET',
+        headers: { Authorization: auth },
+        signal,
+      })
+      if (!res.ok) {
+        const text = await res.text().catch(() => '')
+        throw new FinansitApiError(res.status, text, path)
+      }
+      return res
+    })
   }
 
   const get = (path: string, params?: Record<string, any>) => request('GET', path, params)
