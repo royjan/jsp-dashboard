@@ -20,11 +20,12 @@ import { useQueryClient } from '@tanstack/react-query'
 function SeasonalItemsSection({ dateFrom, dateTo }: { dateFrom: string; dateTo: string }) {
   const [aiEnabled, setAiEnabled] = useState(false)
   const [aiRequested, setAiRequested] = useState(false)
+  const [refreshTick, setRefreshTick] = useState(0)
   const [historicalSyncing, setHistoricalSyncing] = useState(false)
   const [historicalProgress, setHistoricalProgress] = useState<string | null>(null)
   const queryClient = useQueryClient()
 
-  const { data, isLoading, isFetching } = useSeasonalItems(dateFrom, dateTo, aiEnabled)
+  const { data, isLoading, isFetching } = useSeasonalItems(dateFrom, dateTo, aiEnabled, refreshTick)
 
   const winterItems = data?.winter_items || []
   const summerItems = data?.summer_items || []
@@ -36,8 +37,9 @@ function SeasonalItemsSection({ dateFrom, dateTo }: { dateFrom: string; dateTo: 
 
   const handleGenerateAI = () => {
     if (aiEnabled) {
-      // Already enabled — refetch with cache bust
-      queryClient.invalidateQueries({ queryKey: ['seasonal-items', dateFrom, dateTo, true] })
+      // Already enabled — bump the refresh tick to bypass the server cache and
+      // regenerate (new query key → refetch with ?refresh=true).
+      setRefreshTick((t) => t + 1)
     } else {
       setAiEnabled(true)
       setAiRequested(true)

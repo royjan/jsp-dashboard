@@ -147,14 +147,16 @@ export function useSeasonalData(dateFrom?: string, dateTo?: string) {
   })
 }
 
-export function useSeasonalItems(dateFrom?: string, dateTo?: string, ai = false) {
+export function useSeasonalItems(dateFrom?: string, dateTo?: string, ai = false, refreshTick = 0) {
   return useQuery({
-    queryKey: ['seasonal-items', dateFrom, dateTo, ai],
+    queryKey: ['seasonal-items', dateFrom, dateTo, ai, refreshTick],
     queryFn: async () => {
       const params = new URLSearchParams()
       if (dateFrom) params.set('date_from', dateFrom)
       if (dateTo) params.set('date_to', dateTo)
       if (ai) params.set('ai', 'true')
+      // refreshTick > 0 means the user hit "refresh" — bypass the server cache.
+      if (refreshTick > 0) params.set('refresh', 'true')
       const res = await fetch(`/api/analytics/seasonal/items?${params}`)
       if (!res.ok) throw new Error('Failed')
       return res.json()

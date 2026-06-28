@@ -53,9 +53,11 @@ export async function GET(request: Request) {
     const dateFrom = searchParams.get('date_from') || undefined
     const dateTo = searchParams.get('date_to') || undefined
     const aiEnabled = searchParams.get('ai') === 'true'
+    const refresh = searchParams.get('refresh') === 'true'
 
     const cacheKey = `analytics:seasonal-items:v7:${dateFrom || 'all'}:${dateTo || 'all'}:${aiEnabled}`
-    const cached = await getCached<any>(cacheKey)
+    // On refresh (the "רענן ניתוח" button) bypass the cache and regenerate.
+    const cached = refresh ? null : await getCached<any>(cacheKey)
     if (cached) return NextResponse.json(cached)
 
     // Count season months in range for normalization
@@ -325,7 +327,11 @@ Keep it concise and actionable for a store owner. Use • for bullet points.`
       no_summer_data: noSummerData,
     }
 
-    await setCache(cacheKey, response, aiEnabled ? 12 * 3600 : 6 * 3600)
+    // Don't persist a failed AI generation (ai requested but no insights) — that
+    // would pin a stale "no insights" response until TTL. Cache only real results.
+    if (!(aiEnabled && !aiInsights)) {
+      await setCache(cacheKey, response, aiEnabled ? 12 * 3600 : 6 * 3600)
+    }
     return NextResponse.json(response)
   } catch (error) {
     return NextResponse.json(
