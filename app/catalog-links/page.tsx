@@ -18,6 +18,7 @@ interface CatalogItem {
   item_number: string
   description: string
   hebrew_description: string | null
+  brand: string | null
   status: 'exact' | 'mg' | 'linked' | 'unmatched'
   finansit_code: string | null
   finansit_name: string | null
@@ -237,7 +238,14 @@ export default function CatalogLinksPage() {
             )}
             {data?.items?.map(item => (
               <tr key={item.item_number} className="hover:bg-muted/30 transition-colors">
-                <td className="px-4 py-3 font-mono text-xs">{item.item_number}</td>
+                <td className="px-4 py-3 font-mono text-xs">
+                  <div>{item.item_number}</div>
+                  {item.brand && (
+                    <span className="mt-1 inline-block rounded bg-muted px-1.5 py-0.5 font-sans text-[10px] font-medium text-muted-foreground">
+                      {item.brand}
+                    </span>
+                  )}
+                </td>
                 <td className="px-4 py-3">{item.hebrew_description || '—'}</td>
                 <td className="px-4 py-3 text-muted-foreground hidden md:table-cell text-xs">{item.description}</td>
                 <td className="px-4 py-3">

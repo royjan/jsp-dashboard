@@ -44,6 +44,26 @@ export async function GET(req: Request) {
           gp.item_number,
           gp.description,
           gp.hebrew_description,
+          (
+            -- Canonical brand(s) for the part, normalized from the noisy project
+            -- make values (regions/languages collapsed to MG/Peugeot/Citroën/Opel/DS).
+            -- Scalar subquery → evaluated only for the page's rows (post-LIMIT).
+            SELECT string_agg(DISTINCT b.canon, ', ' ORDER BY b.canon)
+            FROM (
+              SELECT CASE
+                WHEN pr.make ILIKE '%MG%' OR pr.make LIKE '%מ.ג%' OR pr.make LIKE '%מ"ג%' THEN 'MG'
+                WHEN pr.make ILIKE '%peugeot%' OR pr.make LIKE '%פיג%' THEN 'Peugeot'
+                WHEN pr.make ILIKE '%citroen%' OR pr.make LIKE '%סיטרו%' THEN 'Citroën'
+                WHEN pr.make ILIKE '%opel%' OR pr.make LIKE '%אופל%' THEN 'Opel'
+                WHEN pr.make ILIKE '%DS%' OR pr.make LIKE '%די אס%' THEN 'DS'
+                ELSE NULLIF(TRIM(pr.make), '')
+              END AS canon
+              FROM partly.project_parts pp
+              JOIN partly.projects pr ON pr.id = pp.project_id
+              WHERE pp.global_part_id = gp.id
+            ) b
+            WHERE b.canon IS NOT NULL
+          ) AS brand,
           CASE
             WHEN ei.code IS NOT NULL THEN 'exact'
             WHEN ei_mg.code IS NOT NULL THEN 'mg'
