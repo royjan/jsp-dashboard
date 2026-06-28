@@ -1,15 +1,17 @@
 /**
  * Word-mapping data access for the integrated chat admin.
- *
- * Ported from jsp-chat-js's WordMappingService, rewritten onto the dashboard's
- * raw `query()` (lib/db) against the shared Neon `word_mappings` /
- * `word_mapping_suggestions` tables. No Prisma. Returns camelCase shapes the
- * ported UI expects.
+ * Drizzle ORM over the shared `word_mappings` / `word_mapping_suggestions`
+ * tables. Returns camelCase shapes the ported UI expects.
  */
 
-import { query, getPool } from '@/lib/db'
+import { and, asc, desc, eq, ilike, or, count } from 'drizzle-orm'
+import { getDb } from '@/lib/db'
+import { wordMappings, wordMappingSuggestions } from '@/lib/db/schema'
 
 export type MappingType = 'translation' | 'synonym'
+
+type MappingRow = typeof wordMappings.$inferSelect
+type SuggestionRow = typeof wordMappingSuggestions.$inferSelect
 
 export interface WordMapping {
   id: string
@@ -68,49 +70,47 @@ export interface GraphNode {
   children?: GraphNode[]
 }
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-function rowToMapping(r: any): WordMapping {
+function rowToMapping(r: MappingRow): WordMapping {
   return {
     id: r.id,
-    sourceWord: r.source_word,
-    sourceLanguage: r.source_language,
-    targetWord: r.target_word,
-    targetLanguage: r.target_language,
-    mappingType: r.mapping_type,
-    confidence: parseFloat(r.confidence?.toString() ?? '1.0'),
-    usageCount: r.usage_count ?? 0,
-    isActive: r.is_active,
-    isDefault: r.is_default ?? false,
+    sourceWord: r.sourceWord,
+    sourceLanguage: r.sourceLanguage,
+    targetWord: r.targetWord,
+    targetLanguage: r.targetLanguage,
+    mappingType: r.mappingType,
+    confidence: parseFloat(r.confidence ?? '1.0'),
+    usageCount: r.usageCount,
+    isActive: r.isActive,
+    isDefault: r.isDefault,
     category: r.category,
     metadata: r.metadata,
-    createdBy: r.created_by,
-    createdAt: r.created_at,
-    updatedAt: r.updated_at,
-    lastUsedAt: r.last_used_at,
+    createdBy: r.createdBy,
+    createdAt: r.createdAt,
+    updatedAt: r.updatedAt,
+    lastUsedAt: r.lastUsedAt,
   }
 }
 
-function rowToSuggestion(r: any): WordMappingSuggestion {
+function rowToSuggestion(r: SuggestionRow): WordMappingSuggestion {
   return {
     id: r.id,
-    sourceWord: r.source_word,
-    sourceLanguage: r.source_language,
-    targetWord: r.target_word,
-    targetLanguage: r.target_language,
-    mappingType: r.mapping_type,
-    confidence: parseFloat(r.confidence?.toString() ?? '0'),
+    sourceWord: r.sourceWord,
+    sourceLanguage: r.sourceLanguage,
+    targetWord: r.targetWord,
+    targetLanguage: r.targetLanguage,
+    mappingType: r.mappingType,
+    confidence: parseFloat(r.confidence ?? '0'),
     evidence: r.evidence,
     status: r.status,
-    createdAt: r.created_at,
-    reviewedAt: r.reviewed_at,
-    reviewedBy: r.reviewed_by,
-    rejectionReason: r.rejection_reason,
+    createdAt: r.createdAt,
+    reviewedAt: r.reviewedAt,
+    reviewedBy: r.reviewedBy,
+    rejectionReason: r.rejectionReason,
   }
 }
 
-function normalizeWord(word: string, language: string): string {
-  return language === 'en' ? word.trim().toLowerCase() : word.trim()
-}
+const normalizeWord = (word: string, language: string) =>
+  language === 'en' ? word.trim().toLowerCase() : word.trim()
 
 export async function getAllMappings(filters: FilterOptions = {}): Promise<{
   items: WordMapping[]
@@ -118,68 +118,49 @@ export async function getAllMappings(filters: FilterOptions = {}): Promise<{
   page: number
   pageSize: number
 }> {
+  const db = await getDb()
   const page = filters.page || 1
   const pageSize = filters.pageSize || 50
   const offset = (page - 1) * pageSize
 
-  const conds: string[] = []
-  const params: any[] = []
-  const add = (sql: string, val: any) => {
-    params.push(val)
-    conds.push(sql.replace('$?', `$${params.length}`))
-  }
-
-  if (filters.isActive !== undefined) add('is_active = $?', filters.isActive)
-  if (filters.mappingType) add('mapping_type = $?', filters.mappingType)
-  if (filters.language) {
-    params.push(filters.language)
-    conds.push(`(source_language = $${params.length} OR target_language = $${params.length})`)
-  }
+  const conds = []
+  if (filters.isActive !== undefined) conds.push(eq(wordMappings.isActive, filters.isActive))
+  if (filters.mappingType) conds.push(eq(wordMappings.mappingType, filters.mappingType))
+  if (filters.language)
+    conds.push(or(eq(wordMappings.sourceLanguage, filters.language), eq(wordMappings.targetLanguage, filters.language)))
   if (filters.firstLetter) {
-    params.push(`${filters.firstLetter.toLowerCase()}%`)
-    conds.push(`(source_word ILIKE $${params.length} OR target_word ILIKE $${params.length})`)
+    const p = `${filters.firstLetter.toLowerCase()}%`
+    conds.push(or(ilike(wordMappings.sourceWord, p), ilike(wordMappings.targetWord, p)))
   }
-  if (filters.searchSource) add('source_word ILIKE $?', `%${filters.searchSource}%`)
-  if (filters.searchTarget) add('target_word ILIKE $?', `%${filters.searchTarget}%`)
-  if (filters.search) {
-    params.push(`%${filters.search}%`)
-    conds.push(`(source_word ILIKE $${params.length} OR target_word ILIKE $${params.length})`)
-  }
+  if (filters.searchSource) conds.push(ilike(wordMappings.sourceWord, `%${filters.searchSource}%`))
+  if (filters.searchTarget) conds.push(ilike(wordMappings.targetWord, `%${filters.searchTarget}%`))
+  if (filters.search)
+    conds.push(or(ilike(wordMappings.sourceWord, `%${filters.search}%`), ilike(wordMappings.targetWord, `%${filters.search}%`)))
+  const where = conds.length ? and(...conds) : undefined
 
-  const where = conds.length ? `WHERE ${conds.join(' AND ')}` : ''
+  const sortColMap = {
+    sourceWord: wordMappings.sourceWord,
+    targetWord: wordMappings.targetWord,
+    usageCount: wordMappings.usageCount,
+    createdAt: wordMappings.createdAt,
+  } as const
+  const sortBy = filters.sortBy || 'usageCount'
+  const col = sortColMap[sortBy]
+  const dir = (filters.sortOrder || (sortBy === 'usageCount' ? 'desc' : 'asc')) === 'desc' ? desc : asc
+  const orderBy = sortBy === 'createdAt' ? [dir(col)] : [dir(col), desc(wordMappings.createdAt)]
 
-  const sortCol = (
-    {
-      sourceWord: 'source_word',
-      targetWord: 'target_word',
-      usageCount: 'usage_count',
-      createdAt: 'created_at',
-    } as const
-  )[filters.sortBy || 'usageCount']
-  const sortOrder = (filters.sortOrder || (sortCol === 'usage_count' ? 'desc' : 'asc')).toUpperCase() === 'DESC' ? 'DESC' : 'ASC'
-  const orderBy =
-    sortCol === 'created_at' ? `ORDER BY created_at ${sortOrder}` : `ORDER BY ${sortCol} ${sortOrder}, created_at DESC`
-
-  const listParams = [...params, pageSize, offset]
-  const [itemsRes, countRes] = await Promise.all([
-    query(
-      `SELECT * FROM word_mappings ${where} ${orderBy} LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
-      listParams,
-    ),
-    query(`SELECT COUNT(*)::int AS total FROM word_mappings ${where}`, params),
+  const [items, totalRes] = await Promise.all([
+    db.select().from(wordMappings).where(where).orderBy(...orderBy).limit(pageSize).offset(offset),
+    db.select({ value: count() }).from(wordMappings).where(where),
   ])
 
-  return {
-    items: itemsRes.rows.map(rowToMapping),
-    total: countRes.rows[0]?.total ?? 0,
-    page,
-    pageSize,
-  }
+  return { items: items.map(rowToMapping), total: totalRes[0]?.value ?? 0, page, pageSize }
 }
 
 export async function getMapping(id: string): Promise<WordMapping | null> {
-  const res = await query('SELECT * FROM word_mappings WHERE id = $1', [id])
-  return res.rows[0] ? rowToMapping(res.rows[0]) : null
+  const db = await getDb()
+  const [row] = await db.select().from(wordMappings).where(eq(wordMappings.id, id)).limit(1)
+  return row ? rowToMapping(row) : null
 }
 
 export async function createMapping(data: {
@@ -192,37 +173,43 @@ export async function createMapping(data: {
   metadata?: unknown
   createdBy?: string | null
 }): Promise<WordMapping> {
+  const db = await getDb()
   const sourceWord = normalizeWord(data.sourceWord, data.sourceLanguage)
   const targetWord = normalizeWord(data.targetWord, data.targetLanguage)
 
-  const dup = await query(
-    `SELECT id FROM word_mappings
-     WHERE source_word = $1 AND source_language = $2 AND target_word = $3 AND target_language = $4`,
-    [sourceWord, data.sourceLanguage, targetWord, data.targetLanguage],
-  )
-  if (dup.rows[0]) {
+  const [dup] = await db
+    .select({ id: wordMappings.id })
+    .from(wordMappings)
+    .where(
+      and(
+        eq(wordMappings.sourceWord, sourceWord),
+        eq(wordMappings.sourceLanguage, data.sourceLanguage),
+        eq(wordMappings.targetWord, targetWord),
+        eq(wordMappings.targetLanguage, data.targetLanguage),
+      ),
+    )
+    .limit(1)
+  if (dup) {
     throw new Error(
       `Mapping already exists: ${sourceWord} (${data.sourceLanguage}) → ${targetWord} (${data.targetLanguage})`,
     )
   }
 
-  const res = await query(
-    `INSERT INTO word_mappings
-       (source_word, source_language, target_word, target_language, mapping_type, category, metadata, created_by, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
-     RETURNING *`,
-    [
+  const [row] = await db
+    .insert(wordMappings)
+    .values({
       sourceWord,
-      data.sourceLanguage,
+      sourceLanguage: data.sourceLanguage,
       targetWord,
-      data.targetLanguage,
-      data.mappingType,
-      data.category ?? null,
-      data.metadata != null ? JSON.stringify(data.metadata) : null,
-      data.createdBy ?? null,
-    ],
-  )
-  return rowToMapping(res.rows[0])
+      targetLanguage: data.targetLanguage,
+      mappingType: data.mappingType,
+      category: data.category ?? null,
+      metadata: data.metadata ?? null,
+      createdBy: data.createdBy ?? null,
+      updatedAt: new Date(),
+    })
+    .returning()
+  return rowToMapping(row)
 }
 
 export async function updateMapping(
@@ -239,40 +226,31 @@ export async function updateMapping(
     metadata?: unknown
   },
 ): Promise<WordMapping> {
-  const sets: string[] = []
-  const params: any[] = []
-  const set = (col: string, val: any) => {
-    params.push(val)
-    sets.push(`${col} = $${params.length}`)
-  }
+  const db = await getDb()
+  const set: Partial<typeof wordMappings.$inferInsert> = { updatedAt: new Date() }
+  if (data.sourceWord !== undefined) set.sourceWord = normalizeWord(data.sourceWord, data.sourceLanguage || 'he')
+  if (data.sourceLanguage !== undefined) set.sourceLanguage = data.sourceLanguage
+  if (data.targetWord !== undefined) set.targetWord = normalizeWord(data.targetWord, data.targetLanguage || 'he')
+  if (data.targetLanguage !== undefined) set.targetLanguage = data.targetLanguage
+  if (data.mappingType !== undefined) set.mappingType = data.mappingType
+  if (data.confidence !== undefined) set.confidence = String(data.confidence)
+  if (data.isActive !== undefined) set.isActive = data.isActive
+  if (data.category !== undefined) set.category = data.category
+  if (data.metadata !== undefined) set.metadata = data.metadata
 
-  if (data.sourceWord !== undefined) set('source_word', normalizeWord(data.sourceWord, data.sourceLanguage || 'he'))
-  if (data.sourceLanguage !== undefined) set('source_language', data.sourceLanguage)
-  if (data.targetWord !== undefined) set('target_word', normalizeWord(data.targetWord, data.targetLanguage || 'he'))
-  if (data.targetLanguage !== undefined) set('target_language', data.targetLanguage)
-  if (data.mappingType !== undefined) set('mapping_type', data.mappingType)
-  if (data.confidence !== undefined) set('confidence', data.confidence)
-  if (data.isActive !== undefined) set('is_active', data.isActive)
-  if (data.category !== undefined) set('category', data.category)
-  if (data.metadata !== undefined) set('metadata', data.metadata != null ? JSON.stringify(data.metadata) : null)
-  sets.push('updated_at = NOW()')
-
-  params.push(id)
-  const res = await query(
-    `UPDATE word_mappings SET ${sets.join(', ')} WHERE id = $${params.length} RETURNING *`,
-    params,
-  )
-  if (!res.rows[0]) {
+  const [row] = await db.update(wordMappings).set(set).where(eq(wordMappings.id, id)).returning()
+  if (!row) {
     const err = new Error('Word mapping not found') as Error & { code?: string }
     err.code = 'P2025'
     throw err
   }
-  return rowToMapping(res.rows[0])
+  return rowToMapping(row)
 }
 
 export async function deleteMapping(id: string): Promise<void> {
-  const res = await query('DELETE FROM word_mappings WHERE id = $1', [id])
-  if (res.rowCount === 0) {
+  const db = await getDb()
+  const deleted = await db.delete(wordMappings).where(eq(wordMappings.id, id)).returning({ id: wordMappings.id })
+  if (deleted.length === 0) {
     const err = new Error('Word mapping not found') as Error & { code?: string }
     err.code = 'P2025'
     throw err
@@ -280,86 +258,81 @@ export async function deleteMapping(id: string): Promise<void> {
 }
 
 export async function setDefaultMapping(id: string): Promise<WordMapping> {
-  const pool = await getPool()
-  const client = await pool.connect()
-  try {
-    await client.query('BEGIN')
-    const cur = await client.query('SELECT * FROM word_mappings WHERE id = $1 FOR UPDATE', [id])
-    if (!cur.rows[0]) throw new Error(`Word mapping not found: ${id}`)
-    const m = cur.rows[0]
-    await client.query(
-      `UPDATE word_mappings SET is_default = false
-       WHERE source_word = $1 AND source_language = $2 AND target_language = $3 AND is_default = true`,
-      [m.source_word, m.source_language, m.target_language],
-    )
-    const updated = await client.query(
-      'UPDATE word_mappings SET is_default = true, updated_at = NOW() WHERE id = $1 RETURNING *',
-      [id],
-    )
-    await client.query('COMMIT')
-    return rowToMapping(updated.rows[0])
-  } catch (e) {
-    await client.query('ROLLBACK')
-    throw e
-  } finally {
-    client.release()
-  }
+  const db = await getDb()
+  return db.transaction(async (tx) => {
+    const [m] = await tx.select().from(wordMappings).where(eq(wordMappings.id, id)).for('update').limit(1)
+    if (!m) throw new Error(`Word mapping not found: ${id}`)
+    await tx
+      .update(wordMappings)
+      .set({ isDefault: false })
+      .where(
+        and(
+          eq(wordMappings.sourceWord, m.sourceWord),
+          eq(wordMappings.sourceLanguage, m.sourceLanguage),
+          eq(wordMappings.targetLanguage, m.targetLanguage),
+          eq(wordMappings.isDefault, true),
+        ),
+      )
+    const [updated] = await tx
+      .update(wordMappings)
+      .set({ isDefault: true, updatedAt: new Date() })
+      .where(eq(wordMappings.id, id))
+      .returning()
+    return rowToMapping(updated)
+  })
 }
 
 /* ── Suggestions ─────────────────────────────────────────────────────── */
 
 export async function getPendingSuggestions(limit = 50): Promise<WordMappingSuggestion[]> {
-  const res = await query(
-    `SELECT * FROM word_mapping_suggestions
-     WHERE status = 'pending'
-     ORDER BY confidence DESC, created_at DESC
-     LIMIT $1`,
-    [limit],
-  )
-  return res.rows.map(rowToSuggestion)
+  const db = await getDb()
+  const rows = await db
+    .select()
+    .from(wordMappingSuggestions)
+    .where(eq(wordMappingSuggestions.status, 'pending'))
+    .orderBy(desc(wordMappingSuggestions.confidence), desc(wordMappingSuggestions.createdAt))
+    .limit(limit)
+  return rows.map(rowToSuggestion)
 }
 
 /** Approve a suggestion: insert the mapping + flip suggestion status, atomically. */
 export async function approveSuggestion(suggestionId: string, reviewedBy = 'admin'): Promise<void> {
-  const pool = await getPool()
-  const client = await pool.connect()
-  try {
-    await client.query('BEGIN')
-    const sres = await client.query(
-      `SELECT * FROM word_mapping_suggestions WHERE id = $1 AND status = 'pending' FOR UPDATE`,
-      [suggestionId],
-    )
-    const s = sres.rows[0]
+  const db = await getDb()
+  await db.transaction(async (tx) => {
+    const [s] = await tx
+      .select()
+      .from(wordMappingSuggestions)
+      .where(and(eq(wordMappingSuggestions.id, suggestionId), eq(wordMappingSuggestions.status, 'pending')))
+      .for('update')
+      .limit(1)
     if (!s) throw new Error('Suggestion not found')
 
-    await client.query(
-      `INSERT INTO word_mappings
-         (source_word, source_language, target_word, target_language, mapping_type, confidence, created_by, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
-       ON CONFLICT (source_word, source_language, target_word, target_language) DO NOTHING`,
-      [
-        s.source_word,
-        s.source_language,
-        s.target_word,
-        s.target_language,
-        s.mapping_type,
-        parseFloat(s.confidence?.toString() ?? '0.5'),
-        reviewedBy,
-      ],
-    )
-    await client.query(
-      `UPDATE word_mapping_suggestions
-       SET status = 'approved', reviewed_at = NOW(), reviewed_by = $2
-       WHERE id = $1`,
-      [suggestionId, reviewedBy],
-    )
-    await client.query('COMMIT')
-  } catch (e) {
-    await client.query('ROLLBACK')
-    throw e
-  } finally {
-    client.release()
-  }
+    await tx
+      .insert(wordMappings)
+      .values({
+        sourceWord: s.sourceWord,
+        sourceLanguage: s.sourceLanguage,
+        targetWord: s.targetWord,
+        targetLanguage: s.targetLanguage,
+        mappingType: s.mappingType,
+        confidence: s.confidence,
+        createdBy: reviewedBy,
+        updatedAt: new Date(),
+      })
+      .onConflictDoNothing({
+        target: [
+          wordMappings.sourceWord,
+          wordMappings.sourceLanguage,
+          wordMappings.targetWord,
+          wordMappings.targetLanguage,
+        ],
+      })
+
+    await tx
+      .update(wordMappingSuggestions)
+      .set({ status: 'approved', reviewedAt: new Date(), reviewedBy })
+      .where(eq(wordMappingSuggestions.id, suggestionId))
+  })
 }
 
 export async function rejectSuggestion(
@@ -367,38 +340,39 @@ export async function rejectSuggestion(
   reason?: string,
   reviewedBy = 'admin',
 ): Promise<void> {
-  const res = await query(
-    `UPDATE word_mapping_suggestions
-     SET status = 'rejected', reviewed_at = NOW(), reviewed_by = $2, rejection_reason = $3
-     WHERE id = $1 AND status = 'pending'`,
-    [suggestionId, reviewedBy, reason ?? null],
-  )
-  if (res.rowCount === 0) throw new Error('Suggestion not found')
+  const db = await getDb()
+  const updated = await db
+    .update(wordMappingSuggestions)
+    .set({ status: 'rejected', reviewedAt: new Date(), reviewedBy, rejectionReason: reason ?? null })
+    .where(and(eq(wordMappingSuggestions.id, suggestionId), eq(wordMappingSuggestions.status, 'pending')))
+    .returning({ id: wordMappingSuggestions.id })
+  if (updated.length === 0) throw new Error('Suggestion not found')
 }
 
-/* ── Graph (ported verbatim from WordMappingService) ─────────────────── */
+/* ── Graph ───────────────────────────────────────────────────────────── */
 
-export async function getGraphData(
-  language: 'en' | 'he' | 'ar',
-  rootLetter?: string,
-): Promise<GraphNode> {
-  const res = await query(
-    `SELECT * FROM word_mappings
-     WHERE (source_language = $1 OR target_language = $1) AND is_active = true
-     ORDER BY source_word ASC`,
-    [language],
-  )
-  const mappings = res.rows
+export async function getGraphData(language: 'en' | 'he' | 'ar', rootLetter?: string): Promise<GraphNode> {
+  const db = await getDb()
+  const mappings = await db
+    .select()
+    .from(wordMappings)
+    .where(
+      and(
+        or(eq(wordMappings.sourceLanguage, language), eq(wordMappings.targetLanguage, language)),
+        eq(wordMappings.isActive, true),
+      ),
+    )
+    .orderBy(asc(wordMappings.sourceWord))
   return rootLetter
     ? buildWordNodesForLetter(mappings, language, rootLetter)
     : buildLetterRootNode(mappings, language)
 }
 
-function buildLetterRootNode(mappings: any[], language: string): GraphNode {
+function buildLetterRootNode(mappings: MappingRow[], language: string): GraphNode {
   const letters = new Set<string>()
   for (const m of mappings) {
-    if (m.source_language === language) letters.add(m.source_word.charAt(0).toLowerCase())
-    if (m.target_language === language) letters.add(m.target_word.charAt(0).toLowerCase())
+    if (m.sourceLanguage === language) letters.add(m.sourceWord.charAt(0).toLowerCase())
+    if (m.targetLanguage === language) letters.add(m.targetWord.charAt(0).toLowerCase())
   }
   const sorted = Array.from(letters).sort((a, b) => a.localeCompare(b, language))
   return {
@@ -412,27 +386,27 @@ function buildLetterRootNode(mappings: any[], language: string): GraphNode {
       attributes: {
         wordCount: mappings.filter(
           (m) =>
-            (m.source_language === language && m.source_word.toLowerCase().startsWith(letter)) ||
-            (m.target_language === language && m.target_word.toLowerCase().startsWith(letter)),
+            (m.sourceLanguage === language && m.sourceWord.toLowerCase().startsWith(letter)) ||
+            (m.targetLanguage === language && m.targetWord.toLowerCase().startsWith(letter)),
         ).length,
       },
     })),
   }
 }
 
-function buildWordNodesForLetter(mappings: any[], language: string, letter: string): GraphNode {
+function buildWordNodesForLetter(mappings: MappingRow[], language: string, letter: string): GraphNode {
   const letterLower = letter.toLowerCase()
   const words = new Map<string, { word: string; connections: string[]; type: string[] }>()
   for (const m of mappings) {
-    if (m.source_language === language && m.source_word.toLowerCase().startsWith(letterLower)) {
-      if (!words.has(m.source_word)) words.set(m.source_word, { word: m.source_word, connections: [], type: [] })
-      words.get(m.source_word)!.connections.push(m.target_word)
-      words.get(m.source_word)!.type.push(m.mapping_type)
+    if (m.sourceLanguage === language && m.sourceWord.toLowerCase().startsWith(letterLower)) {
+      if (!words.has(m.sourceWord)) words.set(m.sourceWord, { word: m.sourceWord, connections: [], type: [] })
+      words.get(m.sourceWord)!.connections.push(m.targetWord)
+      words.get(m.sourceWord)!.type.push(m.mappingType)
     }
-    if (m.target_language === language && m.target_word.toLowerCase().startsWith(letterLower)) {
-      if (!words.has(m.target_word)) words.set(m.target_word, { word: m.target_word, connections: [], type: [] })
-      words.get(m.target_word)!.connections.push(m.source_word)
-      words.get(m.target_word)!.type.push(m.mapping_type)
+    if (m.targetLanguage === language && m.targetWord.toLowerCase().startsWith(letterLower)) {
+      if (!words.has(m.targetWord)) words.set(m.targetWord, { word: m.targetWord, connections: [], type: [] })
+      words.get(m.targetWord)!.connections.push(m.sourceWord)
+      words.get(m.targetWord)!.type.push(m.mappingType)
     }
   }
   return {
@@ -447,8 +421,7 @@ function buildWordNodesForLetter(mappings: any[], language: string, letter: stri
       children: connections.map((conn) => ({
         name: conn,
         type: 'word' as const,
-        language:
-          mappings.find((m) => m.target_word === conn || m.source_word === conn)?.target_language || 'en',
+        language: mappings.find((m) => m.targetWord === conn || m.sourceWord === conn)?.targetLanguage || 'en',
       })),
     })),
   }
