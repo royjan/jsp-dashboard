@@ -1,6 +1,6 @@
 'use client'
 
-import { use, useMemo, useState } from 'react'
+import { use, useMemo, useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { useCustomerDetail, useCustomerPurchases } from '@/hooks/use-analytics'
 import { useLocale } from '@/lib/locale-context'
@@ -58,6 +58,20 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ code:
   const { data, isLoading, error } = useCustomerDetail(code)
   const [purchaseDays, setPurchaseDays] = useState(90)
   const { data: purchasesData, isLoading: purchasesLoading } = useCustomerPurchases(code, purchaseDays)
+
+  // Land on the first tab that actually has data (some customers have invoices
+  // but no recent purchases/orders, so the default "purchases" tab looked empty).
+  const [tab, setTab] = useState('purchases')
+  const [tabTouched, setTabTouched] = useState(false)
+  useEffect(() => {
+    if (tabTouched) return
+    const best = (purchasesData?.item_count ?? 0) > 0 ? 'purchases'
+      : (data?.documents?.length ?? 0) > 0 ? 'documents'
+      : (data?.orders?.length ?? 0) > 0 ? 'orders'
+      : (data?.receipts?.length ?? 0) > 0 ? 'receipts'
+      : 'purchases'
+    setTab(best)
+  }, [purchasesData, data, tabTouched])
 
   if (isLoading) return <LoadingSkeleton />
   if (error) return <div className="text-destructive p-4">Error: {(error as Error).message}</div>
@@ -134,7 +148,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ code:
 
       {/* Tabs: Orders / Receipts / Documents / Purchases */}
       <Card>
-        <Tabs defaultValue="purchases">
+        <Tabs value={tab} onValueChange={(v) => { setTab(v); setTabTouched(true) }}>
           <CardHeader>
             <TabsList className="flex-wrap h-auto gap-1">
               <TabsTrigger value="purchases" className="gap-1"><ShoppingCart className="h-3.5 w-3.5" />קניות אחרונות ({purchasesData?.item_count ?? 0})</TabsTrigger>

@@ -7,6 +7,7 @@ import { useLocale } from '@/lib/locale-context'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import { CustomerLink } from '@/components/shared/CustomerLink'
 import {
   RotateCcw, AlertTriangle, Users, TrendingDown, Receipt,
 } from 'lucide-react'
@@ -14,7 +15,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   LineChart, Line,
 } from 'recharts'
-import { NUMBER_FORMAT } from '@/lib/constants'
+import { NUMBER_FORMAT, ILS_FORMAT } from '@/lib/constants'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const cardVariants: any = {
@@ -133,6 +134,7 @@ function ReturnsContent() {
                 <thead className="sticky top-0 bg-background">
                   <tr className="border-b text-muted-foreground text-xs">
                     <th className="text-start py-2 px-2">{isHe ? 'לקוח' : 'Customer'}</th>
+                    <th className="text-end py-2 px-2">{isHe ? 'סכום זיכויים' : 'Credit Value'}</th>
                     <th className="text-end py-2 px-2">{isHe ? 'החזרות' : 'Returns'}</th>
                   </tr>
                 </thead>
@@ -140,8 +142,11 @@ function ReturnsContent() {
                   {customers.slice(0, 20).map((c: any, i: number) => (
                     <tr key={c.code || i} className="border-b border-muted/50 hover:bg-muted/30 transition-colors">
                       <td className="py-2 px-2">
-                        <div className="font-medium text-sm truncate max-w-[200px]" dir="auto">{c.name}</div>
+                        <CustomerLink code={c.code} name={c.name} className="font-medium text-sm block truncate max-w-[200px]" />
                         <div className="text-xs text-muted-foreground font-mono">{c.code}</div>
+                      </td>
+                      <td className="py-2 px-2 text-end font-mono tabular-nums font-medium">
+                        {ILS_FORMAT.format(Math.round(c.total || 0))}
                       </td>
                       <td className="py-2 px-2 text-end">
                         <Badge variant={c.count >= 10 ? 'destructive' : 'secondary'} className="text-xs">
@@ -151,7 +156,7 @@ function ReturnsContent() {
                     </tr>
                   ))}
                   {customers.length === 0 && (
-                    <tr><td colSpan={2} className="py-8 text-center text-muted-foreground">No credit note data</td></tr>
+                    <tr><td colSpan={3} className="py-8 text-center text-muted-foreground">No credit note data</td></tr>
                   )}
                 </tbody>
               </table>

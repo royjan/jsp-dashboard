@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, Suspense } from 'react'
-import { useSearchParams } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { useLocale } from '@/lib/locale-context'
 import { useVehiclePopulation, useVehicleDemand, useVehicleLifecycle } from '@/hooks/use-vehicle-intelligence'
@@ -11,7 +10,6 @@ import { OpportunityTable } from '@/components/vehicle-intelligence/OpportunityT
 import { MakeModelSelector } from '@/components/vehicle-intelligence/MakeModelSelector'
 import { MarketTab } from '@/components/vehicle-intelligence/MarketTab'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Car, TrendingUp, BarChart3, Target, Factory } from 'lucide-react'
@@ -49,8 +47,6 @@ export default function VehicleIntelligencePage() {
 function VehicleIntelligenceContent() {
   const { locale } = useLocale()
   const isHe = locale === 'he'
-  const searchParams = useSearchParams()
-  const [tab, setTab] = useState(searchParams.get('tab') === 'market' ? 'market' : 'intelligence')
 
   const [selectedMake, setSelectedMake] = useState('')
   const [selectedModel, setSelectedModel] = useState('')
@@ -91,20 +87,6 @@ function VehicleIntelligenceContent() {
             : 'Correlating vehicle registration data with sales history to predict demand'}
         </p>
       </div>
-
-      <Tabs value={tab} onValueChange={setTab}>
-        <TabsList>
-          <TabsTrigger value="intelligence" className="gap-1.5">
-            <Car className="h-4 w-4" />
-            {isHe ? 'אינטליגנציית רכב' : 'Intelligence'}
-          </TabsTrigger>
-          <TabsTrigger value="market" className="gap-1.5">
-            <Factory className="h-4 w-4" />
-            {isHe ? 'שוק הרכב' : 'Market'}
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="intelligence" className="space-y-6 mt-4">
 
       {/* KPI cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -217,17 +199,20 @@ function VehicleIntelligenceContent() {
       </motion.div>
 
       {/* Disclaimer */}
-      <div className="text-xs text-muted-foreground text-center pb-4">
+      <div className="text-xs text-muted-foreground text-center pb-2">
         {isHe
           ? 'נתונים אלו הם הערכה בלבד, מבוססת על מתאם בין אוכלוסיית הרכבים לדפוסי מכירות היסטוריים. אין להסתמך עליהם כנתונים מדויקים.'
           : 'These figures are estimates only, based on correlation between vehicle population and historical sales patterns. Do not rely on them as exact data.'}
       </div>
-        </TabsContent>
 
-        <TabsContent value="market" className="mt-4">
-          <MarketTab />
-        </TabsContent>
-      </Tabs>
+      {/* Vehicle market (Israel registrations) — merged in from the former /market page */}
+      <div className="pt-2 border-t">
+        <h2 className="text-lg font-bold flex items-center gap-2 mb-4">
+          <Factory className="h-5 w-5 text-primary" />
+          {isHe ? 'שוק הרכב בישראל' : 'Vehicle Market (Israel)'}
+        </h2>
+        <MarketTab />
+      </div>
     </div>
   )
 }

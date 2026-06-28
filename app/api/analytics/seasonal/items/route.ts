@@ -6,7 +6,7 @@ import { query as pgQuery } from '@/lib/db'
 import { initializeSecrets, getSecret } from '@/lib/aws-secrets'
 import { getCached, setCache } from '@/lib/redis-client'
 import { getItems } from '@/lib/services/analytics-service'
-import { google } from '@ai-sdk/google'
+import { getGeminiFlash } from '@/lib/gemini'
 import { generateText } from 'ai'
 
 export interface SeasonalItem {
@@ -284,7 +284,6 @@ export async function GET(request: Request) {
     if (aiEnabled) {
       const geminiKey = getSecret('GEMINI_API_KEY')
       if (geminiKey) {
-        process.env.GOOGLE_GENERATIVE_AI_API_KEY = geminiKey
         const topWinter = finalWinter.slice(0, 12)
         const topSummer = finalSummer.slice(0, 12)
         const prompt = `You are an inventory analyst for an Israeli auto parts store. Analyze the following seasonal sales data.
@@ -307,7 +306,7 @@ Keep it concise and actionable for a store owner. Use • for bullet points.`
 
         try {
           const { text } = await generateText({
-            model: google('gemini-2.0-flash'),
+            model: getGeminiFlash(),
             prompt,
           })
           aiInsights = text

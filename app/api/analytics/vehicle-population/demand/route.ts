@@ -73,7 +73,7 @@ export async function GET(request: Request) {
         COALESCE(category, 'ללא קטגוריה') as category,
         SUM(quantity::numeric) as total_qty,
         SUM(revenue::numeric) as total_revenue,
-        COUNT(DISTINCT item_code) as unique_items,
+        COUNT(DISTINCT ms.item_code) as unique_items,
         AVG(quantity::numeric) as avg_monthly_qty
       FROM dashboard.monthly_sales ms
       LEFT JOIN dashboard.item_snapshots snap

@@ -183,17 +183,22 @@ export function PopulationChart({
               </ResponsiveContainer>
             </div>
             {/* Legend */}
-            <div className="flex flex-wrap justify-center gap-4 mt-2">
-              {pieData.map((item, i) => (
-                <div key={item.name} className="flex items-center gap-2 text-sm">
-                  <div
-                    className="w-3 h-3 rounded-sm"
-                    style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }}
-                  />
-                  <span className="text-muted-foreground">{item.name}</span>
-                  <span className="font-mono text-xs">{item.value.toLocaleString()}</span>
-                </div>
-              ))}
+            <div className="flex flex-wrap justify-center gap-x-5 gap-y-2 mt-3">
+              {pieData.map((item, i) => {
+                const total = pieData.reduce((s, p) => s + p.value, 0)
+                const pct = total ? Math.round((item.value / total) * 100) : 0
+                return (
+                  <div key={item.name} className="flex items-center gap-2">
+                    <span
+                      className="w-3.5 h-3.5 rounded-full shrink-0"
+                      style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }}
+                    />
+                    <span className="text-sm font-medium">{item.name}</span>
+                    <span className="text-sm font-mono tabular-nums">{item.value.toLocaleString()}</span>
+                    <span className="text-xs text-muted-foreground">({pct}%)</span>
+                  </div>
+                )
+              })}
             </div>
           </div>
         </CardContent>

@@ -13,6 +13,7 @@ import {
   Info,
 } from 'lucide-react'
 import { ILS_FORMAT, formatNumber } from '@/lib/constants'
+import { ItemLink } from '@/components/shared/ItemLink'
 import { cn } from '@/lib/utils'
 import { useLocale } from '@/lib/locale-context'
 import type { TranslationKey } from '@/lib/i18n'
@@ -303,9 +304,7 @@ export default function PricingPage() {
                         <div className="font-medium truncate max-w-[200px]">
                           {row.item_name || row.item_code}
                         </div>
-                        <div className="text-xs text-muted-foreground font-mono">
-                          {row.item_code}
-                        </div>
+                        <ItemLink code={row.item_code} showCode className="text-xs" />
                       </td>
                       <td className="py-2 text-end font-mono tabular-nums">
                         {ILS_FORMAT.format(row.total_revenue)}
