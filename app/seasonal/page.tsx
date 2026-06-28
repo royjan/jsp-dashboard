@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Skeleton } from '@/components/ui/skeleton'
 import { SeasonalPageSkeleton } from '@/components/layout/PageSkeleton'
 import { Badge } from '@/components/ui/badge'
+import { ItemLink } from '@/components/shared/ItemLink'
 import { MONTH_NAMES } from '@/lib/constants'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import { Snowflake, Sun, Sparkles, Loader2 } from 'lucide-react'
@@ -118,8 +119,9 @@ function SeasonalItemsSection({ dateFrom, dateTo }: { dateFrom: string; dateTo: 
                   <tbody>
                     {winterItems.map((item: any, i: number) => (
                       <tr key={item.item_code} className={i % 2 === 0 ? 'bg-background' : 'bg-muted/20'}>
-                        <td className="px-3 py-2 max-w-[180px] truncate" title={item.item_name}>
-                          {item.item_name}
+                        <td className="px-3 py-2 max-w-[180px]" title={item.item_name}>
+                          <div className="truncate">{item.item_name}</div>
+                          <ItemLink code={item.item_code} showCode className="text-[11px]" />
                         </td>
                         <td className="px-2 py-2 text-center">
                           <div className="flex items-center justify-center gap-1">
@@ -199,8 +201,9 @@ function SeasonalItemsSection({ dateFrom, dateTo }: { dateFrom: string; dateTo: 
                   <tbody>
                     {summerItems.map((item: any, i: number) => (
                       <tr key={item.item_code} className={i % 2 === 0 ? 'bg-background' : 'bg-muted/20'}>
-                        <td className="px-3 py-2 max-w-[180px] truncate" title={item.item_name}>
-                          {item.item_name}
+                        <td className="px-3 py-2 max-w-[180px]" title={item.item_name}>
+                          <div className="truncate">{item.item_name}</div>
+                          <ItemLink code={item.item_code} showCode className="text-[11px]" />
                         </td>
                         <td className="px-2 py-2 text-center">
                           <div className="flex items-center justify-center gap-1">
