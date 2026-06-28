@@ -3,13 +3,15 @@
     "psa": 10,
     "vin17": 10,
     "partslink": 1,
-    "qipei": 10
+    "qipei": 10,
+    "saic": 10
   },
   "estimatedDurationMs": {
     "psa": 30000,
     "vin17": 25000,
     "partslink": 45000,
-    "qipei": 30000
+    "qipei": 30000,
+    "saic": 25000
   },
   "redis": {
     "keyPrefix": "search:",

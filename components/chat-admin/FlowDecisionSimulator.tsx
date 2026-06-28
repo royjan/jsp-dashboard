@@ -201,8 +201,10 @@ export default function FlowDecisionSimulator() {
           </div>
         </div>
 
-        {/* Results — sticky on lg+ so a result is visible immediately */}
-        <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] p-4 backdrop-blur lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto">
+        {/* Results — sticky on lg+ so a result is visible immediately.
+            min-w-0 lets the wide candidates table scroll inside its own
+            overflow-x-auto instead of expanding this grid column past the viewport. */}
+        <div className="relative min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] p-4 backdrop-blur lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto">
           <div
             aria-hidden
             className="pointer-events-none absolute -top-16 -left-10 h-40 w-40 rounded-full bg-indigo-500/10 blur-3xl"

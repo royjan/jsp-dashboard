@@ -239,7 +239,7 @@ export default function CandidateScoreCard({
       {/* Edit Link */}
       <div className="mt-6 pt-4 border-t border-slate-200 dark:border-slate-700">
         <Link
-          href={`/admin/flow-decisions/edit/${candidate.id}`}
+          href={`/chat/flow-decisions/edit/${candidate.id}`}
           className="text-sm text-blue-600 dark:text-blue-400 hover:underline font-medium"
         >
           Edit Flow Decision →

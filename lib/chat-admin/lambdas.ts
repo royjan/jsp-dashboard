@@ -25,6 +25,12 @@ export const AVAILABLE_LAMBDAS: LambdaFunction[] = [
     category: 'parts',
   },
   {
+    id: 'saic',
+    name: 'SAIC (MG / Roewe)',
+    description: 'Parts search for SAIC vehicles (MG, Roewe, Maxus)',
+    category: 'parts',
+  },
+  {
     id: 'qipei',
     name: 'Qipei (BYD)',
     description: 'Parts search for BYD electric vehicles',

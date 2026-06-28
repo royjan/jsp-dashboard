@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-const LAMBDAS: LambdaType[] = ['psa', 'partslink', 'vin17', 'qipei']
+const LAMBDAS: LambdaType[] = ['psa', 'partslink', 'vin17', 'qipei', 'saic']
 
 /** GET /api/admin/sessions/stats — QueueStats from search_tracking */
 export async function GET() {

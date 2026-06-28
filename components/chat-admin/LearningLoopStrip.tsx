@@ -47,7 +47,7 @@ export function LearningLoopStrip({ total, addedInRange, daily }: LearningLoopSt
       </div>
 
       <Link
-        href="/admin/learned-pins"
+        href="/chat/flow-decisions"
         className="inline-flex shrink-0 items-center gap-1 rounded-md border border-violet-500/40 px-3 py-1.5 text-sm text-violet-300 hover:bg-violet-500/10"
       >
         Manage pins <ArrowRight className="h-4 w-4" />
