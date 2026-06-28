@@ -109,7 +109,7 @@ export function FlowFilters({
 
   return (
     <>
-      <div className={`bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900 rounded-xl ${compact ? 'p-4' : 'p-6'} border border-gray-200 dark:border-gray-700`}>
+      <div className={`bg-gray-50 dark:bg-gray-800 rounded-xl ${compact ? 'p-4' : 'p-6'} border border-gray-200 dark:border-gray-700`}>
       {!compact && (
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-md font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">

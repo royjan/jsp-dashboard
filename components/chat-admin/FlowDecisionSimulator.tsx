@@ -86,30 +86,12 @@ export default function FlowDecisionSimulator() {
     <div dir="ltr" className="space-y-4">
       {/* ── Hero header ──────────────────────────────────────────────── */}
       <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-slate-900">
-        {/* Ambient gradient wash + glows */}
-        <div
-          aria-hidden
-          className="absolute inset-0 bg-gradient-to-r from-cyan-500/10 via-blue-500/10 to-indigo-600/10"
-        />
-        <div
-          aria-hidden
-          className="pointer-events-none absolute -top-16 -left-10 h-48 w-72 rounded-full bg-cyan-500/20 blur-3xl"
-        />
-        <div
-          aria-hidden
-          className="pointer-events-none absolute -bottom-20 right-0 h-48 w-72 rounded-full bg-indigo-500/20 blur-3xl"
-        />
-
         <div className="relative flex items-center gap-4 p-5">
-          <div className="relative grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-cyan-400 via-blue-500 to-indigo-600 shadow-lg shadow-blue-500/30 ring-1 ring-inset ring-white/20">
-            <div
-              aria-hidden
-              className="absolute inset-0 rounded-2xl bg-gradient-to-tr from-white/30 to-transparent opacity-60"
-            />
+          <div className="relative grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-blue-600 ring-1 ring-inset ring-white/10">
             <FlaskConical className="relative z-10 h-6 w-6 text-white" />
           </div>
           <div>
-            <h1 className="bg-gradient-to-r from-white via-cyan-100 to-blue-200 bg-clip-text text-2xl font-bold leading-tight tracking-tight text-transparent">
+            <h1 className="text-2xl font-bold leading-tight tracking-tight text-slate-100">
               Flow Decision Simulator
             </h1>
             <p className="mt-1 text-sm text-slate-400">
@@ -117,19 +99,14 @@ export default function FlowDecisionSimulator() {
             </p>
           </div>
         </div>
-        {/* Accent divider: bright on the left, fading out */}
-        <div className="h-px bg-gradient-to-r from-cyan-500/50 via-blue-500/20 to-transparent" />
+        {/* Subtle divider */}
+        <div className="h-px bg-white/10" />
       </div>
 
       {/* ── Two-column workspace: inputs (left) · results (right, sticky) ── */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
         {/* Inputs */}
-        <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] p-4 backdrop-blur">
-          <div
-            aria-hidden
-            className="pointer-events-none absolute -top-16 -right-10 h-40 w-40 rounded-full bg-cyan-500/10 blur-3xl"
-          />
-
+        <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] p-4">
           <div className="relative">
             <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-slate-300">
               <FileText className="h-4 w-4 text-cyan-300" />
@@ -175,7 +152,7 @@ export default function FlowDecisionSimulator() {
               <button
                 onClick={handleSimulate}
                 disabled={!canSimulate}
-                className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 via-blue-500 to-indigo-600 px-5 text-sm font-semibold text-white shadow-lg shadow-blue-500/30 transition-all hover:scale-[1.02] hover:shadow-blue-500/40 focus:outline-none focus:ring-2 focus:ring-cyan-400/60 focus:ring-offset-2 focus:ring-offset-slate-900 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
+                className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white transition-colors hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-400/60 focus:ring-offset-2 focus:ring-offset-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {loading ? (
                   <>
@@ -204,12 +181,7 @@ export default function FlowDecisionSimulator() {
         {/* Results — sticky on lg+ so a result is visible immediately.
             min-w-0 lets the wide candidates table scroll inside its own
             overflow-x-auto instead of expanding this grid column past the viewport. */}
-        <div className="relative min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] p-4 backdrop-blur lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto">
-          <div
-            aria-hidden
-            className="pointer-events-none absolute -top-16 -left-10 h-40 w-40 rounded-full bg-indigo-500/10 blur-3xl"
-          />
-
+        <div className="relative min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] p-4 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto">
           <div className="relative">
             <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-slate-300">
               <BarChart3 className="h-4 w-4 text-cyan-300" />

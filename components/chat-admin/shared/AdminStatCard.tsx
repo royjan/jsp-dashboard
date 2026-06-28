@@ -46,8 +46,8 @@ export function AdminStatCard({
       `.trim().replace(/\s+/g, ' ')}
       onClick={onClick}
     >
-      {/* Hover gradient border glow */}
-      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-500/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+      {/* Hover top accent line */}
+      <div className="absolute inset-x-0 top-0 h-px bg-primary/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
 
       {/* Main Content */}
       <div style={{ padding: compact ? '20px 24px' : '24px 28px' }}>
@@ -83,18 +83,9 @@ export function AdminStatCard({
           <div className="flex items-center" style={{ marginTop: '20px', gap: '16px' }}>
             <div className="flex-1 h-2 bg-slate-100 dark:bg-slate-700/30 rounded-full overflow-hidden">
               <div
-                className={`h-full bg-gradient-to-r ${colors.progressBar} rounded-full transition-all duration-500 relative overflow-hidden`}
+                className={`h-full ${colors.progressBar} rounded-full transition-all duration-500`}
                 style={{ width: `${Math.min(100, Math.max(0, progress))}%` }}
-              >
-                <div
-                  className="absolute inset-0"
-                  style={{
-                    background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent)',
-                    backgroundSize: '200% 100%',
-                    animation: 'progressShine 2s ease-in-out infinite'
-                  }}
-                />
-              </div>
+              />
             </div>
             <span className="text-sm text-slate-500 dark:text-slate-400 min-w-[3.5rem] text-right tabular-nums">
               {progress.toFixed(0)}%

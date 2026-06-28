@@ -29,7 +29,7 @@ const PROBLEM_META: Record<FixRow['problem'], { status: string; label: string; a
 const PAGE_SIZE = 15
 
 function pinHref(query: string) {
-  return `/chat/flow-decisions?prefill=${encodeURIComponent(query)}`
+  return `/chat/learned-pins?prefill=${encodeURIComponent(query)}`
 }
 
 /** Merged, ranked action list across not-found / OOS / schema-flip problems. */

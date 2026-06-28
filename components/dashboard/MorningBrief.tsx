@@ -75,7 +75,7 @@ export function MorningBrief() {
   })
 
   return (
-    <Card className="overflow-hidden border-primary/20 bg-gradient-to-br from-primary/5 via-card to-card">
+    <Card className="overflow-hidden border-primary/20 bg-primary/5">
       <CardHeader className="pb-0 cursor-pointer select-none" onClick={toggleCollapsed}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
