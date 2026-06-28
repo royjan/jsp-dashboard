@@ -11,15 +11,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Search, Link2, Unlink, CheckCircle, ExternalLink } from 'lucide-react'
-type Status = 'all' | 'exact' | 'mg' | 'linked' | 'unmatched'
+import { Search, Link2, Unlink, CheckCircle, ExternalLink, Filter, ArrowUp, ArrowDown, ArrowUpDown, X } from 'lucide-react'
+
+type StatusKey = 'exact' | 'mg' | 'linked' | 'unmatched'
+type SortField = 'code' | 'brand' | 'status'
 
 interface CatalogItem {
   item_number: string
   description: string
   hebrew_description: string | null
   brand: string | null
-  status: 'exact' | 'mg' | 'linked' | 'unmatched'
+  status: StatusKey
   finansit_code: string | null
   finansit_name: string | null
   link_id: string | null
@@ -38,15 +40,14 @@ interface FinansitItem {
   name: string
 }
 
-const STATUS_LABELS: Record<Status, string> = {
-  all: 'הכל',
+const STATUS_LABELS: Record<StatusKey, string> = {
   exact: 'קוד זהה',
   mg: 'קוד MG',
   linked: 'מקושר',
   unmatched: 'לא נמצא',
 }
 
-const STATUS_BADGE: Record<CatalogItem['status'], { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
+const STATUS_BADGE: Record<StatusKey, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
   exact: { label: 'קוד זהה', variant: 'default' },
   mg: { label: 'קוד MG', variant: 'outline' },
   linked: { label: 'מקושר', variant: 'secondary' },
@@ -63,9 +64,54 @@ function useDebounceLocal(value: string, delay: number) {
   return { debounced, handler }
 }
 
+/** Excel-style column filter: a funnel button opening a multi-select checkbox menu. */
+function FilterMenu({ options, selected, onChange }: {
+  options: { value: string; label: string }[]
+  selected: string[]
+  onChange: (v: string[]) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const active = selected.length > 0
+  const toggle = (v: string) => onChange(selected.includes(v) ? selected.filter(x => x !== v) : [...selected, v])
+  return (
+    <span className="relative inline-flex">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className={`rounded p-1 transition-colors hover:bg-muted ${active ? 'text-primary' : 'text-muted-foreground'}`}
+        title="סנן"
+      >
+        <Filter className="h-3.5 w-3.5" fill={active ? 'currentColor' : 'none'} />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute top-full z-50 mt-1 w-48 rounded-lg border bg-popover p-1 text-right shadow-lg" style={{ insetInlineStart: 0 }}>
+            <div className="flex items-center justify-between px-2 py-1">
+              <button className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-40" onClick={() => onChange([])} disabled={!active}>נקה</button>
+              <span className="text-xs font-medium text-muted-foreground">סנן</span>
+            </div>
+            <div className="max-h-60 overflow-y-auto">
+              {options.length === 0 && <div className="px-2 py-2 text-xs text-muted-foreground">אין ערכים</div>}
+              {options.map(o => (
+                <label key={o.value} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted">
+                  <input type="checkbox" checked={selected.includes(o.value)} onChange={() => toggle(o.value)} className="accent-primary" />
+                  <span className="flex-1">{o.label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+    </span>
+  )
+}
+
 export default function CatalogLinksPage() {
   const qc = useQueryClient()
-  const [status, setStatus] = useState<Status>('unmatched')
+  const [statusFilter, setStatusFilter] = useState<StatusKey[]>(['unmatched'])
+  const [brandFilter, setBrandFilter] = useState<string[]>([])
+  const [sort, setSort] = useState<{ field: SortField | null; dir: 'asc' | 'desc' }>({ field: null, dir: 'desc' })
   const [page, setPage] = useState(1)
   const [searchRaw, setSearchRaw] = useState('')
   const { debounced: search, handler: onSearchChange } = useDebounceLocal('', 400)
@@ -76,13 +122,18 @@ export default function CatalogLinksPage() {
   const { debounced: finansitSearchDebounced, handler: onFinansitSearchChange } = useDebounceLocal('', 300)
   const [notes, setNotes] = useState('')
 
+  const statusParam = statusFilter.length ? [...statusFilter].sort().join(',') : 'all'
+  const brandParam = [...brandFilter].sort().join(',')
+
   const { data, isLoading } = useQuery({
-    queryKey: ['catalog-links', status, search, page],
+    queryKey: ['catalog-links', statusParam, brandParam, sort.field, sort.dir, search, page],
     queryFn: async () => {
-      const params = new URLSearchParams({ status, page: String(page), limit: '50' })
+      const params = new URLSearchParams({ status: statusParam, page: String(page), limit: '50' })
+      if (brandParam) params.set('brand', brandParam)
       if (search) params.set('search', search)
+      if (sort.field) { params.set('sort', sort.field); params.set('dir', sort.dir) }
       const res = await fetch(`/api/catalog-links?${params}`)
-      return res.json() as Promise<{ items: CatalogItem[]; total: number; stats: Stats }>
+      return res.json() as Promise<{ items: CatalogItem[]; total: number; stats: Stats; brands: string[] }>
     },
     placeholderData: (prev) => prev,
   })
@@ -127,10 +178,36 @@ export default function CatalogLinksPage() {
   const stats = data?.stats
   const total = data?.total ?? 0
   const totalPages = Math.ceil(total / 50)
+  const availableBrands: string[] = data?.brands ?? []
 
-  const handleStatusChange = (s: Status) => {
-    setStatus(s)
+  const toggleStatus = (s: StatusKey) => {
+    setStatusFilter(prev => (prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]))
     setPage(1)
+  }
+  const handleSort = (field: SortField) => {
+    setSort(s => (s.field === field ? { field, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { field, dir: 'asc' }))
+    setPage(1)
+  }
+  const clearFilters = () => { setStatusFilter([]); setBrandFilter([]); setSearchRaw(''); onSearchChange(''); setPage(1) }
+  const anyFilter = statusFilter.length > 0 || brandFilter.length > 0 || !!search
+
+  const SortHead = ({ label, field, filter }: { label: string; field?: SortField; filter?: React.ReactNode }) => {
+    const isActive = field && sort.field === field
+    return (
+      <th className="px-4 py-3 text-right font-medium">
+        <span className="inline-flex items-center gap-1">
+          {field ? (
+            <button onClick={() => handleSort(field)} className="inline-flex items-center gap-1 hover:text-foreground">
+              {label}
+              {isActive ? (sort.dir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-40" />}
+            </button>
+          ) : (
+            <span>{label}</span>
+          )}
+          {filter}
+        </span>
+      </th>
+    )
   }
 
   return (
@@ -152,68 +229,52 @@ export default function CatalogLinksPage() {
         </div>
       )}
 
-      {/* Stats */}
+      {/* Stats — click a card to toggle that status filter */}
       {stats && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div
-            className={`rounded-lg border p-4 cursor-pointer transition-colors ${status === 'exact' ? 'bg-primary/10 border-primary' : 'hover:bg-muted'}`}
-            onClick={() => handleStatusChange('exact')}
-          >
-            <div className="text-2xl font-bold text-green-600">{stats.exact.toLocaleString()}</div>
-            <div className="text-sm text-muted-foreground mt-1">קוד זהה בפינאנסיט</div>
-          </div>
-          <div
-            className={`rounded-lg border p-4 cursor-pointer transition-colors ${status === 'mg' ? 'bg-primary/10 border-primary' : 'hover:bg-muted'}`}
-            onClick={() => handleStatusChange('mg')}
-          >
-            <div className="text-2xl font-bold text-teal-600">{stats.mg.toLocaleString()}</div>
-            <div className="text-sm text-muted-foreground mt-1">קוד MG (תחילית MG)</div>
-          </div>
-          <div
-            className={`rounded-lg border p-4 cursor-pointer transition-colors ${status === 'linked' ? 'bg-primary/10 border-primary' : 'hover:bg-muted'}`}
-            onClick={() => handleStatusChange('linked')}
-          >
-            <div className="text-2xl font-bold text-blue-600">{stats.linked.toLocaleString()}</div>
-            <div className="text-sm text-muted-foreground mt-1">מקושרים ידנית</div>
-          </div>
-          <div
-            className={`rounded-lg border p-4 cursor-pointer transition-colors ${status === 'unmatched' ? 'bg-primary/10 border-primary' : 'hover:bg-muted'}`}
-            onClick={() => handleStatusChange('unmatched')}
-          >
-            <div className="text-2xl font-bold text-red-600">{stats.unmatched.toLocaleString()}</div>
-            <div className="text-sm text-muted-foreground mt-1">לא נמצאו בפינאנסיט</div>
-          </div>
+          {([
+            ['exact', stats.exact, 'text-green-600', 'קוד זהה בפינאנסיט'],
+            ['mg', stats.mg, 'text-teal-600', 'קוד MG (תחילית MG)'],
+            ['linked', stats.linked, 'text-blue-600', 'מקושרים ידנית'],
+            ['unmatched', stats.unmatched, 'text-red-600', 'לא נמצאו בפינאנסיט'],
+          ] as [StatusKey, number, string, string][]).map(([key, count, color, label]) => (
+            <div
+              key={key}
+              className={`rounded-lg border p-4 cursor-pointer transition-colors ${statusFilter.includes(key) ? 'bg-primary/10 border-primary' : 'hover:bg-muted'}`}
+              onClick={() => toggleStatus(key)}
+            >
+              <div className={`text-2xl font-bold ${color}`}>{count.toLocaleString()}</div>
+              <div className="text-sm text-muted-foreground mt-1">{label}</div>
+            </div>
+          ))}
         </div>
       )}
 
-      {/* Filters */}
+      {/* Search + active-filter bar */}
       <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex gap-1 border rounded-lg p-1">
-          {(['all', 'exact', 'mg', 'linked', 'unmatched'] as Status[]).map(s => (
-            <button
-              key={s}
-              onClick={() => handleStatusChange(s)}
-              className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
-                status === s ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
-              }`}
-            >
-              {STATUS_LABELS[s]}
-            </button>
-          ))}
-        </div>
-        <div className="relative flex-1 min-w-[200px]">
+        <div className="relative flex-1 min-w-[220px]">
           <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             value={searchRaw}
-            onChange={e => {
-              setSearchRaw(e.target.value)
-              onSearchChange(e.target.value)
-              setPage(1)
-            }}
+            onChange={e => { setSearchRaw(e.target.value); onSearchChange(e.target.value); setPage(1) }}
             placeholder="חפש לפי קוד, תיאור..."
             className="pr-9"
           />
         </div>
+        {brandFilter.map(b => (
+          <Badge key={b} variant="secondary" className="gap-1 cursor-pointer" onClick={() => setBrandFilter(prev => prev.filter(x => x !== b))}>
+            {b} <X className="h-3 w-3" />
+          </Badge>
+        ))}
+        {statusFilter.map(s => (
+          <Badge key={s} variant="outline" className="gap-1 cursor-pointer" onClick={() => toggleStatus(s)}>
+            {STATUS_LABELS[s]} <X className="h-3 w-3" />
+          </Badge>
+        ))}
+        {anyFilter && (
+          <Button size="sm" variant="ghost" className="h-7 text-xs text-muted-foreground" onClick={clearFilters}>נקה הכל</Button>
+        )}
+        <span className="text-xs text-muted-foreground ms-auto">{total.toLocaleString()} תוצאות</span>
       </div>
 
       {/* Table */}
@@ -221,30 +282,39 @@ export default function CatalogLinksPage() {
         <table className="w-full text-sm">
           <thead className="bg-muted/50">
             <tr>
-              <th className="text-right px-4 py-3 font-medium">קוד Partly</th>
-              <th className="text-right px-4 py-3 font-medium">תיאור עברית</th>
-              <th className="text-right px-4 py-3 font-medium hidden md:table-cell">תיאור אנגלית</th>
-              <th className="text-right px-4 py-3 font-medium">סטטוס</th>
-              <th className="text-right px-4 py-3 font-medium">קוד פינאנסיט</th>
+              <SortHead label="קוד Partly" field="code" />
+              <SortHead
+                label="מותג"
+                field="brand"
+                filter={<FilterMenu options={availableBrands.map(b => ({ value: b, label: b }))} selected={brandFilter} onChange={v => { setBrandFilter(v); setPage(1) }} />}
+              />
+              <SortHead label="תיאור עברית" />
+              <th className="px-4 py-3 text-right font-medium hidden md:table-cell">תיאור אנגלית</th>
+              <SortHead
+                label="סטטוס"
+                field="status"
+                filter={<FilterMenu options={(['exact', 'mg', 'linked', 'unmatched'] as StatusKey[]).map(s => ({ value: s, label: STATUS_LABELS[s] }))} selected={statusFilter} onChange={v => { setStatusFilter(v as StatusKey[]); setPage(1) }} />}
+              />
+              <SortHead label="קוד פינאנסיט" />
               <th className="px-4 py-3" />
             </tr>
           </thead>
           <tbody className="divide-y">
             {isLoading && (
-              <tr><td colSpan={6} className="text-center py-12 text-muted-foreground">טוען...</td></tr>
+              <tr><td colSpan={7} className="text-center py-12 text-muted-foreground">טוען...</td></tr>
             )}
             {!isLoading && (!data?.items?.length) && (
-              <tr><td colSpan={6} className="text-center py-12 text-muted-foreground">אין תוצאות</td></tr>
+              <tr><td colSpan={7} className="text-center py-12 text-muted-foreground">אין תוצאות</td></tr>
             )}
             {data?.items?.map(item => (
               <tr key={item.item_number} className="hover:bg-muted/30 transition-colors">
-                <td className="px-4 py-3 font-mono text-xs">
-                  <div>{item.item_number}</div>
-                  {item.brand && (
-                    <span className="mt-1 inline-block rounded bg-muted px-1.5 py-0.5 font-sans text-[10px] font-medium text-muted-foreground">
-                      {item.brand}
-                    </span>
-                  )}
+                <td className="px-4 py-3 font-mono text-xs">{item.item_number}</td>
+                <td className="px-4 py-3">
+                  {item.brand
+                    ? item.brand.split(', ').map(b => (
+                        <span key={b} className="me-1 inline-block rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">{b}</span>
+                      ))
+                    : <span className="text-muted-foreground">—</span>}
                 </td>
                 <td className="px-4 py-3">{item.hebrew_description || '—'}</td>
                 <td className="px-4 py-3 text-muted-foreground hidden md:table-cell text-xs">{item.description}</td>
