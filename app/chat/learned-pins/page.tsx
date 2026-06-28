@@ -1,21 +1,13 @@
-'use client'
+import { redirect } from 'next/navigation'
 
-import { Suspense } from 'react'
-import { Pin } from 'lucide-react'
-import LearnedPinsTab from '@/components/chat-admin/LearnedPinsTab'
-import { AdminPageHeader } from '@/components/chat-admin/shared'
-
-export default function LearnedPinsPage() {
-  return (
-    <div dir="ltr" className="chat-admin">
-      <AdminPageHeader
-        title="Learned Pins"
-        subtitle="Parts pinned to flow decisions by the learning loop — review, audit, and undo"
-        icon={<Pin className="w-6 h-6" />}
-      />
-      <Suspense fallback={<div className="p-8 text-slate-400">Loading learned pins…</div>}>
-        <LearnedPinsTab />
-      </Suspense>
-    </div>
-  )
+// Learned Pins merged into Flow Decisions — they're the same table (a learned pin
+// = a learning-loop flow decision with a pinned direct part). Use the Source filter.
+export default async function LearnedPinsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ prefill?: string }>
+}) {
+  const { prefill } = await searchParams
+  const q = prefill ? `&q=${encodeURIComponent(prefill)}` : ''
+  redirect(`/chat/flow-decisions?source=learned${q}`)
 }

@@ -2,39 +2,72 @@ import { NextResponse } from 'next/server'
 import { initializeSecrets } from '@/lib/aws-secrets'
 import { getDb } from '@/lib/db'
 import { deliveries, deliveryPhotos, deliveryStatusLog } from '@/lib/db/schema'
-import { eq, desc } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
+import { getDeliveryFirestore, toIso } from '@/lib/firebase'
+
+// Outbound deliveries live in the delivery-app Firestore (collection `shipments`),
+// keyed by Firestore doc id — NOT the (unused) Postgres `deliveries` uuid table.
+const FS_TO_PAGE_STATUS: Record<string, string> = {
+  assigned: 'assigned', started: 'in_transit', delivered: 'delivered', failed: 'failed',
+}
 
 export async function GET(
-  request: Request,
+  _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await initializeSecrets()
-    const db = await getDb()
     const { id } = await params
-
-    const [delivery] = await db
-      .select()
-      .from(deliveries)
-      .where(eq(deliveries.id, id))
-
-    if (!delivery) {
+    const db = await getDeliveryFirestore()
+    const doc = await db.collection('shipments').doc(id).get()
+    if (!doc.exists) {
       return NextResponse.json({ error: 'Delivery not found' }, { status: 404 })
     }
+    const r = doc.data() as Record<string, any>
 
-    const photos = await db
-      .select()
-      .from(deliveryPhotos)
-      .where(eq(deliveryPhotos.deliveryId, id))
-      .orderBy(desc(deliveryPhotos.capturedAt))
+    let customerName = r.customerName || ''
+    if (!customerName && r.customerId) {
+      try {
+        const c = await db.collection('customers').doc(r.customerId).get()
+        customerName = ((c.data()?.name as string) || '').trim()
+      } catch { /* optional */ }
+    }
 
-    const statusLog = await db
-      .select()
-      .from(deliveryStatusLog)
-      .where(eq(deliveryStatusLog.deliveryId, id))
-      .orderBy(desc(deliveryStatusLog.changedAt))
+    const status = FS_TO_PAGE_STATUS[r.status as string] || r.status || 'assigned'
+    const loc = r.deliveredLocation || r.location || null
+    const deliveryLat = loc?.latitude ?? loc?.lat ?? r.deliveryLat ?? null
+    const deliveryLng = loc?.longitude ?? loc?.lng ?? r.deliveryLng ?? null
 
-    return NextResponse.json({ ...delivery, photos, statusLog })
+    // Synthesize a status timeline from the doc's timestamps.
+    const statusLog = [
+      r.assignedAt && { status: 'assigned', changedAt: toIso(r.assignedAt), changedBy: r.assignedToName || 'system' },
+      r.startedAt && { status: 'in_transit', changedAt: toIso(r.startedAt), changedBy: r.assignedToName || 'system' },
+      r.deliveredAt && { status: status === 'failed' ? 'failed' : 'delivered', changedAt: toIso(r.deliveredAt), changedBy: r.assignedToName || 'system' },
+    ].filter(Boolean)
+
+    const photos = (r.proofOfDeliveryUrls || []).map((url: string, i: number) => ({
+      id: `${id}-${i}`, photoUrl: url, photoType: 'delivery', capturedAt: toIso(r.deliveredAt), notes: null,
+    }))
+
+    return NextResponse.json({
+      id: doc.id,
+      source: 'firestore',
+      documentNumber: r.documentNumber || r.orderNumber || doc.id,
+      customerCode: r.customerId || '',
+      customerName,
+      customerAddress: r.address || r.customerAddress || null,
+      driverName: r.assignedToName || null,
+      status,
+      notes: r.notes || null,
+      deliveryLat,
+      deliveryLng,
+      assignedAt: toIso(r.assignedAt),
+      departedAt: toIso(r.startedAt),
+      deliveredAt: toIso(r.deliveredAt),
+      createdAt: toIso(r.createdAt) || toIso(r.assignedAt) || new Date().toISOString(),
+      photos,
+      statusLog,
+    })
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Failed to fetch delivery' },
