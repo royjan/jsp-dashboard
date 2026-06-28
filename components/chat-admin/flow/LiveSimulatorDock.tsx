@@ -123,7 +123,7 @@ export function LiveSimulatorDock({ highlightRuleId }: Props) {
               </div>
             </div>
 
-            <div className="rounded-md border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800/50">
+            <div className="rounded-md border border-border bg-muted p-3">
               <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">
                 <Sparkles className="h-3 w-3" />
                 Result

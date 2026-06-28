@@ -19,8 +19,8 @@ export const STAT_CARD_COLORS: Record<StatCardColor, {
   valueColor: string
 }> = {
   blue: {
-    gradient: 'bg-white dark:bg-slate-800/50',
-    border: 'border-slate-200/80 dark:border-slate-700/50',
+    gradient: 'bg-card',
+    border: 'border-border',
     iconGradient: 'bg-blue-500',
     iconBg: 'bg-blue-50 dark:bg-blue-500/10',
     iconColor: 'text-blue-600 dark:text-blue-400',
@@ -30,8 +30,8 @@ export const STAT_CARD_COLORS: Record<StatCardColor, {
     progressBar: 'bg-blue-500'
   },
   green: {
-    gradient: 'bg-white dark:bg-slate-800/50',
-    border: 'border-slate-200/80 dark:border-slate-700/50',
+    gradient: 'bg-card',
+    border: 'border-border',
     iconGradient: 'bg-emerald-500',
     iconBg: 'bg-emerald-50 dark:bg-emerald-500/10',
     iconColor: 'text-emerald-600 dark:text-emerald-400',
@@ -41,8 +41,8 @@ export const STAT_CARD_COLORS: Record<StatCardColor, {
     progressBar: 'bg-emerald-500'
   },
   yellow: {
-    gradient: 'bg-white dark:bg-slate-800/50',
-    border: 'border-slate-200/80 dark:border-slate-700/50',
+    gradient: 'bg-card',
+    border: 'border-border',
     iconGradient: 'bg-amber-500',
     iconBg: 'bg-amber-50 dark:bg-amber-500/10',
     iconColor: 'text-amber-600 dark:text-amber-500',
@@ -52,8 +52,8 @@ export const STAT_CARD_COLORS: Record<StatCardColor, {
     progressBar: 'bg-amber-500'
   },
   red: {
-    gradient: 'bg-white dark:bg-slate-800/50',
-    border: 'border-slate-200/80 dark:border-slate-700/50',
+    gradient: 'bg-card',
+    border: 'border-border',
     iconGradient: 'bg-red-500',
     iconBg: 'bg-red-50 dark:bg-red-500/10',
     iconColor: 'text-red-600 dark:text-red-400',
@@ -63,8 +63,8 @@ export const STAT_CARD_COLORS: Record<StatCardColor, {
     progressBar: 'bg-red-500'
   },
   purple: {
-    gradient: 'bg-white dark:bg-slate-800/50',
-    border: 'border-slate-200/80 dark:border-slate-700/50',
+    gradient: 'bg-card',
+    border: 'border-border',
     iconGradient: 'bg-violet-500',
     iconBg: 'bg-violet-50 dark:bg-violet-500/10',
     iconColor: 'text-violet-600 dark:text-violet-400',
@@ -74,8 +74,8 @@ export const STAT_CARD_COLORS: Record<StatCardColor, {
     progressBar: 'bg-violet-500'
   },
   indigo: {
-    gradient: 'bg-white dark:bg-slate-800/50',
-    border: 'border-slate-200/80 dark:border-slate-700/50',
+    gradient: 'bg-card',
+    border: 'border-border',
     iconGradient: 'bg-indigo-500',
     iconBg: 'bg-indigo-50 dark:bg-indigo-500/10',
     iconColor: 'text-indigo-600 dark:text-indigo-400',
@@ -85,8 +85,8 @@ export const STAT_CARD_COLORS: Record<StatCardColor, {
     progressBar: 'bg-indigo-500'
   },
   gray: {
-    gradient: 'bg-white dark:bg-slate-800/50',
-    border: 'border-slate-200/80 dark:border-slate-700/50',
+    gradient: 'bg-card',
+    border: 'border-border',
     iconGradient: 'bg-slate-500',
     iconBg: 'bg-slate-100 dark:bg-slate-600/15',
     iconColor: 'text-slate-600 dark:text-slate-400',
@@ -97,8 +97,8 @@ export const STAT_CARD_COLORS: Record<StatCardColor, {
   },
   // Neutral - for generic stats that don't need color coding
   neutral: {
-    gradient: 'bg-white dark:bg-slate-800/50',
-    border: 'border-slate-200/80 dark:border-slate-700/50',
+    gradient: 'bg-card',
+    border: 'border-border',
     iconGradient: 'bg-slate-400',
     iconBg: 'bg-slate-100 dark:bg-slate-600/15',
     iconColor: 'text-slate-500 dark:text-slate-400',
@@ -148,13 +148,13 @@ export const STATUS_COLORS = {
     dot: 'bg-red-500'
   },
   pending: {
-    bg: 'bg-slate-50 dark:bg-slate-800/50',
+    bg: 'bg-muted',
     text: 'text-slate-600 dark:text-slate-400',
     border: 'border-slate-200 dark:border-slate-700',
     dot: 'bg-slate-400'
   },
   unknown: {
-    bg: 'bg-slate-50 dark:bg-slate-800/50',
+    bg: 'bg-muted',
     text: 'text-slate-600 dark:text-slate-400',
     border: 'border-slate-200 dark:border-slate-700',
     dot: 'bg-slate-400'

@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState } from 'react'
 import Link from 'next/link'
-import { ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react'
+import { ArrowUp, ArrowDown, ArrowUpDown, Check, X, Target } from 'lucide-react'
 import { FlowCandidate } from './CandidateScoreCard'
 
 interface CandidatesTableProps {
@@ -30,23 +30,28 @@ export default function CandidatesTable({ candidates, vehicleData = {} }: Candid
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
 
-  const getMatchIcon = (matched?: boolean) => (matched === undefined ? null : matched ? '✅' : '❌')
+  const getMatchIcon = (matched?: boolean) =>
+    matched === undefined ? null : matched ? (
+      <Check className="inline h-3.5 w-3.5 text-emerald-500" />
+    ) : (
+      <X className="inline h-3.5 w-3.5 text-destructive" />
+    )
   const getMatchPercentage = (matchScore: number, filterCount: number) =>
     filterCount > 0 ? Math.round((matchScore / filterCount) * 100) : 0
 
   const getScoreColor = (percentage: number, filterCount: number) => {
-    if (filterCount === 0) return 'text-gray-600 dark:text-gray-400'
-    if (percentage === 100) return 'text-green-600 dark:text-green-400 font-bold'
+    if (filterCount === 0) return 'text-muted-foreground'
+    if (percentage === 100) return 'text-emerald-600 dark:text-emerald-400 font-bold'
     if (percentage >= 75) return 'text-orange-600 dark:text-orange-400'
     if (percentage >= 50) return 'text-red-600 dark:text-red-400'
-    return 'text-gray-600 dark:text-gray-400'
+    return 'text-muted-foreground'
   }
   const getProgressBarColor = (percentage: number, filterCount: number) => {
-    if (filterCount === 0) return 'bg-gray-400'
-    if (percentage === 100) return 'bg-green-500'
+    if (filterCount === 0) return 'bg-muted-foreground/40'
+    if (percentage === 100) return 'bg-emerald-500'
     if (percentage >= 75) return 'bg-orange-500'
     if (percentage >= 50) return 'bg-red-500'
-    return 'bg-gray-400'
+    return 'bg-muted-foreground/40'
   }
 
   const statusOf = (isSelected: boolean, percentage: number, filterCount: number): StatusKey => {
@@ -104,12 +109,12 @@ export default function CandidatesTable({ candidates, vehicleData = {} }: Candid
   }
 
   const SortHeader = ({ label, k, className = '' }: { label: string; k?: SortKey; className?: string }) => (
-    <th className={`px-3 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider whitespace-nowrap ${className}`}>
+    <th className={`px-3 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap ${className}`}>
       {k ? (
         <button
           type="button"
           onClick={() => toggleSort(k)}
-          className="inline-flex items-center gap-1 hover:text-gray-900 dark:hover:text-white"
+          className="inline-flex items-center gap-1 hover:text-foreground"
         >
           {label}
           {sortKey === k ? (
@@ -128,27 +133,27 @@ export default function CandidatesTable({ candidates, vehicleData = {} }: Candid
     <div className="space-y-3">
       {/* Filter toolbar */}
       <div className="flex flex-wrap items-center gap-2 text-sm">
-        <span className="text-gray-500 dark:text-slate-400">Filter status:</span>
+        <span className="text-muted-foreground">Filter status:</span>
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
-          className="rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-sm text-gray-900 dark:border-white/15 dark:bg-white/5 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500/30"
+          className="rounded-lg border border-border bg-input px-2.5 py-1.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
         >
           {(Object.keys(STATUS_LABELS) as StatusFilter[]).map((s) => (
-            <option key={s} value={s} className="bg-white dark:bg-slate-800">
+            <option key={s} value={s} className="bg-popover">
               {STATUS_LABELS[s]}
             </option>
           ))}
         </select>
-        <span className="text-gray-500 dark:text-slate-400">
+        <span className="text-muted-foreground">
           {rows.length} of {candidates.length}
         </span>
       </div>
 
       {/* Scrollable table */}
-      <div className="overflow-x-auto border border-gray-300 dark:border-gray-700 rounded-lg">
-        <table className="min-w-full divide-y divide-gray-300 dark:divide-gray-700">
-          <thead className="bg-gray-50 dark:bg-gray-900">
+      <div className="overflow-x-auto border border-border bg-card rounded-lg">
+        <table className="min-w-full divide-y divide-border">
+          <thead className="bg-muted/40">
             <tr>
               <SortHeader label="#" />
               <SortHeader label="Status" k="status" />
@@ -161,10 +166,10 @@ export default function CandidatesTable({ candidates, vehicleData = {} }: Candid
               <SortHeader label="Actions" />
             </tr>
           </thead>
-          <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+          <tbody className="divide-y divide-border">
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-3 py-8 text-center text-sm text-gray-500 dark:text-slate-400">
+                <td colSpan={9} className="px-3 py-8 text-center text-sm text-muted-foreground">
                   No candidates match this status filter.
                 </td>
               </tr>
@@ -203,32 +208,32 @@ export default function CandidatesTable({ candidates, vehicleData = {} }: Candid
                 return (
                   <tr
                     key={candidate.id}
-                    className={`${isSelected ? 'bg-green-50 dark:bg-green-900/20 border-l-4 border-green-500' : 'hover:bg-gray-50 dark:hover:bg-gray-700'} transition-colors`}
+                    className={`${isSelected ? 'bg-emerald-50 dark:bg-emerald-900/20 border-l-4 border-emerald-500' : 'hover:bg-accent'} transition-colors`}
                   >
                     <td className="px-3 py-4 whitespace-nowrap">
-                      <span className="text-sm font-bold text-gray-900 dark:text-gray-100">#{index + 1}</span>
+                      <span className="text-sm font-bold text-foreground">#{index + 1}</span>
                     </td>
                     <td className="px-3 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-1">
-                        {isSelected && <span className="text-lg" title="Selected">🎯</span>}
+                        {isSelected && <Target className="h-4 w-4 text-primary" aria-label="Selected" />}
                         {getStatusBadge(status, candidate.matchScore, candidate.filterCount)}
                       </div>
                     </td>
                     <td className="px-3 py-4 whitespace-nowrap">
-                      <span className="text-xs font-mono text-gray-600 dark:text-gray-400">{candidate.id.substring(0, 8)}</span>
+                      <span className="text-xs font-mono text-muted-foreground">{candidate.id.substring(0, 8)}</span>
                     </td>
-                    <td className="px-3 py-4 whitespace-nowrap">
+                    <td className="px-3 py-4">
                       <span className="px-2 py-1 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded text-xs font-medium">
                         {candidate.category}
                       </span>
                     </td>
-                    <td className="px-3 py-4 whitespace-nowrap">
+                    <td className="px-3 py-4">
                       <span className="px-2 py-1 bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 rounded text-xs font-medium">
                         {candidate.subcategory}
                       </span>
                     </td>
                     <td className="px-3 py-4">
-                      <span className="px-2 py-1 bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 rounded text-xs font-medium whitespace-nowrap">
+                      <span className="px-2 py-1 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 rounded text-xs font-medium">
                         {candidate.schema}
                       </span>
                     </td>
@@ -237,56 +242,56 @@ export default function CandidatesTable({ candidates, vehicleData = {} }: Candid
                         <span className={`text-sm font-bold ${scoreColor}`}>
                           {candidate.matchScore}/{candidate.filterCount}
                         </span>
-                        <div className="w-20 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                        <div className="w-20 h-2 bg-muted rounded-full overflow-hidden">
                           <div className={`h-full ${progressBarColor} transition-all`} style={{ width: `${matchPercentage}%` }} />
                         </div>
-                        <span className="text-xs text-gray-500">{matchPercentage}%</span>
+                        <span className="text-xs text-muted-foreground">{matchPercentage}%</span>
                       </div>
                     </td>
                     <td className="px-3 py-4">
-                      <div className="text-xs space-y-1 min-w-[200px]">
+                      <div className="text-xs space-y-1">
                         {candidate.filterCount === 0 ? (
-                          <span className="text-gray-500 italic">No filters (Generic)</span>
+                          <span className="text-muted-foreground italic">No filters (Generic)</span>
                         ) : (
                           <>
                             {(candidate.filters?.yearFrom !== null || candidate.filters?.yearTo !== null) && (
                               <div className="flex items-center justify-between">
-                                <span className="text-gray-600 dark:text-gray-400">
+                                <span className="text-muted-foreground">
                                   Year: {candidate.filters?.yearFrom || '∞'}-{candidate.filters?.yearTo || '∞'}
                                 </span>
                                 {vehicleData.year && (
                                   <span className="ml-2">
-                                    <span className="text-gray-500">({vehicleData.year})</span> {getMatchIcon(filterMatches.year)}
+                                    <span className="text-muted-foreground">({vehicleData.year})</span> {getMatchIcon(filterMatches.year)}
                                   </span>
                                 )}
                               </div>
                             )}
                             {candidate.filters?.model && (
                               <div className="flex items-center justify-between">
-                                <span className="text-gray-600 dark:text-gray-400">Model: {candidate.filters.model}</span>
+                                <span className="text-muted-foreground">Model: {candidate.filters.model}</span>
                                 {vehicleData.model && (
                                   <span className="ml-2">
-                                    <span className="text-gray-500">({vehicleData.model})</span> {getMatchIcon(filterMatches.model)}
+                                    <span className="text-muted-foreground">({vehicleData.model})</span> {getMatchIcon(filterMatches.model)}
                                   </span>
                                 )}
                               </div>
                             )}
                             {candidate.filters?.fuelType && (
                               <div className="flex items-center justify-between">
-                                <span className="text-gray-600 dark:text-gray-400">Fuel: {candidate.filters.fuelType}</span>
+                                <span className="text-muted-foreground">Fuel: {candidate.filters.fuelType}</span>
                                 {vehicleData.fuelType && (
                                   <span className="ml-2">
-                                    <span className="text-gray-500">({vehicleData.fuelType})</span> {getMatchIcon(filterMatches.fuelType)}
+                                    <span className="text-muted-foreground">({vehicleData.fuelType})</span> {getMatchIcon(filterMatches.fuelType)}
                                   </span>
                                 )}
                               </div>
                             )}
                             {candidate.filters?.engineModel && (
                               <div className="flex items-center justify-between">
-                                <span className="text-gray-600 dark:text-gray-400">Engine: {candidate.filters.engineModel}</span>
+                                <span className="text-muted-foreground">Engine: {candidate.filters.engineModel}</span>
                                 {vehicleData.engineModel && (
                                   <span className="ml-2">
-                                    <span className="text-gray-500">({vehicleData.engineModel})</span> {getMatchIcon(filterMatches.engineModel)}
+                                    <span className="text-muted-foreground">({vehicleData.engineModel})</span> {getMatchIcon(filterMatches.engineModel)}
                                   </span>
                                 )}
                               </div>
@@ -298,7 +303,7 @@ export default function CandidatesTable({ candidates, vehicleData = {} }: Candid
                     <td className="px-3 py-4 whitespace-nowrap text-sm">
                       <Link
                         href={`/chat/flow-decisions/edit/${candidate.id}`}
-                        className="text-blue-600 dark:text-blue-400 hover:underline font-medium"
+                        className="text-primary hover:underline font-medium"
                       >
                         Edit →
                       </Link>

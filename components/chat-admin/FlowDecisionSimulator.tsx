@@ -87,7 +87,7 @@ export default function FlowDecisionSimulator() {
       {/* ── Hero header ──────────────────────────────────────────────── */}
       <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-slate-900">
         <div className="relative flex items-center gap-4 p-5">
-          <div className="relative grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-blue-600 ring-1 ring-inset ring-white/10">
+          <div className="relative grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-primary ring-1 ring-inset ring-white/10">
             <FlaskConical className="relative z-10 h-6 w-6 text-white" />
           </div>
           <div>
@@ -126,7 +126,7 @@ export default function FlowDecisionSimulator() {
                   selectors apply the dark palette to AutocompleteInput's input. */}
               <div
                 dir="auto"
-                className="[&_input]:h-11 [&_input]:w-full [&_input]:rounded-xl [&_input]:border-white/15 [&_input]:bg-white/5 [&_input]:px-4 [&_input]:text-base [&_input]:text-slate-100 [&_input]:placeholder:text-slate-500 [&_input]:focus:border-cyan-400/50 [&_input]:focus:ring-2 [&_input]:focus:ring-cyan-500/30"
+                className="[&_input]:h-11 [&_input]:w-full [&_input]:rounded-xl [&_input]:border-white/15 [&_input]:bg-white/5 [&_input]:px-4 [&_input]:text-base [&_input]:text-slate-100 [&_input]:placeholder:text-slate-500 [&_input]:focus:border-cyan-400/50 [&_input]:focus:ring-2 [&_input]:focus:ring-ring"
               >
                 <AutocompleteInput
                   value={partDescription}
@@ -152,7 +152,7 @@ export default function FlowDecisionSimulator() {
               <button
                 onClick={handleSimulate}
                 disabled={!canSimulate}
-                className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white transition-colors hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-400/60 focus:ring-offset-2 focus:ring-offset-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {loading ? (
                   <>

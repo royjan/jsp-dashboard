@@ -84,7 +84,7 @@ export default function SimulatorVehicleInput({
   ]
 
   const inputBaseClass =
-    'h-11 w-full rounded-xl border border-white/15 bg-white/5 px-4 text-sm text-slate-100 placeholder:text-slate-500 transition-colors focus:border-cyan-400/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/30'
+    'h-11 w-full rounded-xl border border-white/15 bg-white/5 px-4 text-sm text-slate-100 placeholder:text-slate-500 transition-colors focus:border-cyan-400/50 focus:outline-none focus:ring-2 focus:ring-ring'
 
   return (
     <div className="space-y-6">
@@ -102,7 +102,7 @@ export default function SimulatorVehicleInput({
               aria-pressed={inputMethod === m.key}
               className={`h-9 rounded-lg px-3 text-sm font-medium transition-all ${
                 inputMethod === m.key
-                  ? 'bg-blue-600 text-white'
+                  ? 'bg-primary text-primary-foreground'
                   : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
               }`}
             >

@@ -14,7 +14,7 @@ const AnalyticsTab = dynamic(
     ssr: false,
     loading: () => (
       <div className="flex items-center justify-center h-64">
-        <div className="text-slate-400">Loading Analytics...</div>
+        <div className="text-muted-foreground">Loading Analytics...</div>
       </div>
     ),
   },

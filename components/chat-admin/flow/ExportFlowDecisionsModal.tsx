@@ -430,7 +430,7 @@ export function ExportFlowDecisionsModal({ isOpen, onClose, decisions }: ExportF
           </button>
           <button
             onClick={handleExport}
-            className="px-sp-lg py-sp-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg flex items-center gap-sp-sm min-h-[44px]"
+            className="px-sp-lg py-sp-sm text-sm font-medium text-primary-foreground bg-primary hover:bg-primary/90 rounded-lg flex items-center gap-sp-sm min-h-[44px]"
           >
             <Download className="w-4 h-4" />
             Export

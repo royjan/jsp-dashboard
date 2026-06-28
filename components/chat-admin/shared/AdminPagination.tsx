@@ -45,29 +45,27 @@ export function AdminPagination({
   }
 
   return (
-    <div className="border-t border-gray-200 dark:border-gray-700 flex items-center justify-between" style={{ padding: '24px 28px' }}>
-      <span className="text-sm text-gray-600 dark:text-gray-400">
+    <div className="border-t border-border flex items-center justify-between px-4 py-3">
+      <span className="text-sm text-muted-foreground">
         Page {currentPage} of {totalPages}
       </span>
-      <div className="flex items-center" style={{ gap: '12px' }}>
+      <div className="flex items-center gap-2">
         <button
           onClick={() => onPageChange(Math.max(1, currentPage - 1))}
           disabled={currentPage === 1}
-          className="rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
-          style={{ width: '52px', height: '52px', minWidth: '52px', minHeight: '52px' }}
+          className="h-9 w-9 rounded-lg hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
         >
-          <ChevronLeft className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+          <ChevronLeft className="w-4 h-4 text-muted-foreground" />
         </button>
         {getPageNumbers().map((pageNumber) => (
           <button
             key={pageNumber}
             onClick={() => onPageChange(pageNumber)}
-            className={`rounded-xl text-sm font-medium transition-colors flex items-center justify-center ${
+            className={`h-9 w-9 rounded-lg text-sm font-medium transition-colors flex items-center justify-center ${
               currentPage === pageNumber
-                ? 'bg-blue-600 text-white'
-                : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400'
+                ? 'bg-primary text-primary-foreground'
+                : 'hover:bg-accent text-muted-foreground'
             }`}
-            style={{ width: '52px', height: '52px', minWidth: '52px', minHeight: '52px' }}
           >
             {pageNumber}
           </button>
@@ -75,10 +73,9 @@ export function AdminPagination({
         <button
           onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
           disabled={currentPage === totalPages}
-          className="rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
-          style={{ width: '52px', height: '52px', minWidth: '52px', minHeight: '52px' }}
+          className="h-9 w-9 rounded-lg hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
         >
-          <ChevronRight className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+          <ChevronRight className="w-4 h-4 text-muted-foreground" />
         </button>
       </div>
     </div>
