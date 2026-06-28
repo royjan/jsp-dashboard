@@ -6,6 +6,7 @@ import type { FlowDecisionStatus } from '@/types/chat-admin/flow-decision'
 export interface RuleFilters {
   search: string
   status: FlowDecisionStatus[]
+  source: 'all' | 'manual' | 'learned'
   lambdaTarget: string[]
   yearFrom: string
   yearTo: string
@@ -36,6 +37,7 @@ export function RuleFilterBar({ filters, onChange, onReset }: Props) {
   const activeCount =
     (filters.search ? 1 : 0) +
     filters.status.length +
+    (filters.source !== 'all' ? 1 : 0) +
     filters.lambdaTarget.length +
     (filters.yearFrom ? 1 : 0) +
     (filters.yearTo ? 1 : 0) +
@@ -66,6 +68,14 @@ export function RuleFilterBar({ filters, onChange, onReset }: Props) {
               {s}
             </Chip>
           ))}
+        </ChipGroup>
+
+        <ChipGroup label="Source">
+          <SelectChip
+            value={filters.source}
+            options={[{ v: 'all', l: 'all' }, { v: 'manual', l: 'manual' }, { v: 'learned', l: 'learned (pins)' }]}
+            onChange={v => set('source', v as RuleFilters['source'])}
+          />
         </ChipGroup>
 
         <ChipGroup label="Lambda">

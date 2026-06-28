@@ -28,6 +28,8 @@ import type { Delivery, DeliveryPhoto, DeliveryStatusLog } from '@/lib/db/schema
 interface DeliveryDetail extends Delivery {
   photos: DeliveryPhoto[]
   statusLog: DeliveryStatusLog[]
+  // 'firestore' = read-only (delivery-app owns status/photos); hides write actions.
+  source?: string
 }
 
 export default function DeliveryDetailPage({
@@ -188,7 +190,7 @@ export default function DeliveryDetailPage({
       </Card>
 
       {/* Status update buttons */}
-      {delivery.status !== 'delivered' && delivery.status !== 'failed' && (
+      {delivery.source !== 'firestore' && delivery.status !== 'delivered' && delivery.status !== 'failed' && (
         <Card>
           <CardContent className="p-5 space-y-3">
             <h2 className="font-bold text-sm">עדכון סטטוס</h2>
@@ -291,7 +293,7 @@ export default function DeliveryDetailPage({
           )}
 
           {/* Upload new photo */}
-          {delivery.status !== 'pending' && (
+          {delivery.source !== 'firestore' && delivery.status !== 'pending' && (
             <div className="pt-2">
               <PhotoCapture
                 deliveryId={delivery.id}

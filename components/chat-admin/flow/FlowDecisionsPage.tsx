@@ -21,9 +21,13 @@ interface FlowDecisionsPageProps {
   initialEditId?: string
 }
 
+// Flow decisions the bot taught itself (a "learned pin" = one of these + a direct part).
+const LEARNED_SOURCES = ['schema_ref_correction', 'agent_correction_seed', 'chat_correction']
+
 const EMPTY_FILTERS: RuleFilters = {
   search: '',
   status: [],
+  source: 'all',
   lambdaTarget: [],
   yearFrom: '',
   yearTo: '',
@@ -349,6 +353,7 @@ function readFiltersFromUrl(params: URLSearchParams): RuleFilters {
   return {
     search: params.get('q') || '',
     status: (params.get('status') || '').split(',').filter(Boolean) as RuleFilters['status'],
+    source: (params.get('source') as RuleFilters['source']) || 'all',
     lambdaTarget: (params.get('lambda') || '').split(',').filter(Boolean),
     yearFrom: params.get('yearFrom') || '',
     yearTo: params.get('yearTo') || '',
@@ -365,6 +370,7 @@ function writeFiltersToUrl(router: ReturnType<typeof useRouter>, pathname: strin
   const params = new URLSearchParams()
   if (f.search) params.set('q', f.search)
   if (f.status.length) params.set('status', f.status.join(','))
+  if (f.source !== 'all') params.set('source', f.source)
   if (f.lambdaTarget.length) params.set('lambda', f.lambdaTarget.join(','))
   if (f.yearFrom) params.set('yearFrom', f.yearFrom)
   if (f.yearTo) params.set('yearTo', f.yearTo)
@@ -386,6 +392,11 @@ function filterRules(rules: FlowDecisionRecord[], f: RuleFilters): FlowDecisionR
       if (!hay.includes(search)) return false
     }
     if (f.status.length && !f.status.includes(r.status)) return false
+    if (f.source !== 'all') {
+      const isLearned = LEARNED_SOURCES.includes(r.source ?? '')
+      if (f.source === 'learned' && !isLearned) return false
+      if (f.source === 'manual' && isLearned) return false
+    }
     if (f.lambdaTarget.length && !f.lambdaTarget.includes(r.lambdaTarget)) return false
     // Year filter = overlap test against the rule's [vehicleYearFrom, vehicleYearTo]
     // range. A null bound means open-ended, so it must NOT exclude the rule.

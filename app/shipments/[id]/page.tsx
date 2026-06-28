@@ -10,6 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useLocale } from '@/lib/locale-context'
 import { formatNumber } from '@/lib/constants'
 import { useSortable, SortableTh } from '@/components/shared/sortable-table'
+import { ItemLink } from '@/components/shared/ItemLink'
 import { ArrowRight, ArrowLeft, AlertTriangle, PackageCheck, Container } from 'lucide-react'
 
 interface Product {
@@ -122,7 +123,7 @@ export default function ShipmentDetailPage() {
                   <tbody>
                     {sorted.map((p) => (
                       <tr key={p.part_id} className={`border-b last:border-0 ${p.faulty ? 'bg-red-500/5' : ''}`}>
-                        <td className="p-2 font-mono text-xs">{p.part_id}</td>
+                        <td className="p-2"><ItemLink code={p.part_id} name={p.description} showCode /></td>
                         <td className="p-2 truncate max-w-[280px]">{p.description}{p.faulty && <Badge variant="destructive" className="ms-2 text-[10px]">{t('פגום', 'faulty')}</Badge>}</td>
                         <td className="p-2 text-muted-foreground">{p.location || '—'}</td>
                         <td className="p-2 text-end tabular-nums">{formatNumber(p.scanned)} / {formatNumber(p.total)}</td>
