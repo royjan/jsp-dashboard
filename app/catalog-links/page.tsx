@@ -64,9 +64,9 @@ function useDebounceLocal(value: string, delay: number) {
   return { debounced, handler }
 }
 
-/** Excel-style column filter: a funnel button opening a multi-select checkbox menu. */
+/** Excel-style column filter: a funnel button opening a multi-select checkbox menu (with counts). */
 function FilterMenu({ options, selected, onChange }: {
-  options: { value: string; label: string }[]
+  options: { value: string; label: string; count?: number }[]
   selected: string[]
   onChange: (v: string[]) => void
 }) {
@@ -97,6 +97,9 @@ function FilterMenu({ options, selected, onChange }: {
                 <label key={o.value} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted">
                   <input type="checkbox" checked={selected.includes(o.value)} onChange={() => toggle(o.value)} className="accent-primary" />
                   <span className="flex-1">{o.label}</span>
+                  {o.count !== undefined && (
+                    <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] tabular-nums text-muted-foreground">{o.count.toLocaleString()}</span>
+                  )}
                 </label>
               ))}
             </div>
@@ -133,7 +136,7 @@ export default function CatalogLinksPage() {
       if (search) params.set('search', search)
       if (sort.field) { params.set('sort', sort.field); params.set('dir', sort.dir) }
       const res = await fetch(`/api/catalog-links?${params}`)
-      return res.json() as Promise<{ items: CatalogItem[]; total: number; stats: Stats; brands: string[] }>
+      return res.json() as Promise<{ items: CatalogItem[]; total: number; statusCounts: Stats; brandCounts: Record<string, number>; brands: string[] }>
     },
     placeholderData: (prev) => prev,
   })
@@ -175,7 +178,8 @@ export default function CatalogLinksPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['catalog-links'] }),
   })
 
-  const stats = data?.stats
+  const stats = data?.statusCounts
+  const brandCounts = data?.brandCounts ?? {}
   const total = data?.total ?? 0
   const totalPages = Math.ceil(total / 50)
   const availableBrands: string[] = data?.brands ?? []
@@ -286,14 +290,14 @@ export default function CatalogLinksPage() {
               <SortHead
                 label="מותג"
                 field="brand"
-                filter={<FilterMenu options={availableBrands.map(b => ({ value: b, label: b }))} selected={brandFilter} onChange={v => { setBrandFilter(v); setPage(1) }} />}
+                filter={<FilterMenu options={availableBrands.map(b => ({ value: b, label: b, count: brandCounts[b] ?? 0 }))} selected={brandFilter} onChange={v => { setBrandFilter(v); setPage(1) }} />}
               />
               <SortHead label="תיאור עברית" />
               <th className="px-4 py-3 text-right font-medium hidden md:table-cell">תיאור אנגלית</th>
               <SortHead
                 label="סטטוס"
                 field="status"
-                filter={<FilterMenu options={(['exact', 'mg', 'linked', 'unmatched'] as StatusKey[]).map(s => ({ value: s, label: STATUS_LABELS[s] }))} selected={statusFilter} onChange={v => { setStatusFilter(v as StatusKey[]); setPage(1) }} />}
+                filter={<FilterMenu options={(['exact', 'mg', 'linked', 'unmatched'] as StatusKey[]).map(s => ({ value: s, label: STATUS_LABELS[s], count: stats?.[s] ?? 0 }))} selected={statusFilter} onChange={v => { setStatusFilter(v as StatusKey[]); setPage(1) }} />}
               />
               <SortHead label="קוד פינאנסיט" />
               <th className="px-4 py-3" />
