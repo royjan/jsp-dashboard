@@ -56,7 +56,7 @@ function TierCell({ tier, maxQty }: { tier: ElasticityTier; maxQty: number }) {
       <div
         className="absolute inset-0 rounded-sm transition-opacity"
         style={{
-          background: `linear-gradient(135deg, rgba(59,130,246,${bgAlpha}) 0%, rgba(99,102,241,${bgAlpha * 0.8}) 100%)`,
+          backgroundColor: `rgba(91,149,230,${bgAlpha})`,
         }}
       />
       <div className="relative z-10">

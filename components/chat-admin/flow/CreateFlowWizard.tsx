@@ -389,20 +389,15 @@ export default function CreateFlowWizard({ seedDescription, existingRules = [], 
         transition={{ type: 'spring', stiffness: 320, damping: 30 }}
         className="relative z-10 flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-slate-900 shadow-2xl shadow-black/60"
       >
-        {/* Ambient glows for depth */}
-        <div aria-hidden className="pointer-events-none absolute -top-24 -left-16 h-64 w-64 rounded-full bg-cyan-500/20 blur-3xl" />
-        <div aria-hidden className={`pointer-events-none absolute -top-20 right-0 h-56 w-56 rounded-full blur-3xl transition-colors duration-500 ${currentSupplier.glow}`} />
-
         {/* Header */}
         <header className="relative shrink-0 overflow-hidden border-b border-white/10">
-          <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/10 via-blue-500/10 to-indigo-600/10" aria-hidden />
           <div className="relative flex items-center justify-between gap-4 px-6 py-4">
             <div className="flex items-center gap-3">
-              <div className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-cyan-400 via-blue-500 to-indigo-600 shadow-lg shadow-blue-500/30 ring-1 ring-inset ring-white/20">
+              <div className="grid h-11 w-11 place-items-center rounded-2xl bg-blue-600 ring-1 ring-inset ring-white/10">
                 <Sparkles className="h-5 w-5 text-white" />
               </div>
               <div>
-                <h2 className="bg-gradient-to-r from-white via-cyan-100 to-blue-200 bg-clip-text text-lg font-bold text-transparent">
+                <h2 className="text-lg font-bold text-slate-100">
                   Create a flow rule
                 </h2>
                 <p className="text-xs text-slate-400">Answer a few simple questions — no code words needed.</p>
@@ -493,7 +488,7 @@ export default function CreateFlowWizard({ seedDescription, existingRules = [], 
               <button
                 onClick={next}
                 disabled={saving}
-                className="inline-flex h-11 items-center gap-1.5 rounded-xl bg-gradient-to-r from-cyan-500 via-blue-500 to-indigo-600 px-5 text-sm font-semibold text-white shadow-lg shadow-blue-500/30 transition-transform hover:scale-[1.02] disabled:opacity-50"
+                className="inline-flex h-11 items-center gap-1.5 rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white transition-colors hover:bg-blue-500 disabled:opacity-50"
               >
                 Continue
                 <ArrowRight className="h-4 w-4" />
@@ -511,7 +506,7 @@ export default function CreateFlowWizard({ seedDescription, existingRules = [], 
                 <button
                   onClick={() => save('approved')}
                   disabled={saving}
-                  className="inline-flex h-11 items-center gap-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 px-5 text-sm font-semibold text-white shadow-lg shadow-emerald-500/30 transition-transform hover:scale-[1.02] disabled:opacity-50"
+                  className="inline-flex h-11 items-center gap-1.5 rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white transition-colors hover:bg-emerald-500 disabled:opacity-50"
                 >
                   {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
                   Save &amp; approve
@@ -557,7 +552,7 @@ function Stepper({
               <span
                 className={`relative grid h-9 w-9 place-items-center rounded-full border text-sm font-semibold transition-all ${
                   active
-                    ? 'border-cyan-400/70 bg-gradient-to-br from-cyan-500 to-blue-600 text-white shadow-lg shadow-blue-500/40'
+                    ? 'border-blue-400/70 bg-blue-600 text-white'
                     : done
                       ? 'border-emerald-400/50 bg-emerald-500/20 text-emerald-300'
                       : 'border-white/15 bg-white/5 text-slate-400'
@@ -583,7 +578,7 @@ function Stepper({
             {i < STEPS.length - 1 && (
               <div className="mx-1 mb-5 h-0.5 flex-1 overflow-hidden rounded-full bg-white/10">
                 <motion.div
-                  className="h-full bg-gradient-to-r from-cyan-400 to-blue-500"
+                  className="h-full bg-blue-500"
                   initial={false}
                   animate={{ width: i < step ? '100%' : '0%' }}
                   transition={{ duration: 0.35 }}
@@ -667,9 +662,6 @@ function StepSupplier({ selected, onSelect }: { selected: string; onSelect: (id:
                 isSel ? `ring-2 ${s.ringSelected}` : 'border-white/10'
               }`}
             >
-              {isSel && (
-                <span aria-hidden className={`pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full blur-2xl ${s.glow}`} />
-              )}
               <span className={`relative grid h-11 w-11 shrink-0 place-items-center rounded-xl ${s.iconBg} ${s.iconText}`}>
                 <Car className="h-5 w-5" />
               </span>
@@ -802,8 +794,7 @@ function ScopeCard({
         active ? 'border-cyan-400/60 bg-cyan-500/10 ring-2 ring-cyan-400/50' : 'border-white/10 bg-white/5'
       }`}
     >
-      {active && <span aria-hidden className="pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full bg-cyan-500/30 blur-2xl" />}
-      <span className={`relative grid h-11 w-11 place-items-center rounded-xl ${active ? 'bg-cyan-500/20 text-cyan-200' : 'bg-white/10 text-slate-300'}`}>
+      <span className={`relative grid h-11 w-11 place-items-center rounded-xl ${active ? 'bg-blue-500/20 text-blue-200' : 'bg-white/10 text-slate-300'}`}>
         {icon}
       </span>
       <span className="relative">
@@ -973,8 +964,7 @@ function StepReview({ form, lambda, duplicate }: { form: WizardState; lambda: st
       hint="Here's what you're about to create. Run a live test to see what would happen."
     >
       {/* Big rule sentence */}
-      <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-slate-800/80 to-slate-900/80 p-5">
-        <div aria-hidden className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-cyan-500/15 blur-3xl" />
+      <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-slate-800/60 p-5">
         <RuleSentence form={form} lambda={lambda} large />
       </div>
 
@@ -1080,7 +1070,7 @@ function Pill({ children }: { children: React.ReactNode }) {
 
 function LivePreview({ form, lambda }: { form: WizardState; lambda: string }) {
   return (
-    <div className="border-b border-white/5 bg-gradient-to-r from-cyan-500/5 via-transparent to-indigo-500/5 px-6 py-3">
+    <div className="border-b border-white/5 bg-white/[0.03] px-6 py-3">
       <div className="flex items-start gap-2">
         <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-cyan-300" />
         <RuleSentence form={form} lambda={lambda} />

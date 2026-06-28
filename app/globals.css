@@ -38,51 +38,51 @@
 
 :root {
   --radius: 0.625rem;
-  --background: #ffffff;
-  --foreground: #0a0a0a;
+  --background: #fbfcfd;
+  --foreground: #1a2230;
   --card: #ffffff;
-  --card-foreground: #0a0a0a;
+  --card-foreground: #1a2230;
   --popover: #ffffff;
-  --popover-foreground: #0a0a0a;
-  --primary: #2563eb;
+  --popover-foreground: #1a2230;
+  --primary: #2f6fd8;
   --primary-foreground: #ffffff;
-  --secondary: #f1f5f9;
-  --secondary-foreground: #0f172a;
-  --muted: #f1f5f9;
-  --muted-foreground: #64748b;
-  --accent: #f1f5f9;
-  --accent-foreground: #0f172a;
-  --destructive: #ef4444;
+  --secondary: #eef2f7;
+  --secondary-foreground: #243044;
+  --muted: #eef2f7;
+  --muted-foreground: #5a6678;
+  --accent: #eef2f7;
+  --accent-foreground: #243044;
+  --destructive: #d64545;
   --destructive-foreground: #ffffff;
-  --border: #e2e8f0;
-  --input: #e2e8f0;
-  --ring: #2563eb;
-  --chart-grid: #d1d5db;
-  --chart-text: #4b5563;
+  --border: #dde3ea;
+  --input: #dde3ea;
+  --ring: #2f6fd8;
+  --chart-grid: #d4dae2;
+  --chart-text: #56606f;
 }
 
 .dark {
-  --background: #0c0e14;
-  --foreground: #f0f0f5;
-  --card: #151821;
-  --card-foreground: #f0f0f5;
-  --popover: #1a1d28;
-  --popover-foreground: #f0f0f5;
-  --primary: #60a5fa;
-  --primary-foreground: #0c0e14;
-  --secondary: #1e2230;
-  --secondary-foreground: #e2e8f0;
-  --muted: #1e2230;
-  --muted-foreground: #94a3b8;
-  --accent: #1e2230;
-  --accent-foreground: #e2e8f0;
-  --destructive: #f87171;
-  --destructive-foreground: #0c0e14;
-  --border: #2a2f3e;
-  --input: #2a2f3e;
-  --ring: #60a5fa;
-  --chart-grid: #4a5168;
-  --chart-text: #e2e8f0;
+  --background: #0f1217;
+  --foreground: #e6e9ef;
+  --card: #171b22;
+  --card-foreground: #e6e9ef;
+  --popover: #1c212a;
+  --popover-foreground: #e6e9ef;
+  --primary: #5b95e6;
+  --primary-foreground: #0b0e14;
+  --secondary: #222834;
+  --secondary-foreground: #d6dae3;
+  --muted: #222834;
+  --muted-foreground: #a2acbd;
+  --accent: #222834;
+  --accent-foreground: #d6dae3;
+  --destructive: #ef7070;
+  --destructive-foreground: #0b0e14;
+  --border: #2a313e;
+  --input: #2a313e;
+  --ring: #5b95e6;
+  --chart-grid: #333b4a;
+  --chart-text: #b4bccb;
 }
 
 @layer base {

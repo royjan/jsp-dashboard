@@ -216,7 +216,7 @@ export default function SearchAnalyticsTab() {
                             <span dir="ltr" className="font-mono text-[11px] text-[var(--color-text-tertiary,#8a8a90)]">{f.schemas.join(' | ')}</span>
                           </td>
                           <td className="py-1.5 text-right">
-                            <Link href={`/chat/flow-decisions?prefill=${encodeURIComponent(f.query)}`}
+                            <Link href={`/chat/learned-pins?prefill=${encodeURIComponent(f.query)}`}
                               className="inline-flex items-center gap-1 rounded-md border border-amber-500/40 px-2 py-0.5 text-xs text-amber-300 hover:bg-amber-500/10">
                               <Pin className="h-3 w-3" /> Pin schema
                             </Link>

@@ -147,14 +147,9 @@ export default function FlowDecisionsPage({ initialEditId }: FlowDecisionsPagePr
   return (
     <div dir="ltr" className="flex h-full min-h-screen flex-col bg-slate-950 text-slate-100">
       <header className="relative sticky top-0 z-30 overflow-hidden border-b border-white/10 bg-slate-950/80 backdrop-blur-xl">
-        {/* Ambient glow behind the header for depth */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute -top-10 left-0 h-32 w-96 rounded-full bg-cyan-500/10 blur-3xl"
-        />
         <div className="relative flex flex-wrap items-center gap-3 px-6 py-4">
           <div className="flex-1 min-w-0">
-            <h1 className="bg-gradient-to-r from-white via-cyan-100 to-blue-200 bg-clip-text text-xl font-bold tracking-tight text-transparent">
+            <h1 className="text-xl font-bold tracking-tight text-slate-100">
               Flow Decisions
             </h1>
             <p className="mt-0.5 text-xs text-slate-400">
@@ -190,9 +185,8 @@ export default function FlowDecisionsPage({ initialEditId }: FlowDecisionsPagePr
             </ToolbarButton>
             <button
               onClick={handleCreate}
-              className="group relative inline-flex h-9 items-center gap-1.5 overflow-hidden rounded-lg bg-gradient-to-r from-cyan-500 via-blue-500 to-indigo-600 px-4 text-sm font-semibold text-white shadow-lg shadow-blue-500/30 ring-1 ring-inset ring-white/20 transition-transform hover:scale-[1.03]"
+              className="group relative inline-flex h-9 items-center gap-1.5 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white ring-1 ring-inset ring-white/10 transition-colors hover:bg-blue-500"
             >
-              <span aria-hidden className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-white/20 to-transparent opacity-50" />
               <Plus className="relative h-4 w-4" />
               <span className="relative">New rule</span>
             </button>

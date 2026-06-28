@@ -34,6 +34,7 @@ import {
   Activity,
   MessagesSquare,
   Bot,
+  Pin,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
@@ -64,6 +65,7 @@ const navItems: Array<{ href: string; labelKey: TranslationKey; icon: typeof Lay
   { href: '/report', labelKey: 'report', icon: FileBarChart },
   // Chat admin (integrated from chat.jan.parts)
   { href: '/chat/flow-decisions', labelKey: 'chatFlowDecisions', icon: GitBranch },
+  { href: '/chat/learned-pins', labelKey: 'chatLearnedPins', icon: Pin },
   { href: '/chat/word-mappings', labelKey: 'chatWordMappings', icon: Languages },
   { href: '/chat/monitoring', labelKey: 'chatMonitoring', icon: Activity },
   { href: '/chat/analytics', labelKey: 'chatAnalytics', icon: MessagesSquare },

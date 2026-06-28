@@ -112,9 +112,8 @@ export function Modal({
         className={`relative w-full ${sizeClasses[size]} ${className}`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="relative bg-gradient-to-b from-gray-900 to-gray-950 dark:from-gray-800 dark:to-gray-900 rounded-xl shadow-2xl">
-          <div className="absolute inset-0 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 opacity-20 blur-xl" />
-          <div className="relative bg-white/95 dark:bg-gray-900/95 backdrop-blur-xl rounded-xl border border-gray-200/20 dark:border-gray-700/30">
+        <div className="relative bg-white dark:bg-gray-900 rounded-xl shadow-2xl">
+          <div className="relative bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700/60">
             {(title || showCloseButton) && (
               <div
                 className="flex items-center justify-between border-b border-gray-200/50 dark:border-gray-700/50"
@@ -123,7 +122,7 @@ export function Modal({
                 {title && (
                   <h2
                     id={titleId}
-                    className="text-xl font-semibold bg-gradient-to-r from-gray-900 to-gray-700 dark:from-gray-100 dark:to-gray-300 bg-clip-text text-transparent"
+                    className="text-xl font-semibold text-gray-900 dark:text-gray-100"
                   >
                     {title}
                   </h2>

@@ -102,7 +102,7 @@ export default function SimulatorVehicleInput({
               aria-pressed={inputMethod === m.key}
               className={`h-9 rounded-lg px-3 text-sm font-medium transition-all ${
                 inputMethod === m.key
-                  ? 'bg-gradient-to-r from-cyan-500/90 to-indigo-600/90 text-white shadow-sm shadow-blue-500/30'
+                  ? 'bg-blue-600 text-white'
                   : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
               }`}
             >

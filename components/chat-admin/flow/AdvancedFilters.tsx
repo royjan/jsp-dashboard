@@ -24,7 +24,7 @@ export function AdvancedFilters({
   const hasActiveFilters = Object.values(filters).some(v => v);
 
   return (
-    <div className="bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700" style={{ padding: '28px 32px' }}>
+    <div className="bg-gray-50 dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700" style={{ padding: '28px 32px' }}>
       <div className="flex items-center justify-between" style={{ marginBottom: '20px' }}>
         <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center" style={{ gap: '12px' }}>
           <Settings2 className="w-5 h-5 text-blue-500" />

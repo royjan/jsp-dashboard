@@ -32,7 +32,7 @@ interface LifecycleHeatmapProps {
 
 function getIntensityStyle(intensity: number): React.CSSProperties {
   if (intensity <= 0) return { backgroundColor: 'hsl(220 13% 18%)' }
-  // Blue -> Orange -> Red gradient
+  // Per-cell solid heat scale: blue (low) through amber to red (high)
   const t = Math.pow(intensity, 0.6)
   if (t < 0.5) {
     // Blue to yellow

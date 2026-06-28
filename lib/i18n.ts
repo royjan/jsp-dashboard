@@ -25,6 +25,7 @@ export const translations = {
     chatMonitoring: 'ניטור מערכת',
     chatAnalytics: 'אנליטיקת צ׳אט',
     chatPartsAnalytics: 'אנליטיקת בוט',
+    chatLearnedPins: 'חלקים מוצמדים',
 
     // Page titles
     'page.overview': 'סקירת לוח בקרה',
@@ -591,6 +592,7 @@ export const translations = {
     chatMonitoring: 'System Monitoring',
     chatAnalytics: 'Chat Analytics',
     chatPartsAnalytics: 'Bot Analytics',
+    chatLearnedPins: 'Learned Pins',
 
     'page.overview': 'Dashboard Overview',
     'page.demand': 'Demand Analysis',

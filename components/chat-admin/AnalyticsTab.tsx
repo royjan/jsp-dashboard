@@ -522,7 +522,7 @@ export function AnalyticsTab({ conversations, feedback }: AnalyticsTabProps) {
   return (
     <div className="space-y-8">
       {/* Filters */}
-      <div className="bg-gradient-to-br from-gray-50 to-slate-50 dark:from-gray-800 dark:to-gray-900 rounded-xl p-6 border border-gray-200 dark:border-gray-700">
+      <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-6 border border-gray-200 dark:border-gray-700">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <Filter className="w-5 h-5 text-gray-600 dark:text-gray-400" />
