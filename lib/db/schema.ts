@@ -491,3 +491,136 @@ export type SupplierPriceUpload = typeof supplierPriceUploads.$inferSelect
 export type NewSupplierPriceUpload = typeof supplierPriceUploads.$inferInsert
 export type SupplierOrderConfirmation = typeof supplierOrderConfirmations.$inferSelect
 export type NewSupplierOrderConfirmation = typeof supplierOrderConfirmations.$inferInsert
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * Chat-admin tables (owned by jsp-chat-js, public schema, shared Neon DB).
+ * Read+write from the dashboard's integrated /chat/* admin. Timestamps are
+ * `timestamp without time zone`; enum columns modeled as varchar().$type<>.
+ * part_descriptions.embedding (pgvector) is intentionally omitted — embedding
+ * I/O stays raw SQL (lib/chat-admin/embeddings + the simulate cosine search).
+ * ────────────────────────────────────────────────────────────────────────── */
+
+export const flowDecisionsV2 = pgTable('flow_decisions_v2', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  partDescription: varchar('part_description').notNull(),
+  category: varchar('category').notNull(),
+  subcategory: varchar('subcategory').notNull(),
+  schema: varchar('schema').notNull(),
+  status: varchar('status').$type<'suggestion' | 'approved' | 'rejected'>().notNull().default('suggestion'),
+  createdBy: varchar('created_by'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull(),
+  feedbackCount: integer('feedback_count').notNull().default(0),
+  isDefault: boolean('is_default').notNull().default(false),
+  metadata: jsonb('metadata'),
+  lambdaTarget: varchar('lambda_target').notNull().default('partslink'),
+  vehicleYearFrom: integer('vehicle_year_from'),
+  vehicleYearTo: integer('vehicle_year_to'),
+  vehicleModel: varchar('vehicle_model'),
+  vehicleFuelType: varchar('vehicle_fuel_type'),
+  vehicleEngineModel: varchar('vehicle_engine_model'),
+  vinPattern: varchar('vin_pattern'),
+  source: varchar('source'),
+  userIds: text('user_ids').array(),
+  conversationIds: text('conversation_ids').array(),
+  confidence: numeric('confidence'),
+  approvedAt: timestamp('approved_at'),
+  approvedBy: varchar('approved_by'),
+  rejectedAt: timestamp('rejected_at'),
+  rejectedBy: varchar('rejected_by'),
+  rejectionReason: text('rejection_reason'),
+  lastConfidenceUpdate: timestamp('last_confidence_update'),
+  learnedConfidence: numeric('learned_confidence'),
+})
+
+export const partDescriptions = pgTable('part_descriptions', {
+  description: varchar('description').primaryKey(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull(),
+  usageCount: integer('usage_count').notNull().default(0),
+  lastAccessed: timestamp('last_accessed').notNull().defaultNow(),
+  originalDescription: text('original_description').notNull(),
+})
+
+export const directParts = pgTable('direct_parts', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  flowDecisionId: uuid('flow_decision_id').notNull(),
+  partId: varchar('part_id').notNull(),
+  name: varchar('name').notNull(),
+  imageUrl: varchar('image_url'),
+  price: numeric('price'),
+  currency: varchar('currency').notNull().default('ILS'),
+  supplier: varchar('supplier'),
+  inStock: boolean('in_stock').notNull().default(true),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull(),
+})
+
+export const wordMappings = pgTable('word_mappings', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  sourceWord: varchar('source_word').notNull(),
+  sourceLanguage: varchar('source_language').notNull(),
+  targetWord: varchar('target_word').notNull(),
+  targetLanguage: varchar('target_language').notNull(),
+  mappingType: varchar('mapping_type').$type<'translation' | 'synonym'>().notNull(),
+  confidence: numeric('confidence').notNull().default('1.0'),
+  usageCount: integer('usage_count').notNull().default(0),
+  isActive: boolean('is_active').notNull().default(true),
+  category: varchar('category'),
+  metadata: jsonb('metadata'),
+  createdBy: varchar('created_by'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull(),
+  lastUsedAt: timestamp('last_used_at'),
+  isDefault: boolean('is_default').notNull().default(false),
+})
+
+export const wordMappingSuggestions = pgTable('word_mapping_suggestions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  sourceWord: varchar('source_word').notNull(),
+  sourceLanguage: varchar('source_language').notNull(),
+  targetWord: varchar('target_word').notNull(),
+  targetLanguage: varchar('target_language').notNull(),
+  mappingType: varchar('mapping_type').$type<'translation' | 'synonym'>().notNull(),
+  confidence: numeric('confidence').notNull(),
+  evidence: jsonb('evidence').notNull(),
+  status: varchar('status').$type<'pending' | 'approved' | 'rejected'>().notNull().default('pending'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  reviewedAt: timestamp('reviewed_at'),
+  reviewedBy: varchar('reviewed_by'),
+  rejectionReason: text('rejection_reason'),
+})
+
+export const lambdaStatus = pgTable('lambda_status', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  serviceName: varchar('service_name').notNull(),
+  status: varchar('status').$type<'healthy' | 'degraded' | 'down' | 'unknown'>().notNull().default('unknown'),
+  errorType: varchar('error_type'),
+  errorMessage: text('error_message'),
+  lastSuccess: timestamp('last_success'),
+  lastFailure: timestamp('last_failure'),
+  lastCheck: timestamp('last_check'),
+  consecutiveFailures: integer('consecutive_failures').notNull().default(0),
+  updatedAt: timestamp('updated_at').notNull(),
+  isEnabled: boolean('is_enabled').notNull().default(true),
+})
+
+export const searchTracking = pgTable('search_tracking', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  searchId: varchar('search_id').notNull(),
+  userId: varchar('user_id').notNull(),
+  userEmail: varchar('user_email'),
+  conversationId: varchar('conversation_id').notNull(),
+  vin: varchar('vin').notNull(),
+  parts: jsonb('parts').notNull(),
+  lambdaType: varchar('lambda_type').notNull(),
+  status: varchar('status').$type<'queued' | 'processing' | 'completed' | 'failed' | 'cancelled'>().notNull().default('queued'),
+  queuePosition: integer('queue_position'),
+  errorMessage: text('error_message'),
+  partsFound: integer('parts_found'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  startedAt: timestamp('started_at'),
+  completedAt: timestamp('completed_at'),
+  durationMs: integer('duration_ms'),
+  licensePlate: varchar('license_plate'),
+})
