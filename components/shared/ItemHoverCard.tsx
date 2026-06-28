@@ -3,6 +3,7 @@
 import { useState, useCallback, type ReactNode } from 'react'
 import { HoverCard, HoverCardTrigger, HoverCardContent } from '@/components/ui/hover-card'
 import { Package, TrendingUp, MapPin, Loader2 } from 'lucide-react'
+import { useLocale } from '@/lib/locale-context'
 
 interface ItemData {
   code: string
@@ -22,12 +23,17 @@ interface ItemData {
   place: string | null
 }
 
-const cache = new Map<string, ItemData | 'not_found'>()
+// Positive results cache indefinitely; negative ("not found") results expire
+// after 30s so a lookup that failed before a deploy/data-sync can self-heal
+// without a full page reload.
+const NEG_TTL_MS = 30_000
+const cache = new Map<string, ItemData>()
+const negCache = new Map<string, number>()
 
-function SalesBars({ item }: { item: ItemData }) {
+function SalesBars({ item, isHe }: { item: ItemData; isHe: boolean }) {
   const values = [item.sold_3y_ago ?? 0, item.sold_2y_ago ?? 0, item.sold_last_year ?? 0, item.sold_this_year ?? 0]
   const max = Math.max(...values, 1)
-  const labels = ['-3Y', '-2Y', '-1Y', 'Now']
+  const labels = isHe ? ['3ש-', '2ש-', '1ש-', 'היום'] : ['-3Y', '-2Y', '-1Y', 'Now']
   return (
     <div className="flex items-end gap-1 h-8">
       {values.map((v, i) => (
@@ -58,6 +64,8 @@ function StockIndicator({ value, label }: { value: number | null; label: string 
 }
 
 function ItemPopoverContent({ item }: { item: ItemData }) {
+  const { locale } = useLocale()
+  const isHe = locale === 'he'
   const displayName = item.canonical_name || item.name
   const displayCode = item.canonical_code || item.code
   const itemPrice = item.price_list_price || item.price
@@ -74,11 +82,11 @@ function ItemPopoverContent({ item }: { item: ItemData }) {
       <div className="bg-muted/50 rounded-md p-2.5 space-y-1">
         <div className="flex items-center gap-1 text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
           <Package className="h-3 w-3" />
-          Stock
+          {isHe ? 'מלאי' : 'Stock'}
         </div>
-        <StockIndicator value={item.stock_qty} label="On Hand" />
-        <StockIndicator value={item.incoming_qty} label="Incoming" />
-        <StockIndicator value={item.ordered_qty} label="Ordered" />
+        <StockIndicator value={item.stock_qty} label={isHe ? 'במלאי' : 'On Hand'} />
+        <StockIndicator value={item.incoming_qty} label={isHe ? 'בדרך' : 'Incoming'} />
+        <StockIndicator value={item.ordered_qty} label={isHe ? 'הוזמן' : 'Ordered'} />
       </div>
 
       <div className="flex justify-between items-end">
@@ -87,7 +95,7 @@ function ItemPopoverContent({ item }: { item: ItemData }) {
         )}
         <div className="flex items-center gap-1">
           <TrendingUp className="h-3 w-3 text-muted-foreground" />
-          <SalesBars item={item} />
+          <SalesBars item={item} isHe={isHe} />
         </div>
       </div>
 
@@ -102,6 +110,8 @@ function ItemPopoverContent({ item }: { item: ItemData }) {
 }
 
 export function ItemHoverCard({ code, children }: { code: string; children: ReactNode }) {
+  const { locale } = useLocale()
+  const isHe = locale === 'he'
   const [item, setItem] = useState<ItemData | null>(null)
   const [loading, setLoading] = useState(false)
   const [notFound, setNotFound] = useState(false)
@@ -109,17 +119,19 @@ export function ItemHoverCard({ code, children }: { code: string; children: Reac
   const fetchItem = useCallback(async () => {
     if (!code) return
     const cached = cache.get(code)
-    if (cached === 'not_found') { setNotFound(true); return }
     if (cached) { setItem(cached); return }
+    const negAt = negCache.get(code)
+    if (negAt && Date.now() - negAt < NEG_TTL_MS) { setNotFound(true); return }
     setLoading(true)
     try {
       const res = await fetch(`/api/items/${encodeURIComponent(code)}`)
       if (!res.ok) throw new Error('Not found')
       const data = await res.json()
       cache.set(code, data)
+      negCache.delete(code)
       setItem(data)
     } catch {
-      cache.set(code, 'not_found')
+      negCache.set(code, Date.now())
       setNotFound(true)
     } finally {
       setLoading(false)
@@ -137,12 +149,12 @@ export function ItemHoverCard({ code, children }: { code: string; children: Reac
         {loading ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
             <Loader2 className="h-4 w-4 animate-spin" />
-            Loading...
+            {isHe ? 'טוען…' : 'Loading…'}
           </div>
         ) : item ? (
           <ItemPopoverContent item={item} />
         ) : notFound ? (
-          <div className="text-sm text-muted-foreground py-1">Item not found</div>
+          <div className="text-sm text-muted-foreground py-1">{isHe ? 'הפריט לא נמצא' : 'Item not found'}</div>
         ) : null}
       </HoverCardContent>
     </HoverCard>

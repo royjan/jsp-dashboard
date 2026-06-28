@@ -1,6 +1,6 @@
 'use client'
 
-import { use } from 'react'
+import { use, useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
 import {
@@ -17,6 +17,7 @@ import {
   ExternalLink,
   Image,
   Package,
+  X,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -58,6 +59,15 @@ export default function DeliveryDetailPage({
 }) {
   const { id } = use(params)
   const queryClient = useQueryClient()
+  const [lightbox, setLightbox] = useState<string | null>(null)
+
+  // Close the photo lightbox on ESC.
+  useEffect(() => {
+    if (!lightbox) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setLightbox(null) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [lightbox])
 
   const { data: delivery, isLoading, error } = useQuery<DeliveryDetail>({
     queryKey: ['delivery', id],
@@ -352,14 +362,16 @@ export default function DeliveryDetailPage({
           {delivery.photos && delivery.photos.length > 0 ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               {delivery.photos.map((photo) => (
-                <div
+                <button
+                  type="button"
                   key={photo.id}
-                  className="relative rounded-lg overflow-hidden border aspect-square"
+                  onClick={() => setLightbox(photo.photoUrl)}
+                  className="relative rounded-lg overflow-hidden border aspect-square group cursor-zoom-in text-start"
                 >
                   <img
                     src={photo.photoUrl}
                     alt={photo.photoType}
-                    className="w-full h-full object-cover"
+                    className="w-full h-full object-cover transition-transform group-hover:scale-105"
                   />
                   <div className="absolute bottom-0 inset-x-0 bg-black/50 px-2 py-1">
                     <p className="text-white text-xs">
@@ -373,7 +385,7 @@ export default function DeliveryDetailPage({
                       {new Date(photo.capturedAt).toLocaleString('he-IL')}
                     </p>
                   </div>
-                </div>
+                </button>
               ))}
             </div>
           ) : (
@@ -422,6 +434,32 @@ export default function DeliveryDetailPage({
           )}
         </CardContent>
       </Card>
+
+      {/* Photo lightbox — click backdrop or press ESC to close */}
+      {lightbox && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 cursor-zoom-out"
+          onClick={() => setLightbox(null)}
+          role="dialog"
+          aria-modal="true"
+        >
+          <button
+            type="button"
+            onClick={() => setLightbox(null)}
+            className="absolute top-4 end-4 text-white/80 hover:text-white"
+            aria-label="סגור"
+          >
+            <X className="h-7 w-7" />
+          </button>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={lightbox}
+            alt=""
+            className="max-h-[90vh] max-w-[90vw] rounded-lg object-contain shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   )
 }

@@ -11,6 +11,13 @@ const FS_TO_PAGE_STATUS: Record<string, string> = {
   assigned: 'assigned', started: 'in_transit', delivered: 'delivered', failed: 'failed',
 }
 
+// Finansit customer codes are 10-digit zero-padded (e.g. 0000032505). A bare
+// numeric id (32505) 404s, so pad it; leave already-padded/non-numeric as-is.
+function padCustomerCode(code: string | number): string {
+  const s = String(code).trim()
+  return /^\d+$/.test(s) ? s.padStart(10, '0') : s
+}
+
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -71,9 +78,10 @@ export async function GET(
       source: 'firestore',
       documentNumber: r.erpDocuments?.[0]?.docNumber || r.documentNumber || r.orderNumber || doc.id,
       documents,
-      // Prefer the padded ERP customer code (e.g. 0000032505) — that's what the
-      // Finansit customer API resolves; the bare customerId (32505) 404s.
-      customerCode: r.erpDocuments?.[0]?.erpCustomerCode || r.customerId || '',
+      // The Finansit customer API only resolves the 10-digit zero-padded ERP code
+      // (e.g. 0000032505); the bare customerId (32505) 404s. Prefer the padded
+      // erpCustomerCode from an attached doc, else zero-pad the numeric customerId.
+      customerCode: padCustomerCode(r.erpDocuments?.[0]?.erpCustomerCode || r.customerId || ''),
       customerName,
       customerAddress: r.address || r.customerAddress || null,
       driverName: r.assignedToName || null,
