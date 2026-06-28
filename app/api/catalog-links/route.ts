@@ -39,30 +39,38 @@ export async function GET(req: Request) {
       unmatched: `NOT ${EXACT} AND NOT ${MG} AND NOT ${LINKED}`,
     }
 
-    // Build WHERE + its params once; reused by the rows + count queries.
-    const params: any[] = []
-    const pf = (v: any) => { params.push(v); return `$${params.length}` }
-    const where = ['1=1']
-
-    if (search) {
-      const sp = pf(`%${search}%`)
-      where.push(`(gp.item_number ILIKE ${sp} OR gp.hebrew_description ILIKE ${sp} OR gp.description ILIKE ${sp})`)
-    }
     const statuses = statusRaw && statusRaw !== 'all'
       ? statusRaw.split(',').filter((s) => s in STATUS_EXPR)
       : []
-    if (statuses.length) {
-      where.push('(' + statuses.map((s) => `(${STATUS_EXPR[s]})`).join(' OR ') + ')')
-    }
     const brands = brandRaw ? brandRaw.split(',').map((b) => b.trim()).filter(Boolean) : []
-    if (brands.length) {
-      const bp = pf(brands)
-      where.push(`EXISTS (
-        SELECT 1 FROM partly.project_parts pp JOIN partly.projects pr ON pr.id = pp.project_id
-        WHERE pp.global_part_id = gp.id AND ${brandCanon('pr.make')} = ANY(${bp})
-      )`)
+
+    // Build a WHERE clause + its own params. Faceted counts exclude their own
+    // dimension's filter (e.g. the brand-facet counts apply status+search, not brand),
+    // so each dropdown shows "how many rows if I also pick this, given the other filters".
+    const buildWhere = ({ withStatus, withBrand }: { withStatus: boolean; withBrand: boolean }) => {
+      const params: any[] = []
+      const pf = (v: any) => { params.push(v); return `$${params.length}` }
+      const conds = ['1=1']
+      if (search) {
+        const sp = pf(`%${search}%`)
+        conds.push(`(gp.item_number ILIKE ${sp} OR gp.hebrew_description ILIKE ${sp} OR gp.description ILIKE ${sp})`)
+      }
+      if (withStatus && statuses.length) {
+        conds.push('(' + statuses.map((s) => `(${STATUS_EXPR[s]})`).join(' OR ') + ')')
+      }
+      if (withBrand && brands.length) {
+        const bp = pf(brands)
+        conds.push(`EXISTS (
+          SELECT 1 FROM partly.project_parts pp JOIN partly.projects pr ON pr.id = pp.project_id
+          WHERE pp.global_part_id = gp.id AND ${brandCanon('pr.make')} = ANY(${bp})
+        )`)
+      }
+      return { sql: conds.join(' AND '), params }
     }
-    const whereSql = where.join(' AND ')
+
+    const full = buildWhere({ withStatus: true, withBrand: true })   // rows + total
+    const statusFacet = buildWhere({ withStatus: false, withBrand: true })  // per-status counts
+    const brandFacet = buildWhere({ withStatus: true, withBrand: false })   // per-brand counts
 
     const RANK = `CASE WHEN ei.code IS NOT NULL THEN 3 WHEN ei_mg.code IS NOT NULL THEN 2
                        WHEN fl.finansit_code IS NOT NULL THEN 1 ELSE 0 END`
@@ -72,10 +80,11 @@ export async function GET(req: Request) {
       sort === 'status' ? `${RANK} ${dir}, gp.item_number ASC` :
       `${RANK} DESC, gp.item_number ASC`
 
-    const limitP = pf(limit)
-    const offsetP = pf(offset)
+    const rowsParams = [...full.params, limit, offset]
+    const limitP = `$${full.params.length + 1}`
+    const offsetP = `$${full.params.length + 2}`
 
-    const [rowsResult, countResult, statsResult, brandsResult] = await Promise.all([
+    const [rowsResult, countResult, statusCountsResult, brandCountsResult, brandsResult] = await Promise.all([
       query(`
         SELECT
           gp.item_number,
@@ -106,33 +115,50 @@ export async function GET(req: Request) {
         LEFT JOIN erp.items ei_mg ON ei_mg.code = 'MG' || gp.item_number
         LEFT JOIN partly.finansit_links fl ON fl.partly_item_number = gp.item_number
         LEFT JOIN erp.items ei2 ON ei2.code = fl.finansit_code
-        WHERE ${whereSql}
+        WHERE ${full.sql}
         ORDER BY ${orderBy}
         LIMIT ${limitP} OFFSET ${offsetP}
-      `, params),
+      `, rowsParams),
 
-      query(`SELECT COUNT(*)::int AS total FROM partly.global_parts gp WHERE ${whereSql}`,
-        params.slice(0, params.length - 2)),
+      query(`SELECT COUNT(*)::int AS total FROM partly.global_parts gp WHERE ${full.sql}`, full.params),
 
+      // Per-status counts under the current brand+search filter (not the status filter).
       query(`
         SELECT
           COUNT(*) FILTER (WHERE ${EXACT})::int AS exact,
           COUNT(*) FILTER (WHERE NOT ${EXACT} AND ${MG})::int AS mg,
           COUNT(*) FILTER (WHERE NOT ${EXACT} AND NOT ${MG} AND ${LINKED})::int AS linked,
           COUNT(*) FILTER (WHERE NOT ${EXACT} AND NOT ${MG} AND NOT ${LINKED})::int AS unmatched
+        FROM partly.global_parts gp WHERE ${statusFacet.sql}
+      `, statusFacet.params),
+
+      // Per-brand counts under the current status+search filter (not the brand filter).
+      query(`
+        SELECT bc.brand, COUNT(*)::int AS n
         FROM partly.global_parts gp
-      `, []),
+        JOIN LATERAL (
+          SELECT DISTINCT ${brandCanon('pr.make')} AS brand
+          FROM partly.project_parts pp JOIN partly.projects pr ON pr.id = pp.project_id
+          WHERE pp.global_part_id = gp.id
+        ) bc ON bc.brand IS NOT NULL
+        WHERE ${brandFacet.sql}
+        GROUP BY bc.brand
+      `, brandFacet.params),
 
       query(`SELECT DISTINCT ${brandCanon('make')} AS brand FROM partly.projects
              WHERE make IS NOT NULL AND TRIM(make) <> '' ORDER BY 1`, []),
     ])
+
+    const brandCounts: Record<string, number> = {}
+    for (const r of brandCountsResult.rows as any[]) brandCounts[r.brand] = r.n
 
     return NextResponse.json({
       items: rowsResult.rows,
       total: (countResult.rows[0] as any)?.total ?? 0,
       page,
       limit,
-      stats: statsResult.rows[0] ?? { exact: 0, mg: 0, linked: 0, unmatched: 0 },
+      statusCounts: statusCountsResult.rows[0] ?? { exact: 0, mg: 0, linked: 0, unmatched: 0 },
+      brandCounts,
       brands: brandsResult.rows.map((r: any) => r.brand).filter(Boolean),
     })
   } catch (err) {
