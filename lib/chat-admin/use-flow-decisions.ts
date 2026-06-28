@@ -62,13 +62,6 @@ export function useFlowDecisions(status?: 'suggestion' | 'approved' | 'rejected'
 
       // Handle both paginated and non-paginated responses for backward compatibility
       if (data.items && Array.isArray(data.items)) {
-        // Debug: Log "urea injector" records
-        const ureaRecords = data.items.filter((item: any) =>
-          item.partDescription?.toLowerCase() === 'urea injector'
-        );
-        logger.info('[useFlowDecisions] Urea Injector records found:', ureaRecords.length,
-          ureaRecords.map((r: any) => ({ id: r.id, schema: r.flowDecision?.schema })));
-
         if (append) {
           setFlowDecisions(prev => [...prev, ...data.items]);
         } else {

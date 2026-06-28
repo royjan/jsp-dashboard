@@ -19,11 +19,16 @@ export async function embedText(text: string): Promise<number[] | null> {
   if (!apiKey) return null
   const input = text.toLowerCase().trim().split('\n')[0]
   if (!input) return null
+  // Hard timeout so a slow/hanging OpenAI call can't pin a pooled DB connection
+  // (callers hold a pg connection across this await) and starve the rest of the app.
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 10_000)
   try {
     const res = await fetch('https://api.openai.com/v1/embeddings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({ model: MODEL, input }),
+      signal: controller.signal,
     })
     if (!res.ok) {
       console.error('[embeddings] OpenAI error:', res.status, await res.text())
@@ -35,6 +40,8 @@ export async function embedText(text: string): Promise<number[] | null> {
   } catch (err) {
     console.error('[embeddings] request failed:', err)
     return null
+  } finally {
+    clearTimeout(timeout)
   }
 }
 

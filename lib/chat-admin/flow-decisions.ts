@@ -8,7 +8,7 @@
 
 import { and, asc, desc, eq, gte, ilike, or, sql, count } from 'drizzle-orm'
 import { getDb, query } from '@/lib/db'
-import { flowDecisionsV2, partDescriptions, directParts } from '@/lib/db/schema'
+import { flowDecisionsV2, partDescriptions, directParts, wordMappings } from '@/lib/db/schema'
 import { embedText, toVectorLiteral } from '@/lib/chat-admin/embeddings'
 import type { FlowDecisionRecord, FlowDecisionStatus } from '@/types/chat-admin/flow-decision'
 
@@ -423,9 +423,7 @@ interface BilingualSuggestion {
 
 async function getHebrewTranslations(englishTerms: string[]): Promise<Map<string, string>> {
   if (englishTerms.length === 0) return new Map()
-  try {
-    const { wordMappings } = await import('@/lib/db/schema')
-    const db = await getDb()
+  try {    const db = await getDb()
     const rows = await db
       .select({ sourceWord: wordMappings.sourceWord, targetWord: wordMappings.targetWord })
       .from(wordMappings)
@@ -555,9 +553,7 @@ export async function simulate(
   const hasHebrew = /[֐-׿]/.test(partDescription)
   const lang = hasHebrew ? 'he' : 'en'
   const terms = new Set<string>([partDescription.toLowerCase().trim()])
-  try {
-    const { wordMappings } = await import('@/lib/db/schema')
-    const exp = await db
+  try {    const exp = await db
       .select({ targetWord: wordMappings.targetWord })
       .from(wordMappings)
       .where(
