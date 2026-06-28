@@ -169,7 +169,7 @@ export default function FlowDecisionsPage({ initialEditId }: FlowDecisionsPagePr
               <ViewTab active={view === 'coverage'} onClick={() => setView('coverage')} label="Coverage" />
             </nav>
             <a
-              href="/admin/flow-decisions/simulator"
+              href="/chat/flow-decisions/simulator"
               className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 text-sm font-medium text-slate-300 transition-colors hover:border-white/20 hover:bg-white/10 hover:text-slate-100"
             >
               <FlaskConical className="h-4 w-4 text-cyan-300" />

@@ -35,7 +35,7 @@ import type { LambdaType } from '@/lib/chat-admin/queue-config'
 
 // Lambda Status types
 interface LambdaStatus {
-  serviceName: 'psa' | 'partslink' | 'vin17' | 'qipei'
+  serviceName: 'psa' | 'partslink' | 'vin17' | 'qipei' | 'saic'
   status: 'healthy' | 'degraded' | 'down' | 'unknown'
   errorType: string | null
   errorMessage: string | null
@@ -102,6 +102,7 @@ const LAMBDA_NAMES: Record<LambdaType, string> = {
   partslink: 'PartsLink',
   vin17: 'VIN17',
   qipei: 'Qipei',
+  saic: 'SAIC',
 }
 
 const STATUS_CONFIG = {
@@ -368,7 +369,7 @@ export function SystemMonitoringTab() {
     )
   }
 
-  const lambdaTypes: LambdaType[] = ['psa', 'partslink', 'vin17', 'qipei']
+  const lambdaTypes: LambdaType[] = ['psa', 'partslink', 'vin17', 'qipei', 'saic']
 
   return (
     <div className="space-y-8">
@@ -596,7 +597,7 @@ export function SystemMonitoringTab() {
                     </td>
                     <td className="px-6 py-4">
                       <Link
-                        href={`/admin/conversations/${search.conversationId}`}
+                        href="/chat/analytics"
                         className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1"
                         title="View conversation"
                       >
@@ -733,7 +734,7 @@ export function SystemMonitoringTab() {
                     paginatedSearches.map((search) => (
                       <tr
                         key={search.searchId}
-                        onClick={() => router.push(`/admin/conversations/${search.conversationId}`)}
+                        onClick={() => router.push('/chat/analytics')}
                         className="hover:bg-slate-50 dark:hover:bg-slate-700/30 cursor-pointer group transition-colors"
                         title={`Click to view conversation ${search.conversationId}`}
                       >

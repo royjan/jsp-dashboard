@@ -10,7 +10,7 @@ import {
 
 export const dynamic = 'force-dynamic'
 
-const VALID: ServiceName[] = ['psa', 'partslink', 'vin17', 'qipei']
+const VALID: ServiceName[] = ['psa', 'partslink', 'vin17', 'qipei', 'saic']
 
 /** GET /api/admin/lambda-status */
 export async function GET() {

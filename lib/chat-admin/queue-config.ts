@@ -7,7 +7,7 @@
 
 import queueConfigJson from './queue-config.json'
 
-export type LambdaType = 'psa' | 'partslink' | 'vin17' | 'qipei'
+export type LambdaType = 'psa' | 'partslink' | 'vin17' | 'qipei' | 'saic'
 
 export interface QueueConfigType {
   lambdaConcurrency: Record<LambdaType, number>
