@@ -49,11 +49,31 @@ export async function GET(
       id: `${id}-${i}`, photoUrl: url, photoType: 'delivery', capturedAt: toIso(r.deliveredAt), notes: null,
     }))
 
+    // Line items live on the ERP documents attached to the delivery (invoices/
+    // delivery notes). Flatten them into the doc's `documents` for the items table.
+    const documents = (r.erpDocuments || []).map((d: Record<string, any>) => ({
+      docFormat: d.docFormat || null,
+      docNumber: d.docNumber || null,
+      documentTotal: d.documentTotal ?? null,
+      lines: (d.documentLines || []).map((l: Record<string, any>) => ({
+        lineNumber: l.lineNumber ?? null,
+        itemCode: l.itemCode || '',
+        itemName: l.itemName || '',
+        quantity: l.quantity ?? null,
+        unitPrice: l.unitPrice ?? null,
+        discountPercent: l.discountPercent ?? null,
+        lineTotal: l.lineTotal ?? null,
+      })),
+    }))
+
     return NextResponse.json({
       id: doc.id,
       source: 'firestore',
-      documentNumber: r.documentNumber || r.orderNumber || doc.id,
-      customerCode: r.customerId || '',
+      documentNumber: r.erpDocuments?.[0]?.docNumber || r.documentNumber || r.orderNumber || doc.id,
+      documents,
+      // Prefer the padded ERP customer code (e.g. 0000032505) — that's what the
+      // Finansit customer API resolves; the bare customerId (32505) 404s.
+      customerCode: r.erpDocuments?.[0]?.erpCustomerCode || r.customerId || '',
       customerName,
       customerAddress: r.address || r.customerAddress || null,
       driverName: r.assignedToName || null,

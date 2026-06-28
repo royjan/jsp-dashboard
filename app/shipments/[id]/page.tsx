@@ -115,7 +115,6 @@ export default function ShipmentDetailPage() {
                     <tr className="border-b text-muted-foreground">
                       <SortableTh<Product> label={t('קוד', 'Code')} sortKey="part_id" align="start" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                       <SortableTh<Product> label={t('תיאור', 'Description')} sortKey="description" align="start" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                      <SortableTh<Product> label={t('מיקום', 'Location')} sortKey="location" align="start" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                       <SortableTh<Product> label={t('נסרק', 'Scanned')} sortKey="scanned" align="end" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                       <SortableTh<Product> label={t('חוסר', 'Missing')} sortKey="missing" align="end" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                     </tr>
@@ -125,7 +124,6 @@ export default function ShipmentDetailPage() {
                       <tr key={p.part_id} className={`border-b last:border-0 ${p.faulty ? 'bg-red-500/5' : ''}`}>
                         <td className="p-2"><ItemLink code={p.part_id} name={p.description} showCode /></td>
                         <td className="p-2 truncate max-w-[280px]">{p.description}{p.faulty && <Badge variant="destructive" className="ms-2 text-[10px]">{t('פגום', 'faulty')}</Badge>}</td>
-                        <td className="p-2 text-muted-foreground">{p.location || '—'}</td>
                         <td className="p-2 text-end tabular-nums">{formatNumber(p.scanned)} / {formatNumber(p.total)}</td>
                         <td className="p-2 text-end tabular-nums">{p.missing > 0 ? <span className="text-amber-500 font-semibold">{formatNumber(p.missing)}</span> : <span className="text-muted-foreground">0</span>}</td>
                       </tr>

@@ -40,6 +40,11 @@ export async function GET(
         item = await client.items.get(linkedCode).catch(() => null)
       }
     }
+    if (!item && !upper.startsWith('MG')) {
+      // MG-brand parts carry an "MG" prefix on the Finansit side only
+      // (e.g. partly 10112700 = Finansit MG10112700), so try that as a fallback.
+      item = await client.items.get('MG' + upper).catch(() => null)
+    }
     if (!item) {
       return NextResponse.json({ error: 'Item not found' }, { status: 404 })
     }

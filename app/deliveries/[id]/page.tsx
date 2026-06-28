@@ -16,6 +16,7 @@ import {
   Loader2,
   ExternalLink,
   Image,
+  Package,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -23,11 +24,29 @@ import { Badge } from '@/components/ui/badge'
 import { StatusTimeline } from '@/components/deliveries/StatusTimeline'
 import { PhotoCapture } from '@/components/deliveries/PhotoCapture'
 import { statusConfig } from '@/components/deliveries/DeliveryCard'
+import { ItemLink } from '@/components/shared/ItemLink'
 import type { Delivery, DeliveryPhoto, DeliveryStatusLog } from '@/lib/db/schema'
+
+interface DeliveryLine {
+  lineNumber: number | null
+  itemCode: string
+  itemName: string
+  quantity: number | null
+  unitPrice: number | null
+  discountPercent: number | null
+  lineTotal: number | null
+}
+interface DeliveryDocument {
+  docFormat: string | null
+  docNumber: string | null
+  documentTotal: number | null
+  lines: DeliveryLine[]
+}
 
 interface DeliveryDetail extends Delivery {
   photos: DeliveryPhoto[]
   statusLog: DeliveryStatusLog[]
+  documents?: DeliveryDocument[]
   // 'firestore' = read-only (delivery-app owns status/photos); hides write actions.
   source?: string
 }
@@ -155,7 +174,12 @@ export default function DeliveryDetailPage({
           {delivery.customerCode && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <User className="h-4 w-4" />
-              <span>קוד לקוח: {delivery.customerCode}</span>
+              <span>
+                קוד לקוח:{' '}
+                <Link href={`/customers/${encodeURIComponent(delivery.customerCode)}`} className="text-primary hover:underline">
+                  {delivery.customerCode}
+                </Link>
+              </span>
             </div>
           )}
 
@@ -188,6 +212,70 @@ export default function DeliveryDetailPage({
           )}
         </CardContent>
       </Card>
+
+      {/* Line items (from the ERP documents attached to the delivery) */}
+      {delivery.documents && delivery.documents.some((d) => d.lines.length > 0) && (
+        <Card>
+          <CardContent className="p-5 space-y-4">
+            {delivery.documents.map((doc, di) => (
+              <div key={di} className="space-y-2">
+                <div className="flex items-center gap-2 text-sm">
+                  <Package className="h-4 w-4 text-muted-foreground" />
+                  <span className="font-bold">פריטים</span>
+                  {doc.docNumber && (
+                    <span className="text-muted-foreground">
+                      · מסמך {doc.docNumber}
+                      {doc.docFormat ? ` (${doc.docFormat})` : ''}
+                    </span>
+                  )}
+                  <span className="text-muted-foreground">· {doc.lines.length} שורות</span>
+                </div>
+                <div className="overflow-x-auto -mx-2 px-2">
+                  <table className="w-full text-xs sm:text-sm min-w-[520px]">
+                    <thead>
+                      <tr className="border-b text-muted-foreground text-start">
+                        <th className="p-2 text-start font-medium">קוד</th>
+                        <th className="p-2 text-start font-medium">תיאור</th>
+                        <th className="p-2 text-end font-medium">כמות</th>
+                        <th className="p-2 text-end font-medium">מחיר</th>
+                        <th className="p-2 text-end font-medium">סה״כ</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {doc.lines.map((l, li) => (
+                        <tr key={li} className="border-b last:border-0">
+                          <td className="p-2">
+                            {l.itemCode ? <ItemLink code={l.itemCode} name={l.itemName} showCode /> : '—'}
+                          </td>
+                          <td className="p-2 truncate max-w-[260px]">{l.itemName || '—'}</td>
+                          <td className="p-2 text-end tabular-nums">{l.quantity ?? '—'}</td>
+                          <td className="p-2 text-end tabular-nums">
+                            {l.unitPrice != null ? l.unitPrice.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}
+                            {l.discountPercent ? <span className="text-muted-foreground"> (-{l.discountPercent}%)</span> : null}
+                          </td>
+                          <td className="p-2 text-end tabular-nums font-medium">
+                            {l.lineTotal != null ? l.lineTotal.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    {doc.documentTotal != null && (
+                      <tfoot>
+                        <tr className="font-bold">
+                          <td className="p-2" colSpan={4}>סה״כ מסמך</td>
+                          <td className="p-2 text-end tabular-nums">
+                            {doc.documentTotal.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    )}
+                  </table>
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Status update buttons */}
       {delivery.source !== 'firestore' && delivery.status !== 'delivered' && delivery.status !== 'failed' && (
