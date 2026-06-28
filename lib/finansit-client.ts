@@ -363,6 +363,36 @@ export async function fetchBatchPrices(codes: string[]): Promise<Record<string, 
   return result
 }
 
+// FINAPI price code holding the purchase/cost price (verified valid codes:
+// 01 RETAIL, 06 COST, 12 AGENT, 03-08 SUPPLIER_*). Used for gross-margin.
+export const COST_PRICE_CODE = '06'
+
+/**
+ * Per-unit cost (price_code 06 = COST) for many items. Returns { CODE: cost }.
+ * Mirrors fetchBatchPrices but requests the COST price list. Degrades to an
+ * empty map on failure so margin callers fall back to "cost pending".
+ */
+export async function fetchBatchCost(codes: string[]): Promise<Record<string, number>> {
+  if (!codes.length) return {}
+  const CHUNK = 100
+  const result: Record<string, number> = {}
+  for (let i = 0; i < codes.length; i += CHUNK) {
+    const chunk = codes.slice(i, i + CHUNK)
+    try {
+      const data = await client.prices.batch({ item_codes: chunk, price_code: COST_PRICE_CODE } as any)
+      const items: any[] = data.items || data || []
+      for (const item of items) {
+        const code = item.item_code || item.code
+        const cost = Number(item.price ?? item.price_list_price ?? 0)
+        if (code && cost > 0) result[String(code).toUpperCase()] = cost
+      }
+    } catch (e) {
+      console.warn('[FINAPI] fetchBatchCost chunk failed:', e)
+    }
+  }
+  return result
+}
+
 export async function lookupPrice(itemCode: string, customerCode?: string, priceCode?: string): Promise<any> {
   return client.prices.lookup(itemCode, { customer_code: customerCode, price_code: priceCode })
 }

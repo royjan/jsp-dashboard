@@ -11,10 +11,12 @@ export const maxDuration = 30
 export async function GET(req: NextRequest) {
   try {
     await initializeSecrets()
-    const code = (new URL(req.url).searchParams.get('code') || '').toUpperCase()
+    const url = new URL(req.url)
+    const code = (url.searchParams.get('code') || '').toUpperCase()
+    const pc = url.searchParams.get('pc') || '06' // price_code to test (06 = COST)
     if (!code) return NextResponse.json({ error: 'code required' }, { status: 400 })
 
-    const out: Record<string, unknown> = { code }
+    const out: Record<string, unknown> = { code, pc }
 
     // 1. default batch (sell price source the dashboard already uses)
     try {
@@ -22,17 +24,17 @@ export async function GET(req: NextRequest) {
     } catch (e) {
       out.batch_default_err = String(e)
     }
-    // 2. batch with price_code 7ITP
+    // 2. batch with the cost price_code
     try {
-      out.batch_7itp = await client.prices.batch({ item_codes: [code], price_code: '7ITP' } as any)
+      out.batch_cost = await client.prices.batch({ item_codes: [code], price_code: pc } as any)
     } catch (e) {
-      out.batch_7itp_err = String(e)
+      out.batch_cost_err = String(e)
     }
-    // 3. lookup with price_code 7ITP
+    // 3. lookup with the cost price_code
     try {
-      out.lookup_7itp = await client.prices.lookup(code, { price_code: '7ITP' } as any)
+      out.lookup_cost = await client.prices.lookup(code, { price_code: pc } as any)
     } catch (e) {
-      out.lookup_7itp_err = String(e)
+      out.lookup_cost_err = String(e)
     }
     // 4. lookup default
     try {
