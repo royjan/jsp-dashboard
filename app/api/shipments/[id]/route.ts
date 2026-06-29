@@ -3,11 +3,7 @@ export const maxDuration = 30
 import { NextResponse } from 'next/server'
 import { initializeSecrets } from '@/lib/aws-secrets'
 import { getShipmentsFirestore } from '@/lib/firebase'
-
-function extractSupplier(name?: string): string | null {
-  if (!name) return null
-  return name.trim().split(/\s+/)[0] || null
-}
+import { buildSupplierMatcher, leadToken } from '@/lib/supplier-match'
 
 // Detail for one inbound shipment: header + products (scanned/expected/missing/
 // faulty/location) + who scanned. Mirrors the SDK's shipments helpers.
@@ -41,6 +37,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     })
     products.sort((a, b) => b.missing - a.missing)
 
+    const matcher = await buildSupplierMatcher().catch(() => null)
+
     // Who scanned (from logs sub-collection), best-effort.
     let scanners: { name: string; count: number }[] = []
     try {
@@ -57,7 +55,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       shipment: {
         id: doc.id,
         name: data.name || '',
-        supplier: extractSupplier(data.name),
+        supplier: leadToken(data.name),
+        matchedSupplier: matcher?.match(data.name) || null,
         shipmentDate: data.shipmentDate || '',
         totalScanned, totalExpected, missing, faulty,
         uniqueProducts: products.length,

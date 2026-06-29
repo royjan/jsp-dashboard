@@ -3,13 +3,7 @@ export const maxDuration = 30
 import { NextResponse } from 'next/server'
 import { initializeSecrets } from '@/lib/aws-secrets'
 import { getShipmentsFirestore } from '@/lib/firebase'
-
-// Inbound shipments (suppliers → Jan) live in the `shipments-app` Firestore.
-// Supplier number = first whitespace token of shipment.name (e.g. "07 Reinz …").
-function extractSupplier(name?: string): string | null {
-  if (!name) return null
-  return name.trim().split(/\s+/)[0] || null
-}
+import { buildSupplierMatcher, leadToken } from '@/lib/supplier-match'
 
 export async function GET(request: Request) {
   try {
@@ -21,6 +15,8 @@ export async function GET(request: Request) {
     const offset = Math.max(0, Number(searchParams.get('offset')) || 0)
 
     const db = await getShipmentsFirestore()
+    // Resolve each shipment's leading tag/number to a real supplier (best-effort).
+    const matcher = await buildSupplierMatcher().catch(() => null)
     // Fetch one extra to detect whether there's a next page.
     let q: FirebaseFirestore.Query = db.collection('shipments').orderBy('shipmentDate', 'desc')
     if (date) {
@@ -37,7 +33,7 @@ export async function GET(request: Request) {
     const shipments: any[] = []
     for (const doc of pageDocs) {
       const data = doc.data() as Record<string, any>
-      const sup = extractSupplier(data.name)
+      const sup = leadToken(data.name)
       if (supplier && sup?.toLowerCase() !== supplier.toLowerCase()) continue
       // Aggregate the products sub-collection (scanned / expected / missing).
       const prodSnap = await doc.ref.collection('products').get()
@@ -53,6 +49,7 @@ export async function GET(request: Request) {
         id: doc.id,
         name: data.name || '',
         supplier: sup,
+        matchedSupplier: matcher?.match(data.name) || null,
         shipmentDate: data.shipmentDate || '',
         totalScanned, totalExpected, missing, faulty,
         uniqueProducts: prodSnap.size,

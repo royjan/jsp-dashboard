@@ -24,7 +24,9 @@ interface Product {
 }
 interface DetailResponse {
   shipment?: {
-    id: string; name: string; supplier: string | null; shipmentDate: string
+    id: string; name: string; supplier: string | null
+    matchedSupplier: { code: string; name: string } | null
+    shipmentDate: string
     totalScanned: number; totalExpected: number; missing: number; faulty: number; uniqueProducts: number
   }
   products: Product[]
@@ -72,7 +74,13 @@ export default function ShipmentDetailPage() {
               <Container className="h-6 w-6 text-primary" />{sh.name || sh.id}
             </h1>
             <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
-              {sh.supplier ? (
+              {sh.matchedSupplier ? (
+                <Link href={`/suppliers/${encodeURIComponent(sh.matchedSupplier.code)}`}>
+                  <Badge variant="outline" className="cursor-pointer hover:bg-accent">
+                    {t('ספק', 'Supplier')} {sh.supplier ? `${sh.supplier} · ` : ''}{sh.matchedSupplier.name} ↗
+                  </Badge>
+                </Link>
+              ) : sh.supplier ? (
                 <Link href={`/suppliers?q=${encodeURIComponent(sh.supplier)}`}>
                   <Badge variant="outline" className="cursor-pointer hover:bg-accent">{t('ספק', 'Supplier')} {sh.supplier} ↗</Badge>
                 </Link>

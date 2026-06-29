@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -16,6 +17,7 @@ interface Shipment {
   id: string
   name: string
   supplier: string | null
+  matchedSupplier: { code: string; name: string } | null
   shipmentDate: string
   totalScanned: number
   totalExpected: number
@@ -122,7 +124,20 @@ export default function ShipmentsPage() {
                         className="border-b last:border-0 hover:bg-accent/50 cursor-pointer"
                       >
                         <td className="p-2 tabular-nums whitespace-nowrap">{fmtDate(s.shipmentDate)}</td>
-                        <td className="p-2"><Badge variant="outline">{s.supplier || '—'}</Badge></td>
+                        <td className="p-2">
+                          {s.matchedSupplier ? (
+                            <Link
+                              href={`/suppliers/${encodeURIComponent(s.matchedSupplier.code)}`}
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <Badge variant="outline" className="cursor-pointer hover:bg-accent max-w-[200px] truncate">
+                                {s.supplier ? `${s.supplier} · ` : ''}{s.matchedSupplier.name} ↗
+                              </Badge>
+                            </Link>
+                          ) : (
+                            <Badge variant="outline">{s.supplier || '—'}</Badge>
+                          )}
+                        </td>
                         <td className="p-2 truncate max-w-[260px]">{s.name}</td>
                         <td className="p-2 text-end tabular-nums">{formatNumber(s.totalScanned)} / {formatNumber(s.totalExpected)}</td>
                         <td className="p-2 text-end tabular-nums">

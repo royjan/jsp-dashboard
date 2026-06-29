@@ -77,18 +77,25 @@ export async function PATCH(
     const db = await getDb()
     const body = await request.json()
 
+    // Upsert: derived suppliers (e.g. tagged from shipments) may have no profile
+    // row yet, so editing one — e.g. setting its shipment tag — must create it.
+    const { supplierName, ...rest } = body
     const result = await db
-      .update(supplierProfiles)
-      .set({
-        ...body,
-        updatedAt: new Date(),
+      .insert(supplierProfiles)
+      .values({
+        supplierCode: code,
+        supplierName: supplierName || code,
+        ...rest,
       })
-      .where(eq(supplierProfiles.supplierCode, code))
+      .onConflictDoUpdate({
+        target: supplierProfiles.supplierCode,
+        set: {
+          ...(supplierName !== undefined ? { supplierName } : {}),
+          ...rest,
+          updatedAt: new Date(),
+        },
+      })
       .returning()
-
-    if (!result.length) {
-      return NextResponse.json({ error: 'Supplier not found' }, { status: 404 })
-    }
 
     return NextResponse.json({ supplier: result[0] })
   } catch (error) {

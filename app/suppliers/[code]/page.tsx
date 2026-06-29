@@ -55,6 +55,7 @@ export default function SupplierDetailPage() {
     setEditing(true)
     setEditForm({
       supplierName: profile?.supplierName || '',
+      shipmentTag: profile?.shipmentTag || '',
       contactEmail: profile?.contactEmail || '',
       contactPhone: profile?.contactPhone || '',
       leadTimeDays: profile?.leadTimeDays || '',
@@ -93,6 +94,9 @@ export default function SupplierDetailPage() {
             <div className="flex items-center gap-3">
               <CardTitle className="text-lg">{profile?.supplierName || code}</CardTitle>
               {profile?.active && <Badge variant="success">פעיל</Badge>}
+              {profile?.shipmentTag && (
+                <Badge variant="outline" className="font-mono">{t('suppliers.shipmentTag')}: {profile.shipmentTag}</Badge>
+              )}
               <span className="text-sm text-muted-foreground font-mono">{code}</span>
             </div>
             <Button
@@ -118,6 +122,15 @@ export default function SupplierDetailPage() {
                 <input
                   value={editForm.supplierName}
                   onChange={e => setEditForm(p => ({ ...p, supplierName: e.target.value }))}
+                  className="w-full rounded border px-2 py-1.5 text-sm bg-background mt-1"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground">{t('suppliers.shipmentTag')}</label>
+                <input
+                  value={editForm.shipmentTag}
+                  onChange={e => setEditForm(p => ({ ...p, shipmentTag: e.target.value }))}
+                  placeholder={t('suppliers.shipmentTagHint')}
                   className="w-full rounded border px-2 py-1.5 text-sm bg-background mt-1"
                 />
               </div>

@@ -447,6 +447,7 @@ export const supplierProfiles = dashboardSchema.table('supplier_profiles', {
   id: uuid('id').primaryKey().defaultRandom(),
   supplierCode: text('supplier_code').notNull().unique(),
   supplierName: text('supplier_name').notNull(),
+  shipmentTag: text('shipment_tag'),
   contactEmail: text('contact_email'),
   contactPhone: text('contact_phone'),
   leadTimeDays: integer('lead_time_days'),
