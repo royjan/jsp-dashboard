@@ -9,7 +9,8 @@ export async function GET(request: Request) {
     await initializeSecrets()
     const { searchParams } = new URL(request.url)
     const period = searchParams.get('period') || '30d'
-    const data = await getTopSellingItems(period)
+    const refresh = searchParams.get('refresh') === 'true'
+    const data = await getTopSellingItems(period, refresh)
     return NextResponse.json({ data, count: data.length })
   } catch (error) {
     return NextResponse.json(

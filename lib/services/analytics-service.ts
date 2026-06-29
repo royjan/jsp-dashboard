@@ -1296,9 +1296,9 @@ async function reconcileStockFromItemApi(rows: TopSellingItem[]): Promise<void> 
   }))
 }
 
-export async function getTopSellingItems(period: string = '30d'): Promise<TopSellingItem[]> {
+export async function getTopSellingItems(period: string = '30d', forceRefresh = false): Promise<TopSellingItem[]> {
   const cacheKey = `analytics:top-items:${period}`
-  const cached = await getCached<TopSellingItem[]>(cacheKey)
+  const cached = forceRefresh ? null : await getCached<TopSellingItem[]>(cacheKey)
   if (cached) return cached
 
   const now = new Date()
