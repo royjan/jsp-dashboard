@@ -1887,7 +1887,7 @@ export async function getABCClassification(dateFrom?: string, dateTo?: string) {
 // ── Customer Analytics ──
 
 export async function getCustomerAnalytics(dateFrom?: string, dateTo?: string) {
-  const cacheKey = `analytics:customers:v6:${dateFrom || 'all'}:${dateTo || 'all'}`
+  const cacheKey = `analytics:customers:v7:${dateFrom || 'all'}:${dateTo || 'all'}`
   const cached = await getCached<any>(cacheKey)
   if (cached) return cached
 
