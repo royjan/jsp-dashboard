@@ -53,6 +53,10 @@ export interface FinapiClientConfig {
   /** Ordered base URLs: primary first, then fallbacks. Overrides `baseUrl`. */
   baseUrls?: string[]
   credentials: string | (() => Promise<string> | string)
+  /** Optional per-base-URL credentials (e.g. the fallback box uses a different
+   *  login). Returns `email:api_key` for that base, or undefined to use the
+   *  default `credentials`. */
+  credentialsByUrl?: (baseUrl: string) => Promise<string | undefined> | string | undefined
   concurrency?: number
   timeout?: number
 }
@@ -64,14 +68,18 @@ export function createClient(config: FinapiClientConfig) {
     .map((u) => u.replace(/\/$/, ''))
   const timeout = config.timeout ?? 15000
   const semaphore = config.concurrency ? new Semaphore(config.concurrency) : null
-  let cachedAuthHeader: string | null = null
+  const authHeaderByBase = new Map<string, string>() // per-base (boxes can differ)
   let activeIdx = 0 // sticky: stay on the last base URL that worked
 
-  async function getAuthHeader(): Promise<string> {
-    if (cachedAuthHeader) return cachedAuthHeader
-    const creds = typeof config.credentials === 'function' ? await config.credentials() : config.credentials
-    cachedAuthHeader = `Basic ${Buffer.from(creds).toString('base64')}`
-    return cachedAuthHeader
+  async function getAuthHeader(base: string): Promise<string> {
+    const cached = authHeaderByBase.get(base)
+    if (cached) return cached
+    const override = config.credentialsByUrl ? await config.credentialsByUrl(base) : undefined
+    const creds = override
+      || (typeof config.credentials === 'function' ? await config.credentials() : config.credentials)
+    const header = `Basic ${Buffer.from(creds).toString('base64')}`
+    authHeaderByBase.set(base, header)
+    return header
   }
 
   function buildUrl(base: string, path: string, params?: Record<string, any>): string {
@@ -133,7 +141,7 @@ export function createClient(config: FinapiClientConfig) {
 
   async function request(method: string, path: string, params?: Record<string, any>, body?: any): Promise<any> {
     return withFailover(async (base, signal) => {
-      const auth = await getAuthHeader()
+      const auth = await getAuthHeader(base)
       const url = method === 'GET' ? buildUrl(base, path, params) : buildUrl(base, path)
       const res = await fetch(url, {
         method,
@@ -154,7 +162,7 @@ export function createClient(config: FinapiClientConfig) {
 
   async function requestRaw(path: string, params?: Record<string, any>): Promise<Response> {
     return withFailover(async (base, signal) => {
-      const auth = await getAuthHeader()
+      const auth = await getAuthHeader(base)
       const res = await fetch(buildUrl(base, path, params), {
         method: 'GET',
         headers: { Authorization: auth },

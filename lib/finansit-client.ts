@@ -39,6 +39,14 @@ const client = createClient({
     await initializeSecrets()
     return getSecret('FINANSIT_API_CREDENTIALS', '')
   },
+  // The fallback box (192.168.0.109) authenticates with a different login than
+  // the primary. Supply it via FINANSIT_API_CREDENTIALS_FALLBACK (email:api_key);
+  // falls through to the primary credentials when unset.
+  credentialsByUrl: async (base: string) => {
+    if (!base.includes('192.168.0.109')) return undefined
+    await initializeSecrets()
+    return getSecret('FINANSIT_API_CREDENTIALS_FALLBACK', '') || undefined
+  },
   // FINAPI is a single uvicorn worker with a 20-seat concurrency limiter; a
   // cold cache turns /api/dashboard + analytics into 60-90s Btrieve scans. Keep
   // our fan-out small so the dashboard can never fill all 20 seats and wedge it
