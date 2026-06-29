@@ -1,8 +1,8 @@
 'use client'
 
-import { use } from 'react'
+import { use, useState } from 'react'
 import { motion } from 'framer-motion'
-import { useItemDetail } from '@/hooks/use-analytics'
+import { useItemDetail, useItemDocuments } from '@/hooks/use-analytics'
 import { useLocale } from '@/lib/locale-context'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -10,8 +10,68 @@ import { Skeleton } from '@/components/ui/skeleton'
 import Link from 'next/link'
 import {
   ArrowLeft, Package, DollarSign, Warehouse, TrendingUp, Tag, MapPin, Calendar, Layers, Hash,
+  FileText, X,
 } from 'lucide-react'
 import { ILS_FORMAT, NUMBER_FORMAT } from '@/lib/constants'
+
+type DocType = 'invoices' | 'quotes' | 'purchases'
+const DOC_LABELS: Record<DocType, { he: string; en: string }> = {
+  invoices: { he: 'חשבוניות', en: 'Invoices' },
+  quotes: { he: 'הצעות מחיר', en: 'Quotes' },
+  purchases: { he: 'קניות מספק', en: 'Purchases' },
+}
+
+function ItemDocsPanel({ code, type, isHe, onClose }: { code: string; type: DocType; isHe: boolean; onClose: () => void }) {
+  const { data, isLoading } = useItemDocuments(code, type)
+  const rows: any[] = data?.rows || []
+  const label = DOC_LABELS[type]
+  return (
+    <Card>
+      <CardHeader className="pb-3 flex flex-row items-center justify-between">
+        <CardTitle className="text-base flex items-center gap-2">
+          <FileText className="h-4 w-4 text-primary" />
+          {isHe ? label.he : label.en}
+          {!isLoading && <span className="text-xs font-normal text-muted-foreground">({rows.length})</span>}
+        </CardTitle>
+        <button onClick={onClose} className="text-muted-foreground hover:text-foreground" aria-label="close">
+          <X className="h-4 w-4" />
+        </button>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <div className="space-y-2">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-8 w-full" />)}</div>
+        ) : rows.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-2">{isHe ? 'לא נמצאו מסמכים' : 'No documents found'}</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs sm:text-sm">
+              <thead>
+                <tr className="border-b text-muted-foreground">
+                  <th className="text-start p-2">{isHe ? 'תאריך' : 'Date'}</th>
+                  <th className="text-start p-2">{isHe ? 'מסמך' : 'Doc'}</th>
+                  <th className="text-start p-2">{isHe ? 'לקוח/ספק' : 'Party'}</th>
+                  <th className="text-end p-2">{isHe ? 'כמות' : 'Qty'}</th>
+                  <th className="text-end p-2">{isHe ? 'סה"כ' : 'Total'}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r, i) => (
+                  <tr key={`${r.doc_number}-${i}`} className="border-b last:border-0">
+                    <td className="p-2 whitespace-nowrap tabular-nums">{formatErpDate(r.date)}</td>
+                    <td className="p-2 font-mono">{r.doc_number ?? '-'}</td>
+                    <td className="p-2 truncate max-w-[200px]" dir="rtl">{r.party || '-'}</td>
+                    <td className="p-2 text-end tabular-nums">{NUMBER_FORMAT.format(r.qty)}</td>
+                    <td className="p-2 text-end tabular-nums">{r.total ? ILS_FORMAT.format(r.total) : '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const cardVariants: any = {
@@ -59,6 +119,8 @@ export default function ItemDetailPage({ params }: { params: Promise<{ code: str
   const { t, locale } = useLocale()
   const { data, isLoading, error } = useItemDetail(decodedCode)
   const isHe = locale === 'he'
+  const [openDocs, setOpenDocs] = useState<DocType | null>(null)
+  const toggleDocs = (type: DocType) => setOpenDocs((cur) => (cur === type ? null : type))
 
   if (isLoading) return <LoadingSkeleton />
   if (error) return <div className="text-destructive p-4">Error: {(error as Error).message}</div>
@@ -128,11 +190,15 @@ export default function ItemDetailPage({ params }: { params: Promise<{ code: str
         </motion.div>
 
         <motion.div custom={2} variants={cardVariants} initial="hidden" animate="visible">
-          <Card>
+          <Card
+            onClick={() => toggleDocs('invoices')}
+            className={`cursor-pointer transition-colors hover:border-primary/50 ${openDocs === 'invoices' ? 'border-primary' : ''}`}
+          >
             <CardContent className="p-4">
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-2">
                 <TrendingUp className="h-3.5 w-3.5 text-violet-500" />
                 {isHe ? 'נמכר השנה' : 'Sold This Year'}
+                <FileText className="h-3 w-3 ms-auto opacity-60" />
               </div>
               <div className="text-xl sm:text-2xl font-bold">{NUMBER_FORMAT.format(data.sold_this_year || 0)}</div>
               <div className="text-xs text-muted-foreground mt-1">
@@ -154,6 +220,16 @@ export default function ItemDetailPage({ params }: { params: Promise<{ code: str
           </Card>
         </motion.div>
       </div>
+
+      {/* Document drill-down (invoices / quotes / purchases for this item) */}
+      {openDocs && (
+        <ItemDocsPanel
+          code={data.canonical_code || data.code || decodedCode}
+          type={openDocs}
+          isHe={isHe}
+          onClose={() => setOpenDocs(null)}
+        />
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
         {/* Sales History */}
@@ -223,15 +299,27 @@ export default function ItemDetailPage({ params }: { params: Promise<{ code: str
               <dt className="text-muted-foreground">{isHe ? 'מכירה אחרונה' : 'Last Sale'}</dt>
               <dd>{formatErpDate(data.sale_date)}</dd>
               <dt className="text-muted-foreground">{isHe ? 'קניה אחרונה' : 'Last Purchase'}</dt>
-              <dd>{formatErpDate(data.purchase_date)}</dd>
+              <dd>
+                <button
+                  onClick={() => toggleDocs('purchases')}
+                  className={`inline-flex items-center gap-1 hover:text-primary transition-colors ${openDocs === 'purchases' ? 'text-primary' : ''}`}
+                >
+                  {formatErpDate(data.purchase_date)}
+                  <FileText className="h-3 w-3 opacity-60" />
+                </button>
+              </dd>
               <dt className="text-muted-foreground">{isHe ? 'ספירה אחרונה' : 'Last Count'}</dt>
               <dd>{formatErpDate(data.count_date)}</dd>
-              {data.inquiry_count > 0 && (
-                <>
-                  <dt className="text-muted-foreground">{isHe ? 'פניות' : 'Inquiries'}</dt>
-                  <dd>{data.inquiry_count}</dd>
-                </>
-              )}
+              <dt className="text-muted-foreground">{isHe ? 'פניות' : 'Inquiries'}</dt>
+              <dd>
+                <button
+                  onClick={() => toggleDocs('quotes')}
+                  className={`inline-flex items-center gap-1 hover:text-primary transition-colors ${openDocs === 'quotes' ? 'text-primary' : ''}`}
+                >
+                  {data.inquiry_count || 0}
+                  <FileText className="h-3 w-3 opacity-60" />
+                </button>
+              </dd>
             </dl>
           </CardContent>
         </Card>

@@ -1,7 +1,10 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
+import { Check, Copy } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { toast } from '@/lib/toast'
 import { ItemHoverCard } from './ItemHoverCard'
 
 interface ItemLinkProps {
@@ -10,14 +13,54 @@ interface ItemLinkProps {
   className?: string
   showCode?: boolean
   dir?: string
+  /** Show a copy-to-clipboard button next to the code. Defaults on when showCode. */
+  copyable?: boolean
 }
 
-export function ItemLink({ code, name, className, showCode = false, dir }: ItemLinkProps) {
+async function copyText(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text)
+      return true
+    }
+  } catch { /* fall through to legacy path */ }
+  try {
+    const ta = document.createElement('textarea')
+    ta.value = text
+    ta.style.position = 'fixed'
+    ta.style.opacity = '0'
+    document.body.appendChild(ta)
+    ta.focus(); ta.select()
+    const ok = document.execCommand('copy')
+    document.body.removeChild(ta)
+    return ok
+  } catch {
+    return false
+  }
+}
+
+export function ItemLink({ code, name, className, showCode = false, dir, copyable }: ItemLinkProps) {
+  const [copied, setCopied] = useState(false)
   // If name is same as code (no real description), treat as code display
   const hasRealName = name && name !== code && !/^\d{5,}$/.test(name)
   const display = showCode ? code : (hasRealName ? name : code)
   const isCodeDisplay = showCode || !hasRealName
-  return (
+  const showCopy = copyable ?? showCode
+
+  const handleCopy = async (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const ok = await copyText(code)
+    if (ok) {
+      setCopied(true)
+      toast.success(`הועתק: ${code}`)
+      setTimeout(() => setCopied(false), 2000)
+    } else {
+      toast.error('ההעתקה נכשלה')
+    }
+  }
+
+  const link = (
     <ItemHoverCard code={code}>
       <Link
         href={`/items/${encodeURIComponent(code)}`}
@@ -31,5 +74,22 @@ export function ItemLink({ code, name, className, showCode = false, dir }: ItemL
         {display}
       </Link>
     </ItemHoverCard>
+  )
+
+  if (!showCopy) return link
+
+  return (
+    <span className="inline-flex items-center gap-1">
+      {link}
+      <button
+        type="button"
+        onClick={handleCopy}
+        title={`העתק ${code}`}
+        aria-label={`העתק ${code}`}
+        className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
+      >
+        {copied ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
+      </button>
+    </span>
   )
 }

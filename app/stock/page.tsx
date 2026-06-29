@@ -8,6 +8,7 @@ import { useItems } from '@/hooks/use-dashboard'
 import { useLocale } from '@/lib/locale-context'
 import { useUrlParams } from '@/hooks/use-url-params'
 import { DateRangePicker } from '@/components/shared/DateRangePicker'
+import { DateRangePresets } from '@/components/shared/DateRangePresets'
 import { DeadStockTreemap } from '@/components/charts/DeadStockTreemap'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -478,7 +479,8 @@ function ConversionSection({ searchQuery }: { searchQuery: string }) {
 
   return (
     <div className="space-y-4 md:space-y-6">
-      <div className="flex justify-end">
+      <div className="flex flex-wrap justify-end items-center gap-2">
+        <DateRangePresets dateFrom={dateFrom} dateTo={dateTo} onChange={(from, to) => { setDateFrom(from); setDateTo(to) }} />
         <DateRangePicker dateFrom={dateFrom} dateTo={dateTo} onChange={(from, to) => { setDateFrom(from); setDateTo(to) }} />
       </div>
 

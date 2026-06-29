@@ -27,7 +27,6 @@ import {
   Briefcase,
   PackageCheck,
   Container,
-  GitMerge,
   GitBranch,
   Languages,
   Activity,
@@ -46,7 +45,7 @@ const navItems: Array<{ href: string; labelKey: TranslationKey; icon: typeof Lay
   { href: '/stock-forecast', labelKey: 'stockForecast', icon: TrendingDown },
   { href: '/customers', labelKey: 'customers', icon: Users },
   { href: '/receivables', labelKey: 'receivables', icon: Receipt },
-  { href: '/catalog-links', labelKey: 'catalogLinks', icon: GitMerge },
+  // Catalog Links hidden from nav (route still reachable at /catalog-links)
   { href: '/gap', labelKey: 'gapAnalysis', icon: SearchX },
   { href: '/scrap', labelKey: 'scrap', icon: Trash2 },
   { href: '/returns', labelKey: 'returns', icon: RotateCcw },

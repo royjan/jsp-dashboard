@@ -6,6 +6,7 @@ import { useCustomerAnalytics } from '@/hooks/use-analytics'
 import { useLocale } from '@/lib/locale-context'
 import { useUrlParams } from '@/hooks/use-url-params'
 import { DateRangePicker } from '@/components/shared/DateRangePicker'
+import { DateRangePresets } from '@/components/shared/DateRangePresets'
 import { AnimatedCounter } from '@/components/shared/AnimatedCounter'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -188,7 +189,8 @@ function CustomersSection({ searchQuery }: { searchQuery: string }) {
 
   return (
     <div className="space-y-4 md:space-y-6">
-      <div className="flex justify-end">
+      <div className="flex flex-wrap justify-end items-center gap-2">
+        <DateRangePresets dateFrom={dateFrom} dateTo={dateTo} onChange={(from, to) => { setDateFrom(from); setDateTo(to) }} />
         <DateRangePicker dateFrom={dateFrom} dateTo={dateTo} onChange={(from, to) => { setDateFrom(from); setDateTo(to) }} />
       </div>
 

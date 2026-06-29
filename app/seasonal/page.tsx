@@ -1,11 +1,12 @@
 'use client'
 
 import { useState, useMemo, useEffect, Suspense } from 'react'
-import { useSeasonalData, useSeasonalItems } from '@/hooks/use-analytics'
+import { useSeasonalData, useSeasonalItems, useSeasonalItemsByMonth } from '@/hooks/use-analytics'
 import { useLocale } from '@/lib/locale-context'
 import { useUrlParams } from '@/hooks/use-url-params'
 import { SeasonalHeatmap } from '@/components/charts/SeasonalHeatmap'
 import { DateRangePicker } from '@/components/shared/DateRangePicker'
+import { DateRangePresets } from '@/components/shared/DateRangePresets'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { SeasonalPageSkeleton } from '@/components/layout/PageSkeleton'
@@ -284,6 +285,61 @@ function SeasonalItemsSection({ dateFrom, dateTo }: { dateFrom: string; dateTo: 
   )
 }
 
+function PerMonthItemsSection({ dateFrom, dateTo }: { dateFrom: string; dateTo: string }) {
+  const { data, isLoading } = useSeasonalItemsByMonth(dateFrom, dateTo)
+  const months: { month: number; items: any[] }[] = data?.months || []
+  const hasAny = months.some((m) => m.items.length > 0)
+
+  return (
+    <div>
+      <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-1">
+        פריטים חזקים לפי חודש
+      </h2>
+      <p className="text-xs text-muted-foreground mb-3">
+        המוצרים המובילים בכל חודש (סכום מכירות על פני כל השנים בטווח)
+      </p>
+      {isLoading ? (
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
+          {Array.from({ length: 12 }).map((_, i) => <Skeleton key={i} className="h-40 w-full" />)}
+        </div>
+      ) : !hasAny ? (
+        <p className="text-sm text-muted-foreground">אין נתוני מכירות חודשיים בטווח זה</p>
+      ) : (
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
+          {months.map((m) => (
+            <Card key={m.month}>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">{MONTH_NAMES[m.month - 1]}</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                {m.items.length === 0 ? (
+                  <p className="px-3 pb-3 text-xs text-muted-foreground">—</p>
+                ) : (
+                  <table className="w-full text-xs">
+                    <tbody>
+                      {m.items.map((it, i) => (
+                        <tr key={it.item_code} className={i % 2 === 0 ? 'bg-background' : 'bg-muted/20'}>
+                          <td className="px-3 py-1.5 max-w-[150px]">
+                            <div className="truncate" title={it.item_name}>{it.item_name}</div>
+                            <ItemLink code={it.item_code} showCode className="text-[10px]" />
+                          </td>
+                          <td className="px-2 py-1.5 text-right text-muted-foreground whitespace-nowrap">
+                            ₪{it.revenue.toLocaleString()}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function SeasonalPageContent() {
   const { t } = useLocale()
   const { get, setMany } = useUrlParams()
@@ -317,11 +373,18 @@ function SeasonalPageContent() {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <DateRangePicker
-          dateFrom={dateFrom}
-          dateTo={dateTo}
-          onChange={(from, to) => { setDateFrom(from); setDateTo(to) }}
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <DateRangePresets
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            onChange={(from, to) => { setDateFrom(from); setDateTo(to) }}
+          />
+          <DateRangePicker
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            onChange={(from, to) => { setDateFrom(from); setDateTo(to) }}
+          />
+        </div>
         <span className="text-xs text-muted-foreground">
           {categories.length} {t('items')}
         </span>
@@ -390,6 +453,8 @@ function SeasonalPageContent() {
         </h2>
         <SeasonalItemsSection dateFrom={dateFrom} dateTo={dateTo} />
       </div>
+
+      <PerMonthItemsSection dateFrom={dateFrom} dateTo={dateTo} />
     </div>
   )
 }

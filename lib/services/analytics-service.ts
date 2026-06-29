@@ -652,6 +652,35 @@ export async function getDemandAnalysis(dateFrom?: string, dateTo?: string): Pro
 
 // ── Sales Analytics ──
 
+// The daily_sales table is populated by a sync/cron that can lag (it was stuck at
+// mid-month in prod). For recent days, aggregate live invoice headers from the SDK so
+// the chart runs through today. Basis matches daily_sales (SUM of grand_total per day).
+async function getLiveDailySales(from: string, to: string): Promise<SalesDataPoint[]> {
+  const cacheKey = `analytics:daily-live:${from}:${to}`
+  const cached = await getCached<SalesDataPoint[]>(cacheKey)
+  if (cached) return cached
+  try {
+    const invoices = await fetchDocuments(DOC_FORMATS.TAX_INVOICE, 2000)
+    const byDay = new Map<string, { revenue: number; count: number }>()
+    for (const inv of invoices as any[]) {
+      const d = (inv.doc_date || '').slice(0, 10)
+      if (!d || d < from || d > to) continue
+      const e = byDay.get(d) || { revenue: 0, count: 0 }
+      e.revenue += Number(inv.grand_total ?? inv.total) || 0
+      e.count += 1
+      byDay.set(d, e)
+    }
+    const rows = [...byDay.entries()]
+      .map(([date, v]) => ({ date, revenue: Math.round(v.revenue), count: v.count }))
+      .sort((a, b) => a.date.localeCompare(b.date))
+    await setCache(cacheKey, rows, 3600) // 1h — recent days settle quickly
+    return rows
+  } catch (e: any) {
+    console.warn('[Analytics] getLiveDailySales failed:', e?.message)
+    return []
+  }
+}
+
 export async function getSalesData(period: string = '30d', overrideDateFrom?: string, overrideDateTo?: string): Promise<SalesDataPoint[]> {
   const now = new Date()
   let dateFrom: string
@@ -669,7 +698,10 @@ export async function getSalesData(period: string = '30d', overrideDateFrom?: st
     }
   }
 
-  const dateTo = overrideDateTo || now.toISOString().split('T')[0]
+  const today = now.toISOString().split('T')[0]
+  const dateTo = overrideDateTo || today
+
+  let rows: SalesDataPoint[] = []
 
   // Try SQLite first (fast, local)
   try {
@@ -680,38 +712,54 @@ export async function getSalesData(period: string = '30d', overrideDateFrom?: st
        ORDER BY date`,
       [dateFrom, dateTo]
     )
-    if (dbResult.rows.length > 0) {
-      return dbResult.rows.map((r: any) => ({
-        date: r.date,
-        revenue: parseFloat(r.revenue) || 0,
-        count: r.invoice_count || 0,
-      }))
-    }
+    rows = dbResult.rows.map((r: any) => ({
+      date: r.date,
+      revenue: parseFloat(r.revenue) || 0,
+      count: r.invoice_count || 0,
+    }))
   } catch (e: any) {
     console.warn('[Analytics] getSalesData SQLite query failed:', e?.message)
   }
 
   // Fallback: Neon PostgreSQL
-  try {
-    const pgResult = await dbQuery(
-      `SELECT date::text as date, revenue, invoice_count
-       FROM dashboard.daily_sales
-       WHERE date >= $1 AND date <= $2
-       ORDER BY date`,
-      [dateFrom, dateTo]
-    )
-    if (pgResult.rows.length > 0) {
-      return pgResult.rows.map((r: any) => ({
+  if (rows.length === 0) {
+    try {
+      const pgResult = await dbQuery(
+        `SELECT date::text as date, revenue, invoice_count
+         FROM dashboard.daily_sales
+         WHERE date >= $1 AND date <= $2
+         ORDER BY date`,
+        [dateFrom, dateTo]
+      )
+      rows = pgResult.rows.map((r: any) => ({
         date: r.date,
         revenue: parseFloat(r.revenue) || 0,
         count: r.invoice_count || 0,
       }))
+    } catch (e: any) {
+      console.warn('[Analytics] getSalesData Neon fallback failed:', e?.message)
     }
-  } catch (e: any) {
-    console.warn('[Analytics] getSalesData Neon fallback failed:', e?.message)
   }
 
-  return []
+  // Live-fill the recent gap: if the synced table lags behind the requested window
+  // and that window reaches near today, aggregate the missing days live from the SDK.
+  const recentCutoff = new Date(now.getTime() - 35 * 86400000).toISOString().split('T')[0]
+  if (dateTo >= recentCutoff) {
+    const lastDbDate = rows.length ? rows[rows.length - 1].date : null
+    const gapFrom = lastDbDate
+      ? new Date(new Date(lastDbDate).getTime() + 86400000).toISOString().split('T')[0]
+      : (dateFrom > recentCutoff ? dateFrom : recentCutoff)
+    if (gapFrom <= dateTo) {
+      const live = await getLiveDailySales(gapFrom, dateTo)
+      if (live.length > 0) {
+        const byDate = new Map(rows.map((r) => [r.date, r]))
+        for (const lr of live) byDate.set(lr.date, lr) // live wins for overlapping days
+        rows = [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date))
+      }
+    }
+  }
+
+  return rows
 }
 
 // ── Seasonal Correlation ──
@@ -1299,7 +1347,13 @@ async function reconcileStockFromItemApi(rows: TopSellingItem[]): Promise<void> 
 export async function getTopSellingItems(period: string = '30d', forceRefresh = false): Promise<TopSellingItem[]> {
   const cacheKey = `analytics:top-items:${period}`
   const cached = forceRefresh ? null : await getCached<TopSellingItem[]>(cacheKey)
-  if (cached) return cached
+  if (cached) {
+    // Only sales aggregates are cached; stock can be stale/wrong (bulk feed quirk),
+    // so always reconcile the ≤20 displayed rows against the authoritative item API
+    // so the table's מלאי matches the hover card.
+    await reconcileStockFromItemApi(cached)
+    return cached
+  }
 
   const now = new Date()
   let dateFrom: string
@@ -1844,10 +1898,6 @@ export async function getCustomerAnalytics(dateFrom?: string, dateTo?: string) {
   const fromYear = parseInt(effDateFrom.substring(0, 4), 10)
   const toYear = parseInt(effDateTo.substring(0, 4), 10)
 
-  // Also fetch last year for churn/trend detection
-  const lastYearFrom = `${activeYear - 1}-01-01`
-  const lastYearTo = `${activeYear - 1}-12-31`
-
   interface InvoiceRecord {
     doc_date: string
     customer_code: string
@@ -2165,6 +2215,51 @@ export async function getCustomerAnalytics(dateFrom?: string, dateTo?: string) {
       }
     })
     .sort((a, b) => b.total_revenue - a.total_revenue)
+
+  // Churn needs previous-year revenue, but the default (this-year) range never loads
+  // last year — so seed it from Postgres customer_stats. This both fixes the trend of
+  // existing customers and surfaces customers who bought last year but nothing this
+  // year (true churn). Skip if the selected range already covers last year.
+  const lyStart = `${activeYear - 1}-01-01`
+  const lyEnd = `${activeYear - 1}-12-31`
+  const lastYearAlreadyLoaded = allInvoices.some(inv => inv.doc_date >= lyStart && inv.doc_date <= lyEnd)
+  if (!lastYearAlreadyLoaded) {
+    try {
+      const ly = await dbQuery(
+        `SELECT customer_code, MAX(customer_name) AS customer_name,
+                SUM(total_revenue::numeric) AS rev
+         FROM dashboard.customer_stats
+         WHERE year = $1
+         GROUP BY customer_code`,
+        [activeYear - 1]
+      )
+      const byCode = new Map(customers.map(c => [c.code, c]))
+      for (const row of ly.rows as any[]) {
+        const rev = Math.round(Number(row.rev) || 0)
+        if (rev <= 0 || !row.customer_code) continue
+        const existing = byCode.get(row.customer_code)
+        if (existing) {
+          existing.last_year_revenue = rev
+          const ratio = existing.this_year_revenue / rev
+          existing.trend = ratio > 1.2 ? 'up' : ratio < 0.8 ? 'down' : 'stable'
+        } else {
+          const c = {
+            code: row.customer_code,
+            name: customerNames.get(row.customer_code) || row.customer_name || row.customer_code,
+            gross_invoices: 0, total_credits: 0, total_revenue: 0, invoice_count: 0,
+            avg_order_value: 0, first_purchase: lyEnd, last_purchase: lyEnd,
+            this_year_revenue: 0, last_year_revenue: rev, unique_items: 0,
+            trend: 'down' as const,
+          }
+          customers.push(c)
+          byCode.set(row.customer_code, c)
+        }
+      }
+      console.log(`[Analytics] Customers: seeded last-year (${activeYear - 1}) revenue from customer_stats (${ly.rows.length} rows)`)
+    } catch (e: any) {
+      console.warn('[Analytics] Customers last-year seed failed:', e?.message)
+    }
+  }
 
   // Churned customers: bought last year, not this year
   const churned = customers

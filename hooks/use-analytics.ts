@@ -166,6 +166,34 @@ export function useSeasonalItems(dateFrom?: string, dateTo?: string, ai = false,
   })
 }
 
+export function useItemDocuments(code: string, type: string | null) {
+  return useQuery({
+    queryKey: ['item-documents', code, type],
+    queryFn: async () => {
+      const res = await fetch(`/api/items/${encodeURIComponent(code)}/documents?type=${type}`)
+      if (!res.ok) throw new Error('Failed')
+      return res.json()
+    },
+    enabled: !!code && !!type,
+    staleTime: 5 * 60 * 1000,
+  })
+}
+
+export function useSeasonalItemsByMonth(dateFrom?: string, dateTo?: string) {
+  return useQuery({
+    queryKey: ['seasonal-items-by-month', dateFrom, dateTo],
+    queryFn: async () => {
+      const params = new URLSearchParams()
+      if (dateFrom) params.set('date_from', dateFrom)
+      if (dateTo) params.set('date_to', dateTo)
+      const res = await fetch(`/api/analytics/seasonal/items-by-month?${params}`)
+      if (!res.ok) throw new Error('Failed')
+      return res.json()
+    },
+    staleTime: 6 * 60 * 60 * 1000,
+  })
+}
+
 export function useDeadStock(years: number = 1) {
   return useQuery({
     queryKey: ['dead-stock', years],

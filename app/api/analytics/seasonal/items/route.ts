@@ -55,7 +55,7 @@ export async function GET(request: Request) {
     const aiEnabled = searchParams.get('ai') === 'true'
     const refresh = searchParams.get('refresh') === 'true'
 
-    const cacheKey = `analytics:seasonal-items:v7:${dateFrom || 'all'}:${dateTo || 'all'}:${aiEnabled}`
+    const cacheKey = `analytics:seasonal-items:v8:${dateFrom || 'all'}:${dateTo || 'all'}:${aiEnabled}`
     // On refresh (the "רענן ניתוח" button) bypass the cache and regenerate.
     const cached = refresh ? null : await getCached<any>(cacheKey)
     if (cached) return NextResponse.json(cached)
@@ -102,7 +102,7 @@ export async function GET(request: Request) {
            FROM monthly_sales
            ${whereClause}
            GROUP BY item_code
-           HAVING SUM(revenue) > 100
+           HAVING SUM(revenue) > 500
            ORDER BY total_revenue DESC
            LIMIT 1000`,
           params
@@ -142,7 +142,7 @@ export async function GET(request: Request) {
           FROM dashboard.monthly_sales
           ${pgWhere}
           GROUP BY item_code
-          HAVING SUM(revenue) > 100
+          HAVING SUM(revenue) > 500
           ORDER BY total_revenue DESC
           LIMIT 1000
         `, pgParams)
@@ -263,23 +263,25 @@ export async function GET(request: Request) {
       finalSummer = []
     } else {
       const winterItems = items
-        .filter(i => i.winter_share > 0.52 && i.total_revenue > 200)
+        .filter(i => i.winter_share > 0.52 && i.total_revenue > 1000)
         .sort((a, b) => b.winter_share - a.winter_share)
         .slice(0, 25)
 
       const summerItems = items
-        .filter(i => i.summer_share > 0.52 && i.total_revenue > 200)
+        .filter(i => i.summer_share > 0.52 && i.total_revenue > 1000)
         .sort((a, b) => b.summer_share - a.summer_share)
         .slice(0, 25)
 
       // Relative-leader fallback: if nothing passes threshold, show top items sorted by seasonal tendency
       isRelative = winterItems.length === 0 && summerItems.length === 0
+      // Relative fallback still excludes tiny items so the list stays meaningful.
+      const meaningful = items.filter(i => i.total_revenue > 500)
       finalWinter = winterItems.length > 0
         ? winterItems
-        : [...items].sort((a, b) => b.winter_share - a.winter_share).slice(0, 10)
+        : [...meaningful].sort((a, b) => b.winter_share - a.winter_share).slice(0, 10)
       finalSummer = summerItems.length > 0
         ? summerItems
-        : [...items].sort((a, b) => b.summer_share - a.summer_share).slice(0, 10)
+        : [...meaningful].sort((a, b) => b.summer_share - a.summer_share).slice(0, 10)
     }
 
     let aiInsights: string | null = null
