@@ -4,15 +4,16 @@ import { NextResponse } from 'next/server'
 import { initializeSecrets } from '@/lib/aws-secrets'
 import { query } from '@/lib/db'
 import { getCached, setCache } from '@/lib/redis-client'
-import { fetchAllCustomers, fetchCustomerAging } from '@/lib/finansit-client'
+import { fetchAllCustomers, fetchCustomerBalanceFallback, fetchCustomerAgingFallback } from '@/lib/finansit-client'
 
 /**
  * Accounts-receivable (AR) overview.
  *
- * Open balances come LIVE from the Finansit SDK: the customer list already carries
- * a `balance` per customer, so one paginated sweep gives every debtor. For the top N
- * displayed debtors we additionally pull real per-bucket aging via getAging(code).
- * Falls back to the synced dashboard.customer_stats table if the SDK is unavailable.
+ * Open balances come LIVE from the FALLBACK box (192.168.0.109) — the primary box's
+ * AR Btrieve files are broken (balance 500s, aging returns wrong residual data). We
+ * read each customer's `net_balance` via getBalance, keep debtors (>0), and pull real
+ * aging buckets for the displayed top N. Falls back to dashboard.customer_stats if the
+ * SDK is unavailable.
  */
 
 interface ReceivableCustomer {
@@ -42,41 +43,64 @@ function sumTotals(customers: ReceivableCustomer[]) {
   )
 }
 
+// net_balance = debit − credit (what the customer owes). The .109 balance payload
+// exposes net_balance directly; derive it if only the debit/credit pair is present.
+function netBalanceOf(b: any): number {
+  if (!b) return 0
+  const net = b.net_balance ?? b.netBalance
+  if (net != null) return Number(net) || 0
+  const debit = Number(b.balance_debit ?? 0) || 0
+  const credit = Number(b.balance_credit ?? 0) || 0
+  if (debit || credit) return debit - credit
+  return Number(b.balance ?? b.total ?? 0) || 0
+}
+
+function bucketsOf(a: any, fallbackBalance: number) {
+  const bk = a?.buckets
+  if (!bk) return { ...emptyAging(), current: fallbackBalance } // unknown split → current
+  const t = (x: any) => Number(x?.total ?? x ?? 0) || 0
+  return {
+    current: t(bk.current),
+    days_30: t(bk['1_30'] ?? bk.days_30),
+    days_60: t(bk['31_60'] ?? bk.days_60),
+    days_90: t(bk['61_90'] ?? bk.days_90),
+    over_90: t(bk.over_90 ?? bk['90_plus']),
+  }
+}
+
+async function mapWithConcurrency<T, R>(items: T[], conc: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const out: R[] = []
+  for (let i = 0; i < items.length; i += conc) {
+    out.push(...(await Promise.all(items.slice(i, i + conc).map(fn))))
+  }
+  return out
+}
+
 async function fromLiveSdk(limit: number) {
   const all = await fetchAllCustomers()
-  const debtors = all
-    .map((c: any) => ({
-      code: c.code || c.customer_code || '',
-      name: c.name || c.customer_name || c.code || '',
-      balance: Number(c.balance ?? c.total ?? 0) || 0,
-    }))
-    .filter((c) => c.code && c.balance > 0)
+  const candidates = all
+    .map((c: any) => ({ code: c.code || c.customer_code || '', name: c.name || c.customer_name || c.code || '' }))
+    .filter((c) => c.code)
+
+  // net_balance per customer from the healthy fallback box (small payloads).
+  const balances = await mapWithConcurrency(candidates, 8, async (c) => {
+    const b = await fetchCustomerBalanceFallback(c.code).catch(() => null)
+    return { ...c, balance: netBalanceOf(b) }
+  })
+
+  const debtors = balances
+    .filter((c) => c.balance > 0)
     .sort((a, b) => b.balance - a.balance)
     .slice(0, limit)
 
   if (debtors.length === 0) return null
 
-  // Real aging buckets for the displayed debtors (bounded, batched).
-  const customers: ReceivableCustomer[] = []
-  for (let i = 0; i < debtors.length; i += 10) {
-    const batch = debtors.slice(i, i + 10)
-    const aged = await Promise.all(
-      batch.map(async (d) => {
-        const a = await fetchCustomerAging(d.code).catch(() => null)
-        const aging = a
-          ? {
-              current: Number(a.current ?? 0) || 0,
-              days_30: Number(a['1_30'] ?? a.days_30 ?? 0) || 0,
-              days_60: Number(a['31_60'] ?? a.days_60 ?? 0) || 0,
-              days_90: Number(a['61_90'] ?? a.days_90 ?? 0) || 0,
-              over_90: Number(a['90_plus'] ?? a.over_90 ?? 0) || 0,
-            }
-          : { ...emptyAging(), current: d.balance } // unknown split → show as current
-        return { ...d, open_count: 0, aging }
-      }),
-    )
-    customers.push(...aged)
-  }
+  // Real aging buckets for the displayed debtors (also from .109).
+  const customers: ReceivableCustomer[] = await mapWithConcurrency(debtors, 6, async (d) => {
+    const a = await fetchCustomerAgingFallback(d.code, { include_documents: false }).catch(() => null)
+    return { code: d.code, name: d.name, balance: d.balance, open_count: 0, aging: bucketsOf(a, d.balance) }
+  })
+
   return { customers, totals: sumTotals(customers), aging_basis: 'finapi_live' as const }
 }
 
@@ -113,7 +137,7 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const limit = Math.min(Number(searchParams.get('limit')) || 50, 500)
 
-    const cacheKey = `analytics:receivables:v2:${limit}`
+    const cacheKey = `analytics:receivables:v3:${limit}`
     const cached = await getCached<any>(cacheKey)
     if (cached) return NextResponse.json(cached)
 

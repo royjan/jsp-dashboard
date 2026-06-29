@@ -55,6 +55,35 @@ const client = createClient({
   timeout: 15000,
 })
 
+// Dedicated client pinned to the FALLBACK box (192.168.0.109). The primary box
+// (.111) has broken AR Btrieve files: balance 500s (which does fail over) but
+// aging returns 200 with WRONG residual data (which does NOT fail over). So for
+// accounts-receivable (balance + aging) we always go straight to the healthy .109.
+const fallbackBase = process.env.FINANSIT_BASE_URL_FALLBACK || FINANSIT_FALLBACK
+const fallbackClient = createClient({
+  baseUrl: fallbackBase,
+  baseUrls: [fallbackBase],
+  credentials: async () => {
+    await initializeSecrets()
+    return getSecret('FINANSIT_API_CREDENTIALS', '')
+  },
+  // Prefer the fallback-box login if configured; otherwise reuse primary creds.
+  credentialsByUrl: async () => {
+    await initializeSecrets()
+    return getSecret('FINANSIT_API_CREDENTIALS_FALLBACK', '') || undefined
+  },
+  concurrency: 6,
+  timeout: 15000,
+})
+
+export async function fetchCustomerBalanceFallback(code: string): Promise<any> {
+  return fallbackClient.customers.getBalance(code)
+}
+
+export async function fetchCustomerAgingFallback(code: string, params?: Record<string, any>): Promise<any> {
+  return fallbackClient.customers.getAging(code, params as any)
+}
+
 // ── Health & Utility ──
 
 export async function fetchHealth(): Promise<any> {

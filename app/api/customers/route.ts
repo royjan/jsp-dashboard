@@ -2,7 +2,7 @@ export const maxDuration = 120
 
 import { NextResponse } from 'next/server'
 import { initializeSecrets } from '@/lib/aws-secrets'
-import { client } from '@/lib/finansit-client'
+import { client, fetchCustomerBalanceFallback, fetchCustomerAgingFallback } from '@/lib/finansit-client'
 
 export async function GET(request: Request) {
   try {
@@ -15,10 +15,11 @@ export async function GET(request: Request) {
     }
 
     // Fetch all customer data in parallel
+    // Balance + aging come from the healthy .109 box (primary AR Btrieve files are broken).
     const [profile, balance, aging, orders, receipts, documents] = await Promise.all([
       client.customers.get(code),
-      client.customers.getBalance(code).catch(() => null),
-      client.customers.getAging(code).catch(() => null),
+      fetchCustomerBalanceFallback(code).catch(() => null),
+      fetchCustomerAgingFallback(code, { include_documents: false }).catch(() => null),
       // FINAPI ignores offset and has no total-count, so fetch up to a high cap
       // (1000 works; 5000 errors) and paginate client-side. A returned length of
       // exactly the cap means "at least this many".
@@ -29,13 +30,13 @@ export async function GET(request: Request) {
 
     return NextResponse.json({
       profile,
-      balance: balance?.balance ?? balance?.total ?? 0,
+      balance: balance?.net_balance ?? balance?.balance ?? balance?.total ?? 0,
       aging: {
-        current: aging?.current ?? 0,
-        days_30: aging?.['1_30'] ?? aging?.days_30 ?? 0,
-        days_60: aging?.['31_60'] ?? aging?.days_60 ?? 0,
-        days_90: aging?.['61_90'] ?? aging?.days_90 ?? 0,
-        over_90: aging?.['90_plus'] ?? aging?.over_90 ?? 0,
+        current: Number(aging?.buckets?.current?.total ?? aging?.current ?? 0) || 0,
+        days_30: Number(aging?.buckets?.['1_30']?.total ?? aging?.['1_30'] ?? 0) || 0,
+        days_60: Number(aging?.buckets?.['31_60']?.total ?? aging?.['31_60'] ?? 0) || 0,
+        days_90: Number(aging?.buckets?.['61_90']?.total ?? aging?.['61_90'] ?? 0) || 0,
+        over_90: Number(aging?.buckets?.over_90?.total ?? aging?.['90_plus'] ?? 0) || 0,
       },
       orders: orders?.orders || orders?.documents || orders || [],
       receipts: receipts?.receipts || receipts?.documents || receipts || [],
