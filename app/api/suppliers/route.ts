@@ -79,13 +79,23 @@ export async function GET(request: Request) {
       }
     }
 
-    // If a search query is provided, sort: exact number match first, partial
-    // number match second, the rest in original order.
-    const q = new URL(request.url).searchParams.get('q') || ''
+    // If a search query is provided, sort by relevance. Users type the supplier
+    // number with an optional "#" prefix (e.g. "#11" → vendor number 11), so strip
+    // it. Rank: exact number match, then number/code match, then name/code contains.
+    const rawQ = new URL(request.url).searchParams.get('q') || ''
+    const q = rawQ.trim().replace(/^#/, '').trim()
+    const qLower = q.toLowerCase()
     const sorted = q
       ? [...suppliers].sort((a, b) => {
-          const rank = (s: typeof suppliers[0]) =>
-            s.supplierNumber === q ? 0 : (s.supplierNumber || '').includes(q) ? 1 : 2
+          const rank = (s: typeof suppliers[0]) => {
+            const num = s.supplierNumber || ''
+            const code = (s.supplierCode || '').toLowerCase()
+            const name = (s.supplierName || '').toLowerCase()
+            if (num === q) return 0
+            if (num.includes(q) || code === qLower) return 1
+            if (name.includes(qLower) || code.includes(qLower)) return 2
+            return 3
+          }
           const rd = rank(a) - rank(b)
           if (rd !== 0) return rd
           return (b.totalOrders ?? 0) - (a.totalOrders ?? 0)

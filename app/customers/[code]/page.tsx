@@ -12,7 +12,7 @@ import { cn } from '@/lib/utils'
 import { useSortable, SortableTh } from '@/components/shared/sortable-table'
 import Link from 'next/link'
 import {
-  User, DollarSign, Clock, FileText, Receipt, ArrowLeft, AlertTriangle, ShoppingCart,
+  User, DollarSign, Clock, FileText, Receipt, ArrowLeft, AlertTriangle, ShoppingCart, ExternalLink,
 } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
@@ -273,6 +273,8 @@ interface DocRow {
   doc: any
   docNumber: string
   docType: string
+  format: string
+  year: string
   date: string
   amount: number
   itemCount: number
@@ -281,14 +283,19 @@ interface DocRow {
 function DocumentTable({ items, t, isReceipt }: { items: any[]; t: (k: any) => string; isReceipt?: boolean }) {
   const rows: DocRow[] = useMemo(
     () =>
-      (items || []).slice(0, 50).map((doc: any) => ({
-        doc,
-        docNumber: String(doc.number || doc.doc_number || doc.receipt_number || ''),
-        docType: String(DOC_TYPE_NAMES[doc.format || doc.type] || doc.format_name || doc.type || ''),
-        date: doc.date || doc.created_at || '',
-        amount: doc.total || doc.amount || doc.sum || 0,
-        itemCount: doc.line_count || doc.items?.length || 0,
-      })),
+      (items || []).slice(0, 50).map((doc: any) => {
+        const date = doc.date || doc.doc_date || doc.created_at || ''
+        return {
+          doc,
+          docNumber: String(doc.number || doc.doc_number || doc.receipt_number || ''),
+          docType: String(DOC_TYPE_NAMES[doc.format || doc.type] || doc.format_name || doc.type || ''),
+          format: String(doc.format || doc.type || ''),
+          year: String(date).slice(0, 4),
+          date,
+          amount: doc.total || doc.amount || doc.sum || 0,
+          itemCount: doc.line_count || doc.items?.length || 0,
+        }
+      }),
     [items]
   )
 
@@ -321,7 +328,22 @@ function DocumentTable({ items, t, isReceipt }: { items: any[]; t: (k: any) => s
                 transition={{ delay: Math.min(i * 0.02, 0.5), duration: 0.2 }}
                 className="border-b hover:bg-muted/50 transition-colors"
               >
-                <td className="p-2 font-mono">{row.docNumber || '-'}</td>
+                <td className="p-2 font-mono">
+                  {row.docNumber && row.format ? (
+                    <a
+                      href={`/api/documents/${encodeURIComponent(row.format)}/${encodeURIComponent(row.docNumber)}/pdf${row.year ? `?year=${row.year}` : ''}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary hover:underline inline-flex items-center gap-1"
+                      title="צפייה במסמך (PDF)"
+                    >
+                      {row.docNumber}
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                  ) : (
+                    row.docNumber || '-'
+                  )}
+                </td>
                 <td className="p-2">
                   <Badge variant="secondary">{row.docType || '-'}</Badge>
                 </td>
