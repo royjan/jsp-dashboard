@@ -125,14 +125,20 @@ export function ItemHoverCard({ code, children }: { code: string; children: Reac
     setLoading(true)
     try {
       const res = await fetch(`/api/items/${encodeURIComponent(code)}`)
-      if (!res.ok) throw new Error('Not found')
-      const data = await res.json()
-      cache.set(code, data)
-      negCache.delete(code)
-      setItem(data)
+      if (res.ok) {
+        const data = await res.json()
+        cache.set(code, data)
+        negCache.delete(code)
+        setItem(data)
+      } else if (res.status === 404) {
+        // Genuine "not found" — cache briefly and show the message.
+        negCache.set(code, Date.now())
+        setNotFound(true)
+      }
+      // Transient (5xx / failover hiccup): leave notFound false and don't cache,
+      // so the next hover retries instead of getting stuck on "not found".
     } catch {
-      negCache.set(code, Date.now())
-      setNotFound(true)
+      // Network/timeout — also transient; allow a retry on the next hover.
     } finally {
       setLoading(false)
     }
