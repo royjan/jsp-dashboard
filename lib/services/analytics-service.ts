@@ -1277,6 +1277,25 @@ export async function getReorderRecommendations(dateFrom?: string, dateTo?: stri
 
 // ── Top Selling Items ──
 
+/**
+ * The per-warehouse stock feed (fetchAllStockItems / client.stock.*) is out of sync
+ * with item-level stock for some items: a real in-stock item can show 0 or be missing
+ * from the bulk feed entirely (e.g. 9850364680 — 36 in stock, absent from /all). The
+ * item endpoint (client.items.get) returns the authoritative qty — the same value the
+ * ItemHoverCard shows. Reconcile a top-items result against it so the table's stock
+ * column matches the hover. Bounded to the ≤20 displayed rows, run in parallel; a
+ * failed lookup keeps the existing value.
+ */
+async function reconcileStockFromItemApi(rows: TopSellingItem[]): Promise<void> {
+  await Promise.all(rows.map(async (r) => {
+    try {
+      const live = await client.items.get(r.code)
+      const qty = Number((live as any)?.stock_qty)
+      if (Number.isFinite(qty)) r.stock_qty = qty
+    } catch { /* keep existing value */ }
+  }))
+}
+
 export async function getTopSellingItems(period: string = '30d'): Promise<TopSellingItem[]> {
   const cacheKey = `analytics:top-items:${period}`
   const cached = await getCached<TopSellingItem[]>(cacheKey)
@@ -1346,6 +1365,7 @@ export async function getTopSellingItems(period: string = '30d'): Promise<TopSel
         }
       }).slice(0, 20)
 
+      await reconcileStockFromItemApi(result)
       await setCache(cacheKey, result, CACHE_TTL.ANALYTICS)
       console.log(`[Analytics] Top selling items from PostgreSQL: ${result.length} items`)
       return result
@@ -1421,6 +1441,7 @@ export async function getTopSellingItems(period: string = '30d'): Promise<TopSel
       .sort((a, b) => b.total_revenue - a.total_revenue)
       .slice(0, 20)
 
+    await reconcileStockFromItemApi(result)
     await setCache(cacheKey, result, CACHE_TTL.ANALYTICS)
     return result
   } catch (e) {

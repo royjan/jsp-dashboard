@@ -216,7 +216,9 @@ ${stockAlerts.length > 0
         model: getGeminiFlash(),
         system: SYSTEM_PROMPT_HE,
         prompt,
-        maxOutputTokens: 500,
+        // Hebrew tokenizes densely; 500 truncated the JSON mid-string, which then
+        // leaked raw `{"summary": ...` into the UI. Give it room to close the JSON.
+        maxOutputTokens: 1000,
       })
 
       // Parse the response
@@ -231,22 +233,22 @@ ${stockAlerts.length > 0
           bullets: Array.isArray(raw.bullets) ? raw.bullets.map(String) : [],
         }
       } catch {
-        // Fallback: use the raw text as bullets, stripping any JSON wrapper
-        const text = result.text.trim()
-        let lines: string[]
-        try {
-          const obj = JSON.parse(text)
-          lines = Array.isArray(obj.bullets) ? obj.bullets : [obj.summary || text]
-        } catch {
-          lines = text.split('\n').map(l => l.replace(/^[-•*]\s*/, '').trim()).filter(Boolean)
+        // The model returned truncated or malformed JSON. If it was *trying* to be
+        // JSON (starts with '{' or a markdown fence) but won't parse, never echo the
+        // raw/partial object into the UI — bail to the deterministic brief below.
+        const text = result.text.trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim()
+        if (text.startsWith('{') || text.startsWith('[')) {
+          throw new Error('model returned unparseable JSON')
         }
+        // Otherwise it's plain text / markdown bullets — use those as-is.
+        const lines = text.split('\n').map(l => l.replace(/^[-•*]\s*/, '').trim()).filter(Boolean)
         parsed = { summary: lines[0] || 'תקציר בוקר', bullets: lines.slice(1).length > 0 ? lines.slice(1) : lines }
       }
     } catch (aiErr) {
       // AI unavailable (e.g. GEMINI_API_KEY not set, or generation failed) —
       // degrade gracefully to a deterministic, data-driven brief (HTTP 200)
       // instead of 500-ing the whole overview page.
-      console.warn('[morning-brief] AI unavailable, using templated brief:', aiErr instanceof Error ? aiErr.message : aiErr)
+      console.warn('[morning-brief] AI unavailable or unparseable, using templated brief:', aiErr instanceof Error ? aiErr.message : aiErr)
       const fmt = (n: number) => `₪${Math.round(n).toLocaleString()}`
       const bullets: string[] = []
       bullets.push(`מכירות החודש: ${fmt(salesKpis.monthSales.total)} (${salesKpis.monthSales.count} עסקאות)${salesKpis.yoyChange !== null ? `, שינוי שנתי ${salesKpis.yoyChange > 0 ? '+' : ''}${salesKpis.yoyChange}%` : ''}`)
