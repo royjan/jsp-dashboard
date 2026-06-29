@@ -280,10 +280,13 @@ interface DocRow {
   itemCount: number
 }
 
+const PAGE_SIZE = 30
+
 function DocumentTable({ items, t, isReceipt }: { items: any[]; t: (k: any) => string; isReceipt?: boolean }) {
+  const [page, setPage] = useState(0)
   const rows: DocRow[] = useMemo(
     () =>
-      (items || []).slice(0, 50).map((doc: any) => {
+      (items || []).map((doc: any) => {
         const date = doc.date || doc.doc_date || doc.created_at || ''
         return {
           doc,
@@ -305,56 +308,81 @@ function DocumentTable({ items, t, isReceipt }: { items: any[]; t: (k: any) => s
     return <p className="text-muted-foreground text-sm py-4 text-center">-</p>
   }
 
+  const total = sorted.length
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE))
+  const current = Math.min(page, pageCount - 1)
+  const start = current * PAGE_SIZE
+  const pageRows = sorted.slice(start, start + PAGE_SIZE)
+
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b text-muted-foreground [&>th]:p-2">
-            <SortableTh<DocRow> label={t('docNumber')} sortKey="docNumber" align="start" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-            <SortableTh<DocRow> label={t('docType')} sortKey="docType" align="start" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-            <SortableTh<DocRow> label={t('date')} sortKey="date" align="start" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-            <SortableTh<DocRow> label={t('amount')} sortKey="amount" align="end" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-            {!isReceipt && <SortableTh<DocRow> label={t('items')} sortKey="itemCount" align="end" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />}
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.map((row: DocRow, i: number) => {
-            const doc = row.doc
-            return (
-              <motion.tr
-                key={`${doc.format || doc.type}-${doc.number || doc.doc_number}-${i}`}
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: Math.min(i * 0.02, 0.5), duration: 0.2 }}
-                className="border-b hover:bg-muted/50 transition-colors"
-              >
-                <td className="p-2 font-mono">
-                  {row.docNumber && row.format ? (
-                    <a
-                      href={`/api/documents/${encodeURIComponent(row.format)}/${encodeURIComponent(row.docNumber)}/pdf${row.year ? `?year=${row.year}` : ''}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-primary hover:underline inline-flex items-center gap-1"
-                      title="צפייה במסמך (PDF)"
-                    >
-                      {row.docNumber}
-                      <ExternalLink className="h-3 w-3" />
-                    </a>
-                  ) : (
-                    row.docNumber || '-'
-                  )}
-                </td>
-                <td className="p-2">
-                  <Badge variant="secondary">{row.docType || '-'}</Badge>
-                </td>
-                <td className="p-2 text-muted-foreground">{row.date || '-'}</td>
-                <td className="p-2 text-end font-medium">{ILS_FORMAT.format(row.amount)}</td>
-                {!isReceipt && <td className="p-2 text-end">{row.itemCount ? formatNumber(row.itemCount) : '-'}</td>}
-              </motion.tr>
-            )
-          })}
-        </tbody>
-      </table>
+    <div className="space-y-2">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b text-muted-foreground [&>th]:p-2">
+              <SortableTh<DocRow> label={t('docNumber')} sortKey="docNumber" align="start" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+              <SortableTh<DocRow> label={t('docType')} sortKey="docType" align="start" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+              <SortableTh<DocRow> label={t('date')} sortKey="date" align="start" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+              <SortableTh<DocRow> label={t('amount')} sortKey="amount" align="end" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+              {!isReceipt && <SortableTh<DocRow> label={t('items')} sortKey="itemCount" align="end" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />}
+            </tr>
+          </thead>
+          <tbody>
+            {pageRows.map((row: DocRow, i: number) => {
+              const doc = row.doc
+              return (
+                <tr
+                  key={`${doc.format || doc.type}-${doc.number || doc.doc_number}-${start + i}`}
+                  className="border-b hover:bg-muted/50 transition-colors"
+                >
+                  <td className="p-2 font-mono">
+                    {row.docNumber && row.format ? (
+                      <Link
+                        href={`/documents/${encodeURIComponent(row.format)}/${encodeURIComponent(row.docNumber)}${row.year ? `?year=${row.year}` : ''}`}
+                        className="text-primary hover:underline inline-flex items-center gap-1"
+                        title="צפייה במסמך"
+                      >
+                        {row.docNumber}
+                        <ExternalLink className="h-3 w-3" />
+                      </Link>
+                    ) : (
+                      row.docNumber || '-'
+                    )}
+                  </td>
+                  <td className="p-2">
+                    <Badge variant="secondary">{row.docType || '-'}</Badge>
+                  </td>
+                  <td className="p-2 text-muted-foreground">{(row.date || '-').slice(0, 10)}</td>
+                  <td className="p-2 text-end font-medium">{ILS_FORMAT.format(row.amount)}</td>
+                  {!isReceipt && <td className="p-2 text-end">{row.itemCount ? formatNumber(row.itemCount) : '-'}</td>}
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Pagination */}
+      <div className="flex items-center justify-between text-xs text-muted-foreground pt-1">
+        <span>{start + 1}–{Math.min(start + PAGE_SIZE, total)} מתוך {formatNumber(total)}{total >= 1000 ? '+' : ''}</span>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setPage(Math.max(0, current - 1))}
+            disabled={current === 0}
+            className="px-2 py-1 rounded border disabled:opacity-40 hover:bg-accent"
+          >
+            הקודם
+          </button>
+          <span className="px-1">{current + 1}/{pageCount}</span>
+          <button
+            onClick={() => setPage(Math.min(pageCount - 1, current + 1))}
+            disabled={current >= pageCount - 1}
+            className="px-2 py-1 rounded border disabled:opacity-40 hover:bg-accent"
+          >
+            הבא
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

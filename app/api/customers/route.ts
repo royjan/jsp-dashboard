@@ -19,9 +19,12 @@ export async function GET(request: Request) {
       client.customers.get(code),
       client.customers.getBalance(code).catch(() => null),
       client.customers.getAging(code).catch(() => null),
-      client.customers.getOrders(code, { limit: 50, direction: 'desc' }).catch(() => null),
-      client.customers.getReceipts(code, { limit: 50, direction: 'desc' }).catch(() => null),
-      client.customers.getDocuments(code, { limit: 100, direction: 'desc' }).catch(() => null),
+      // FINAPI ignores offset and has no total-count, so fetch up to a high cap
+      // (1000 works; 5000 errors) and paginate client-side. A returned length of
+      // exactly the cap means "at least this many".
+      client.customers.getOrders(code, { limit: 1000, direction: 'desc' }).catch(() => null),
+      client.customers.getReceipts(code, { limit: 1000, direction: 'desc' }).catch(() => null),
+      client.customers.getDocuments(code, { limit: 1000, direction: 'desc' }).catch(() => null),
     ])
 
     return NextResponse.json({
