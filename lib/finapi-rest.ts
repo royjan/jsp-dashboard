@@ -84,8 +84,12 @@ export function createClient(config: FinapiClientConfig) {
     return url.toString()
   }
 
-  function shouldFailover(e: any): boolean {
-    if (e instanceof FinansitApiError) return e.status >= 502 // 502/503/504 → try next box
+  function shouldFailover(e: any, retryOn500 = false): boolean {
+    // 502/503/504 → box unreachable/overloaded, always safe to retry. 500 →
+    // only retry for idempotent GETs (e.g. the primary box failing to open a
+    // Btrieve file 500s PDFs/details that the fallback box can serve); never
+    // retry a 500 on a mutation (could double-write).
+    if (e instanceof FinansitApiError) return e.status >= (retryOn500 ? 500 : 502)
     const code = e?.code
     return (
       e?.name === 'AbortError' || // our timeout fired
@@ -97,7 +101,7 @@ export function createClient(config: FinapiClientConfig) {
 
   // Run `attempt` against the active base URL; on a connection-level error fail
   // over to the remaining base URLs in order. Each attempt gets its own timeout.
-  async function withFailover<T>(attempt: (base: string, signal: AbortSignal) => Promise<T>): Promise<T> {
+  async function withFailover<T>(attempt: (base: string, signal: AbortSignal) => Promise<T>, retryOn500 = false): Promise<T> {
     if (semaphore) await semaphore.acquire()
     try {
       const order = [activeIdx, ...baseUrls.map((_, i) => i).filter((i) => i !== activeIdx)]
@@ -112,7 +116,7 @@ export function createClient(config: FinapiClientConfig) {
           return out
         } catch (e: any) {
           lastErr = e
-          if (n < order.length - 1 && shouldFailover(e)) {
+          if (n < order.length - 1 && shouldFailover(e, retryOn500)) {
             console.warn(`[finapi] ${baseUrls[idx]} failed (${e?.name || e?.code || e?.status || 'error'}); failing over to ${baseUrls[order[n + 1]]}`)
             continue
           }
@@ -145,7 +149,7 @@ export function createClient(config: FinapiClientConfig) {
         throw new FinansitApiError(res.status, text, path)
       }
       return res.json()
-    })
+    }, method === 'GET') // GETs are idempotent → also fail over on 500
   }
 
   async function requestRaw(path: string, params?: Record<string, any>): Promise<Response> {
@@ -161,7 +165,7 @@ export function createClient(config: FinapiClientConfig) {
         throw new FinansitApiError(res.status, text, path)
       }
       return res
-    })
+    }, true) // raw fetches are GET-only (PDFs/exports) → fail over on 500 too
   }
 
   const get = (path: string, params?: Record<string, any>) => request('GET', path, params)

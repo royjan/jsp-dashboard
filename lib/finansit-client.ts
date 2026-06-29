@@ -19,16 +19,22 @@ import type {
 
 // FINANSIT_BASE_URL = primary FINAPI box; FINANSIT_BASE_URL_FALLBACK = secondary.
 // The client tries primary first and fails over to the fallback on
-// connection/timeout/5xx errors (sticky once one works). Falls back to the
-// prod default when neither env var is set.
+// connection/timeout/5xx errors (sticky once one works). Defaults to the known
+// LAN boxes so the fallback is ALWAYS active even if the env vars are unset:
+// primary 192.168.0.111:8000, fallback 192.168.0.109:8000. This matters because
+// the primary box intermittently can't open the current-year invoice-detail
+// Btrieve file (7IVH.DAT, status 3012), which 503s PDFs / purchases / details —
+// the fallback box serves those.
+const FINANSIT_PRIMARY = 'http://192.168.0.111:8000'
+const FINANSIT_FALLBACK = 'http://192.168.0.109:8000'
 const finansitBaseUrls = [
-  process.env.FINANSIT_BASE_URL,
-  process.env.FINANSIT_BASE_URL_FALLBACK,
+  process.env.FINANSIT_BASE_URL || FINANSIT_PRIMARY,
+  process.env.FINANSIT_BASE_URL_FALLBACK || FINANSIT_FALLBACK,
 ].filter(Boolean) as string[]
 
 const client = createClient({
   baseUrls: finansitBaseUrls.length ? finansitBaseUrls : undefined,
-  baseUrl: process.env.FINANSIT_BASE_URL || undefined,
+  baseUrl: process.env.FINANSIT_BASE_URL || FINANSIT_PRIMARY,
   credentials: async () => {
     await initializeSecrets()
     return getSecret('FINANSIT_API_CREDENTIALS', '')
