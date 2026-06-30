@@ -124,6 +124,7 @@ interface WizardState {
   schema: string
   directPartId: string
   directPartName: string
+  lookupVin: string
 }
 
 const STEPS = [
@@ -175,6 +176,7 @@ export default function CreateFlowWizard({ seedDescription, existingRules = [], 
     schema: '',
     directPartId: '',
     directPartName: '',
+    lookupVin: '',
   }))
 
   const panelRef = useRef<HTMLDivElement>(null)
@@ -183,6 +185,50 @@ export default function CreateFlowWizard({ seedDescription, existingRules = [], 
   const set = useCallback(<K extends keyof WizardState>(key: K, value: WizardState[K]) => {
     setForm(prev => ({ ...prev, [key]: value }))
   }, [])
+
+  // Auto-fill the catalog path (category/subcategory/schema) from a direct part number.
+  // Fast when the part is already pinned; otherwise a live PSA lookup (needs the VIN, slow).
+  const [resolving, setResolving] = useState(false)
+  const [resolveMsg, setResolveMsg] = useState<{ kind: 'ok' | 'info' | 'error'; text: string } | null>(null)
+  const autoFillByPartId = useCallback(async () => {
+    const pid = form.directPartId.trim()
+    if (!pid) {
+      setResolveMsg({ kind: 'error', text: 'Enter a direct part number first.' })
+      return
+    }
+    setResolving(true)
+    setResolveMsg(null)
+    try {
+      const res = await fetch('/api/flow-decisions/resolve-path', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ partId: pid, vin: form.lookupVin.trim() || undefined }),
+      })
+      const d = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(d?.error || 'Lookup failed')
+      if (d.found) {
+        setForm(prev => ({
+          ...prev,
+          category: d.category || prev.category,
+          subcategory: d.subcategory || prev.subcategory,
+          schema: d.schema || prev.schema,
+          directPartName: prev.directPartName || d.name || '',
+        }))
+        setResolveMsg({
+          kind: 'ok',
+          text: d.source === 'cache' ? 'Filled from a known part ✓' : 'Filled from the live PSA catalog ✓',
+        })
+      } else if (d.needsVin) {
+        setResolveMsg({ kind: 'info', text: 'New part — enter the VIN below to look it up live in PSA (can take up to ~90s).' })
+      } else {
+        setResolveMsg({ kind: 'error', text: d.error || 'Could not resolve this part.' })
+      }
+    } catch (e) {
+      setResolveMsg({ kind: 'error', text: e instanceof Error ? e.message : 'Lookup failed.' })
+    } finally {
+      setResolving(false)
+    }
+  }, [form.directPartId, form.lookupVin])
 
   const lambda = form.suppliers[0] || 'partslink'
 
@@ -463,6 +509,9 @@ export default function CreateFlowWizard({ seedDescription, existingRules = [], 
                   set={set}
                   suggestions={autocomplete}
                   supplierName={currentSupplier.name}
+                  onAutoFill={autoFillByPartId}
+                  resolving={resolving}
+                  resolveMsg={resolveMsg}
                 />
               )}
               {step === 4 && (
@@ -822,19 +871,65 @@ function StepMapping({
   set,
   suggestions,
   supplierName,
+  onAutoFill,
+  resolving,
+  resolveMsg,
 }: {
   form: WizardState
   set: <K extends keyof WizardState>(key: K, value: WizardState[K]) => void
   suggestions: AutocompleteData
   supplierName: string
+  onAutoFill: () => void
+  resolving: boolean
+  resolveMsg: { kind: 'ok' | 'info' | 'error'; text: string } | null
 }) {
+  const msgColor =
+    resolveMsg?.kind === 'ok' ? 'text-emerald-300'
+      : resolveMsg?.kind === 'error' ? 'text-rose-300'
+        : 'text-sky-300'
   return (
     <StepShell
       icon={<Layers className="h-5 w-5" />}
       title="Where does this part live in the catalog?"
-      hint={`Tell us how to find the part inside ${supplierName}. Start typing — we suggest paths used before.`}
+      hint={`Tell us how to find the part inside ${supplierName} — or paste a part number and let us auto-fill it.`}
     >
       <div className="space-y-4">
+        {/* Auto-fill by part id: known part → instant; new part → live PSA lookup (needs VIN). */}
+        <div className="rounded-xl border border-sky-400/20 bg-sky-500/5 p-3">
+          <div className="mb-1 flex items-baseline justify-between gap-2">
+            <span className="text-sm font-medium text-slate-200">Have the part number? Auto-fill the path</span>
+            <span className="text-[11px] text-slate-500">We look it up in {supplierName} for you.</span>
+          </div>
+          <div className="flex gap-2 [&_input]:h-12 [&_input]:rounded-xl [&_input]:border-white/15 [&_input]:bg-white/5 [&_input]:px-3 [&_input]:text-slate-100 [&_input]:placeholder:text-slate-500">
+            <input
+              type="text"
+              value={form.directPartId}
+              onChange={e => set('directPartId', e.target.value)}
+              placeholder='Direct part number (מק״ט), e.g. 6466S5'
+              className="w-full"
+            />
+            <button
+              type="button"
+              onClick={onAutoFill}
+              disabled={resolving || !form.directPartId.trim()}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-sky-500 px-3 text-sm font-medium text-white hover:bg-sky-400 disabled:opacity-50"
+            >
+              {resolving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+              Auto-fill by part id
+            </button>
+          </div>
+          <div className="mt-2 [&_input]:h-10 [&_input]:rounded-lg [&_input]:border-white/10 [&_input]:bg-white/5 [&_input]:px-3 [&_input]:text-sm [&_input]:text-slate-100 [&_input]:placeholder:text-slate-500">
+            <input
+              type="text"
+              value={form.lookupVin}
+              onChange={e => set('lookupVin', e.target.value)}
+              placeholder="VIN — only needed for a part we haven't seen before (live lookup, up to ~90s)"
+              className="w-full"
+            />
+          </div>
+          {resolveMsg && <p className={`mt-2 text-xs ${msgColor}`}>{resolveMsg.text}</p>}
+        </div>
+
         <WizardAutocompleteField label="Category" hint="The broad group, e.g. Engine, Brakes, Body.">
           <AutocompleteInput
             id="wizard-category"
@@ -862,18 +957,6 @@ function StepMapping({
             placeholder="e.g. ENGINE OIL FILTER"
           />
         </WizardAutocompleteField>
-
-        <div className="border-t border-white/10 pt-4">
-          <WizardAutocompleteField label="Direct part number (optional)" hint="The exact מק״ט to pin for this flow, e.g. 6466S5.">
-            <input
-              type="text"
-              value={form.directPartId}
-              onChange={e => set('directPartId', e.target.value)}
-              placeholder="e.g. 6466S5 — leave empty for none"
-              className="w-full"
-            />
-          </WizardAutocompleteField>
-        </div>
         <WizardAutocompleteField label="Direct part name (optional)" hint="How the part is listed inside the schema, e.g. OIL SEPARATOR SEAL.">
           <input
             type="text"
