@@ -122,6 +122,8 @@ interface WizardState {
   category: string
   subcategory: string
   schema: string
+  directPartId: string
+  directPartName: string
 }
 
 const STEPS = [
@@ -171,6 +173,8 @@ export default function CreateFlowWizard({ seedDescription, existingRules = [], 
     category: '',
     subcategory: '',
     schema: '',
+    directPartId: '',
+    directPartName: '',
   }))
 
   const panelRef = useRef<HTMLDivElement>(null)
@@ -318,6 +322,7 @@ export default function CreateFlowWizard({ seedDescription, existingRules = [], 
       setError(null)
       try {
         const vehicleFilters = buildVehicleFilters(form)
+        const directPartId = form.directPartId.trim()
         const body = {
           partDescription: form.partDescription.trim(),
           flowDecision: {
@@ -327,6 +332,9 @@ export default function CreateFlowWizard({ seedDescription, existingRules = [], 
           },
           lambdaTarget: lambda,
           ...(vehicleFilters ? { vehicleFilters } : {}),
+          ...(directPartId
+            ? { directPart: { partId: directPartId, name: form.directPartName.trim() || undefined } }
+            : {}),
         }
         const res = await fetch('/api/flow-decisions', {
           method: 'POST',
@@ -854,6 +862,27 @@ function StepMapping({
             placeholder="e.g. ENGINE OIL FILTER"
           />
         </WizardAutocompleteField>
+
+        <div className="border-t border-white/10 pt-4">
+          <WizardAutocompleteField label="Direct part number (optional)" hint="The exact מק״ט to pin for this flow, e.g. 6466S5.">
+            <input
+              type="text"
+              value={form.directPartId}
+              onChange={e => set('directPartId', e.target.value)}
+              placeholder="e.g. 6466S5 — leave empty for none"
+              className="w-full"
+            />
+          </WizardAutocompleteField>
+        </div>
+        <WizardAutocompleteField label="Direct part name (optional)" hint="How the part is listed inside the schema, e.g. OIL SEPARATOR SEAL.">
+          <input
+            type="text"
+            value={form.directPartName}
+            onChange={e => set('directPartName', e.target.value)}
+            placeholder="e.g. OIL SEPARATOR SEAL"
+            className="w-full"
+          />
+        </WizardAutocompleteField>
       </div>
     </StepShell>
   )
@@ -1102,6 +1131,17 @@ function RuleSentence({ form, lambda, large }: { form: WizardState; lambda: stri
           <span className="text-slate-400">Catalog path: </span>
           <span className="font-medium text-slate-200">
             {form.category} › {form.subcategory} › {form.schema}
+          </span>
+          .
+        </>
+      )}
+      {form.directPartId.trim() && (
+        <>
+          {' '}
+          <span className="text-slate-400">Pinned part: </span>
+          <span className="font-medium text-emerald-200" dir="auto">
+            {form.directPartId.trim()}
+            {form.directPartName.trim() && ` (${form.directPartName.trim()})`}
           </span>
           .
         </>

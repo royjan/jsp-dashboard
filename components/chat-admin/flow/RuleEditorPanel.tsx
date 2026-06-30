@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { X, Save, Trash2, Check, XCircle, Loader2, Car } from 'lucide-react'
+import { X, Save, Trash2, Check, XCircle, Loader2, Car, Pin } from 'lucide-react'
 import type { FlowDecisionRecord } from '@/types/chat-admin/flow-decision'
 import AutocompleteInput from './AutocompleteInput'
 import { VinDecodeSection } from './VinDecodeSection'
@@ -94,6 +94,7 @@ export function RuleEditorPanel({ rule, isCreating, seedDescription, onClose, on
         },
         lambdaTarget: form.lambdaTarget,
         vehicleFilters: buildVehicleFilters(form),
+        directPart: buildDirectPart(form, rule),
       }
       let saved: FlowDecisionRecord
       if (isCreating || !rule) {
@@ -252,6 +253,39 @@ export function RuleEditorPanel({ rule, isCreating, seedDescription, onClose, on
                 />
               </Field>
             </div>
+
+            <fieldset className="rounded-md border border-slate-200 p-3 dark:border-slate-800">
+              <legend className="px-2 text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">
+                <Pin className="mr-1 inline h-3 w-3" />
+                Pinned direct part (optional)
+              </legend>
+              <div className="grid grid-cols-1 gap-3">
+                <Field label="Part number (מק״ט)">
+                  <TextInput
+                    value={form.directPartId}
+                    onChange={v => set('directPartId', v)}
+                    placeholder="e.g. 6466S5 — leave empty for no pin"
+                  />
+                </Field>
+                <Field label="Part name (as listed in the schema)">
+                  <TextInput
+                    value={form.directPartName}
+                    onChange={v => set('directPartName', v)}
+                    placeholder="e.g. OIL SEPARATOR SEAL"
+                  />
+                </Field>
+              </div>
+              {rule?.directPart && rule.directPart.partId === form.directPartId.trim() && (
+                <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                  {rule.directPart.price != null && `₪${rule.directPart.price} · `}
+                  {rule.directPart.inStock ? 'in stock' : 'out of stock'}
+                </p>
+              )}
+              <p className="mt-2 text-xs text-slate-400">
+                The exact part returned for this description + scope. The name is how the part is
+                listed inside the schema — that&apos;s how the lambda finds it. Clear the number to remove the pin.
+              </p>
+            </fieldset>
           </div>
         )}
 
@@ -333,6 +367,8 @@ interface FormState {
   vehicleFuelType: string
   vehicleEngineModel: string
   vinPattern: string
+  directPartId: string
+  directPartName: string
 }
 
 function initialForm(rule: FlowDecisionRecord | null, seedDescription?: string): FormState {
@@ -350,6 +386,8 @@ function initialForm(rule: FlowDecisionRecord | null, seedDescription?: string):
       vehicleFuelType: rule.vehicleFuelType ?? '',
       vehicleEngineModel: rule.vehicleEngineModel ?? '',
       vinPattern: rule.vinPattern ?? '',
+      directPartId: rule.directPart?.partId ?? '',
+      directPartName: rule.directPart?.name ?? '',
     }
   }
   return {
@@ -365,7 +403,33 @@ function initialForm(rule: FlowDecisionRecord | null, seedDescription?: string):
     vehicleFuelType: '',
     vehicleEngineModel: '',
     vinPattern: '',
+    directPartId: '',
+    directPartName: '',
   }
+}
+
+/**
+ * The pinned direct part to send. `null` removes the pin. `name` is the part's catalog name
+ * (how it's listed inside the schema) — sent as edited. Price/supplier/image are carried over
+ * from the existing pin so editing here doesn't wipe them.
+ */
+function buildDirectPart(f: FormState, rule: FlowDecisionRecord | null) {
+  const partId = f.directPartId.trim()
+  if (!partId) return null
+  const name = f.directPartName.trim() || undefined
+  const existing = rule?.directPart
+  if (existing && existing.partId === partId) {
+    return {
+      partId,
+      name: name ?? existing.name,
+      price: existing.price ?? null,
+      currency: existing.currency,
+      supplier: existing.supplier ?? null,
+      inStock: existing.inStock,
+      imageUrl: existing.imageUrl ?? null,
+    }
+  }
+  return { partId, name }
 }
 
 function buildVehicleFilters(f: FormState) {

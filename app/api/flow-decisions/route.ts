@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
     } catch {
       return NextResponse.json({ error: 'Invalid JSON in request body' }, { status: 400 })
     }
-    const { partDescription, flowDecision, lambdaTarget, metadata, status, createdBy, vehicleFilters } = body
+    const { partDescription, flowDecision, lambdaTarget, metadata, status, createdBy, vehicleFilters, directPart } = body
     if (!partDescription || !flowDecision) {
       return NextResponse.json({ error: 'Missing required fields: partDescription, flowDecision' }, { status: 400 })
     }
@@ -63,6 +63,7 @@ export async function POST(request: NextRequest) {
       metadata,
       createdBy: createdBy || undefined,
       vehicleFilters,
+      directPart,
     })
     return NextResponse.json(record, { status: 201 })
   } catch (error) {
@@ -81,7 +82,7 @@ export async function PUT(request: NextRequest) {
     } catch {
       return NextResponse.json({ error: 'Invalid JSON in request body' }, { status: 400 })
     }
-    const { id, partDescription, flowDecision, lambdaTarget, vehicleFilters, status, metadata } = body
+    const { id, partDescription, flowDecision, lambdaTarget, vehicleFilters, status, metadata, directPart } = body
     if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
     const updated = await updateFlowDecision(id, {
       partDescription,
@@ -92,6 +93,7 @@ export async function PUT(request: NextRequest) {
       vehicleFilters,
       status,
       metadata,
+      directPart,
     })
     if (!updated) return NextResponse.json({ error: 'Flow decision not found' }, { status: 404 })
     return NextResponse.json(updated)

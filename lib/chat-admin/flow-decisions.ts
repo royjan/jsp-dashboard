@@ -165,6 +165,7 @@ export interface CreateInput {
   vehicleFilters?: any
   metadata?: any
   createdBy?: string | null
+  directPart?: DirectPartInput | null
 }
 
 /** Ensure the part_descriptions FK row exists, with an embedding when available (raw SQL — pgvector). */
@@ -237,6 +238,7 @@ export async function createFlowDecision(input: CreateInput): Promise<FlowDecisi
         })
         .where(eq(flowDecisionsV2.id, dup.id))
     }
+    if (input.directPart !== undefined) await setDirectPart(dup.id, input.directPart)
     return (await getFlowDecisionById(dup.id))!
   }
 
@@ -261,7 +263,65 @@ export async function createFlowDecision(input: CreateInput): Promise<FlowDecisi
       updatedAt: new Date(),
     })
     .returning({ id: flowDecisionsV2.id })
+  if (input.directPart !== undefined) await setDirectPart(ins.id, input.directPart)
   return (await getFlowDecisionById(ins.id))!
+}
+
+export interface DirectPartInput {
+  partId: string
+  name?: string
+  imageUrl?: string | null
+  price?: number | null
+  currency?: string
+  supplier?: string | null
+  inStock?: boolean
+}
+
+/**
+ * Upsert (or clear) the pinned `direct_part` for a flow decision. Pass null — or an empty
+ * partId — to remove the pin. When no name is given it falls back to the decision's schema.
+ * This is what the live matcher returns as the "direct part", so editing it here changes
+ * what Diego answers for that description+scope.
+ */
+export async function setDirectPart(flowDecisionId: string, input: DirectPartInput | null): Promise<void> {
+  const db = await getDb()
+  const partId = input?.partId?.trim()
+  if (!partId) {
+    await db.delete(directParts).where(eq(directParts.flowDecisionId, flowDecisionId))
+    return
+  }
+  // name = the part's catalog name (how it's listed inside the schema, e.g. 'OIL SEPARATOR
+  // SEAL') — that's how the lambda finds the direct part within the schema. Staff enter it in
+  // the editor; if left blank we fall back to the schema, then the part id.
+  let name = (input?.name || '').trim()
+  if (!name) {
+    const [fd] = await db
+      .select({ schema: flowDecisionsV2.schema })
+      .from(flowDecisionsV2)
+      .where(eq(flowDecisionsV2.id, flowDecisionId))
+      .limit(1)
+    name = fd?.schema || partId
+  }
+  const values = {
+    partId,
+    name,
+    imageUrl: input?.imageUrl ?? null,
+    price: input?.price != null ? String(input.price) : null,
+    currency: input?.currency || 'ILS',
+    supplier: input?.supplier ?? null,
+    inStock: input?.inStock ?? true,
+    updatedAt: new Date(),
+  }
+  const [existing] = await db
+    .select({ id: directParts.id })
+    .from(directParts)
+    .where(eq(directParts.flowDecisionId, flowDecisionId))
+    .limit(1)
+  if (existing) {
+    await db.update(directParts).set(values).where(eq(directParts.id, existing.id))
+  } else {
+    await db.insert(directParts).values({ flowDecisionId, ...values })
+  }
 }
 
 export interface UpdateInput {
@@ -274,6 +334,7 @@ export interface UpdateInput {
   isDefault?: boolean
   metadata?: any
   vehicleFilters?: any
+  directPart?: DirectPartInput | null
 }
 
 export async function updateFlowDecision(id: string, data: UpdateInput): Promise<FlowDecisionRecord | null> {
@@ -320,6 +381,7 @@ export async function updateFlowDecision(id: string, data: UpdateInput): Promise
       )
     }
   }
+  if (data.directPart !== undefined) await setDirectPart(id, data.directPart)
   return getFlowDecisionById(id)
 }
 
