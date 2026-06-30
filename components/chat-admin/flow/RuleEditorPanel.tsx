@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { X, Save, Trash2, Check, XCircle, Loader2, Car, Pin } from 'lucide-react'
+import { useModalA11y } from '@/hooks/use-modal-a11y'
 import type { FlowDecisionRecord } from '@/types/chat-admin/flow-decision'
 import AutocompleteInput from './AutocompleteInput'
 import { VinDecodeSection } from './VinDecodeSection'
@@ -43,6 +44,8 @@ export function RuleEditorPanel({ rule, isCreating, seedDescription, onClose, on
   const [autocomplete, setAutocomplete] = useState<AutocompleteData>(EMPTY_AUTOCOMPLETE)
 
   const [form, setForm] = useState(() => initialForm(rule, seedDescription))
+  const panelRef = useRef<HTMLDivElement>(null)
+  useModalA11y(panelRef, onClose)
 
   useEffect(() => {
     setForm(initialForm(rule, seedDescription))
@@ -150,7 +153,7 @@ export function RuleEditorPanel({ rule, isCreating, seedDescription, onClose, on
   }, [rule, onDeleted])
 
   return (
-    <div className="fixed inset-y-0 right-0 z-40 flex w-full max-w-xl flex-col border-l border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900" role="dialog" aria-label={isCreating ? 'New flow decision' : 'Edit flow decision'}>
+    <div ref={panelRef} className="fixed inset-y-0 right-0 z-40 flex w-full max-w-xl flex-col border-l border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900" role="dialog" aria-modal="true" aria-label={isCreating ? 'New flow decision' : 'Edit flow decision'}>
       <header className="flex items-center justify-between border-b border-slate-200 px-5 py-3 dark:border-slate-800">
         <div className="flex items-center gap-2">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">

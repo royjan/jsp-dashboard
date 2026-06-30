@@ -1,9 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { X, Loader2, ScanSearch, Check, XCircle } from 'lucide-react'
 import { logger } from '@/lib/logger'
 import { toast } from '@/lib/toast'
+import { useModalA11y } from '@/hooks/use-modal-a11y'
 
 interface ScanSuggestion {
   partDescription: string
@@ -21,6 +22,8 @@ interface Props {
 }
 
 export function RetroScanDrawer({ onClose, onApplied }: Props) {
+  const panelRef = useRef<HTMLDivElement>(null)
+  useModalA11y(panelRef, onClose)
   const [scanning, setScanning] = useState(false)
   const [suggestions, setSuggestions] = useState<ScanSuggestion[]>([])
   const [selected, setSelected] = useState<Set<number>>(new Set())
@@ -84,8 +87,8 @@ export function RetroScanDrawer({ onClose, onApplied }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/30" role="dialog" aria-label="Retro-scan suggestions">
-      <div className="fixed inset-y-0 right-0 flex w-full max-w-2xl flex-col bg-white shadow-2xl dark:bg-slate-900">
+    <div className="fixed inset-0 z-50 bg-black/30" role="dialog" aria-modal="true" aria-label="Retro-scan suggestions" onClick={onClose}>
+      <div ref={panelRef} className="fixed inset-y-0 right-0 flex w-full max-w-2xl flex-col bg-white shadow-2xl dark:bg-slate-900" onClick={e => e.stopPropagation()}>
         <header className="flex items-center justify-between border-b border-slate-200 px-5 py-3 dark:border-slate-800">
           <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-900 dark:text-slate-100">
             <ScanSearch className="h-5 w-5 text-indigo-500" />

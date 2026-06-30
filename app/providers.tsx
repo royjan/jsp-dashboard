@@ -2,6 +2,7 @@
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ThemeProvider } from 'next-themes'
+import { MotionConfig } from 'framer-motion'
 import { Toaster } from 'sonner'
 import { LocaleProvider } from '@/lib/locale-context'
 import { useState, useEffect } from 'react'
@@ -28,8 +29,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
       <LocaleProvider>
         <QueryClientProvider client={queryClient}>
-          {children}
-          <Toaster richColors position="top-center" />
+          {/* Honor the OS "reduce motion" setting across all Framer Motion animations. */}
+          <MotionConfig reducedMotion="user">
+            {children}
+            <Toaster richColors position="top-center" />
+          </MotionConfig>
         </QueryClientProvider>
       </LocaleProvider>
     </ThemeProvider>

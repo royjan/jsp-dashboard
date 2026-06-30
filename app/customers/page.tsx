@@ -12,6 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { CustomersPageSkeleton } from '@/components/layout/PageSkeleton'
+import { ErrorState } from '@/components/ui/feedback-state'
 import { SubTabs } from '@/components/shared/SubTabs'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
@@ -40,14 +41,6 @@ const cardVariants: any = {
   }),
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const tableRowVariants: any = {
-  hidden: { opacity: 0, x: -10 },
-  visible: (i: number) => ({
-    opacity: 1, x: 0,
-    transition: { delay: i * 0.025, duration: 0.3 },
-  }),
-}
 
 function TrendIcon({ trend }: { trend: string }) {
   if (trend === 'up') return <Badge variant="success" className="gap-1"><TrendingUp className="h-3 w-3" /><span className="hidden md:inline">↑</span></Badge>
@@ -103,7 +96,7 @@ function CustomersSection({ searchQuery }: { searchQuery: string }) {
   const [churnSort, setChurnSort] = useState<ChurnSortField>((get('hsort') as ChurnSortField) || 'last_year_revenue')
   const [churnDir, setChurnDir] = useState<SortDir>((get('hdir') as SortDir) || 'desc')
 
-  const { data, isLoading } = useCustomerAnalytics(dateFrom, dateTo)
+  const { data, isLoading, error, refetch } = useCustomerAnalytics(dateFrom, dateTo)
 
   useEffect(() => {
     setMany({
@@ -166,6 +159,7 @@ function CustomersSection({ searchQuery }: { searchQuery: string }) {
   )
 
   if (isLoading) return <LoadingSkeleton />
+  if (error) return <ErrorState onRetry={() => refetch()} className="mt-6" />
   if (!data) return null
 
   const pieData = (() => {
@@ -264,7 +258,7 @@ function CustomersSection({ searchQuery }: { searchQuery: string }) {
                         </thead>
                         <tbody>
                           {customers.slice(0, 100).map((cust: any, idx: number) => (
-                            <motion.tr key={cust.code || idx} custom={idx} variants={tableRowVariants} initial="hidden" animate="visible" className="border-b hover:bg-muted/50 transition-colors">
+                            <tr key={cust.code || idx} className="border-b hover:bg-muted/50 transition-colors">
                               <td className="py-2.5 ps-4 md:ps-0">
                                 <div className="flex items-center gap-2">
                                   {idx < 3 && <Crown className={cn('h-3.5 w-3.5 shrink-0', idx === 0 ? 'text-amber-500' : idx === 1 ? 'text-slate-400' : 'text-amber-700')} />}
@@ -280,7 +274,7 @@ function CustomersSection({ searchQuery }: { searchQuery: string }) {
                               <td className="py-2.5 text-end tabular-nums">{formatNumber(cust.invoice_count)}</td>
                               <td className="py-2.5 text-center"><TrendIcon trend={cust.trend} /></td>
                               <td className="py-2.5 text-end text-muted-foreground pe-4 md:pe-0">{cust.last_purchase?.substring(0, 10)}</td>
-                            </motion.tr>
+                            </tr>
                           ))}
                           {customers.length === 0 && <tr><td colSpan={7} className="py-12 text-center text-muted-foreground">{t('noInsights')}</td></tr>}
                         </tbody>
@@ -306,14 +300,14 @@ function CustomersSection({ searchQuery }: { searchQuery: string }) {
                           </thead>
                           <tbody>
                             {churned.map((cust: any, idx: number) => (
-                              <motion.tr key={cust.code || idx} custom={idx} variants={tableRowVariants} initial="hidden" animate="visible" className="border-b hover:bg-muted/50 transition-colors">
+                              <tr key={cust.code || idx} className="border-b hover:bg-muted/50 transition-colors">
                                 <td className="py-2.5 ps-4 md:ps-0">
                                   <Link href={`/customers/${cust.code}`} className="font-medium truncate max-w-[200px] md:max-w-none text-primary hover:underline block">{cust.name}</Link>
                                   <div className="text-xs text-muted-foreground">{cust.code}</div>
                                 </td>
                                 <td className="py-2.5 text-end font-mono text-destructive tabular-nums">{ILS_FORMAT.format(cust.last_year_revenue)}</td>
                                 <td className="py-2.5 text-end text-muted-foreground pe-4 md:pe-0">{cust.last_purchase?.substring(0, 10)}</td>
-                              </motion.tr>
+                              </tr>
                             ))}
                           </tbody>
                         </table>

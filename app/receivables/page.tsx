@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ReceivablesPageSkeleton } from '@/components/layout/PageSkeleton'
+import { ErrorState } from '@/components/ui/feedback-state'
 import { cn } from '@/lib/utils'
 import Link from 'next/link'
 import {
@@ -39,7 +40,7 @@ function LoadingSkeleton() {
 
 export default function ReceivablesPage() {
   const { t } = useLocale()
-  const { data, isLoading, error } = useReceivables(20)
+  const { data, isLoading, error, refetch } = useReceivables(20)
   const [search, setSearch] = useState('')
   const [sortField, setSortField] = useState<SortField>('balance')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
@@ -78,7 +79,7 @@ export default function ReceivablesPage() {
   ).length
 
   if (isLoading) return <LoadingSkeleton />
-  if (error) return <div className="text-destructive p-4">Error: {(error as Error).message}</div>
+  if (error) return <ErrorState onRetry={() => refetch()} className="mt-6" />
 
   return (
     <div className="space-y-6">
@@ -199,12 +200,9 @@ export default function ReceivablesPage() {
                 </tr>
               </thead>
               <tbody>
-                {customers.map((c: any, i: number) => (
-                  <motion.tr
+                {customers.map((c: any) => (
+                  <tr
                     key={c.code}
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: i * 0.02, duration: 0.2 }}
                     className="border-b hover:bg-muted/50 transition-colors"
                   >
                     <td className="p-2">
@@ -227,7 +225,7 @@ export default function ReceivablesPage() {
                     <td className="p-2 text-end">
                       {c.aging.over_90 > 0 ? <Badge variant="destructive">{ILS_FORMAT.format(c.aging.over_90)}</Badge> : '-'}
                     </td>
-                  </motion.tr>
+                  </tr>
                 ))}
               </tbody>
             </table>
