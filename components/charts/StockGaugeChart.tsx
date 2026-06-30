@@ -3,6 +3,7 @@
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useLocale } from '@/lib/locale-context'
+import { CHART_SEMANTIC_SCALE as GAUGE_COLORS } from '@/lib/chart-colors'
 
 interface StockGaugeChartProps {
   label: string
@@ -11,7 +12,6 @@ interface StockGaugeChartProps {
   healthy: number
 }
 
-const GAUGE_COLORS = ['#34d399', '#fbbf24', '#f87171']
 
 export function StockGaugeChart({ label, value, total, healthy }: StockGaugeChartProps) {
   const { t } = useLocale()

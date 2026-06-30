@@ -6,8 +6,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useLocale } from '@/lib/locale-context'
 import { formatNumber } from '@/lib/constants'
 import type { DemandItem } from '@/lib/types'
-
-const COLORS = ['#60a5fa', '#34d399', '#fbbf24', '#a78bfa', '#fb7185', '#fb923c', '#38bdf8', '#4ade80', '#e879f9', '#f87171']
+import { CHART_PALETTE as COLORS } from '@/lib/chart-colors'
 
 interface DemandBarChartProps {
   data: DemandItem[]

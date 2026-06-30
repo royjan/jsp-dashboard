@@ -1,8 +1,9 @@
 'use client'
 
 import { useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { usePathname } from 'next/navigation'
+import { pageTransition } from '@/lib/motion'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { TopBar } from '@/components/layout/TopBar'
 import { MobileNav } from '@/components/layout/MobileNav'
@@ -41,17 +42,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <div className={cn('min-h-screen transition-all duration-300', marginClass)}>
         <TopBar />
         <main className="p-2 sm:p-4 lg:p-6 pb-20 lg:pb-6">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={pathname}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.2 }}
-            >
-              {children}
-            </motion.div>
-          </AnimatePresence>
+          {/* Enter-only fade keyed on the route — no mode="wait" exit delay, so navigation
+              shows the new page immediately instead of waiting for the old one to animate out. */}
+          <motion.div
+            key={pathname}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={pageTransition}
+          >
+            {children}
+          </motion.div>
         </main>
       </div>
       <MobileNav />
