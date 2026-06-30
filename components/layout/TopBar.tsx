@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { usePathname } from 'next/navigation'
-import { Moon, Sun, Languages, RefreshCw } from 'lucide-react'
+import { Moon, Sun, Languages, RefreshCw, LogOut } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { useLocale } from '@/lib/locale-context'
 import { useQueryClient } from '@tanstack/react-query'
@@ -96,6 +96,15 @@ export function TopBar() {
           <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
           <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
           <span className="sr-only">{t('toggleTheme')}</span>
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => { window.location.href = '/api/auth/logout' }}
+          title={t('logout')}
+        >
+          <LogOut className="h-4 w-4" />
+          <span className="sr-only">{t('logout')}</span>
         </Button>
       </div>
     </header>

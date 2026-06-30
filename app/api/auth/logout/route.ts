@@ -11,31 +11,23 @@ const COOKIES_TO_CLEAR = [
 ];
 
 function clear(request: NextRequest) {
-  const isProduction = process.env.NODE_ENV === 'production';
-  const host = request.headers.get('host') || 'dashboard.jan.parts';
-  const baseUrl = isProduction ? 'https://dashboard.jan.parts' : `http://${host}`;
-  const response = NextResponse.redirect(`${baseUrl}/api/auth/login`);
+  // Host-aware: clear both the LAN cookie (http://<ip>:3002, no domain) and the shared
+  // https://*.jan.parts SSO cookie. Lands the user on the /login page.
+  const host = (request.headers.get('host') || 'dashboard.jan.parts').toLowerCase();
+  const proto = request.headers.get('x-forwarded-proto') || request.nextUrl.protocol.replace(':', '');
+  const isHttps = proto === 'https';
+  const onJanDomain = host.endsWith('.jan.parts');
+  const response = NextResponse.redirect(`${isHttps ? 'https' : 'http'}://${host}/login`);
 
-  const baseOpts = {
-    path: '/',
-    maxAge: 0,
-    secure: isProduction,
-    sameSite: 'lax' as const,
-    ...(isProduction ? { domain: '.jan.parts' } : {}),
-  };
+  const baseOpts = { path: '/', maxAge: 0, secure: isHttps, sameSite: 'lax' as const };
 
   for (const name of COOKIES_TO_CLEAR) {
-    // Set httpOnly cookies
     response.cookies.set({ name, value: '', httpOnly: true, ...baseOpts });
-    // Also clear without httpOnly flag (for `authenticated` which is client-readable)
+    if (onJanDomain) response.cookies.set({ name, value: '', httpOnly: true, ...baseOpts, domain: '.jan.parts' });
   }
   // `authenticated` is non-httpOnly — clear it that way too
-  response.cookies.set({
-    name: 'authenticated',
-    value: '',
-    httpOnly: false,
-    ...baseOpts,
-  });
+  response.cookies.set({ name: 'authenticated', value: '', httpOnly: false, ...baseOpts });
+  if (onJanDomain) response.cookies.set({ name: 'authenticated', value: '', httpOnly: false, ...baseOpts, domain: '.jan.parts' });
 
   return response;
 }
