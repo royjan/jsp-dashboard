@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import {
   LayoutDashboard,
   MessageSquare,
@@ -114,8 +115,18 @@ interface AppSwitcherProps {
 
 export function AppSwitcher({ currentApp }: AppSwitcherProps) {
   const [open, setOpen] = useState(false)
+  const [pos, setPos] = useState<{ top: number; right: number } | null>(null)
   const popoverRef = useRef<HTMLDivElement>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
+
+  const toggle = () => {
+    if (!open && buttonRef.current) {
+      const r = buttonRef.current.getBoundingClientRect()
+      // Fixed position: panel's right edge aligns with the button's right edge, opens leftward.
+      setPos({ top: r.bottom + 8, right: Math.max(8, window.innerWidth - r.right) })
+    }
+    setOpen((v) => !v)
+  }
 
   // Close on click outside
   useEffect(() => {
@@ -145,7 +156,7 @@ export function AppSwitcher({ currentApp }: AppSwitcherProps) {
     <div className="relative">
       <button
         ref={buttonRef}
-        onClick={() => setOpen(!open)}
+        onClick={toggle}
         className="inline-flex items-center justify-center rounded-md p-2 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
         aria-label="App Switcher"
         aria-expanded={open}
@@ -153,11 +164,11 @@ export function AppSwitcher({ currentApp }: AppSwitcherProps) {
         <LayoutGrid className="h-5 w-5" />
       </button>
 
-      {open && (
+      {open && pos && createPortal(
         <div
           ref={popoverRef}
-          className="absolute right-0 top-full mt-2 z-50 w-[340px] sm:w-[380px] max-w-[calc(100vw-1rem)] rounded-xl border bg-popover shadow-xl animate-in fade-in-0 zoom-in-95 slide-in-from-top-2 duration-200"
-          style={{ direction: 'rtl' }}
+          className="fixed z-[100] w-[340px] sm:w-[380px] max-w-[calc(100vw-1rem)] rounded-xl border bg-popover shadow-xl animate-in fade-in-0 zoom-in-95 slide-in-from-top-2 duration-200"
+          style={{ direction: 'rtl', top: pos.top, right: pos.right }}
         >
           {/* Header */}
           <div className="px-4 py-3 border-b">
@@ -217,7 +228,8 @@ export function AppSwitcher({ currentApp }: AppSwitcherProps) {
               jan.parts
             </a>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )
