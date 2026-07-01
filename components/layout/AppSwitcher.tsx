@@ -156,7 +156,7 @@ export function AppSwitcher({ currentApp }: AppSwitcherProps) {
       {open && (
         <div
           ref={popoverRef}
-          className="absolute left-0 top-full mt-2 z-50 w-[340px] sm:w-[380px] rounded-xl border bg-popover shadow-xl animate-in fade-in-0 zoom-in-95 slide-in-from-top-2 duration-200"
+          className="absolute right-0 top-full mt-2 z-50 w-[340px] sm:w-[380px] max-w-[calc(100vw-1rem)] rounded-xl border bg-popover shadow-xl animate-in fade-in-0 zoom-in-95 slide-in-from-top-2 duration-200"
           style={{ direction: 'rtl' }}
         >
           {/* Header */}
