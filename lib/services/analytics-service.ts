@@ -379,23 +379,50 @@ async function _getItemsImpl(cacheKey: string, staleCacheKey?: string): Promise<
 
     console.log(`[Analytics] Stock data: ${effectiveStockItems.length} items with stock, catalog: ${catalogItems.length}`)
 
-    // Resolve names for items where item_name looks like a numeric code (barcode/alias)
-    // Blocking — must complete before buildChainMap so inMemoryItemsCache is always correct
-    const MAX_NAME_RESOLVE = 50
+    // Resolve names for items where item_name looks like a numeric code (barcode/alias).
+    // These fall through the `stock.item_name || catalog?.name || code` chain to the raw
+    // code when the bulk stock summary has no name AND the item is past fetchItems()'s
+    // 10k-item catalog window. The authoritative name lives in the per-item endpoint
+    // (client.items.get(code).name) — the exact field the /items/[code] page renders —
+    // so we point-resolve it here. getHistory().canonical_name is only a secondary
+    // fallback (often empty). The REST transport throttles these calls internally
+    // (finapi-rest concurrency cap), so a plain Promise.allSettled is safe.
+    // Blocking — must complete before buildChainMap so inMemoryItemsCache is always correct.
+    // Cap bounds the worst-case COLD-START latency (this path only blocks when no cache
+    // exists at all; the 6h refresh is stale-while-revalidate and never blocks a request).
+    // 500 covers the forecast's max page size with headroom; the transport's concurrency
+    // cap keeps this to a bounded background cost.
+    const MAX_NAME_RESOLVE = 500
     const numericNameItems = items
       .filter(i => (/^\d+$/.test(i.name) && i.name !== i.code) || i.name === i.code)
       .slice(0, MAX_NAME_RESOLVE)
     if (numericNameItems.length > 0) {
-      console.log(`[Analytics] Resolving ${numericNameItems.length} items with numeric/alias names via history API`)
+      console.log(`[Analytics] Resolving ${numericNameItems.length} items with numeric/alias names via item endpoint`)
+      let resolved = 0
       await Promise.allSettled(
         numericNameItems.map(async (item) => {
+          // Primary: authoritative short name from the per-item endpoint.
+          try {
+            const full = await client.items.get(item.code)
+            const name = full?.name
+            if (name && !/^\d+$/.test(name) && name !== item.code) {
+              item.name = fixRtlItemName(name)
+              resolved++
+              return
+            }
+          } catch {}
+          // Secondary: chain canonical_name (covers superseded/aliased codes).
           try {
             const history = await client.items.getHistory(item.code)
-            const description = history?.canonical_name
-            if (description && !/^\d+$/.test(description)) item.name = fixRtlItemName(description)
+            const canonical = history?.canonical_name
+            if (canonical && !/^\d+$/.test(canonical) && canonical !== item.code) {
+              item.name = fixRtlItemName(canonical)
+              resolved++
+            }
           } catch {}
         })
       )
+      console.log(`[Analytics] Name resolution: ${resolved}/${numericNameItems.length} items got a real name`)
     }
 
     // Batch-fetch prices for items still at price=0 (catalog list doesn't include prices)
