@@ -638,15 +638,29 @@ export async function getDemandAnalysis(dateFrom?: string, dateTo?: string): Pro
   const unresolvedCodes = Array.from(demandMap.keys()).filter(code => code.length > 1 && !itemMap.has(code))
   const resolvedNameMap = new Map<string, string>()
   if (unresolvedCodes.length > 0) {
-    const MAX_NAME_RESOLVE = 50
+    // Same resolution strategy as the enriched-items backfill above: prefer the
+    // authoritative per-item name (client.items.get(code).name), fall back to the
+    // chain canonical_name only when that's missing. Cap raised from 50 so demand/
+    // gap rows for quote-only items stop rendering their raw code.
+    const MAX_NAME_RESOLVE = 300
     const codesToResolve = unresolvedCodes.slice(0, MAX_NAME_RESOLVE)
-    console.log(`[Analytics] Resolving ${codesToResolve.length} demand item names via history API`)
+    console.log(`[Analytics] Resolving ${codesToResolve.length} demand item names via item endpoint`)
     await Promise.allSettled(
       codesToResolve.map(async (code) => {
         try {
+          const full = await client.items.get(code)
+          const name = full?.name
+          if (name && !/^\d+$/.test(name) && name !== code) {
+            resolvedNameMap.set(code, fixRtlItemName(name))
+            return
+          }
+        } catch {}
+        try {
           const history = await client.items.getHistory(code)
-          const description = history?.canonical_name
-          if (description && !/^\d+$/.test(description)) resolvedNameMap.set(code, fixRtlItemName(description))
+          const canonical = history?.canonical_name
+          if (canonical && !/^\d+$/.test(canonical) && canonical !== code) {
+            resolvedNameMap.set(code, fixRtlItemName(canonical))
+          }
         } catch {}
       })
     )
