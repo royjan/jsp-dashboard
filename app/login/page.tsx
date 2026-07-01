@@ -58,7 +58,7 @@ function LoginForm() {
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-muted-foreground">אימייל</span>
             <div className="relative">
-              <Mail className="pointer-events-none absolute end-3 top-3 h-4 w-4 text-muted-foreground" />
+              <Mail className="pointer-events-none absolute start-3 top-3 h-4 w-4 text-muted-foreground" />
               <input
                 type="email"
                 dir="ltr"
@@ -75,7 +75,7 @@ function LoginForm() {
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-muted-foreground">סיסמה</span>
             <div className="relative">
-              <Lock className="pointer-events-none absolute end-3 top-3 h-4 w-4 text-muted-foreground" />
+              <Lock className="pointer-events-none absolute start-3 top-3 h-4 w-4 text-muted-foreground" />
               <input
                 type="password"
                 dir="ltr"
