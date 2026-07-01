@@ -8,7 +8,6 @@ import { Sidebar } from '@/components/layout/Sidebar'
 import { TopBar } from '@/components/layout/TopBar'
 import { MobileNav } from '@/components/layout/MobileNav'
 import { QueryLoadingBar } from '@/components/layout/QueryLoadingBar'
-import { useLocale } from '@/lib/locale-context'
 import { cn } from '@/lib/utils'
 
 // Pages that render their own full-screen layout (no sidebar/topbar/mobile-nav)
@@ -17,8 +16,6 @@ const FULLSCREEN_PATHS = ['/deliveries/driver', '/login']
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false)
   const pathname = usePathname()
-  const { dir } = useLocale()
-  const isRTL = dir === 'rtl'
 
   const isFullscreen = FULLSCREEN_PATHS.some((p) => pathname.startsWith(p))
 
@@ -31,9 +28,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     )
   }
 
-  const marginClass = collapsed
-    ? (isRTL ? 'lg:mr-16' : 'lg:ml-16')
-    : (isRTL ? 'lg:mr-56' : 'lg:ml-56')
+  // Logical margin-inline-start pushes content off the sidebar on the correct side in both LTR & RTL.
+  const marginClass = collapsed ? 'lg:ms-16' : 'lg:ms-56'
 
   return (
     <>

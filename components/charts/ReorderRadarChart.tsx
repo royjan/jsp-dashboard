@@ -30,8 +30,8 @@ export function ReorderRadarChart({ item }: ReorderRadarChartProps) {
       <CardContent>
         <ResponsiveContainer width="100%" height={220}>
           <RadarChart data={radarData}>
-            <PolarGrid stroke="#4a5168" />
-            <PolarAngleAxis dataKey="metric" tick={{ fontSize: 10, fill: '#e2e8f0' }} />
+            <PolarGrid />
+            <PolarAngleAxis dataKey="metric" tick={{ fontSize: 10 }} />
             <Radar
               dataKey="value"
               stroke="var(--primary)"

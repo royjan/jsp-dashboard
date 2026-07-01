@@ -20,7 +20,7 @@ interface KPICardProps {
   iconBg?: string
 }
 
-export function KPICard({ label, value, format, icon: Icon, trend, changePercent, iconColor = 'text-blue-500', iconBg = 'bg-blue-500/10' }: KPICardProps) {
+export function KPICard({ label, value, format, icon: Icon, trend, changePercent, iconColor = 'text-primary', iconBg = 'bg-primary/10' }: KPICardProps) {
   const { t } = useLocale()
   return (
     <motion.div

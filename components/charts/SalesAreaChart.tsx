@@ -41,18 +41,14 @@ export function SalesAreaChart({ data, isLoading, title, height = 300 }: SalesAr
                 <stop offset="95%" stopColor={CHART_COLOR} stopOpacity={0.02} />
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#4a5168" />
+            <CartesianGrid strokeDasharray="3 3" />
             <XAxis
               dataKey="date"
-              tick={{ fontSize: 12, fill: '#e2e8f0' }}
-              tickLine={{ stroke: '#4a5168' }}
-              axisLine={{ stroke: '#4a5168' }}
+              tick={{ fontSize: 12 }}
               tickFormatter={(v) => new Date(v).toLocaleDateString(dateLocale, { month: 'short', day: 'numeric' })}
             />
             <YAxis
-              tick={{ fontSize: 12, fill: '#e2e8f0' }}
-              tickLine={{ stroke: '#4a5168' }}
-              axisLine={{ stroke: '#4a5168' }}
+              tick={{ fontSize: 12 }}
               tickFormatter={(v) => `${(v / 1000).toFixed(0)}K`}
             />
             <Tooltip

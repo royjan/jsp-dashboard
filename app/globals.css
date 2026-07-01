@@ -162,6 +162,11 @@
 .recharts-cartesian-axis-tick-line {
   stroke: var(--chart-grid) !important;
 }
+/* Radar/polar charts aren't covered by the cartesian rules above — theme their grid too. */
+.recharts-polar-grid line,
+.recharts-polar-grid path {
+  stroke: var(--chart-grid);
+}
 .recharts-tooltip-wrapper .recharts-default-tooltip {
   background-color: var(--popover) !important;
   border-color: var(--border) !important;

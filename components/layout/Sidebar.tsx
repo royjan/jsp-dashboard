@@ -154,8 +154,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
     <TooltipProvider delayDuration={0}>
       <aside
         className={cn(
-          'fixed top-0 z-40 h-screen border-e bg-card transition-all duration-300 hidden lg:flex flex-col',
-          isRTL ? 'right-0' : 'left-0',
+          'fixed top-0 start-0 z-40 h-screen border-e bg-card transition-all duration-300 hidden lg:flex flex-col',
           collapsed ? 'w-16' : 'w-56'
         )}
       >

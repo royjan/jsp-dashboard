@@ -50,9 +50,9 @@ export function ComparisonChart({ data, title, isLoading, headerActions }: Compa
                 <stop offset="95%" stopColor="var(--muted-foreground)" stopOpacity={0} />
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#4a5168" />
-            <XAxis dataKey="date" tick={{ fontSize: 12, fill: '#e2e8f0' }} tickLine={{ stroke: '#4a5168' }} axisLine={{ stroke: '#4a5168' }} />
-            <YAxis tick={{ fontSize: 12, fill: '#e2e8f0' }} tickLine={{ stroke: '#4a5168' }} axisLine={{ stroke: '#4a5168' }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}K`} />
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="date" tick={{ fontSize: 12 }} />
+            <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}K`} />
             <Tooltip
               contentStyle={{ backgroundColor: 'var(--popover)', borderColor: 'var(--border)', borderRadius: '8px', color: 'var(--popover-foreground)' }}
               formatter={(value: any, name: any, props: any) => {
