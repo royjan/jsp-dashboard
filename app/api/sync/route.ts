@@ -145,6 +145,10 @@ export async function GET(request: Request) {
     let invoices: any[]
     let totalFetched = 0
     let hasMore = false
+    // Set when historical mode targets a prior year — threaded into the Step 3
+    // line-item detail fetch below, which otherwise defaults to the current
+    // year's Btrieve context and hangs/fails for every doc in that month.
+    let detailYear: string | undefined
 
     if (mode === 'historical') {
       // page=1 → current month, page=2 → previous month, etc.
@@ -167,6 +171,7 @@ export async function GET(request: Request) {
       // Query the correct year database when target month is in a previous year
       if (targetYear !== activeYear) {
         searchParams.year = targetYear
+        detailYear = targetYear
       }
       invoices = await searchDocuments(searchParams)
       totalFetched = invoices.length
@@ -221,7 +226,7 @@ export async function GET(request: Request) {
       const batch = lineItemInvoices.slice(i, i + 20)
       const details = await Promise.all(
         batch.map(async (doc: any) => {
-          try { return await fetchDocumentDetail(11, doc.doc_number) } catch { return null }
+          try { return await fetchDocumentDetail(11, doc.doc_number, detailYear) } catch { return null }
         })
       )
 
