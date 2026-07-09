@@ -65,6 +65,7 @@ const navSections: Array<{ id: string; labelKey: TranslationKey; items: NavItem[
       { href: '/margin', labelKey: 'margin', icon: Percent },
       { href: '/pricing', labelKey: 'pricing', icon: DollarSign },
       { href: '/ebay', labelKey: 'ebay', icon: ShoppingCart },
+      { href: '/ebay-reco', labelKey: 'ebayReco', icon: PackageCheck },
       { href: '/sales-rep', labelKey: 'salesRep', icon: Briefcase },
     ],
   },

@@ -43,6 +43,7 @@ const navItems: Array<{ href: string; labelKey: TranslationKey; icon: typeof Lay
   { href: '/scrap', labelKey: 'scrap', icon: Trash2 },
   { href: '/returns', labelKey: 'returns', icon: RotateCcw },
   { href: '/ebay', labelKey: 'ebay', icon: ShoppingCart },
+  { href: '/ebay-reco', labelKey: 'ebayReco', icon: ShoppingCart },
   { href: '/margin', labelKey: 'margin', icon: Percent },
   { href: '/alerts', labelKey: 'alerts', icon: Bell },
   { href: '/pricing', labelKey: 'pricing', icon: DollarSign },

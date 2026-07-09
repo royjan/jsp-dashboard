@@ -15,6 +15,7 @@ import { query } from './db'
 
 const DASHBOARD_TABLES = [
   'monthly_sales', 'daily_sales', 'item_snapshots', 'customer_stats', 'documents', 'format_summary',
+  'yearly_item_sales',
 ]
 
 /** Normalize SQLite-style SQL to Postgres (idempotent on Postgres-style SQL). */

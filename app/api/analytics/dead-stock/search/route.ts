@@ -33,8 +33,9 @@ export async function GET(request: Request) {
 
   try {
     // Step 1: Search the latest item_snapshots for matching items.
-    // (Schema: stock_qty, price, sold_this_year, sold_last_year — there is no
-    // 2y/3y-ago column in dashboard.item_snapshots, so those are 0 here.)
+    // sold_2y_ago/sold_3y_ago are backfilled from dashboard.yearly_item_sales
+    // (accurate, void-aware ERP 7IPQ counters); COALESCE guards items whose
+    // snapshot predates the backfill.
     const rawItems = (await readQueryAsync(`
       SELECT
         item_code,
@@ -44,8 +45,8 @@ export async function GET(request: Request) {
         ROUND(stock_qty * price) as capital_tied,
         CAST(sold_this_year AS INT) as sold_this_year,
         CAST(sold_last_year AS INT) as sold_last_year,
-        0 as sold_2y_ago,
-        0 as sold_3y_ago
+        CAST(COALESCE(sold_2y_ago, 0) AS INT) as sold_2y_ago,
+        CAST(COALESCE(sold_3y_ago, 0) AS INT) as sold_3y_ago
       FROM item_snapshots
       WHERE snapshot_date = (SELECT MAX(snapshot_date) FROM item_snapshots)
         AND stock_qty > 0
@@ -76,8 +77,8 @@ export async function GET(request: Request) {
               ROUND(stock_qty * price) as capital_tied,
               CAST(sold_this_year AS INT) as sold_this_year,
               CAST(sold_last_year AS INT) as sold_last_year,
-              0 as sold_2y_ago,
-              0 as sold_3y_ago
+              CAST(COALESCE(sold_2y_ago, 0) AS INT) as sold_2y_ago,
+              CAST(COALESCE(sold_3y_ago, 0) AS INT) as sold_3y_ago
             FROM item_snapshots
             WHERE snapshot_date = (SELECT MAX(snapshot_date) FROM item_snapshots)
               AND item_code IN (${chainPlaceholders})

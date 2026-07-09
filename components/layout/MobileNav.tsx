@@ -24,6 +24,7 @@ const moreNav: Array<{ href: string; labelKey: TranslationKey; icon: typeof Layo
   { href: '/scrap', labelKey: 'scrap', icon: Trash2 },
   { href: '/returns', labelKey: 'returns', icon: RotateCcw },
   { href: '/ebay', labelKey: 'ebay', icon: ShoppingCart },
+  { href: '/ebay-reco', labelKey: 'ebayReco', icon: PackageCheck },
   { href: '/margin', labelKey: 'margin', icon: Percent },
   { href: '/suppliers', labelKey: 'suppliers', icon: PackageCheck },
   { href: '/vehicle-intelligence', labelKey: 'vehicleIntelligence', icon: CarFront },

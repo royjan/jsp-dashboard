@@ -405,6 +405,7 @@ export const translations = {
     ebayRecommended: 'מומלץ ל-eBay',
     ebayRemove: 'הסר המלצת eBay',
     ebay: 'eBay',
+    ebayReco: 'eBay חכם',
 
     // Health Transitions & Win-Back
     recentChanges: 'שינויים אחרונים',
@@ -970,6 +971,7 @@ export const translations = {
     ebayRecommended: 'Recommended for eBay',
     ebayRemove: 'Remove eBay recommendation',
     ebay: 'eBay',
+    ebayReco: 'eBay Smart',
 
     // Health Transitions & Win-Back
     recentChanges: 'Recent Changes',
