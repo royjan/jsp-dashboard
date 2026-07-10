@@ -1,8 +1,9 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { usePathname, useRouter } from 'next/navigation'
 import { ItemLink } from '@/components/shared/ItemLink'
-import { LiquidationMap } from './LiquidationMap'
+import { LiquidationMap } from '../LiquidationMap'
 
 type Row = {
   code: string; name: string; size: 'small' | 'medium'
@@ -21,6 +22,15 @@ type SortKey = keyof Row
 const NUMERIC: SortKey[] = ['price', 'stock', 'sold_this_year', 'sold_2025', 'sold_2024', 'demand', 'years_of_stock', 'match']
 
 export default function EbayRecoPage() {
+  // view is driven by the URL (/ebay-reco/table · /ebay-reco/map) so it is
+  // bookmarkable and shareable. This is an optional-catch-all route, so switching
+  // between table and map is a param-only change — the page does NOT remount, the
+  // fetched data + filter state below persist (no re-fetch of the 2,645 items).
+  const pathname = usePathname()
+  const router = useRouter()
+  const view: 'table' | 'map' = pathname.endsWith('/map') ? 'map' : 'table'
+  const goTo = (v: 'table' | 'map') => router.push(`/ebay-reco/${v}`, { scroll: false })
+
   const [data, setData] = useState<Payload | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [q, setQ] = useState('')
@@ -28,7 +38,6 @@ export default function EbayRecoPage() {
   const [sortKey, setSortKey] = useState<SortKey>('match')
   const [sortDir, setSortDir] = useState<1 | -1>(-1)
   const [page, setPage] = useState(0)
-  const [view, setView] = useState<'table' | 'map'>('table')
 
   useEffect(() => {
     fetch('/api/analytics/ebay-recommend')
@@ -102,8 +111,8 @@ export default function EbayRecoPage() {
       {/* Toolbar */}
       <div className="flex flex-wrap gap-2.5 items-center">
         <div className="flex rounded-lg border overflow-hidden text-sm">
-          <button onClick={() => setView('table')} className={`px-3.5 py-2 ${view === 'table' ? 'bg-primary text-primary-foreground font-bold' : 'bg-muted/40'}`}>טבלה</button>
-          <button onClick={() => setView('map')} className={`px-3.5 py-2 ${view === 'map' ? 'bg-primary text-primary-foreground font-bold' : 'bg-muted/40'}`}>מפה</button>
+          <button onClick={() => goTo('table')} className={`px-3.5 py-2 ${view === 'table' ? 'bg-primary text-primary-foreground font-bold' : 'bg-muted/40'}`}>טבלה</button>
+          <button onClick={() => goTo('map')} className={`px-3.5 py-2 ${view === 'map' ? 'bg-primary text-primary-foreground font-bold' : 'bg-muted/40'}`}>מפה</button>
         </div>
         <input
           value={q} onChange={e => { setQ(e.target.value); setPage(0) }}
