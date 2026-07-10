@@ -47,23 +47,29 @@ export function classifySize(name: string): ShipSize {
 
 export const SIZE_FACTOR: Record<ShipSize, number> = { small: 1.0, medium: 0.55, large: 0.12 }
 
-// Years of inventory at the RECENT sales pace — the "dead stock" signal.
-// Recent window = this year so far (2026) + last full year (2025). Including the current
-// year matters: an item that stopped in 2025 but is selling again NOW (2026) is NOT dead,
-// and looking at 2025 alone would wrongly flag it. Only an item with ~0 sales across BOTH
-// recent years is truly dead. The 0.5 floor keeps zero-sellers finite (maximally overstocked).
+// Years of inventory at the RECENT sales pace. Recent window = this year so far (2026)
+// + last full year (2025); the 0.5 floor keeps zero-sellers finite. Negative (net-return)
+// years clamp to 0.
 export function yearsOfStock(stock: number, sold2025: number, sold2026: number): number {
-  return stock / Math.max(sold2025 + sold2026, 0.5)
+  return stock / Math.max(Math.max(sold2025, 0) + Math.max(sold2026, 0), 0.5)
 }
 
-// Transparent 0–100 match score for eBay LIQUIDATION: overstock 45% + value 28% + ship 27%.
-// eBay is a channel to clear dead/excess stock, so overstocked NOT-currently-selling items
-// score HIGH and healthy fast-movers score LOW (we keep those and sell locally at full margin).
+// Per-year "deadness": 0 units sold = fully dead (1.0), decaying as sales rise
+// (~5 units/yr = 0.5). Net-negative (returns > sales) clamps to fully dead.
+function deadness(sold: number): number {
+  return 1 / (1 + Math.max(sold, 0) / 5)
+}
+
+// 0–100 liquidation score = dead-stock signal (50%) + price (30%) + stock quantity (20%).
+// The dead-stock signal weights the CURRENT year most: 70% this year (2026) + 20% last
+// year (2025) + 10% years-of-stock — an item selling NOW isn't dead. Price and stock lift
+// the ranking: expensive is worth the shipping, and a big pile is a bigger win to clear.
 export function matchScore(
-  price: number, size: ShipSize, stock: number, sold2025: number, sold2026: number,
+  price: number, stock: number, sold2025: number, sold2026: number,
 ): number {
-  const overstock = Math.min(yearsOfStock(stock, sold2025, sold2026) / 10, 1)
+  const dead = 0.70 * deadness(sold2026) + 0.20 * deadness(sold2025)
+    + 0.10 * Math.min(yearsOfStock(stock, sold2025, sold2026) / 10, 1)
   const value = Math.min(price / 15000, 1)
-  const ship = SIZE_FACTOR[size]
-  return Math.round(100 * (0.45 * overstock + 0.28 * value + 0.27 * ship))
+  const stk = Math.min(stock / 15, 1)
+  return Math.round(100 * (0.50 * dead + 0.30 * value + 0.20 * stk))
 }
