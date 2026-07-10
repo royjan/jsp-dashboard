@@ -101,15 +101,20 @@ function layoutTreemap(rows: MapRow[], W: number, H: number): { rects: Rect[]; t
     if ((v / total) * area >= MIN_PX && keep.length < 600) keep.push(r)
     else { tail.push(r); tailValue += v }
   }
-  const values = keep.map(r => (r.price * r.stock / total) * area)
-  if (tailValue > 0) values.push((tailValue / total) * area)
+  // fold "אחר" into the list at its TRUE size position (it can be one of the
+  // biggest blocks by capital) — appending it last made squarify treat it as the
+  // smallest, wedging a giant block in at the end and scrambling the sort order.
+  const entries: { value: number; row: MapRow | null }[] = keep.map(r => ({ value: r.price * r.stock, row: r }))
+  if (tailValue > 0) entries.push({ value: tailValue, row: null })
+  entries.sort((a, b) => b.value - a.value)
+  const values = entries.map(e => (e.value / total) * area)
   const raw = squarify(values, 0, 0, W, H)
   // mirror horizontally: largest block lands top-RIGHT (natural RTL reading order,
   // so the value-sorting is visible to a Hebrew reader)
   const rects = raw.map((g, i) => ({
     ...g, x: W - g.x - g.w,
-    ...(i < keep.length
-      ? { row: keep[i], value: keep[i].price * keep[i].stock }
+    ...(entries[i].row
+      ? { row: entries[i].row, value: entries[i].value }
       : { row: null, value: tailValue, count: tail.length }),
   }))
   return { rects, tail }
