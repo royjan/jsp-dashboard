@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { initializeSecrets } from '@/lib/aws-secrets'
 import { getItems } from '@/lib/services/analytics-service'
 import { readQueryAsync } from '@/lib/neon-read'
-import { classifySize, matchScore, yearsOfStock } from '@/lib/ebay-size'
+import { classifySize, deadnessScore, matchScore, yearsOfStock } from '@/lib/ebay-size'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -59,6 +59,7 @@ export async function GET(request: Request) {
         sold_2024: Math.max(0, Math.round(sold2024)),
         demand: Math.round(demand),
         years_of_stock: Math.round(yearsOfStock(stock, sold2025, sold2026) * 10) / 10,
+        deadness: Math.round(100 * deadnessScore(stock, sold2025, sold2026)),
         match: matchScore(price, size, stock, sold2025, sold2026),
       })
     }

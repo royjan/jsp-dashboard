@@ -2,11 +2,12 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { ItemLink } from '@/components/shared/ItemLink'
+import { LiquidationMap } from './LiquidationMap'
 
 type Row = {
   code: string; name: string; size: 'small' | 'medium'
   price: number; stock: number; sold_this_year: number; sold_2025: number; sold_2024: number
-  demand: number; years_of_stock: number; match: number
+  demand: number; years_of_stock: number; deadness: number; match: number
 }
 type Payload = {
   count: number; small: number; medium: number
@@ -27,6 +28,7 @@ export default function EbayRecoPage() {
   const [sortKey, setSortKey] = useState<SortKey>('match')
   const [sortDir, setSortDir] = useState<1 | -1>(-1)
   const [page, setPage] = useState(0)
+  const [view, setView] = useState<'table' | 'map'>('table')
 
   useEffect(() => {
     fetch('/api/analytics/ebay-recommend')
@@ -99,6 +101,10 @@ export default function EbayRecoPage() {
 
       {/* Toolbar */}
       <div className="flex flex-wrap gap-2.5 items-center">
+        <div className="flex rounded-lg border overflow-hidden text-sm">
+          <button onClick={() => setView('table')} className={`px-3.5 py-2 ${view === 'table' ? 'bg-primary text-primary-foreground font-bold' : 'bg-muted/40'}`}>טבלה</button>
+          <button onClick={() => setView('map')} className={`px-3.5 py-2 ${view === 'map' ? 'bg-primary text-primary-foreground font-bold' : 'bg-muted/40'}`}>מפה</button>
+        </div>
         <input
           value={q} onChange={e => { setQ(e.target.value); setPage(0) }}
           placeholder="חיפוש לפי שם או קוד פריט…"
@@ -115,7 +121,11 @@ export default function EbayRecoPage() {
         <span className="ms-auto text-sm text-muted-foreground">{nf(rows.length)} פריטים</span>
       </div>
 
+      {/* Map view */}
+      {view === 'map' && <LiquidationMap rows={rows} />}
+
       {/* Table */}
+      {view === 'table' && (<>
       <div className="overflow-x-auto rounded-xl border">
         <table className="w-full text-sm min-w-[900px]">
           <thead>
@@ -172,6 +182,7 @@ export default function EbayRecoPage() {
         </span>
         <button disabled={cur >= pages - 1} onClick={() => setPage(cur + 1)} className="rounded-lg border bg-muted/40 px-4 py-1.5 text-sm disabled:opacity-40">הבא ›</button>
       </div>
+      </>)}
 
       <p className="text-xs text-muted-foreground/70 max-w-3xl">
         הגודל מסווג אוטומטית משם הפריט בעברית. נתוני מכירות: מוני 7IPQ של ה-ERP (מדויקים, מנוכי ביטולים) — 2025 מ-FINAPI, 2024 מטבלת yearly_item_sales.
