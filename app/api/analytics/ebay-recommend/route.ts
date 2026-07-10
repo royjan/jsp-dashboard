@@ -59,7 +59,7 @@ export async function GET(request: Request) {
         sold_2024: Math.max(0, Math.round(sold2024)),
         demand: Math.round(demand),
         years_of_stock: Math.round(yearsOfStock(stock, sold2025, sold2026) * 10) / 10,
-        match: matchScore(price, stock, sold2025, sold2026),
+        match: matchScore(price, size, stock, sold2025, sold2026),
       })
     }
     out.sort((a, b) => b.match - a.match)

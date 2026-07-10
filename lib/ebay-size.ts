@@ -60,16 +60,19 @@ function deadness(sold: number): number {
   return 1 / (1 + Math.max(sold, 0) / 5)
 }
 
-// 0–100 liquidation score = dead-stock signal (50%) + price (30%) + stock quantity (20%).
-// The dead-stock signal weights the CURRENT year most: 70% this year (2026) + 20% last
-// year (2025) + 10% years-of-stock — an item selling NOW isn't dead. Price and stock lift
-// the ranking: expensive is worth the shipping, and a big pile is a bigger win to clear.
+// 0–100 liquidation score = dead-stock signal (45%) + price (25%) + stock qty (15%)
+// + shipping ease (15%). The dead-stock signal weights the CURRENT year most: 70% this
+// year (2026) + 20% last year (2025) + 10% years-of-stock — an item selling NOW isn't
+// dead. Price and stock lift the ranking (expensive is worth the shipping, a big pile is
+// a bigger win to clear), and small parts beat medium ones — international shipping cost
+// and hassle scale with size.
 export function matchScore(
-  price: number, stock: number, sold2025: number, sold2026: number,
+  price: number, size: ShipSize, stock: number, sold2025: number, sold2026: number,
 ): number {
   const dead = 0.70 * deadness(sold2026) + 0.20 * deadness(sold2025)
     + 0.10 * Math.min(yearsOfStock(stock, sold2025, sold2026) / 10, 1)
   const value = Math.min(price / 15000, 1)
   const stk = Math.min(stock / 15, 1)
-  return Math.round(100 * (0.50 * dead + 0.30 * value + 0.20 * stk))
+  const ship = SIZE_FACTOR[size]
+  return Math.round(100 * (0.45 * dead + 0.25 * value + 0.15 * stk + 0.15 * ship))
 }
