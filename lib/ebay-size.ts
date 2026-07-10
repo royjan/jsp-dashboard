@@ -47,22 +47,22 @@ export function classifySize(name: string): ShipSize {
 
 export const SIZE_FACTOR: Record<ShipSize, number> = { small: 1.0, medium: 0.55, large: 0.12 }
 
-// Years of inventory at LAST YEAR's sales pace — the "dead stock" signal.
-// Rate uses the most recent complete year (2025) ONLY, because that reflects CURRENT
-// demand: a part that sold well in 2024 but 0 in 2025 has died NOW, and averaging the
-// two years would mask that (a strong 2024 hides a dead 2025). The 0.5 floor keeps
-// zero-sellers finite (and maximally overstocked).
-export function yearsOfStock(stock: number, sold2025: number): number {
-  return stock / Math.max(sold2025, 0.5)
+// Years of inventory at the RECENT sales pace — the "dead stock" signal.
+// Recent window = this year so far (2026) + last full year (2025). Including the current
+// year matters: an item that stopped in 2025 but is selling again NOW (2026) is NOT dead,
+// and looking at 2025 alone would wrongly flag it. Only an item with ~0 sales across BOTH
+// recent years is truly dead. The 0.5 floor keeps zero-sellers finite (maximally overstocked).
+export function yearsOfStock(stock: number, sold2025: number, sold2026: number): number {
+  return stock / Math.max(sold2025 + sold2026, 0.5)
 }
 
 // Transparent 0–100 match score for eBay LIQUIDATION: overstock 45% + value 28% + ship 27%.
 // eBay is a channel to clear dead/excess stock, so overstocked NOT-currently-selling items
 // score HIGH and healthy fast-movers score LOW (we keep those and sell locally at full margin).
 export function matchScore(
-  price: number, size: ShipSize, stock: number, sold2025: number,
+  price: number, size: ShipSize, stock: number, sold2025: number, sold2026: number,
 ): number {
-  const overstock = Math.min(yearsOfStock(stock, sold2025) / 10, 1)
+  const overstock = Math.min(yearsOfStock(stock, sold2025, sold2026) / 10, 1)
   const value = Math.min(price / 15000, 1)
   const ship = SIZE_FACTOR[size]
   return Math.round(100 * (0.45 * overstock + 0.28 * value + 0.27 * ship))
