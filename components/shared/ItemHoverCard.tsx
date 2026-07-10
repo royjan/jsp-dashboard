@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, type ReactNode } from 'react'
+import { useState, useCallback, useEffect, useRef, type ReactNode } from 'react'
 import { HoverCard, HoverCardTrigger, HoverCardContent } from '@/components/ui/hover-card'
 import { Package, TrendingUp, MapPin, Loader2 } from 'lucide-react'
 import { useLocale } from '@/lib/locale-context'
@@ -115,6 +115,12 @@ export function ItemHoverCard({ code, children }: { code: string; children: Reac
   const [item, setItem] = useState<ItemData | null>(null)
   const [loading, setLoading] = useState(false)
   const [notFound, setNotFound] = useState(false)
+  // Radix HoverCard is hover-only (dead on touch). On a coarse pointer we control
+  // `open` ourselves: first tap opens the card, a second tap on the link navigates,
+  // and a tap outside closes it. Desktop hover is unchanged (Radix drives open).
+  const [open, setOpen] = useState(false)
+  const triggerRef = useRef<HTMLSpanElement>(null)
+  const contentRef = useRef<HTMLDivElement>(null)
 
   const fetchItem = useCallback(async () => {
     if (!code) return
@@ -144,24 +150,54 @@ export function ItemHoverCard({ code, children }: { code: string; children: Reac
     }
   }, [code])
 
+  const isCoarse = () =>
+    typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches
+
+  // On touch: first tap opens the card (blocking navigation); a second tap on the
+  // same link (card already open) navigates as usual.
+  const onTriggerClickCapture = (e: React.MouseEvent) => {
+    if (!isCoarse() || open) return
+    e.preventDefault(); e.stopPropagation()
+    if (!item && !loading && !notFound) fetchItem()
+    setOpen(true)
+  }
+
+  // Close on a tap outside the trigger/content (touch has no "mouse leave").
+  useEffect(() => {
+    if (!open) return
+    const onDoc = (e: Event) => {
+      const t = e.target as Node
+      if (triggerRef.current?.contains(t) || contentRef.current?.contains(t)) return
+      setOpen(false)
+    }
+    document.addEventListener('pointerdown', onDoc, true)
+    return () => document.removeEventListener('pointerdown', onDoc, true)
+  }, [open])
+
   return (
-    <HoverCard openDelay={300} closeDelay={100}>
+    <HoverCard open={open} onOpenChange={setOpen} openDelay={300} closeDelay={100}>
       <HoverCardTrigger asChild>
-        <span onMouseEnter={() => { if (!item && !loading && !notFound) fetchItem() }}>
+        <span
+          ref={triggerRef}
+          onMouseEnter={() => { if (!item && !loading && !notFound) fetchItem() }}
+          onClickCapture={onTriggerClickCapture}
+        >
           {children}
         </span>
       </HoverCardTrigger>
       <HoverCardContent side="top" align="start" className="w-72">
-        {loading ? (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            {isHe ? 'טוען…' : 'Loading…'}
-          </div>
-        ) : item ? (
-          <ItemPopoverContent item={item} />
-        ) : notFound ? (
-          <div className="text-sm text-muted-foreground py-1">{isHe ? 'הפריט לא נמצא' : 'Item not found'}</div>
-        ) : null}
+        <div ref={contentRef}>
+          {loading ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              {isHe ? 'טוען…' : 'Loading…'}
+            </div>
+          ) : item ? (
+            <ItemPopoverContent item={item} />
+          ) : notFound ? (
+            <div className="text-sm text-muted-foreground py-1">{isHe ? 'הפריט לא נמצא' : 'Item not found'}</div>
+          ) : null}
+        </div>
       </HoverCardContent>
     </HoverCard>
   )

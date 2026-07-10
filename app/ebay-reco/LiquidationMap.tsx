@@ -29,6 +29,10 @@ type Dot = { x: number; y: number; r: number; row: MapRow }
 
 const nf = (n: number) => Math.round(n).toLocaleString('en-US')
 const shekAbbr = (n: number) => n >= 1000 ? `₪${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : `₪${Math.round(n)}`
+// DEAD capital = capital × deadness. This is what the treemap sizes by, so a
+// still-selling item (low deadness) shrinks toward nothing while dead expensive
+// stock dominates — the map becomes "the money to liquidate", not just "the money".
+const deadCapOf = (r: MapRow) => r.price * r.stock * (r.deadness / 100)
 
 function theme(dark: boolean) {
   return dark ? {
@@ -89,22 +93,24 @@ function squarify(values: number[], x: number, y: number, w: number, h: number):
 }
 
 function layoutTreemap(rows: MapRow[], W: number, H: number): { rects: Rect[]; tail: MapRow[] } {
-  const sorted = [...rows].sort((a, b) => b.price * b.stock - a.price * a.stock)
-  const total = sorted.reduce((s, r) => s + r.price * r.stock, 0)
+  // size by DEAD capital, so the map ranks liquidation value (dead + expensive +
+  // lots in stock), not raw capital — a healthy green seller no longer takes space.
+  const sorted = [...rows].sort((a, b) => deadCapOf(b) - deadCapOf(a))
+  const total = sorted.reduce((s, r) => s + deadCapOf(r), 0)
   if (!total || !sorted.length) return { rects: [], tail: [] }
   const area = W * H
   // render individually only rects big enough to see; fold the tail into "אחר"
   const MIN_PX = 64
   const keep: MapRow[] = []; const tail: MapRow[] = []; let tailValue = 0
   for (const r of sorted) {
-    const v = r.price * r.stock
+    const v = deadCapOf(r)
     if ((v / total) * area >= MIN_PX && keep.length < 600) keep.push(r)
     else { tail.push(r); tailValue += v }
   }
   // fold "אחר" into the list at its TRUE size position (it can be one of the
-  // biggest blocks by capital) — appending it last made squarify treat it as the
+  // biggest blocks) — appending it last made squarify treat it as the
   // smallest, wedging a giant block in at the end and scrambling the sort order.
-  const entries: { value: number; row: MapRow | null }[] = keep.map(r => ({ value: r.price * r.stock, row: r }))
+  const entries: { value: number; row: MapRow | null }[] = keep.map(r => ({ value: deadCapOf(r), row: r }))
   if (tailValue > 0) entries.push({ value: tailValue, row: null })
   entries.sort((a, b) => b.value - a.value)
   const values = entries.map(e => (e.value / total) * area)
@@ -280,17 +286,40 @@ export function LiquidationMap({ rows }: { rows: MapRow[] }) {
     return best ? { row: best.row, other: null } : null
   }, [mode, rects, dots])
 
-  const onMove = (e: React.MouseEvent) => {
+  const lastPointerType = useRef<string>('mouse')
+  const lastTouchKey = useRef<string | null>(null)
+
+  const activate = (hit: { row: MapRow | null; other: { count: number; value: number } | null }) => {
+    if (hit.row) { window.open(`/items/${encodeURIComponent(hit.row.code)}`, '_blank'); return }
+    if (hit.other && tm.tail.length) setDrill(d => [...d, tm.tail])
+  }
+
+  const onPointerMove = (e: React.PointerEvent) => {
+    lastPointerType.current = e.pointerType
     const b = canvasRef.current!.getBoundingClientRect()
-    const hit = hitTest(e.clientX - b.left, e.clientY - b.top)
-    setHover(hit ? { px: e.clientX - b.left, py: e.clientY - b.top, ...hit } : null)
+    const mx = e.clientX - b.left, my = e.clientY - b.top
+    const hit = hitTest(mx, my)
+    setHover(hit ? { px: mx, py: my, ...hit } : null)
+  }
+
+  // touch/pen: first tap on a block shows its tooltip, second tap on the SAME
+  // block activates (item page / drill into "אחר"). Mouse keeps hover + click.
+  const onPointerDown = (e: React.PointerEvent) => {
+    lastPointerType.current = e.pointerType
+    if (e.pointerType === 'mouse') return
+    const b = canvasRef.current!.getBoundingClientRect()
+    const mx = e.clientX - b.left, my = e.clientY - b.top
+    const hit = hitTest(mx, my)
+    if (!hit) { setHover(null); lastTouchKey.current = null; return }
+    const key = hit.row ? hit.row.code : '__other__'
+    setHover({ px: mx, py: my, ...hit })
+    if (lastTouchKey.current === key) { activate(hit); lastTouchKey.current = null }
+    else lastTouchKey.current = key
   }
 
   const onClick = () => {
-    if (!hover) return
-    if (hover.row) { window.open(`/items/${encodeURIComponent(hover.row.code)}`, '_blank'); return }
-    // clicked "אחר" → drill into its contents
-    if (hover.other && tm.tail.length) setDrill(d => [...d, tm.tail])
+    if (lastPointerType.current !== 'mouse' || !hover) return
+    activate(hover)
   }
 
   const exportPng = () => {
@@ -303,7 +332,7 @@ export function LiquidationMap({ rows }: { rows: MapRow[] }) {
     ctx.fillText(mode === 'treemap' ? 'מפת כסף — מלאי מת למכירה ב-eBay' : 'מפת פיזור — מלאי מת למכירה ב-eBay', W - PAD, 38)
     ctx.font = '13px -apple-system, "Segoe UI", sans-serif'; ctx.fillStyle = t.dim
     ctx.fillText(`${nf(rows.length)} פריטים · ₪${nf(capital)} תקוע במלאי · ${new Date().toLocaleDateString('he-IL')}`, W - PAD, 62)
-    ctx.fillText(mode === 'treemap' ? 'שטח = כסף תקוע (מחיר × מלאי) · ירוק = נמכר · אדום = מת' : 'ימינה = מת יותר · למעלה = יקר יותר · גודל עיגול = מלאי · ירוק = קטן, כתום = בינוני', W - PAD, 80)
+    ctx.fillText(mode === 'treemap' ? 'שטח = כסף מת (מחיר × מלאי × מדד-מת) · אדום = מת, ירוק = נמכר' : 'ימינה = מת יותר · למעלה = יקר יותר · גודל עיגול = מלאי · ירוק = קטן, כתום = בינוני', W - PAD, 80)
     ctx.direction = 'ltr'
     ctx.save(); ctx.translate(PAD, HEAD)
     const iw = W - 2 * PAD, ih = H - HEAD - PAD
@@ -332,7 +361,7 @@ export function LiquidationMap({ rows }: { rows: MapRow[] }) {
             <span>נמכר</span>
             <span className="h-2.5 w-28 rounded-full" style={{ background: `linear-gradient(to left, ${deadColor(t, 0)}, ${deadColor(t, 50)}, ${deadColor(t, 100)})` }} />
             <span>מת</span>
-            <span className="ms-2">· שטח = כסף תקוע (מחיר × מלאי)</span>
+            <span className="ms-2">· שטח = כסף מת (מחיר × מלאי × מדד-מת) — כמה כסף כדאי לחלץ</span>
           </div>
         ) : (
           <div className="flex items-center gap-3 text-xs text-muted-foreground">
@@ -356,10 +385,11 @@ export function LiquidationMap({ rows }: { rows: MapRow[] }) {
       <div ref={wrapRef} className="relative rounded-xl border overflow-hidden" style={{ background: t.surface }}>
         <canvas
           ref={canvasRef}
-          onMouseMove={onMove}
-          onMouseLeave={() => setHover(null)}
+          onPointerMove={onPointerMove}
+          onPointerDown={onPointerDown}
+          onPointerLeave={() => { if (lastPointerType.current === 'mouse') setHover(null) }}
           onClick={onClick}
-          style={{ cursor: hoveringSomething ? 'pointer' : 'default', display: 'block' }}
+          style={{ cursor: hoveringSomething ? 'pointer' : 'default', display: 'block', touchAction: 'pan-y' }}
         />
         {hoveringSomething && (
           <div
@@ -374,19 +404,20 @@ export function LiquidationMap({ rows }: { rows: MapRow[] }) {
                 <span className="text-muted-foreground">מחיר</span><span>₪{nf(h.price)}</span>
                 <span className="text-muted-foreground">מלאי</span><span>{h.stock}</span>
                 <span className="text-muted-foreground">כסף תקוע</span><span className="font-bold">₪{nf(h.price * h.stock)}</span>
+                <span className="text-muted-foreground">מתוכו מלאי-מת</span><span className="font-bold" style={{ color: deadColor(t, h.deadness) }}>₪{nf(h.price * h.stock * h.deadness / 100)}</span>
                 <span className="text-muted-foreground">נמכר 26/25/24</span><span>{h.sold_this_year} / {h.sold_2025} / {h.sold_2024}</span>
                 <span className="text-muted-foreground">שנות מלאי</span><span>{h.years_of_stock >= 100 ? '∞' : h.years_of_stock}</span>
                 <span className="text-muted-foreground">מדד מלאי-מת</span><span>{h.deadness}</span>
                 <span className="text-muted-foreground">ציון התאמה</span><span className="font-bold">{h.match}</span>
               </div>
-              <div className="mt-1.5 text-muted-foreground">לחיצה — דף פריט ↗</div>
+              <div className="mt-1.5 text-muted-foreground">לחיצה/הקשה — דף פריט ↗</div>
             </>) : (<>
               <div className="font-bold text-sm mb-0.5">שאר הפריטים הקטנים</div>
               <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 tabular-nums mt-1">
                 <span className="text-muted-foreground">כמות פריטים</span><span>{nf(hover!.other!.count)}</span>
-                <span className="text-muted-foreground">כסף תקוע</span><span className="font-bold">₪{nf(hover!.other!.value)}</span>
+                <span className="text-muted-foreground">כסף מת</span><span className="font-bold">₪{nf(hover!.other!.value)}</span>
               </div>
-              <div className="mt-1.5 text-muted-foreground">לחיצה — כניסה וצפייה בפריטים ↵</div>
+              <div className="mt-1.5 text-muted-foreground">לחיצה/הקשה — כניסה וצפייה בפריטים ↵</div>
             </>)}
           </div>
         )}
