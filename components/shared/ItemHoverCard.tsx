@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useCallback, useEffect, useRef, type ReactNode } from 'react'
+import Link from 'next/link'
 import { HoverCard, HoverCardTrigger, HoverCardContent } from '@/components/ui/hover-card'
 import { Package, TrendingUp, MapPin, Loader2 } from 'lucide-react'
 import { useLocale } from '@/lib/locale-context'
@@ -120,7 +121,7 @@ export function ItemHoverCard({ code, children }: { code: string; children: Reac
   // and a tap outside closes it. Desktop hover is unchanged (Radix drives open).
   const [open, setOpen] = useState(false)
   const triggerRef = useRef<HTMLSpanElement>(null)
-  const contentRef = useRef<HTMLDivElement>(null)
+  const contentRef = useRef<HTMLAnchorElement>(null)
 
   const fetchItem = useCallback(async () => {
     if (!code) return
@@ -186,7 +187,15 @@ export function ItemHoverCard({ code, children }: { code: string; children: Reac
         </span>
       </HoverCardTrigger>
       <HoverCardContent side="top" align="start" className="w-72">
-        <div ref={contentRef}>
+        {/* The whole card is a link to the item page — on touch the open card
+            overlays the tapped row, so tapping the card (not the hidden link
+            underneath) must navigate. */}
+        <Link
+          ref={contentRef}
+          href={`/items/${encodeURIComponent(code)}`}
+          onClick={() => setOpen(false)}
+          className="block hover:opacity-90 transition-opacity"
+        >
           {loading ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -197,7 +206,12 @@ export function ItemHoverCard({ code, children }: { code: string; children: Reac
           ) : notFound ? (
             <div className="text-sm text-muted-foreground py-1">{isHe ? 'הפריט לא נמצא' : 'Item not found'}</div>
           ) : null}
-        </div>
+          {(item || notFound) && (
+            <div className="mt-2 pt-2 border-t text-[11px] text-primary text-center">
+              {isHe ? 'פתח דף פריט ↗' : 'Open item page ↗'}
+            </div>
+          )}
+        </Link>
       </HoverCardContent>
     </HoverCard>
   )
