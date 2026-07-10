@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { initializeSecrets } from '@/lib/aws-secrets'
 import { getItems } from '@/lib/services/analytics-service'
 import { readQueryAsync } from '@/lib/neon-read'
-import { classifySize, matchScore } from '@/lib/ebay-size'
+import { classifySize, matchScore, yearsOfStock } from '@/lib/ebay-size'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -17,7 +17,6 @@ export async function GET(request: Request) {
     await initializeSecrets()
     const { searchParams } = new URL(request.url)
     const minPrice = Number(searchParams.get('min_price') ?? 1000)
-    const minDemand = Number(searchParams.get('min_demand') ?? 1)
 
     const now = new Date()
     const year2y = now.getFullYear() - 2 // 2y-ago = the "sold_2y_ago" year
@@ -44,11 +43,11 @@ export async function GET(request: Request) {
       // skip junk placeholder rows + fee/discount pseudo-items
       if (!name || name.length < 2 || ['!', '.', '-', '----'].includes(name)) continue
       if (code.length <= 3 && /^\d+$/.test(code)) continue
-      // filters: in stock, expensive, proven demand
-      if (stock <= 0 || price < minPrice || demand < minDemand) continue
+      // filters: in stock + expensive (NO sales floor — dead/unsold stock is the target)
+      if (stock <= 0 || price < minPrice) continue
 
       const size = classifySize(name)
-      if (size === 'large') continue // not worth shipping abroad
+      if (size === 'large') continue // too bulky/heavy to ship abroad
 
       out.push({
         code, name, size,
@@ -58,7 +57,8 @@ export async function GET(request: Request) {
         sold_2025: Math.round(sold2025),
         sold_2024: Math.round(sold2024),
         demand: Math.round(demand),
-        match: matchScore(price, size, demand, stock),
+        years_of_stock: Math.round(yearsOfStock(stock, sold2025, sold2024) * 10) / 10,
+        match: matchScore(price, size, stock, sold2025, sold2024),
       })
     }
     out.sort((a, b) => b.match - a.match)

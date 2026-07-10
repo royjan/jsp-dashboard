@@ -6,7 +6,7 @@ import { ItemLink } from '@/components/shared/ItemLink'
 type Row = {
   code: string; name: string; size: 'small' | 'medium'
   price: number; stock: number; sold_2025: number; sold_2024: number
-  demand: number; match: number
+  demand: number; years_of_stock: number; match: number
 }
 type Payload = {
   count: number; small: number; medium: number
@@ -17,7 +17,7 @@ const PER = 50
 const nf = (n: number) => n.toLocaleString('en-US')
 
 type SortKey = keyof Row
-const NUMERIC: SortKey[] = ['price', 'stock', 'sold_2025', 'sold_2024', 'demand', 'match']
+const NUMERIC: SortKey[] = ['price', 'stock', 'sold_2025', 'sold_2024', 'demand', 'years_of_stock', 'match']
 
 export default function EbayRecoPage() {
   const [data, setData] = useState<Payload | null>(null)
@@ -75,10 +75,10 @@ export default function EbayRecoPage() {
     <div className="space-y-5">
       <div>
         <div className="text-xs font-bold text-primary mb-1">רשימת מכירה ל-eBay — לוגיקה חדשה</div>
-        <h1 className="text-2xl font-bold">חלפים יקרים, קלים למשלוח, עם ביקוש</h1>
+        <h1 className="text-2xl font-bold">מלאי מת ויקר שקל לשלוח — למכירה ב-eBay</h1>
         <p className="text-sm text-muted-foreground max-w-2xl mt-1">
-          ציון ההתאמה (0–100) משקלל ערך (מחיר) 35% · קלות משלוח (קטן&gt;בינוני) 30% · ביקוש (נמכר 2025+2024) 20% · מלאי 15%.
-          מסונן: קטן/בינוני בלבד, מחיר ≥ ₪1,000, נמכר לפחות יחידה אחת, יש מלאי.
+          ציון ההתאמה (0–100) משקלל עודף מלאי (מלאי גבוה ÷ מכירות נמוכות) 45% · מחיר 28% · קלות משלוח (קטן&gt;בינוני) 27%.
+          ככל שפריט <b>לא נמכר</b> ויש ממנו הרבה במלאי — הציון גבוה יותר (זה מה שחייבים להיפטר ממנו). מסונן: קטן/בינוני, מחיר ≥ ₪1,000, יש מלאי.
         </p>
       </div>
 
@@ -127,8 +127,8 @@ export default function EbayRecoPage() {
               <Th k="price">מחיר</Th>
               <Th k="sold_2025">נמכר 25׳</Th>
               <Th k="sold_2024">נמכר 24׳</Th>
-              <Th k="demand">ביקוש</Th>
               <Th k="stock">מלאי</Th>
+              <Th k="years_of_stock">שנות מלאי</Th>
               <Th k="match">ציון התאמה</Th>
             </tr>
           </thead>
@@ -148,8 +148,8 @@ export default function EbayRecoPage() {
                 <td className="px-3 py-2 font-bold tabular-nums whitespace-nowrap" dir="ltr" style={{ textAlign: 'right' }}>₪{nf(r.price)}</td>
                 <td className="px-3 py-2 text-center tabular-nums">{r.sold_2025}</td>
                 <td className="px-3 py-2 text-center tabular-nums">{r.sold_2024}</td>
-                <td className="px-3 py-2 text-center tabular-nums">{r.demand}</td>
                 <td className="px-3 py-2 text-center tabular-nums text-muted-foreground">{r.stock}</td>
+                <td className="px-3 py-2 text-center tabular-nums font-semibold">{r.years_of_stock >= 100 ? '∞' : r.years_of_stock}</td>
                 <td className="px-3 py-2 min-w-[96px]">
                   <div className="font-bold tabular-nums">{r.match}</div>
                   <div className="h-1 bg-muted rounded mt-1 overflow-hidden">
