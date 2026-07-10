@@ -88,25 +88,31 @@ function squarify(values: number[], x: number, y: number, w: number, h: number):
   return out
 }
 
-function layoutTreemap(rows: MapRow[], W: number, H: number): Rect[] {
+function layoutTreemap(rows: MapRow[], W: number, H: number): { rects: Rect[]; tail: MapRow[] } {
   const sorted = [...rows].sort((a, b) => b.price * b.stock - a.price * a.stock)
   const total = sorted.reduce((s, r) => s + r.price * r.stock, 0)
-  if (!total || !sorted.length) return []
+  if (!total || !sorted.length) return { rects: [], tail: [] }
   const area = W * H
   // render individually only rects big enough to see; fold the tail into "אחר"
   const MIN_PX = 64
-  const keep: MapRow[] = []; let tailValue = 0; let tailCount = 0
+  const keep: MapRow[] = []; const tail: MapRow[] = []; let tailValue = 0
   for (const r of sorted) {
     const v = r.price * r.stock
     if ((v / total) * area >= MIN_PX && keep.length < 600) keep.push(r)
-    else { tailValue += v; tailCount++ }
+    else { tail.push(r); tailValue += v }
   }
   const values = keep.map(r => (r.price * r.stock / total) * area)
   if (tailValue > 0) values.push((tailValue / total) * area)
-  const rects = squarify(values, 0, 0, W, H)
-  return rects.map((g, i) => i < keep.length
-    ? { ...g, row: keep[i], value: keep[i].price * keep[i].stock }
-    : { ...g, row: null, value: tailValue, count: tailCount })
+  const raw = squarify(values, 0, 0, W, H)
+  // mirror horizontally: largest block lands top-RIGHT (natural RTL reading order,
+  // so the value-sorting is visible to a Hebrew reader)
+  const rects = raw.map((g, i) => ({
+    ...g, x: W - g.x - g.w,
+    ...(i < keep.length
+      ? { row: keep[i], value: keep[i].price * keep[i].stock }
+      : { row: null, value: tailValue, count: tail.length }),
+  }))
+  return { rects, tail }
 }
 
 // ── scatter layout ───────────────────────────────────────────────────────────
@@ -147,7 +153,7 @@ function render(ctx: CanvasRenderingContext2D, W: number, H: number, mode: Mode,
           font(11); ctx.fillText(`${shekAbbr(rc.value)}${rc.row.stock > 1 ? ` ×${rc.row.stock}` : ''}`, x + w - 6, y + 29)
         } else {
           font(11, true); ctx.fillText(`אחר (${nf(rc.count || 0)} פריטים)`, x + w - 6, y + 15)
-          font(11); ctx.fillText(shekAbbr(rc.value), x + w - 6, y + 29)
+          font(11); ctx.fillText(`${shekAbbr(rc.value)} · לחיצה לצפייה ↵`, x + w - 6, y + 29)
         }
         ctx.restore(); ctx.direction = 'ltr'
       }
@@ -203,7 +209,9 @@ export function LiquidationMap({ rows }: { rows: MapRow[] }) {
   const [mode, setMode] = useState<Mode>('treemap')
   const [dark, setDark] = useState(false)
   const [dims, setDims] = useState({ w: 900, h: 520 })
-  const [hover, setHover] = useState<{ px: number; py: number; row: MapRow } | null>(null)
+  const [hover, setHover] = useState<{ px: number; py: number; row: MapRow | null; other: { count: number; value: number } | null } | null>(null)
+  // drill-down stack: each level is the row-set inside the "אחר" block that was clicked
+  const [drill, setDrill] = useState<MapRow[][]>([])
 
   // theme detection (next-themes toggles the 'dark' class on <html>)
   useEffect(() => {
@@ -228,7 +236,12 @@ export function LiquidationMap({ rows }: { rows: MapRow[] }) {
 
   const t = useMemo(() => theme(dark), [dark])
   const maxPrice = useMemo(() => Math.max(...rows.map(r => r.price), 2000), [rows])
-  const rects = useMemo(() => mode === 'treemap' ? layoutTreemap(rows, dims.w, dims.h) : [], [rows, dims, mode])
+  // reset drill-down when the underlying rows change (search/size filter) or leaving treemap
+  useEffect(() => { setDrill([]) }, [rows, mode])
+  // the row-set currently shown = the deepest drill level, else all rows
+  const viewRows = drill.length ? drill[drill.length - 1] : rows
+  const tm = useMemo(() => mode === 'treemap' ? layoutTreemap(viewRows, dims.w, dims.h) : { rects: [], tail: [] }, [viewRows, dims, mode])
+  const rects = tm.rects
   const dots = useMemo(() => mode === 'scatter' ? layoutScatter(rows, dims.w, dims.h, maxPrice) : [], [rows, dims, mode, maxPrice])
   const capital = useMemo(() => rows.reduce((s, r) => s + r.price * r.stock, 0), [rows])
 
@@ -240,12 +253,18 @@ export function LiquidationMap({ rows }: { rows: MapRow[] }) {
     cv.style.width = `${dims.w}px`; cv.style.height = `${dims.h}px`
     const ctx = cv.getContext('2d'); if (!ctx) return
     ctx.scale(dpr, dpr)
-    render(ctx, dims.w, dims.h, mode, t, rects, dots, maxPrice, hover?.row.code ?? null)
+    render(ctx, dims.w, dims.h, mode, t, rects, dots, maxPrice, hover?.row?.code ?? null)
   }, [dims, mode, t, rects, dots, maxPrice, hover])
 
-  const hitTest = useCallback((mx: number, my: number): MapRow | null => {
+  // hit-test returns either a real row, or the "אחר" block (row:null + its tail info)
+  const hitTest = useCallback((mx: number, my: number): { row: MapRow | null; other: { count: number; value: number } | null } | null => {
     if (mode === 'treemap') {
-      for (const rc of rects) if (rc.row && mx >= rc.x && mx <= rc.x + rc.w && my >= rc.y && my <= rc.y + rc.h) return rc.row
+      for (const rc of rects) {
+        if (mx >= rc.x && mx <= rc.x + rc.w && my >= rc.y && my <= rc.y + rc.h) {
+          if (rc.row) return { row: rc.row, other: null }
+          return { row: null, other: { count: rc.count || 0, value: rc.value } }
+        }
+      }
       return null
     }
     let best: Dot | null = null; let bestD = Infinity
@@ -253,13 +272,20 @@ export function LiquidationMap({ rows }: { rows: MapRow[] }) {
       const dist = Math.hypot(mx - d.x, my - d.y)
       if (dist <= Math.max(d.r + 4, 10) && dist < bestD) { best = d; bestD = dist }
     }
-    return best?.row ?? null
+    return best ? { row: best.row, other: null } : null
   }, [mode, rects, dots])
 
   const onMove = (e: React.MouseEvent) => {
     const b = canvasRef.current!.getBoundingClientRect()
-    const row = hitTest(e.clientX - b.left, e.clientY - b.top)
-    setHover(row ? { px: e.clientX - b.left, py: e.clientY - b.top, row } : null)
+    const hit = hitTest(e.clientX - b.left, e.clientY - b.top)
+    setHover(hit ? { px: e.clientX - b.left, py: e.clientY - b.top, ...hit } : null)
+  }
+
+  const onClick = () => {
+    if (!hover) return
+    if (hover.row) { window.open(`/items/${encodeURIComponent(hover.row.code)}`, '_blank'); return }
+    // clicked "אחר" → drill into its contents
+    if (hover.other && tm.tail.length) setDrill(d => [...d, tm.tail])
   }
 
   const exportPng = () => {
@@ -277,7 +303,7 @@ export function LiquidationMap({ rows }: { rows: MapRow[] }) {
     ctx.save(); ctx.translate(PAD, HEAD)
     const iw = W - 2 * PAD, ih = H - HEAD - PAD
     render(ctx, iw, ih, mode, t,
-      mode === 'treemap' ? layoutTreemap(rows, iw, ih) : [],
+      mode === 'treemap' ? layoutTreemap(viewRows, iw, ih).rects : [],
       mode === 'scatter' ? layoutScatter(rows, iw, ih, maxPrice) : [], maxPrice, null)
     ctx.restore()
     const a = document.createElement('a')
@@ -286,6 +312,7 @@ export function LiquidationMap({ rows }: { rows: MapRow[] }) {
   }
 
   const h = hover?.row
+  const hoveringSomething = !!(hover && (hover.row || hover.other))
   const flipTip = hover ? hover.px > dims.w - 260 : false
 
   return (
@@ -312,32 +339,50 @@ export function LiquidationMap({ rows }: { rows: MapRow[] }) {
         <button onClick={exportPng} className="ms-auto rounded-lg border bg-muted/40 px-3.5 py-1.5 text-sm hover:bg-muted">📷 הורד כתמונה</button>
       </div>
 
+      {/* drill-down breadcrumb (treemap only) */}
+      {mode === 'treemap' && drill.length > 0 && (
+        <div className="flex items-center gap-2 text-sm">
+          <button onClick={() => setDrill([])} className="rounded-lg border bg-muted/40 px-3 py-1 hover:bg-muted">כל הפריטים</button>
+          <button onClick={() => setDrill(d => d.slice(0, -1))} className="rounded-lg border bg-muted/40 px-3 py-1 hover:bg-muted">‹ חזרה</button>
+          <span className="text-muted-foreground">בתוך ״אחר״ · רמה {drill.length} · {nf(viewRows.length)} פריטים</span>
+        </div>
+      )}
+
       <div ref={wrapRef} className="relative rounded-xl border overflow-hidden" style={{ background: t.surface }}>
         <canvas
           ref={canvasRef}
           onMouseMove={onMove}
           onMouseLeave={() => setHover(null)}
-          onClick={() => { if (h) window.open(`/items/${encodeURIComponent(h.code)}`, '_blank') }}
-          style={{ cursor: h ? 'pointer' : 'default', display: 'block' }}
+          onClick={onClick}
+          style={{ cursor: hoveringSomething ? 'pointer' : 'default', display: 'block' }}
         />
-        {h && (
+        {hoveringSomething && (
           <div
             dir="rtl"
             className="pointer-events-none absolute z-10 w-60 rounded-lg border bg-card p-3 text-xs shadow-lg"
             style={{ top: Math.min(hover!.py + 14, dims.h - 190), ...(flipTip ? { right: dims.w - hover!.px + 12 } : { left: hover!.px + 12 }) }}
           >
-            <div className="font-bold text-sm mb-0.5">{h.name}</div>
-            <div className="font-mono text-muted-foreground mb-1.5" dir="ltr" style={{ textAlign: 'right' }}>{h.code}</div>
-            <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 tabular-nums">
-              <span className="text-muted-foreground">מחיר</span><span>₪{nf(h.price)}</span>
-              <span className="text-muted-foreground">מלאי</span><span>{h.stock}</span>
-              <span className="text-muted-foreground">כסף תקוע</span><span className="font-bold">₪{nf(h.price * h.stock)}</span>
-              <span className="text-muted-foreground">נמכר 26/25/24</span><span>{h.sold_this_year} / {h.sold_2025} / {h.sold_2024}</span>
-              <span className="text-muted-foreground">שנות מלאי</span><span>{h.years_of_stock >= 100 ? '∞' : h.years_of_stock}</span>
-              <span className="text-muted-foreground">מדד מלאי-מת</span><span>{h.deadness}</span>
-              <span className="text-muted-foreground">ציון התאמה</span><span className="font-bold">{h.match}</span>
-            </div>
-            <div className="mt-1.5 text-muted-foreground">לחיצה — דף פריט ↗</div>
+            {h ? (<>
+              <div className="font-bold text-sm mb-0.5">{h.name}</div>
+              <div className="font-mono text-muted-foreground mb-1.5" dir="ltr" style={{ textAlign: 'right' }}>{h.code}</div>
+              <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 tabular-nums">
+                <span className="text-muted-foreground">מחיר</span><span>₪{nf(h.price)}</span>
+                <span className="text-muted-foreground">מלאי</span><span>{h.stock}</span>
+                <span className="text-muted-foreground">כסף תקוע</span><span className="font-bold">₪{nf(h.price * h.stock)}</span>
+                <span className="text-muted-foreground">נמכר 26/25/24</span><span>{h.sold_this_year} / {h.sold_2025} / {h.sold_2024}</span>
+                <span className="text-muted-foreground">שנות מלאי</span><span>{h.years_of_stock >= 100 ? '∞' : h.years_of_stock}</span>
+                <span className="text-muted-foreground">מדד מלאי-מת</span><span>{h.deadness}</span>
+                <span className="text-muted-foreground">ציון התאמה</span><span className="font-bold">{h.match}</span>
+              </div>
+              <div className="mt-1.5 text-muted-foreground">לחיצה — דף פריט ↗</div>
+            </>) : (<>
+              <div className="font-bold text-sm mb-0.5">שאר הפריטים הקטנים</div>
+              <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 tabular-nums mt-1">
+                <span className="text-muted-foreground">כמות פריטים</span><span>{nf(hover!.other!.count)}</span>
+                <span className="text-muted-foreground">כסף תקוע</span><span className="font-bold">₪{nf(hover!.other!.value)}</span>
+              </div>
+              <div className="mt-1.5 text-muted-foreground">לחיצה — כניסה וצפייה בפריטים ↵</div>
+            </>)}
           </div>
         )}
       </div>
