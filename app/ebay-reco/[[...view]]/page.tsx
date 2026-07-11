@@ -9,6 +9,7 @@ type Row = {
   code: string; name: string; size: 'small' | 'medium'
   price: number; stock: number; sold_this_year: number; sold_2025: number; sold_2024: number
   demand: number; years_of_stock: number; deadness: number; match: number
+  first_seen_year: number | null; age_years: number | null
 }
 type Payload = {
   count: number; small: number; medium: number
@@ -19,7 +20,7 @@ const PER = 50
 const nf = (n: number) => n.toLocaleString('en-US')
 
 type SortKey = keyof Row
-const NUMERIC: SortKey[] = ['price', 'stock', 'sold_this_year', 'sold_2025', 'sold_2024', 'demand', 'years_of_stock', 'match']
+const NUMERIC: SortKey[] = ['price', 'stock', 'sold_this_year', 'sold_2025', 'sold_2024', 'demand', 'years_of_stock', 'match', 'age_years']
 
 export default function EbayRecoPage() {
   // view is driven by the URL (/ebay-reco/table · /ebay-reco/map) so it is
@@ -35,6 +36,9 @@ export default function EbayRecoPage() {
   const [err, setErr] = useState<string | null>(null)
   const [q, setQ] = useState('')
   const [size, setSize] = useState<'' | 'small' | 'medium'>('')
+  // Minimum age (years in system) — hides parts newer than this. 0 = off.
+  // Parts with unknown age (no sales on record since 2020) are kept.
+  const [minAge, setMinAge] = useState(0)
   const [sortKey, setSortKey] = useState<SortKey>('match')
   const [sortDir, setSortDir] = useState<1 | -1>(-1)
   const [page, setPage] = useState(0)
@@ -50,15 +54,22 @@ export default function EbayRecoPage() {
     if (!data) return []
     const term = q.trim()
     const filtered = data.items.filter(
-      r => (!size || r.size === size) && (!term || r.name.includes(term) || r.code.includes(term)),
+      r => (!size || r.size === size)
+        && (!term || r.name.includes(term) || r.code.includes(term))
+        // Age filter: keep only parts proven older than the threshold. Unknown age
+        // (null) is kept — we never hide potential dead stock we can't date.
+        && (minAge <= 0 || r.age_years === null || r.age_years > minAge),
     )
     filtered.sort((a, b) => {
       const x = a[sortKey], y = b[sortKey]
       if (typeof x === 'string' && typeof y === 'string') return sortDir * x.localeCompare(y, 'he')
+      // Nulls (unknown age) sort to the end regardless of direction.
+      if (x === null) return 1
+      if (y === null) return -1
       return sortDir * ((x as number) - (y as number))
     })
     return filtered
-  }, [data, q, size, sortKey, sortDir])
+  }, [data, q, size, minAge, sortKey, sortDir])
 
   const pages = Math.max(1, Math.ceil(rows.length / PER))
   const cur = Math.min(page, pages - 1)
@@ -127,6 +138,18 @@ export default function EbayRecoPage() {
           <option value="small">קטן בלבד</option>
           <option value="medium">בינוני בלבד</option>
         </select>
+        <label
+          className="flex items-center gap-1.5 rounded-lg border bg-muted/40 px-3 py-2 text-sm whitespace-nowrap"
+          title="הסתרת פריטים חדשים — מציג רק כאלה שקיימים במערכת יותר משנים אלו (לפי כל הצ׳יין). פריטים ללא היסטוריית מכירות מ-2020 נשארים."
+        >
+          <span className="text-muted-foreground">ותק מינ׳ (שנים)</span>
+          <input
+            type="number" min={0} inputMode="numeric"
+            value={minAge || ''} onChange={e => { setMinAge(Math.max(0, Number(e.target.value) || 0)); setPage(0) }}
+            placeholder="הכל"
+            className="w-14 bg-transparent text-center tabular-nums outline-none"
+          />
+        </label>
         <span className="ms-auto text-sm text-muted-foreground">{nf(rows.length)} פריטים</span>
       </div>
 
@@ -136,7 +159,7 @@ export default function EbayRecoPage() {
       {/* Table */}
       {view === 'table' && (<>
       <div className="overflow-x-auto rounded-xl border">
-        <table className="w-full text-sm min-w-[900px]">
+        <table className="w-full text-sm min-w-[1000px]">
           <thead>
             <tr>
               <Th>#</Th>
@@ -149,6 +172,7 @@ export default function EbayRecoPage() {
               <Th k="sold_2024">נמכר 24׳</Th>
               <Th k="stock">מלאי</Th>
               <Th k="years_of_stock">שנות מלאי</Th>
+              <Th k="age_years">ותק במערכת</Th>
               <Th k="match">ציון התאמה</Th>
             </tr>
           </thead>
@@ -171,6 +195,13 @@ export default function EbayRecoPage() {
                 <td className="px-3 py-2 text-center tabular-nums">{r.sold_2024}</td>
                 <td className="px-3 py-2 text-center tabular-nums text-muted-foreground">{r.stock}</td>
                 <td className="px-3 py-2 text-center tabular-nums font-semibold">{r.years_of_stock >= 100 ? '∞' : r.years_of_stock}</td>
+                <td className="px-3 py-2 text-center tabular-nums whitespace-nowrap">
+                  {r.age_years === null
+                    ? <span className="text-muted-foreground/50" title="אין היסטוריית מכירות מ-2020 — ותק לא ידוע">—</span>
+                    : <span title={r.first_seen_year ? `נראה לראשונה: ${r.first_seen_year}` : undefined}>
+                        {r.age_years >= 6 ? '6+' : r.age_years}
+                      </span>}
+                </td>
                 <td className="px-3 py-2 min-w-[96px]">
                   <div className="font-bold tabular-nums">{r.match}</div>
                   <div className="h-1 bg-muted rounded mt-1 overflow-hidden">
@@ -195,6 +226,7 @@ export default function EbayRecoPage() {
 
       <p className="text-xs text-muted-foreground/70 max-w-3xl">
         הגודל מסווג אוטומטית משם הפריט בעברית. נתוני מכירות: מוני 7IPQ של ה-ERP (מדויקים, מנוכי ביטולים) — 2025 מ-FINAPI, 2024 מטבלת yearly_item_sales.
+        ״ותק במערכת״ = מספר השנים מאז המכירה הראשונה שנרשמה (על פני כל קודי הצ׳יין) — נתונים מ-2020 ומעלה, לכן ותק מוצג עד ״6+״. פריט ללא מכירות מאז 2020 מסומן ״—״ (ותק לא ידוע) ואינו מוסתר ע״י הסינון.
       </p>
     </div>
   )

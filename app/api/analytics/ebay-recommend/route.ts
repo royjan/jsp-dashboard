@@ -3,6 +3,7 @@ import { initializeSecrets } from '@/lib/aws-secrets'
 import { getItems } from '@/lib/services/analytics-service'
 import { readQueryAsync } from '@/lib/neon-read'
 import { classifySize, deadnessScore, matchScore, yearsOfStock } from '@/lib/ebay-size'
+import type { FinansitItem } from '@/lib/types'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -19,15 +20,41 @@ export async function GET(request: Request) {
     const minPrice = Number(searchParams.get('min_price') ?? 1000)
 
     const now = new Date()
-    const year2y = now.getFullYear() - 2 // 2y-ago = the "sold_2y_ago" year
+    const currentYear = now.getFullYear()
+    const year2y = currentYear - 2 // 2y-ago = the "sold_2y_ago" year
 
-    // 2-years-ago units per item, from the historical table.
-    const twoYrRows = (await readQueryAsync(
-      `SELECT item_code, units_sold FROM yearly_item_sales WHERE year = ?`,
-      [year2y],
-    )).rows as Array<{ item_code: string; units_sold: number }>
+    // One pass over the historical table gives us two things per item_code:
+    //   · sold2yMap    — units sold in the 2-years-ago year (for the sold_2024 column)
+    //   · firstYearMap — the earliest year the code appears (its "first seen" signal).
+    // yearly_item_sales spans 2020–now (accurate, void-aware ERP 7IPQ counters), so
+    // first-seen is capped at 2020 — plenty to tell a new part from an established one.
+    const yisRows = (await readQueryAsync(
+      `SELECT item_code, year, units_sold FROM yearly_item_sales`,
+    )).rows as Array<{ item_code: string; year: number; units_sold: number }>
     const sold2yMap = new Map<string, number>()
-    for (const r of twoYrRows) sold2yMap.set(r.item_code, Number(r.units_sold) || 0)
+    const firstYearMap = new Map<string, number>()
+    for (const r of yisRows) {
+      const yr = Number(r.year)
+      if (yr === year2y) sold2yMap.set(r.item_code, Number(r.units_sold) || 0)
+      const prev = firstYearMap.get(r.item_code)
+      if (prev === undefined || yr < prev) firstYearMap.set(r.item_code, yr)
+    }
+
+    // First-seen year for a whole chain = the earliest first-seen across ALL its
+    // codes. A part-id renamed 3 years ago still counts as old if an alias in its
+    // chain goes back further (e.g. 1920LL ← [9819938480, 1675941280]).
+    const chainFirstYear = (it: FinansitItem): number | null => {
+      const codes = new Set<string>([it.code])
+      for (const c of it.alias_codes || []) codes.add(c)
+      for (const c of it.chain_history || []) codes.add(c)
+      for (const c of it.item_id_history || []) codes.add(c)
+      let min: number | null = null
+      for (const c of codes) {
+        const y = firstYearMap.get(c)
+        if (y !== undefined && (min === null || y < min)) min = y
+      }
+      return min
+    }
 
     const items = await getItems()
     const out: any[] = []
@@ -50,6 +77,9 @@ export async function GET(request: Request) {
       const size = classifySize(name)
       if (size === 'large') continue // too bulky/heavy to ship abroad
 
+      const firstSeenYear = chainFirstYear(it)
+      const ageYears = firstSeenYear === null ? null : currentYear - firstSeenYear
+
       out.push({
         code, name, size,
         price: Math.round(price),
@@ -61,6 +91,11 @@ export async function GET(request: Request) {
         years_of_stock: Math.round(yearsOfStock(stock, sold2025, sold2026) * 10) / 10,
         deadness: Math.round(100 * deadnessScore(stock, sold2025, sold2026)),
         match: matchScore(price, size, stock, sold2025, sold2026),
+        first_seen_year: firstSeenYear,
+        // Years the part (or any code in its chain) has existed in the system.
+        // null = no sales on record since 2020 — age unknown (could be old dead
+        // stock or brand-new); the UI keeps these rather than hide dead stock.
+        age_years: ageYears,
       })
     }
     out.sort((a, b) => b.match - a.match)
