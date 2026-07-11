@@ -299,13 +299,15 @@ function PerMonthItemsSection({ dateFrom, dateTo }: { dateFrom: string; dateTo: 
         המוצרים המובילים בכל חודש (סכום מכירות על פני כל השנים בטווח)
       </p>
       {isLoading ? (
-        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 min-[480px]:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
           {Array.from({ length: 12 }).map((_, i) => <Skeleton key={i} className="h-40 w-full" />)}
         </div>
       ) : !hasAny ? (
         <p className="text-sm text-muted-foreground">אין נתוני מכירות חודשיים בטווח זה</p>
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
+        // Single column below 480px — each month card holds a ~213px-min table
+        // (150px name col + nowrap revenue) that overflows a 2-col grid on phones.
+        <div className="grid grid-cols-1 min-[480px]:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
           {months.map((m) => (
             <Card key={m.month}>
               <CardHeader className="pb-2">

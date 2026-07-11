@@ -282,8 +282,8 @@ export default function CatalogLinksPage() {
       </div>
 
       {/* Table */}
-      <div className="rounded-lg border overflow-hidden">
-        <table className="w-full text-sm">
+      <div className="rounded-lg border overflow-x-auto">
+        <table className="w-full text-sm min-w-[640px]">
           <thead className="bg-muted/50">
             <tr>
               <SortHead label="קוד Partly" field="code" />

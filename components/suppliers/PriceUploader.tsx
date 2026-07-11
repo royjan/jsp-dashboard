@@ -141,8 +141,8 @@ export function PriceUploader({ supplierCode }: PriceUploaderProps) {
           {preview && preview.length > 0 && (
             <div className="mt-3">
               <p className="text-xs text-muted-foreground mb-2">{t('suppliers.preview')}</p>
-              <div className="rounded border overflow-hidden">
-                <table className="w-full text-xs">
+              <div className="rounded border overflow-x-auto">
+                <table className="w-full text-xs min-w-[420px]">
                   <thead className="bg-muted/50">
                     <tr>
                       <th className="px-2 py-1 text-start">{t('suppliers.itemCode')}</th>
@@ -175,8 +175,8 @@ export function PriceUploader({ supplierCode }: PriceUploaderProps) {
             <CardTitle className="text-sm">{t('suppliers.uploadHistory')}</CardTitle>
           </CardHeader>
           <CardContent className="p-3">
-            <div className="rounded border overflow-hidden">
-              <table className="w-full text-xs">
+            <div className="rounded border overflow-x-auto">
+              <table className="w-full text-xs min-w-[480px]">
                 <thead className="bg-muted/50">
                   <tr>
                     <th className="px-2 py-1 text-start">{t('suppliers.fileName')}</th>

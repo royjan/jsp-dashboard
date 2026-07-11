@@ -97,8 +97,8 @@ export function OrderConfirmation({ supplierCode, order }: OrderConfirmationProp
               {order.lines.length} {t('suppliers.lineItems')}
             </button>
             {expanded && (
-              <div className="mt-2 rounded border overflow-hidden">
-                <table className="w-full text-xs">
+              <div className="mt-2 rounded border overflow-x-auto">
+                <table className="w-full text-xs min-w-[400px]">
                   <thead className="bg-muted/50">
                     <tr>
                       <th className="px-2 py-1 text-start">{t('suppliers.itemCode')}</th>

@@ -57,7 +57,10 @@ export function SeasonalHeatmap({ data, isLoading }: SeasonalHeatmapProps) {
         <CardTitle>{t('seasonalHeatmap')}</CardTitle>
         <CardDescription>{t('salesIntensity')}</CardDescription>
       </CardHeader>
-      <CardContent className="overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0">
+      <CardContent>
+        {/* Full-bleed scroll lives on an inner div so the negative margin cancels
+            CardContent's own padding instead of pushing past the card edge. */}
+        <div className="overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0">
         {/* Season overlay */}
         <div className="flex mb-2 text-xs">
           <div className="w-20 sm:w-32 shrink-0" />
@@ -127,6 +130,7 @@ export function SeasonalHeatmap({ data, isLoading }: SeasonalHeatmapProps) {
             ))}
           </div>
           <span>{t('high')}</span>
+        </div>
         </div>
       </CardContent>
     </Card>

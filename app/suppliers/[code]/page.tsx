@@ -289,8 +289,8 @@ export default function SupplierDetailPage() {
               <span>{t('suppliers.noDeliveries')}</span>
             </div>
           ) : (
-            <div className="rounded border overflow-hidden">
-              <table className="w-full text-sm">
+            <div className="rounded border overflow-x-auto">
+              <table className="w-full text-sm min-w-[560px]">
                 <thead className="bg-muted/50">
                   <tr>
                     <th className="px-3 py-2 text-start text-xs font-medium">{t('suppliers.docNumber')}</th>

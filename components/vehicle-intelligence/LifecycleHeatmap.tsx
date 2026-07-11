@@ -83,7 +83,10 @@ export function LifecycleHeatmap({ heatmap, peakAnalysis, isLoading }: Lifecycle
           {isHe ? 'הערכה' : 'Estimate'}
         </Badge>
       </CardHeader>
-      <CardContent className="overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0">
+      <CardContent>
+        {/* Full-bleed scroll lives on an inner div so the negative margin cancels
+            CardContent's own padding instead of pushing past the card edge. */}
+        <div className="overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0">
         {/* Age labels header */}
         <div className="flex mb-1 text-xs">
           <div className="w-24 sm:w-36 shrink-0" />
@@ -165,6 +168,7 @@ export function LifecycleHeatmap({ heatmap, peakAnalysis, isLoading }: Lifecycle
             </div>
           </div>
         )}
+        </div>
       </CardContent>
     </Card>
   )

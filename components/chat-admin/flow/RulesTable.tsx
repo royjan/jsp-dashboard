@@ -76,8 +76,8 @@ export function RulesTable({ rules, loading, selectedIds, onSelectionChange, onR
   }
 
   return (
-    <div dir="ltr" className="overflow-hidden rounded-xl border border-white/10 bg-white/[0.03] shadow-lg shadow-black/20 backdrop-blur">
-      <table className="w-full table-fixed divide-y divide-white/10">
+    <div dir="ltr" className="overflow-x-auto rounded-xl border border-white/10 bg-white/[0.03] shadow-lg shadow-black/20 backdrop-blur">
+      <table className="w-full table-fixed divide-y divide-white/10 min-w-[760px]">
         <thead className="bg-white/[0.04]">
           <tr>
             <th className="w-10 px-3 py-2.5 text-left">
