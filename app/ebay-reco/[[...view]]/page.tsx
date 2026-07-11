@@ -10,6 +10,8 @@ type Row = {
   price: number; stock: number; sold_this_year: number; sold_2025: number; sold_2024: number
   demand: number; years_of_stock: number; deadness: number; match: number
   first_seen_year: number | null; age_years: number | null
+  ebay_ils: number | null; ebay_market: string | null; ebay_flag: string
+  ebay_match_count: number | null; ebay_spread_pct: number | null
 }
 type Payload = {
   count: number; small: number; medium: number
@@ -20,7 +22,7 @@ const PER = 50
 const nf = (n: number) => n.toLocaleString('en-US')
 
 type SortKey = keyof Row
-const NUMERIC: SortKey[] = ['price', 'stock', 'sold_this_year', 'sold_2025', 'sold_2024', 'demand', 'years_of_stock', 'match', 'age_years']
+const NUMERIC: SortKey[] = ['price', 'stock', 'sold_this_year', 'sold_2025', 'sold_2024', 'demand', 'years_of_stock', 'match', 'age_years', 'ebay_ils']
 
 export default function EbayRecoPage() {
   // view is driven by the URL (/ebay-reco/table · /ebay-reco/map) so it is
@@ -159,7 +161,7 @@ export default function EbayRecoPage() {
       {/* Table */}
       {view === 'table' && (<>
       <div className="overflow-x-auto rounded-xl border">
-        <table className="w-full text-sm min-w-[1000px]">
+        <table className="w-full text-sm min-w-[1140px]">
           <thead>
             <tr>
               <Th>#</Th>
@@ -167,6 +169,7 @@ export default function EbayRecoPage() {
               <Th k="name">שם</Th>
               <Th k="size">גודל</Th>
               <Th k="price">מחיר</Th>
+              <Th k="ebay_ils">eBay (חדש, הכי גבוה)</Th>
               <Th k="sold_this_year">נמכר 26׳</Th>
               <Th k="sold_2025">נמכר 25׳</Th>
               <Th k="sold_2024">נמכר 24׳</Th>
@@ -190,6 +193,24 @@ export default function EbayRecoPage() {
                   </span>
                 </td>
                 <td className="px-3 py-2 font-bold tabular-nums whitespace-nowrap" dir="ltr" style={{ textAlign: 'right' }}>₪{nf(r.price)}</td>
+                <td className="px-3 py-2 whitespace-nowrap" dir="ltr" style={{ textAlign: 'right' }}>
+                  {r.ebay_ils == null ? (
+                    <span className="text-muted-foreground/40" title="טרם נבדק ב-eBay, או אין התאמה חדשה">—</span>
+                  ) : (
+                    <span title={`${r.ebay_market} · ${r.ebay_match_count} התאמות חדשות`}>
+                      <span className="font-bold tabular-nums">₪{nf(r.ebay_ils)}</span>
+                      <span className="ms-1">{r.ebay_flag}</span>
+                      {r.ebay_spread_pct != null && (
+                        <span className={`ms-1 text-[11px] font-semibold tabular-nums ${r.ebay_spread_pct >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                          {r.ebay_spread_pct >= 0 ? '+' : ''}{r.ebay_spread_pct}%
+                        </span>
+                      )}
+                      {(r.ebay_match_count ?? 0) < 3 && (
+                        <span className="ms-1 text-[10px] text-amber-500" title="מעט התאמות — ביטחון נמוך">⚠</span>
+                      )}
+                    </span>
+                  )}
+                </td>
                 <td className="px-3 py-2 text-center tabular-nums">{r.sold_this_year}</td>
                 <td className="px-3 py-2 text-center tabular-nums">{r.sold_2025}</td>
                 <td className="px-3 py-2 text-center tabular-nums">{r.sold_2024}</td>

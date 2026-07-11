@@ -116,6 +116,24 @@ export const itemSnapshots = dashboardSchema.table('item_snapshots', {
 })
 
 /**
+ * eBay price comparison cache — our dead-stock parts vs live eBay "new" asking
+ * prices across marketplaces. Populated by the /api/cron/ebay-prices warm job
+ * (rate-limit-aware, rolling refresh by checked_at). Keyed by the canonical
+ * item code; the join in ebay-recommend is chain-aware. `markets` holds the
+ * per-country breakdown; the top-level columns are the best (highest) market.
+ */
+export const ebayPriceCompare = dashboardSchema.table('ebay_price_compare', {
+  itemCode: text('item_code').primaryKey(),
+  bestMarket: text('best_market'),          // e.g. EBAY_DE  (null when no comparable found)
+  medianIls: integer('median_ils'),         // best market's median, converted to ₪
+  medianLocal: numeric('median_local'),      // best market's median in its own currency
+  currency: text('currency'),               // best market's currency (EUR/GBP/USD/…)
+  matchCount: integer('match_count').default(0),  // # of genuine matches behind the best median (confidence)
+  markets: jsonb('markets'),                // [{ market, currency, medianLocal, medianIls, matchCount }]
+  checkedAt: timestamp('checked_at', { withTimezone: true }).defaultNow().notNull(),
+})
+
+/**
  * Document headers (invoices, quotes, delivery notes, credit notes).
  * Populated externally or via bulk sync.
  */

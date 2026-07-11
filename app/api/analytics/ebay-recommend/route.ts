@@ -3,6 +3,7 @@ import { initializeSecrets } from '@/lib/aws-secrets'
 import { getItems } from '@/lib/services/analytics-service'
 import { readQueryAsync } from '@/lib/neon-read'
 import { classifySize, deadnessScore, matchScore, yearsOfStock } from '@/lib/ebay-size'
+import { marketFlag } from '@/lib/ebay-browse'
 import type { FinansitItem } from '@/lib/types'
 
 export const runtime = 'nodejs'
@@ -56,6 +57,22 @@ export async function GET(request: Request) {
       return min
     }
 
+    // eBay price comparison, populated by /api/cron/ebay-prices. Keyed by any
+    // code so the chain lookup below finds it whichever code was searched.
+    type EbayRow = { item_code: string; best_market: string | null; median_ils: number | null; match_count: number | null; checked_at: string | null }
+    const ebayRows = (await readQueryAsync(
+      `SELECT item_code, best_market, median_ils, match_count, checked_at FROM dashboard.ebay_price_compare WHERE median_ils IS NOT NULL`,
+    ).catch(() => ({ rows: [] as EbayRow[] }))).rows as EbayRow[]
+    const ebayMap = new Map<string, EbayRow>()
+    for (const r of ebayRows) ebayMap.set(r.item_code, r)
+    const chainEbay = (it: FinansitItem): EbayRow | null => {
+      for (const c of [it.code, ...(it.alias_codes || []), ...(it.chain_history || []), ...(it.item_id_history || [])]) {
+        const hit = ebayMap.get(c)
+        if (hit) return hit
+      }
+      return null
+    }
+
     const items = await getItems()
     const out: any[] = []
     for (const it of items) {
@@ -80,6 +97,11 @@ export async function GET(request: Request) {
       const firstSeenYear = chainFirstYear(it)
       const ageYears = firstSeenYear === null ? null : currentYear - firstSeenYear
 
+      // Best "new" eBay comparable across marketplaces (from the warm-cache).
+      const eb = chainEbay(it)
+      const ebayIls = eb?.median_ils ?? null
+      const ebaySpread = ebayIls != null && price > 0 ? Math.round((ebayIls / Math.round(price) - 1) * 100) : null
+
       out.push({
         code, name, size,
         price: Math.round(price),
@@ -96,6 +118,13 @@ export async function GET(request: Request) {
         // null = no sales on record since 2020 — age unknown (could be old dead
         // stock or brand-new); the UI keeps these rather than hide dead stock.
         age_years: ageYears,
+        // Best "new" eBay asking-price comparable (null until the warm-cache has
+        // checked this part, or when no comparable exists on eBay).
+        ebay_ils: ebayIls,
+        ebay_market: eb?.best_market ?? null,
+        ebay_flag: marketFlag(eb?.best_market),
+        ebay_match_count: eb?.match_count ?? null,
+        ebay_spread_pct: ebaySpread, // eBay median vs our price, %  (negative = eBay cheaper)
       })
     }
     out.sort((a, b) => b.match - a.match)
