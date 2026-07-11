@@ -59,9 +59,9 @@ export async function GET(request: Request) {
 
     // eBay price comparison, populated by /api/cron/ebay-prices. Keyed by any
     // code so the chain lookup below finds it whichever code was searched.
-    type EbayRow = { item_code: string; best_market: string | null; median_ils: number | null; match_count: number | null; checked_at: string | null }
+    type EbayRow = { item_code: string; best_market: string | null; median_ils: number | null; match_count: number | null; oem: boolean | null; best_url: string | null; checked_at: string | null }
     const ebayRows = (await readQueryAsync(
-      `SELECT item_code, best_market, median_ils, match_count, checked_at FROM dashboard.ebay_price_compare WHERE median_ils IS NOT NULL`,
+      `SELECT item_code, best_market, median_ils, match_count, oem, best_url, checked_at FROM dashboard.ebay_price_compare WHERE median_ils IS NOT NULL`,
     ).catch(() => ({ rows: [] as EbayRow[] }))).rows as EbayRow[]
     const ebayMap = new Map<string, EbayRow>()
     for (const r of ebayRows) ebayMap.set(r.item_code, r)
@@ -125,6 +125,8 @@ export async function GET(request: Request) {
         ebay_flag: marketFlag(eb?.best_market),
         ebay_match_count: eb?.match_count ?? null,
         ebay_spread_pct: ebaySpread, // eBay median vs our price, %  (negative = eBay cheaper)
+        ebay_oem: eb?.oem ?? null,   // true = comparable is genuine/OEM (fair vs our stock)
+        ebay_url: eb?.best_url ?? null, // link to the best-match eBay listing
       })
     }
     out.sort((a, b) => b.match - a.match)

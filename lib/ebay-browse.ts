@@ -39,13 +39,21 @@ export const marketFlag = (id: string | null | undefined): string => (id ? MARKE
 export type MarketComparable = {
   market: string; currency: string
   medianLocal: number; medianIls: number; matchCount: number
+  oem: boolean          // true = the median is built from genuine/OEM listings
+  url: string | null    // link to the representative listing (nearest the median)
+  title: string | null
 }
 export type EbayComparable = {
   bestMarket: string | null; medianIls: number | null; medianLocal: number | null
-  currency: string | null; matchCount: number; markets: MarketComparable[]
+  currency: string | null; matchCount: number; oem: boolean
+  bestUrl: string | null; bestTitle: string | null
+  markets: MarketComparable[]
 }
 
 const norm = (s: string) => (s || '').toUpperCase().replace(/[^A-Z0-9]/g, '')
+// Genuine/OEM signal in a listing title. Jan Parts sells OEM, so comparing
+// against aftermarket is apples-to-oranges — we prefer these when present.
+const OEM_RE = /\b(genuine|original|o\.?e\.?m|o\.?e\b|oes|echt|origineel|origine|originale?|d'origine)\b/i
 function median(xs: number[]): number | null {
   if (!xs.length) return null
   const s = [...xs].sort((a, b) => a - b), m = s.length >> 1
@@ -95,39 +103,60 @@ export async function getFxToIls(): Promise<Record<string, number>> {
   return out
 }
 
+type Listing = { price: number; url: string | null; title: string; oem: boolean }
+type MarketData = { medianLocal: number | null; matchCount: number; oem: boolean; url: string | null; title: string | null }
+
 // ── One marketplace: median "new" asking price for an MPN, in local currency ──
-async function marketMedian(token: string, mpn: string, market: string): Promise<{ medianLocal: number | null; matchCount: number }> {
+// Prefers genuine/OEM listings when any exist (fairer vs our OEM stock), and
+// returns a representative listing (nearest the median) with its eBay link.
+async function marketData(token: string, mpn: string, market: string): Promise<MarketData> {
   const url = `${SEARCH_URL}?q=${encodeURIComponent(mpn)}&filter=conditions:{NEW},buyingOptions:{FIXED_PRICE}&limit=50`
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${token}`, 'X-EBAY-C-MARKETPLACE-ID': market },
   })
-  if (!res.ok) return { medianLocal: null, matchCount: 0 }
+  if (!res.ok) return { medianLocal: null, matchCount: 0, oem: false, url: null, title: null }
   const data = await res.json()
   const n = norm(mpn)
   // Keep only listings whose title actually contains the MPN — kills keyword noise.
-  const prices = (data.itemSummaries || [])
+  const matched: Listing[] = (data.itemSummaries || [])
     .filter((i: any) => i.price && norm(i.title).includes(n))
-    .map((i: any) => Number(i.price.value))
-    .filter((v: number) => v > 0)
-  return { medianLocal: median(prices), matchCount: prices.length }
+    .map((i: any) => ({ price: Number(i.price.value), url: i.itemWebUrl || null, title: i.title || '', oem: OEM_RE.test(i.title || '') }))
+    .filter((l: Listing) => l.price > 0)
+  if (!matched.length) return { medianLocal: null, matchCount: 0, oem: false, url: null, title: null }
+
+  // Prefer OEM/original listings when we have some; otherwise fall back to all NEW.
+  const oemHits = matched.filter(l => l.oem)
+  const useOem = oemHits.length > 0
+  const set = useOem ? oemHits : matched
+  const med = median(set.map(l => l.price))!
+  // Representative "best match" = the listing closest to the median price.
+  const rep = set.reduce((a, b) => (Math.abs(b.price - med) < Math.abs(a.price - med) ? b : a))
+  return { medianLocal: med, matchCount: set.length, oem: useOem, url: rep.url, title: rep.title }
 }
 
-/** Best (highest-median) "new" eBay comparable for an MPN across all markets. */
+/** Best (highest-median) "new/OEM" eBay comparable for an MPN across all markets. */
 export async function fetchEbayComparable(mpn: string): Promise<EbayComparable> {
   const [token, fx] = await Promise.all([getEbayToken(), getFxToIls()])
-  const markets: MarketComparable[] = []
-  for (const m of EBAY_MARKETS) {
-    const { medianLocal, matchCount } = await marketMedian(token, mpn, m.id)
-    if (medianLocal == null || !fx[m.currency]) continue
-    markets.push({
-      market: m.id, currency: m.currency, medianLocal,
-      medianIls: Math.round(medianLocal * fx[m.currency]), matchCount,
-    })
-  }
-  if (!markets.length) return { bestMarket: null, medianIls: null, medianLocal: null, currency: null, matchCount: 0, markets: [] }
-  const best = markets.reduce((a, b) => (b.medianIls > a.medianIls ? b : a))
+  // Markets in parallel — one part hits ~10 marketplaces; sequential would blow
+  // the cron's time budget on large batches.
+  const markets = (await Promise.all(EBAY_MARKETS.map(async m => {
+    const d = await marketData(token, mpn, m.id)
+    if (d.medianLocal == null || !fx[m.currency]) return null
+    return {
+      market: m.id, currency: m.currency, medianLocal: d.medianLocal,
+      medianIls: Math.round(d.medianLocal * fx[m.currency]), matchCount: d.matchCount,
+      oem: d.oem, url: d.url, title: d.title,
+    } as MarketComparable
+  }))).filter((x): x is MarketComparable => x !== null)
+  if (!markets.length) return { bestMarket: null, medianIls: null, medianLocal: null, currency: null, matchCount: 0, oem: false, bestUrl: null, bestTitle: null, markets: [] }
+  // Prefer markets with an OEM-based median; among those (or all, if none), take
+  // the highest median — the best place to sell — as the headline comparable.
+  const oemMarkets = markets.filter(m => m.oem)
+  const pool = oemMarkets.length ? oemMarkets : markets
+  const best = pool.reduce((a, b) => (b.medianIls > a.medianIls ? b : a))
   return {
     bestMarket: best.market, medianIls: best.medianIls, medianLocal: best.medianLocal,
-    currency: best.currency, matchCount: best.matchCount, markets,
+    currency: best.currency, matchCount: best.matchCount, oem: best.oem,
+    bestUrl: best.url, bestTitle: best.title, markets,
   }
 }

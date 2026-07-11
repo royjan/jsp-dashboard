@@ -129,7 +129,10 @@ export const ebayPriceCompare = dashboardSchema.table('ebay_price_compare', {
   medianLocal: numeric('median_local'),      // best market's median in its own currency
   currency: text('currency'),               // best market's currency (EUR/GBP/USD/…)
   matchCount: integer('match_count').default(0),  // # of genuine matches behind the best median (confidence)
-  markets: jsonb('markets'),                // [{ market, currency, medianLocal, medianIls, matchCount }]
+  oem: boolean('oem').default(false),        // true = median built from genuine/OEM listings (fair vs our OEM stock)
+  bestUrl: text('best_url'),                // eBay link to the representative best-match listing
+  bestTitle: text('best_title'),            // that listing's title
+  markets: jsonb('markets'),                // per-country breakdown [{ market, currency, medianLocal, medianIls, matchCount, oem, url, title }]
   checkedAt: timestamp('checked_at', { withTimezone: true }).defaultNow().notNull(),
 })
 

@@ -21,6 +21,7 @@ const MARKETS = [
 ]
 const CURRENCIES = [...new Set(MARKETS.map(m => m[1]))]
 const norm = s => (s || '').toUpperCase().replace(/[^A-Z0-9]/g, '')
+const OEM_RE = /\b(genuine|original|o\.?e\.?m|o\.?e\b|oes|echt|origineel|origine|originale?|d'origine)\b/i
 const median = xs => { if (!xs.length) return null; const s = [...xs].sort((a, b) => a - b), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2 }
 
 function dbUrl() {
@@ -45,23 +46,31 @@ async function fx() {
   const rates = (await r.json()).rates
   return Object.fromEntries(CURRENCIES.map(c => [c, 1 / rates[c]]))
 }
-async function marketMedian(tok, mpn, market) {
+async function marketData(tok, mpn, market) {
   const url = `https://api.ebay.com/buy/browse/v1/item_summary/search?q=${encodeURIComponent(mpn)}&filter=conditions:{NEW},buyingOptions:{FIXED_PRICE}&limit=50`
   const r = await fetch(url, { headers: { Authorization: `Bearer ${tok}`, 'X-EBAY-C-MARKETPLACE-ID': market } })
-  if (!r.ok) return { medianLocal: null, matchCount: 0 }
+  if (!r.ok) return { medianLocal: null, matchCount: 0, oem: false, url: null, title: null }
   const d = await r.json(), n = norm(mpn)
-  const prices = (d.itemSummaries || []).filter(i => i.price && norm(i.title).includes(n)).map(i => +i.price.value).filter(v => v > 0)
-  return { medianLocal: median(prices), matchCount: prices.length }
+  const matched = (d.itemSummaries || [])
+    .filter(i => i.price && norm(i.title).includes(n))
+    .map(i => ({ price: +i.price.value, url: i.itemWebUrl || null, title: i.title || '', oem: OEM_RE.test(i.title || '') }))
+    .filter(l => l.price > 0)
+  if (!matched.length) return { medianLocal: null, matchCount: 0, oem: false, url: null, title: null }
+  const oemHits = matched.filter(l => l.oem), useOem = oemHits.length > 0, set = useOem ? oemHits : matched
+  const med = median(set.map(l => l.price))
+  const rep = set.reduce((a, b) => (Math.abs(b.price - med) < Math.abs(a.price - med) ? b : a))
+  return { medianLocal: med, matchCount: set.length, oem: useOem, url: rep.url, title: rep.title }
 }
 async function comparable(tok, rates, mpn) {
   const per = (await Promise.all(MARKETS.map(async ([id, cur]) => {
-    const { medianLocal, matchCount } = await marketMedian(tok, mpn, id)
-    return medianLocal == null || !rates[cur] ? null
-      : { market: id, currency: cur, medianLocal, medianIls: Math.round(medianLocal * rates[cur]), matchCount }
+    const d = await marketData(tok, mpn, id)
+    return d.medianLocal == null || !rates[cur] ? null
+      : { market: id, currency: cur, medianLocal: d.medianLocal, medianIls: Math.round(d.medianLocal * rates[cur]), matchCount: d.matchCount, oem: d.oem, url: d.url, title: d.title }
   }))).filter(Boolean)
-  if (!per.length) return { bestMarket: null, medianIls: null, medianLocal: null, currency: null, matchCount: 0, markets: [] }
-  const best = per.reduce((a, b) => (b.medianIls > a.medianIls ? b : a))
-  return { bestMarket: best.market, medianIls: best.medianIls, medianLocal: best.medianLocal, currency: best.currency, matchCount: best.matchCount, markets: per }
+  if (!per.length) return { bestMarket: null, medianIls: null, medianLocal: null, currency: null, matchCount: 0, oem: false, bestUrl: null, bestTitle: null, markets: [] }
+  const pool = per.filter(m => m.oem).length ? per.filter(m => m.oem) : per
+  const best = pool.reduce((a, b) => (b.medianIls > a.medianIls ? b : a))
+  return { bestMarket: best.market, medianIls: best.medianIls, medianLocal: best.medianLocal, currency: best.currency, matchCount: best.matchCount, oem: best.oem, bestUrl: best.url, bestTitle: best.title, markets: per }
 }
 
 const [{ app, cert }, rates, candResp] = await Promise.all([
@@ -78,13 +87,13 @@ let done = 0, withCmp = 0
 for (const code of codes) {
   const c = await comparable(tok, rates, code)
   await client.query(
-    `INSERT INTO dashboard.ebay_price_compare (item_code,best_market,median_ils,median_local,currency,match_count,markets,checked_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,now())
-     ON CONFLICT (item_code) DO UPDATE SET best_market=$2,median_ils=$3,median_local=$4,currency=$5,match_count=$6,markets=$7,checked_at=now()`,
-    [code, c.bestMarket, c.medianIls, c.medianLocal, c.currency, c.matchCount, JSON.stringify(c.markets)],
+    `INSERT INTO dashboard.ebay_price_compare (item_code,best_market,median_ils,median_local,currency,match_count,oem,best_url,best_title,markets,checked_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,now())
+     ON CONFLICT (item_code) DO UPDATE SET best_market=$2,median_ils=$3,median_local=$4,currency=$5,match_count=$6,oem=$7,best_url=$8,best_title=$9,markets=$10,checked_at=now()`,
+    [code, c.bestMarket, c.medianIls, c.medianLocal, c.currency, c.matchCount, c.oem, c.bestUrl, c.bestTitle, JSON.stringify(c.markets)],
   )
   done++; if (c.bestMarket) withCmp++
-  if (c.bestMarket) console.log(`  ${code.padEnd(12)} → ₪${c.medianIls} ${c.bestMarket} (${c.matchCount})`)
+  if (c.bestMarket) console.log(`  ${code.padEnd(12)} → ₪${c.medianIls} ${c.bestMarket} ${c.oem ? 'OEM' : '   '} (${c.matchCount}) ${c.bestUrl || ''}`)
   else console.log(`  ${code.padEnd(12)} → no comparable`)
 }
 await client.end()

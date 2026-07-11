@@ -6,6 +6,7 @@ import { getItems } from '@/lib/services/analytics-service'
 import { getDb } from '@/lib/db'
 import { ebayPriceCompare } from '@/lib/db/schema'
 import { fetchEbayComparable } from '@/lib/ebay-browse'
+import { classifySize } from '@/lib/ebay-size'
 import { sql } from 'drizzle-orm'
 
 /**
@@ -37,9 +38,17 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const limit = Math.min(200, Math.max(1, Number(searchParams.get('limit')) || 40))
 
-    // Candidate parts (canonical, chain-collapsed) matching the ebay-reco filter.
+    // Candidate parts (canonical, chain-collapsed) — mirror the /ebay-recommend
+    // filter so we don't spend rate budget pricing parts the table never shows:
+    // in stock, expensive, real name, and small/medium (large = not eBay-shippable).
     const items = await getItems()
-    const candidates = items.filter(it => (it.stock_qty || 0) > 0 && (it.price || 0) >= MIN_PRICE)
+    const candidates = items.filter(it => {
+      const name = (it.name || '').trim()
+      if ((it.stock_qty || 0) <= 0 || (it.price || 0) < MIN_PRICE) return false
+      if (!name || name.length < 2 || ['!', '.', '-', '----'].includes(name)) return false
+      if (it.code.length <= 3 && /^\d+$/.test(it.code)) return false
+      return classifySize(name) !== 'large'
+    })
 
     // Order by staleness: never-checked first, then oldest checked_at.
     const db = await getDb()
@@ -65,6 +74,9 @@ export async function GET(request: Request) {
             medianLocal: cmp.medianLocal != null ? String(cmp.medianLocal) : null,
             currency: cmp.currency,
             matchCount: cmp.matchCount,
+            oem: cmp.oem,
+            bestUrl: cmp.bestUrl,
+            bestTitle: cmp.bestTitle,
             markets: cmp.markets,
             checkedAt: new Date(),
           })
@@ -76,6 +88,9 @@ export async function GET(request: Request) {
               medianLocal: cmp.medianLocal != null ? String(cmp.medianLocal) : null,
               currency: cmp.currency,
               matchCount: cmp.matchCount,
+              oem: cmp.oem,
+              bestUrl: cmp.bestUrl,
+              bestTitle: cmp.bestTitle,
               markets: cmp.markets,
               checkedAt: new Date(),
             },
