@@ -75,7 +75,7 @@ data/
 | Database | PostgreSQL (Neon) via Drizzle ORM + SQLite (local historical cache) |
 | Cache | Upstash Redis (3h TTL, 48h for seasonal) |
 | AI | Google Gemini (reorder recommendations, insights) |
-| Deploy | Docker → AWS ECR → AWS App Runner |
+| Deploy | Dokploy (builds from `main` via Dockerfile) |
 | Secrets | AWS Secrets Manager |
 | i18n | Hebrew (RTL primary), English |
 
@@ -138,16 +138,22 @@ AWS Secrets Manager provides these in production. Override locally via `.env.loc
 
 ## Deployment
 
+Production runs on **Dokploy** (self-hosted at `192.168.0.112:3000`; the dashboard
+app serves on `:3002`). Dokploy builds from the `main` branch via the repo's
+`Dockerfile` — so **push to `main`, then trigger a deploy**:
+
 ```bash
-./deploy.sh [tag]    # Build Docker → push ECR → update App Runner
+# push, then POST the Dokploy deploy webhook (token at ~/.config/dokploy/api-token)
+git push origin main
+curl -X POST -H "x-api-key: $(cat ~/.config/dokploy/api-token)" \
+  -H "Content-Type: application/json" \
+  -d '{"applicationId":"fS6YxDi2AGcFvYIdaOtAJ"}' \
+  http://192.168.0.112:3000/api/application.deploy
 ```
 
-- Registry: AWS ECR (`224072612352.dkr.ecr.eu-central-1.amazonaws.com`)
-- Service: AWS App Runner (`jan-parts-dashboard`)
-- Domain: `dashboard.jan.parts` (Route 53 CNAME)
-- Region: eu-central-1
-- Docker: Node 25 Alpine, multi-stage build, runs as non-root user
+- Build: Node 25 Alpine multi-stage Dockerfile, runs as non-root user
 - CodeArtifact auth required for `@jan/finansit-sdk` during build
+- The former AWS App Runner + ECR path (`dashboard.jan.parts`) is retired
 
 ## Dashboard Pages
 
