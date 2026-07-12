@@ -88,6 +88,32 @@ export async function getEbayToken(): Promise<string> {
   return data.access_token
 }
 
+/**
+ * Remaining Browse API calls for today (eBay getRateLimits). Returns null if the
+ * check itself fails, so callers can fall back to a conservative batch rather
+ * than stall forever. Free — costs nothing against the Browse quota.
+ */
+export async function getEbayRemaining(): Promise<number | null> {
+  try {
+    const token = await getEbayToken()
+    const r = await fetch(
+      'https://api.ebay.com/developer/analytics/v1_beta/rate_limit/?api_context=buy&api_name=Browse',
+      { headers: { Authorization: `Bearer ${token}` } },
+    )
+    if (!r.ok) return null
+    const d = await r.json()
+    let remaining: number | null = null
+    for (const rl of d.rateLimits || [])
+      for (const res of rl.resources || [])
+        if (res.name === 'buy.browse')
+          for (const rt of res.rates || [])
+            if (typeof rt.remaining === 'number') remaining = rt.remaining
+    return remaining
+  } catch {
+    return null
+  }
+}
+
 // ── FX → ILS (ECB via frankfurter, free/no-key), cached in Redis 24h ──
 const FX_KEY = 'ebay:fx:ils'
 

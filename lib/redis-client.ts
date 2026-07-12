@@ -106,3 +106,27 @@ export async function deleteCache(key: string): Promise<void> {
   // In-memory fallback
   memoryCache.delete(key)
 }
+
+/**
+ * Best-effort mutual-exclusion lock (atomic SET key val NX EX ttl). Returns true
+ * if this caller acquired it. The TTL auto-frees the lock if the holder crashes.
+ * Falls back to the in-memory map (single-process only) when Redis is absent.
+ */
+export async function tryAcquireLock(key: string, ttlSeconds: number): Promise<boolean> {
+  const r = getRedis()
+  if (r) {
+    try {
+      const res = await r.set(key, '1', 'EX', ttlSeconds, 'NX')
+      return res === 'OK'
+    } catch (e: any) {
+      console.warn(`[redis-client] tryAcquireLock failed for key "${key}":`, e.message?.substring(0, 200))
+      return false // fail closed — don't run duplicate work if the lock is uncertain
+    }
+  }
+  // In-memory fallback (only meaningful within one process)
+  const now = Date.now()
+  const cur = memoryCache.get(key)
+  if (cur && cur.expires > now) return false
+  memoryCache.set(key, { data: '1', expires: now + ttlSeconds * 1000 })
+  return true
+}

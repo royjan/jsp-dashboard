@@ -15,5 +15,16 @@ export async function register() {
     }
     process.on('SIGTERM', () => shutdown('SIGTERM'))
     process.on('SIGINT', () => shutdown('SIGINT'))
+
+    // Free, self-scheduling eBay price warmer (rate-limit-aware). Production only
+    // so local `next dev` doesn't spend the shared Browse quota.
+    if (process.env.NODE_ENV === 'production') {
+      try {
+        const { startEbayWarmLoop } = await import('./lib/ebay-warm-loop')
+        startEbayWarmLoop()
+      } catch (e) {
+        console.error('[instrumentation] failed to start eBay warm loop:', e)
+      }
+    }
   }
 }
