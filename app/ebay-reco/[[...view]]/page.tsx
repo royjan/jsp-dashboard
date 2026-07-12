@@ -26,6 +26,28 @@ const nf = (n: number) => n.toLocaleString('en-US')
 type SortKey = keyof Row
 const NUMERIC: SortKey[] = ['price', 'stock', 'sold_this_year', 'sold_2025', 'sold_2024', 'demand', 'years_of_stock', 'match', 'age_years', 'ebay_ils']
 
+// Readable ?sort_by= values ↔ internal column keys, so links are shareable and
+// intuitive, e.g. ?sort_by=ebay&sort_dir=desc · ?sort_by=stock_years · ?sort_by=sold_26.
+const SORT_PARAMS: Array<{ param: string; key: SortKey }> = [
+  { param: 'match', key: 'match' },
+  { param: 'price', key: 'price' },
+  { param: 'ebay', key: 'ebay_ils' },
+  { param: 'stock', key: 'stock' },
+  { param: 'stock_years', key: 'years_of_stock' },
+  { param: 'age', key: 'age_years' },
+  { param: 'sold_26', key: 'sold_this_year' },
+  { param: 'sold_25', key: 'sold_2025' },
+  { param: 'sold_24', key: 'sold_2024' },
+  { param: 'demand', key: 'demand' },
+  { param: 'code', key: 'code' },
+  { param: 'name', key: 'name' },
+  { param: 'size', key: 'size' },
+]
+const PARAM_TO_SORT = new Map<string, SortKey>(SORT_PARAMS.map(s => [s.param, s.key]))
+for (const s of SORT_PARAMS) if (!PARAM_TO_SORT.has(s.key)) PARAM_TO_SORT.set(s.key, s.key) // also accept raw keys
+const SORT_TO_PARAM = new Map<SortKey, string>(SORT_PARAMS.map(s => [s.key, s.param]))
+const DEFAULT_SORT: SortKey = 'match'
+
 function EbayRecoContent() {
   // view is driven by the URL (/ebay-reco/table · /ebay-reco/map) so it is
   // bookmarkable and shareable. This is an optional-catch-all route, so switching
@@ -51,8 +73,15 @@ function EbayRecoContent() {
   // Minimum age (years in system) — hides parts newer than this. 0 = off.
   // Parts with unknown age (no sales on record since 2020) are kept.
   const [minAge, setMinAge] = useState(() => Math.max(0, Number(get('min_age')) || 0))
-  const [sortKey, setSortKey] = useState<SortKey>('match')
-  const [sortDir, setSortDir] = useState<1 | -1>(-1)
+  const [sortKey, setSortKey] = useState<SortKey>(() => PARAM_TO_SORT.get(get('sort_by') || '') || DEFAULT_SORT)
+  const [sortDir, setSortDir] = useState<1 | -1>(() => {
+    const d = get('sort_dir')
+    if (d === 'asc') return 1
+    if (d === 'desc') return -1
+    // No explicit direction → the column's natural default (numeric = high→low).
+    const k = PARAM_TO_SORT.get(get('sort_by') || '') || DEFAULT_SORT
+    return NUMERIC.includes(k) ? -1 : 1
+  })
   const [page, setPage] = useState(0)
 
   useEffect(() => {
@@ -88,9 +117,15 @@ function EbayRecoContent() {
   const slice = rows.slice(cur * PER, cur * PER + PER)
 
   function sortBy(k: SortKey) {
-    if (sortKey === k) setSortDir(d => (d === 1 ? -1 : 1))
-    else { setSortKey(k); setSortDir(NUMERIC.includes(k) ? -1 : 1) }
+    const nextDir: 1 | -1 = sortKey === k ? (sortDir === 1 ? -1 : 1) : (NUMERIC.includes(k) ? -1 : 1)
+    setSortKey(k)
+    setSortDir(nextDir)
     setPage(0)
+    // Mirror to the URL (shareable). Drop the params when back at the default
+    // (match, high→low) to keep links clean.
+    const isDefault = k === DEFAULT_SORT && nextDir === -1
+    set('sort_by', isDefault ? null : (SORT_TO_PARAM.get(k) || k))
+    set('sort_dir', isDefault ? null : (nextDir === 1 ? 'asc' : 'desc'))
   }
 
   if (err) return <div className="p-4 text-red-500">שגיאה בטעינה: {err}</div>
