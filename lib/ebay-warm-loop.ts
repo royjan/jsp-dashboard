@@ -16,9 +16,12 @@
 import { initializeSecrets } from './aws-secrets'
 import { getEbayRemaining, EBAY_MARKETS } from './ebay-browse'
 import { warmEbayPrices } from './ebay-warm'
-import { tryAcquireLock } from './redis-client'
+import { tryAcquireLock, setCache } from './redis-client'
 
 const LOCK_KEY = 'ebay-warm-loop:lock'
+const STATUS_KEY = 'ebay-warm:status'      // heartbeat, read by /api/cron/ebay-prices?mode=status
+const heartbeat = (s: Record<string, unknown>) =>
+  setCache(STATUS_KEY, { ...s, at: new Date().toISOString() }, 30 * 24 * 3600).catch(() => {})
 const SAFETY_BUFFER = 300   // leave this many Browse calls/day untouched
 const MAX_PER_RUN = 120     // cap one tick regardless of budget (keeps ticks short)
 const FALLBACK_BATCH = 25   // used when the budget check itself fails (unknown)
@@ -34,9 +37,16 @@ export function startEbayWarmLoop(): void {
   }
   started = true
   const intervalMin = Math.max(15, Number(process.env.EBAY_WARM_INTERVAL_MIN) || 120)
-  const tick = () => { runOnce().catch(e => console.error('[ebay-warm-loop] tick error:', e)) }
+  const tick = () => {
+    runOnce().catch(e => {
+      const msg = e instanceof Error ? e.message : String(e)
+      console.error('[ebay-warm-loop] tick error:', msg)
+      heartbeat({ phase: 'error', error: msg })
+    })
+  }
   setTimeout(tick, FIRST_DELAY_MS)
   setInterval(tick, intervalMin * 60_000)
+  heartbeat({ phase: 'started', intervalMin })
   console.log(`[ebay-warm-loop] scheduled every ${intervalMin} min`)
 }
 
@@ -64,7 +74,9 @@ async function runOnce(): Promise<void> {
     limit = Math.min(MAX_PER_RUN, affordable)
   }
 
+  await heartbeat({ phase: 'running', remaining, limit })
   const r = await warmEbayPrices(limit)
+  await heartbeat({ phase: 'done', remaining, limit, updated: r.updated, coverage: `${r.cachedTotal}/${r.candidates}` })
   console.log(
     `[ebay-warm-loop] warmed ${r.updated}/${r.processed} ` +
     `(budget ${remaining ?? 'unknown'} → ${limit} items) · coverage ${r.cachedTotal}/${r.candidates}`,

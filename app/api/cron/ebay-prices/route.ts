@@ -2,7 +2,12 @@ export const maxDuration = 300 // 5 min — iterates a bounded batch of parts ×
 
 import { NextResponse } from 'next/server'
 import { initializeSecrets, getSecret } from '@/lib/aws-secrets'
-import { warmEbayPrices } from '@/lib/ebay-warm'
+import { warmEbayPrices, ebayCandidateItems } from '@/lib/ebay-warm'
+import { getEbayRemaining, EBAY_MARKETS } from '@/lib/ebay-browse'
+import { getCached } from '@/lib/redis-client'
+import { getDb } from '@/lib/db'
+import { ebayPriceCompare } from '@/lib/db/schema'
+import { sql } from 'drizzle-orm'
 
 /**
  * GET /api/cron/ebay-prices?limit=40
@@ -25,8 +30,32 @@ export async function GET(request: Request) {
     }
 
     const { searchParams } = new URL(request.url)
-    const limit = Math.min(200, Math.max(1, Number(searchParams.get('limit')) || 40))
 
+    // ?mode=status — coverage, live eBay budget, and the auto-loop heartbeat.
+    if (searchParams.get('mode') === 'status') {
+      const db = await getDb()
+      const [{ total, priced, oldest, newest }] = (await db
+        .select({
+          total: sql<number>`count(*)::int`,
+          priced: sql<number>`count(median_ils)::int`,
+          oldest: sql<string>`min(checked_at)`,
+          newest: sql<string>`max(checked_at)`,
+        })
+        .from(ebayPriceCompare)) as Array<{ total: number; priced: number; oldest: string; newest: string }>
+      const [candidates, remaining, heartbeat] = await Promise.all([
+        ebayCandidateItems().then(c => c.length).catch(() => null),
+        getEbayRemaining(),
+        getCached('ebay-warm:status'),
+      ])
+      return NextResponse.json({
+        coverage: candidates != null ? `${total}/${candidates}` : `${total}/?`,
+        priced, candidates, oldestChecked: oldest, newestChecked: newest,
+        ebayBudget: remaining == null ? 'unknown' : { remaining, perItem: EBAY_MARKETS.length, itemsAffordable: Math.floor(remaining / EBAY_MARKETS.length) },
+        autoLoop: heartbeat ?? 'no heartbeat yet (loop not started or failed to import)',
+      })
+    }
+
+    const limit = Math.min(200, Math.max(1, Number(searchParams.get('limit')) || 40))
     const r = await warmEbayPrices(limit)
     return NextResponse.json({ ...r, coverage: `${r.cachedTotal}/${r.candidates}` })
   } catch (error) {
