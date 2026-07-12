@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, Suspense } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
+import { useUrlParams } from '@/hooks/use-url-params'
 import { ItemLink } from '@/components/shared/ItemLink'
 import { LiquidationMap } from '../LiquidationMap'
 
@@ -25,7 +26,7 @@ const nf = (n: number) => n.toLocaleString('en-US')
 type SortKey = keyof Row
 const NUMERIC: SortKey[] = ['price', 'stock', 'sold_this_year', 'sold_2025', 'sold_2024', 'demand', 'years_of_stock', 'match', 'age_years', 'ebay_ils']
 
-export default function EbayRecoPage() {
+function EbayRecoContent() {
   // view is driven by the URL (/ebay-reco/table · /ebay-reco/map) so it is
   // bookmarkable and shareable. This is an optional-catch-all route, so switching
   // between table and map is a param-only change — the page does NOT remount, the
@@ -33,15 +34,23 @@ export default function EbayRecoPage() {
   const pathname = usePathname()
   const router = useRouter()
   const view: 'table' | 'map' = pathname.endsWith('/map') ? 'map' : 'table'
-  const goTo = (v: 'table' | 'map') => router.push(`/ebay-reco/${v}`, { scroll: false })
+  // Preserve the query string (filters) when switching table↔map. Read it fresh
+  // at click time — a render-time capture can be stale before the URL flush.
+  const goTo = (v: 'table' | 'map') =>
+    router.push(`/ebay-reco/${v}${typeof window !== 'undefined' ? window.location.search : ''}`, { scroll: false })
 
+  // Filters are mirrored to the URL query string so a filtered view is shareable
+  // (e.g. /ebay-reco/table?min_age=4&size=small&q=טורבו). Initialized from the URL.
+  const { get, set } = useUrlParams()
   const [data, setData] = useState<Payload | null>(null)
   const [err, setErr] = useState<string | null>(null)
-  const [q, setQ] = useState('')
-  const [size, setSize] = useState<'' | 'small' | 'medium'>('')
+  const [q, setQ] = useState(() => get('q') || '')
+  const [size, setSize] = useState<'' | 'small' | 'medium'>(() => {
+    const s = get('size'); return s === 'small' || s === 'medium' ? s : ''
+  })
   // Minimum age (years in system) — hides parts newer than this. 0 = off.
   // Parts with unknown age (no sales on record since 2020) are kept.
-  const [minAge, setMinAge] = useState(0)
+  const [minAge, setMinAge] = useState(() => Math.max(0, Number(get('min_age')) || 0))
   const [sortKey, setSortKey] = useState<SortKey>('match')
   const [sortDir, setSortDir] = useState<1 | -1>(-1)
   const [page, setPage] = useState(0)
@@ -129,12 +138,12 @@ export default function EbayRecoPage() {
           <button onClick={() => goTo('map')} className={`px-3.5 py-2 ${view === 'map' ? 'bg-primary text-primary-foreground font-bold' : 'bg-muted/40'}`}>מפה</button>
         </div>
         <input
-          value={q} onChange={e => { setQ(e.target.value); setPage(0) }}
+          value={q} onChange={e => { setQ(e.target.value); set('q', e.target.value || null); setPage(0) }}
           placeholder="חיפוש לפי שם או קוד פריט…"
           className="flex-1 min-w-[180px] rounded-lg border bg-muted/40 px-3 py-2 text-sm"
         />
         <select
-          value={size} onChange={e => { setSize(e.target.value as any); setPage(0) }}
+          value={size} onChange={e => { setSize(e.target.value as any); set('size', e.target.value || null); setPage(0) }}
           className="rounded-lg border bg-muted/40 px-3 py-2 text-sm"
         >
           <option value="">כל הגדלים</option>
@@ -148,7 +157,7 @@ export default function EbayRecoPage() {
           <span className="text-muted-foreground">ותק מינ׳ (שנים)</span>
           <input
             type="number" min={0} inputMode="numeric"
-            value={minAge || ''} onChange={e => { setMinAge(Math.max(0, Number(e.target.value) || 0)); setPage(0) }}
+            value={minAge || ''} onChange={e => { const v = Math.max(0, Number(e.target.value) || 0); setMinAge(v); set('min_age', v > 0 ? String(v) : null); setPage(0) }}
             placeholder="הכל"
             className="w-14 bg-transparent text-center tabular-nums outline-none"
           />
@@ -258,5 +267,14 @@ export default function EbayRecoPage() {
         ״ותק במערכת״ = מספר השנים מאז המכירה הראשונה שנרשמה (על פני כל קודי הצ׳יין) — נתונים מ-2020 ומעלה, לכן ותק מוצג עד ״6+״. פריט ללא מכירות מאז 2020 מסומן ״—״ (ותק לא ידוע) ואינו מוסתר ע״י הסינון.
       </p>
     </div>
+  )
+}
+
+// useSearchParams (via useUrlParams) requires a Suspense boundary.
+export default function EbayRecoPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-muted-foreground">טוען מומלצים…</div>}>
+      <EbayRecoContent />
+    </Suspense>
   )
 }
