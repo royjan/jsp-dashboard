@@ -28,6 +28,7 @@ import {
   PackageCheck,
   Container,
   GitBranch,
+  Radar,
   Languages,
   Activity,
   MessagesSquare,
@@ -82,6 +83,7 @@ const navSections: Array<{ id: string; labelKey: TranslationKey; items: NavItem[
     // Chat admin (integrated from chat.jan.parts)
     id: 'chat', labelKey: 'sectionChat', items: [
       { href: '/chat/flow-decisions', labelKey: 'chatFlowDecisions', icon: GitBranch },
+      { href: '/chat/flow-decisions/observatory', labelKey: 'chatFlowObservatory', icon: Radar },
       { href: '/chat/word-mappings', labelKey: 'chatWordMappings', icon: Languages },
       { href: '/chat/monitoring', labelKey: 'chatMonitoring', icon: Activity },
       { href: '/chat/analytics', labelKey: 'chatAnalytics', icon: MessagesSquare },

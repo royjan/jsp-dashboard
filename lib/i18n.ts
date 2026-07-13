@@ -21,6 +21,7 @@ export const translations = {
 
     // Chat admin
     chatFlowDecisions: 'החלטות זרימה',
+    chatFlowObservatory: 'מצפה החלטות',
     chatWordMappings: 'מיפוי מילים',
     chatMonitoring: 'ניטור מערכת',
     chatAnalytics: 'אנליטיקת צ׳אט',
@@ -597,6 +598,7 @@ export const translations = {
 
     // Chat admin
     chatFlowDecisions: 'Flow Decisions',
+    chatFlowObservatory: 'Decision Observatory',
     chatWordMappings: 'Word Mappings',
     chatMonitoring: 'System Monitoring',
     chatAnalytics: 'Chat Analytics',

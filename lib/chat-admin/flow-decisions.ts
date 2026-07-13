@@ -6,7 +6,7 @@
  * `flow_decisions_with_embeddings` view.
  */
 
-import { and, asc, desc, eq, gte, ilike, or, sql, count } from 'drizzle-orm'
+import { and, asc, desc, eq, gte, ilike, inArray, or, sql, count } from 'drizzle-orm'
 import { getDb, query } from '@/lib/db'
 import { flowDecisionsV2, partDescriptions, directParts, wordMappings } from '@/lib/db/schema'
 import { embedText, toVectorLiteral } from '@/lib/chat-admin/embeddings'
@@ -710,5 +710,159 @@ export async function simulate(
       vehicleEngineModel: c.row.vehicle_engine_model,
       vinPattern: c.row.vin_pattern,
     })),
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Flow Decisions Observatory — a richer, debuggable trace (superset of simulate)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type TraceStatus = 'approved' | 'suggestion' | 'rejected'
+
+/** Discrete PRODUCTION mirror: prefer the rule where the MOST filters ALL match;
+ *  otherwise fall back to the generic (isDefault / zero-filter) rule. Returns its id. */
+function pickProduction(cands: { row: any; filterCount: number; matched: number }[]): string | null {
+  const full = cands
+    .filter((c) => c.filterCount > 0 && c.matched === c.filterCount)
+    .sort((a, b) => b.filterCount - a.filterCount)
+  if (full.length) return full[0].row.id
+  const generic = cands.find((c) => c.filterCount === 0 || c.row.is_default)
+  return generic?.row.id ?? null
+}
+
+/** No-vector fallback: exact/ILIKE match on part_description (works without embeddings). */
+async function getRulesByExactTerm(term: string, includeStatuses: TraceStatus[]): Promise<any[]> {
+  const statusList = includeStatuses.map((s) => `'${s}'`).join(',')
+  const res = await query(
+    `SELECT * FROM flow_decisions_v2
+     WHERE status IN (${statusList}) AND LOWER(part_description) LIKE $1
+     ORDER BY is_default DESC LIMIT 20`,
+    [`%${term.toLowerCase()}%`],
+  )
+  return (res.rows as any[]).map((row) => ({
+    id: row.id, category: row.category, subcategory: row.subcategory, schema: row.schema,
+    status: row.status, source: row.source, isDefault: row.is_default, lambdaTarget: row.lambda_target,
+    cosineSim: null, matchScore: null, vehicleScore: null, filterCount: 0, matched: 0, nearMiss: false,
+    winningTerm: term, mismatchReasons: [], lexical: true,
+    filters: { yearFrom: row.vehicle_year_from, yearTo: row.vehicle_year_to, model: row.vehicle_model,
+               fuelType: row.vehicle_fuel_type, engineModel: row.vehicle_engine_model, vinPattern: row.vin_pattern },
+    directPart: null, isSelected: false, isProduction: false,
+  }))
+}
+
+/**
+ * simulateTrace — everything simulate() computes, PLUS what a debugger needs:
+ * which term won, cosine + vehicle scores separately, near-misses, non-approved
+ * lanes, the pinned direct_part, and the discrete production verdict (so simulator
+ * vs production disagreement is visible). Reuses the same expansion, cosine query
+ * and scoreVehicleMatch as simulate().
+ */
+export async function simulateTrace(
+  partDescription: string,
+  vehicle: SimulateVehicle = {},
+  opts: { threshold?: number; nearMissFloor?: number; includeStatuses?: TraceStatus[] } = {},
+): Promise<any> {
+  const threshold = opts.threshold ?? 0.6
+  const nearMissFloor = opts.nearMissFloor ?? 0.45
+  const includeStatuses = (opts.includeStatuses?.length ? opts.includeStatuses : ['approved']) as TraceStatus[]
+  const db = await getDb()
+
+  // 1) term expansion (track canonical + which terms fired)
+  const hasHebrew = /[֐-׿]/.test(partDescription)
+  const lang = hasHebrew ? 'he' : 'en'
+  const raw = partDescription.toLowerCase().trim()
+  const expansion: { term: string; isCanonical: boolean; fired: boolean }[] = [{ term: raw, isCanonical: false, fired: false }]
+  try {
+    const exp = await db
+      .select({ targetWord: wordMappings.targetWord })
+      .from(wordMappings)
+      .where(and(
+        sql`LOWER(${wordMappings.sourceWord}) = LOWER(${partDescription.trim()})`,
+        eq(wordMappings.sourceLanguage, lang),
+        eq(wordMappings.isActive, true),
+      ))
+      .orderBy(desc(wordMappings.isDefault), desc(wordMappings.usageCount))
+      .limit(5)
+    exp.forEach((r, i) => expansion.push({ term: String(r.targetWord).toLowerCase(), isCanonical: i === 0, fired: false }))
+  } catch { /* best-effort */ }
+  const terms = Array.from(new Set(expansion.map((e) => e.term)))
+
+  // 2) cosine search across the chosen statuses; track the winning term per rule
+  const statusList = includeStatuses.map((s) => `'${s}'`).join(',')
+  const byId = new Map<string, { row: any; sim: number; winningTerm: string }>()
+  let embeddedAny = false
+  for (const term of terms) {
+    const vec = await embedText(term)
+    if (!vec) continue
+    embeddedAny = true
+    const res = await query(
+      `SELECT *, 1 - (part_description_embedding <=> $1::vector) AS similarity
+       FROM flow_decisions_with_embeddings
+       WHERE status IN (${statusList}) AND part_description_embedding IS NOT NULL
+       ORDER BY part_description_embedding <=> $1::vector LIMIT 20`,
+      [toVectorLiteral(vec)],
+    )
+    for (const row of res.rows as any[]) {
+      const simv = Number(row.similarity)
+      const prev = byId.get(row.id)
+      if (!prev || simv > prev.sim) byId.set(row.id, { row, sim: simv, winningTerm: term })
+    }
+  }
+
+  // No embeddings → lexical fallback so the tracer is never a dead screen.
+  if (!embeddedAny) {
+    const lex = await getRulesByExactTerm(raw, includeStatuses)
+    const productionId = pickProduction(lex.map((c: any) => ({ row: { id: c.id, is_default: c.isDefault }, filterCount: 0, matched: 0 })))
+    if (lex[0]) lex[0].isSelected = true
+    lex.forEach((c: any) => { c.isProduction = c.id === productionId })
+    return { ok: false, mode: 'lexical', reason: 'Embeddings unavailable (no OPENAI_API_KEY) — showing exact/ILIKE lexical matches.',
+             expansion, threshold, nearMissFloor, candidates: lex, bestId: lex[0]?.id ?? null, productionId, disagree: false, vehicle }
+  }
+
+  // 3) score (keep near-misses down to nearMissFloor)
+  const scored = Array.from(byId.values())
+    .filter((c) => c.sim >= nearMissFloor)
+    .map(({ row, sim, winningTerm }) => {
+      const vs = scoreVehicleMatch(row, vehicle)
+      const matched = vs.filterCount === 0 ? 0 : Math.round(vs.score * vs.filterCount)
+      return { row, sim, winningTerm, matched, ...vs, matchScore: Math.round(sim * vs.score * 1000) / 1000, nearMiss: sim < threshold }
+    })
+    .sort((a, b) => b.matchScore - a.matchScore)
+    .slice(0, 20)
+
+  const firedTerms = new Set(scored.map((c) => c.winningTerm))
+  for (const e of expansion) e.fired = firedTerms.has(e.term)
+
+  // 4) pinned parts
+  const ids = scored.map((c) => c.row.id)
+  const pins = new Map<string, any>()
+  if (ids.length) {
+    const pr = await db.select().from(directParts).where(inArray(directParts.flowDecisionId, ids))
+    for (const p of pr) pins.set(p.flowDecisionId, p)
+  }
+
+  const selected = scored.filter((c) => !c.nearMiss)   // above threshold = eligible to win
+  const best = selected[0] ?? null
+  const productionId = pickProduction(selected.map((c) => ({ row: c.row, filterCount: c.filterCount, matched: c.matched })))
+
+  const candidates = scored.map((c) => ({
+    id: c.row.id,
+    category: c.row.category, subcategory: c.row.subcategory, schema: c.row.schema,
+    status: c.row.status, source: c.row.source, isDefault: c.row.is_default, lambdaTarget: c.row.lambda_target,
+    cosineSim: Math.round(c.sim * 1000) / 1000, matchScore: c.matchScore, vehicleScore: Math.round(c.score * 100) / 100,
+    filterCount: c.filterCount, matched: c.matched, nearMiss: c.nearMiss,
+    winningTerm: c.winningTerm, mismatchReasons: c.reasons,
+    filters: { yearFrom: c.row.vehicle_year_from, yearTo: c.row.vehicle_year_to, model: c.row.vehicle_model,
+               fuelType: c.row.vehicle_fuel_type, engineModel: c.row.vehicle_engine_model, vinPattern: c.row.vin_pattern },
+    directPart: pins.get(c.row.id) ?? null,
+    isSelected: best ? c.row.id === best.row.id : false,
+    isProduction: c.row.id === productionId,
+  }))
+
+  return {
+    ok: true, mode: 'semantic', expansion, threshold, nearMissFloor, candidates,
+    bestId: best?.row.id ?? null, productionId,
+    disagree: !!(best && productionId && best.row.id !== productionId),
+    vehicle,
   }
 }
