@@ -9,22 +9,33 @@ import { Loader2, Maximize2, X } from 'lucide-react'
 // react-d3-tree touches window — load client-only.
 const Tree = nextDynamic(() => import('react-d3-tree'), { ssr: false }) as any
 
-/** Deep-link to the rules browser scoped to a catalog node (its scheme + name).
- *  The browser filters via free-text `q` (matches category/subcategory/schema) + `lambda`;
- *  status is pinned to approved+suggestion to match the catalog's rule counts (excludes rejected). */
-function rulesHref(nodeDatum: any): string {
+/** Deep-link to the rules browser scoped EXACTLY to a catalog node.
+ *  A schema name can repeat under different subcategories (e.g. "OIL FILLER DECANTING UNIT
+ *  UNIONS" lives under both Engine - Lubrication and Engine - Cylinder head), so a free-text
+ *  `q` over-matches. We walk the node's ancestors and pass the exact category/subcategory/schema
+ *  (+ lambda), which the browser matches exactly — so the row count equals the node's count.
+ *  Status is pinned to approved+suggestion to match the catalog counts (excludes rejected). */
+function rulesHref(nodeDatum: any, hpn?: any): string {
   const a = nodeDatum.attributes || {}
+  const anc: any[] = hpn?.ancestors ? hpn.ancestors().map((n: any) => n.data) : [nodeDatum]
+  const pick = (kind: string) => {
+    const d = anc.find((x) => (x.attributes || {}).kind === kind)
+    return d && d.name && d.name !== '(none)' ? d.name : null
+  }
   const p = new URLSearchParams()
-  if (a.kind !== 'lambda' && a.kind !== 'root' && nodeDatum.name && nodeDatum.name !== '(none)') p.set('q', nodeDatum.name)
+  const cat = pick('category'), sub = pick('subcategory'), sch = pick('schema')
+  if (cat) p.set('category', cat)
+  if (sub) p.set('subcategory', sub)
+  if (sch) p.set('schema', sch)
   if (a.lambda) p.set('lambda', a.lambda)
   p.set('status', 'approved,suggestion')
   return `/chat/flow-decisions?${p.toString()}`
 }
-function openRules(nodeDatum: any) {
-  if (typeof window !== 'undefined') window.open(rulesHref(nodeDatum), '_blank', 'noopener,noreferrer')
+function openRules(nodeDatum: any, hpn?: any) {
+  if (typeof window !== 'undefined') window.open(rulesHref(nodeDatum, hpn), '_blank', 'noopener,noreferrer')
 }
 
-function renderNode({ nodeDatum, toggleNode }: any) {
+function renderNode({ nodeDatum, toggleNode, hierarchyPointNode }: any) {
   const a = nodeDatum.attributes || {}
   const isSchema = a.kind === 'schema'
   const isLambda = a.kind === 'lambda'
@@ -39,7 +50,7 @@ function renderNode({ nodeDatum, toggleNode }: any) {
     // paint-order:normal paints over the light fill and renders labels near-black/unreadable.
     // Reset it here (the circle re-declares its own stroke below).
     // Leaf schema nodes have nothing to expand, so clicking them opens the rule list.
-    <g stroke="none" style={{ cursor: 'pointer' }} onClick={isSchema ? () => openRules(nodeDatum) : toggleNode}>
+    <g stroke="none" style={{ cursor: 'pointer' }} onClick={isSchema ? () => openRules(nodeDatum, hierarchyPointNode) : toggleNode}>
       <title>{isSchema ? 'פתח את החוקים של סכמה זו' : 'לחץ לפתיחה/סגירה · לחץ על מספר החוקים לרשימה'}</title>
       <circle r={isLambda ? 9 : 7} fill={fill} stroke="#0f172a" strokeWidth={1.5} />
       {/* vertical (top→bottom) tree: center labels BELOW each node so long names
@@ -50,7 +61,7 @@ function renderNode({ nodeDatum, toggleNode }: any) {
         <text
           fill={isLambda ? '#f0abfc' : '#7dd3fc'} stroke="none" textAnchor="middle" x={0} dy={isLambda ? 40 : 36} fontSize={10}
           style={{ cursor: 'pointer', textDecoration: 'underline', textDecorationStyle: 'dotted' }}
-          onClick={(e) => { e.stopPropagation(); openRules(nodeDatum) }}
+          onClick={(e) => { e.stopPropagation(); openRules(nodeDatum, hierarchyPointNode) }}
         >
           {a.rules} rules{a.pinned ? ` · ${a.pinned}📌` : ''} ↗
         </text>

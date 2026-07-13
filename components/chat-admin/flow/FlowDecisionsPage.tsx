@@ -26,6 +26,9 @@ const LEARNED_SOURCES = ['schema_ref_correction', 'agent_correction_seed', 'chat
 
 const EMPTY_FILTERS: RuleFilters = {
   search: '',
+  category: '',
+  subcategory: '',
+  schema: '',
   status: [],
   source: 'all',
   lambdaTarget: [],
@@ -158,6 +161,9 @@ export default function FlowDecisionsPage({ initialEditId }: FlowDecisionsPagePr
             </h1>
             <p className="mt-0.5 text-xs text-slate-400">
               {counts.total} rules · {counts.approved} approved · {counts.suggestions} suggestions · {counts.rejected} rejected
+              {view === 'rules' && filtered.length !== counts.total && (
+                <> · <span className="font-semibold text-cyan-300">{filtered.length} matching</span></>
+              )}
             </p>
           </div>
 
@@ -352,6 +358,9 @@ function ToolbarButton({
 function readFiltersFromUrl(params: URLSearchParams): RuleFilters {
   return {
     search: params.get('q') || '',
+    category: params.get('category') || '',
+    subcategory: params.get('subcategory') || '',
+    schema: params.get('schema') || '',
     status: (params.get('status') || '').split(',').filter(Boolean) as RuleFilters['status'],
     source: (params.get('source') as RuleFilters['source']) || 'all',
     lambdaTarget: (params.get('lambda') || '').split(',').filter(Boolean),
@@ -369,6 +378,9 @@ function readFiltersFromUrl(params: URLSearchParams): RuleFilters {
 function writeFiltersToUrl(router: ReturnType<typeof useRouter>, pathname: string, f: RuleFilters) {
   const params = new URLSearchParams()
   if (f.search) params.set('q', f.search)
+  if (f.category) params.set('category', f.category)
+  if (f.subcategory) params.set('subcategory', f.subcategory)
+  if (f.schema) params.set('schema', f.schema)
   if (f.status.length) params.set('status', f.status.join(','))
   if (f.source !== 'all') params.set('source', f.source)
   if (f.lambdaTarget.length) params.set('lambda', f.lambdaTarget.join(','))
@@ -391,6 +403,10 @@ function filterRules(rules: FlowDecisionRecord[], f: RuleFilters): FlowDecisionR
       const hay = `${r.partDescription} ${r.category} ${r.subcategory} ${r.schema} ${r.lambdaTarget}`.toLowerCase()
       if (!hay.includes(search)) return false
     }
+    // exact catalog-path scope (case-insensitive) — distinct from the substring `search`
+    if (f.category && (r.category || '').toLowerCase() !== f.category.toLowerCase()) return false
+    if (f.subcategory && (r.subcategory || '').toLowerCase() !== f.subcategory.toLowerCase()) return false
+    if (f.schema && (r.schema || '').toLowerCase() !== f.schema.toLowerCase()) return false
     if (f.status.length && !f.status.includes(r.status)) return false
     if (f.source !== 'all') {
       const isLearned = LEARNED_SOURCES.includes(r.source ?? '')

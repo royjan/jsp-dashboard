@@ -5,6 +5,11 @@ import type { FlowDecisionStatus } from '@/types/chat-admin/flow-decision'
 
 export interface RuleFilters {
   search: string
+  // exact catalog-path scope (from the Observatory catalog drill-down) — matched exactly,
+  // unlike `search` which is a free-text substring across all fields
+  category: string
+  subcategory: string
+  schema: string
   status: FlowDecisionStatus[]
   source: 'all' | 'manual' | 'learned'
   lambdaTarget: string[]
@@ -36,6 +41,9 @@ export function RuleFilterBar({ filters, onChange, onReset }: Props) {
 
   const activeCount =
     (filters.search ? 1 : 0) +
+    (filters.category ? 1 : 0) +
+    (filters.subcategory ? 1 : 0) +
+    (filters.schema ? 1 : 0) +
     filters.status.length +
     (filters.source !== 'all' ? 1 : 0) +
     filters.lambdaTarget.length +
@@ -61,6 +69,14 @@ export function RuleFilterBar({ filters, onChange, onReset }: Props) {
             className="w-full rounded-lg border border-white/10 bg-white/5 py-1.5 pl-9 pr-3 text-sm text-slate-100 placeholder:text-slate-500 focus:border-cyan-400/50 focus:outline-none focus:ring-2 focus:ring-ring"
           />
         </div>
+
+        {(filters.category || filters.subcategory || filters.schema) && (
+          <ChipGroup label="Scope">
+            {filters.category && <ScopeChip label={filters.category} onClear={() => set('category', '')} />}
+            {filters.subcategory && <ScopeChip label={filters.subcategory} onClear={() => set('subcategory', '')} />}
+            {filters.schema && <ScopeChip label={filters.schema} onClear={() => set('schema', '')} />}
+          </ChipGroup>
+        )}
 
         <ChipGroup label="Status">
           {STATUSES.map(s => (
@@ -126,6 +142,17 @@ export function RuleFilterBar({ filters, onChange, onReset }: Props) {
         </div>
       </details>
     </div>
+  )
+}
+
+function ScopeChip({ label, onClear }: { label: string; onClear: () => void }) {
+  return (
+    <span className="inline-flex max-w-[220px] items-center gap-1 rounded-full bg-fuchsia-500/15 px-2.5 py-1 text-xs font-medium text-fuchsia-200 ring-1 ring-inset ring-fuchsia-400/30">
+      <span className="truncate">{label}</span>
+      <button onClick={onClear} className="shrink-0 rounded-full p-0.5 hover:bg-white/10" aria-label="Clear scope">
+        <X className="h-3 w-3" />
+      </button>
+    </span>
   )
 }
 
