@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
-import { Search, Loader2, AlertTriangle, GitBranch, ExternalLink, Car } from 'lucide-react'
+import { Search, Loader2, AlertTriangle, GitBranch, ExternalLink, Car, ShieldCheck, ShieldAlert } from 'lucide-react'
 import SimulatorVehicleInput, { type VehicleInputData } from '@/components/chat-admin/SimulatorVehicleInput'
 import { TraceGraph } from './TraceGraph'
 
@@ -22,6 +22,23 @@ export default function DecisionTracer({ initialQuery = '' }: { initialQuery?: s
   const [trace, setTrace] = useState<any>(null)
   const [error, setError] = useState<string | null>(null)
   const [selected, setSelected] = useState<string | null>(null)
+  const [verify, setVerify] = useState<any>(null)
+  const [verifying, setVerifying] = useState(false)
+
+  const runVerify = async (partId: string, schema: string) => {
+    const vin = trace?.resolvedVehicle?.vin
+    if (!vin || !partId) return
+    setVerifying(true); setVerify(null)
+    try {
+      const res = await fetch('/api/flow-decisions/verify-psa', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ partId, vin, expectedSchema: schema }),
+      })
+      setVerify(await res.json())
+    } catch (e) {
+      setVerify({ error: e instanceof Error ? e.message : 'failed' })
+    } finally { setVerifying(false) }
+  }
 
   const run = async () => {
     if (!part.trim()) return
@@ -99,7 +116,7 @@ export default function DecisionTracer({ initialQuery = '' }: { initialQuery?: s
       {/* graph + detail */}
       {trace?.candidates?.length ? (
         <div className="grid gap-3 lg:grid-cols-[1fr_300px]">
-          <TraceGraph trace={trace} onSelect={setSelected} />
+          <TraceGraph trace={trace} onSelect={(id) => { setSelected(id); setVerify(null) }} />
           <div className="rounded-lg border border-slate-700 bg-slate-800/60 p-3 text-sm text-slate-200">
             {sel ? (
               <div className="space-y-2">
@@ -123,6 +140,28 @@ export default function DecisionTracer({ initialQuery = '' }: { initialQuery?: s
                 <a href={`/chat/flow-decisions/edit/${sel.id}`} className="inline-flex items-center gap-1 text-[12px] text-sky-400 hover:underline">
                   <ExternalLink size={12} /> ערוך חוק
                 </a>
+                {/* verify against PSA ground truth (needs a pinned part + a decoded VIN) */}
+                {sel.directPart?.partId && trace?.resolvedVehicle?.vin && (
+                  <div className="mt-1 border-t border-slate-700 pt-2">
+                    <button onClick={() => runVerify(sel.directPart.partId, sel.schema)} disabled={verifying}
+                      className="inline-flex items-center gap-1.5 rounded-md bg-slate-700 px-2.5 py-1.5 text-[12px] text-slate-100 hover:bg-slate-600 disabled:opacity-50">
+                      {verifying ? <Loader2 size={13} className="animate-spin" /> : <ShieldCheck size={13} />} אמת מול PSA
+                    </button>
+                    {verify && (
+                      verify.error ? (
+                        <div className="mt-1.5 text-[11px] text-rose-300">{verify.error}</div>
+                      ) : verify.match ? (
+                        <div className="mt-1.5 flex items-center gap-1 text-[12px] text-emerald-300"><ShieldCheck size={13} /> תואם ל-PSA ✓ ({sel.schema})</div>
+                      ) : (
+                        <div className="mt-1.5 text-[12px] text-amber-300">
+                          <div className="flex items-center gap-1"><ShieldAlert size={13} /> אי-התאמה ל-PSA</div>
+                          <div className="text-[11px] text-slate-300">החוק: {sel.schema}</div>
+                          <div className="text-[11px] text-slate-300">PSA: {(verify.schemas || []).join(', ') || 'לא נמצא'}</div>
+                        </div>
+                      )
+                    )}
+                  </div>
+                )}
               </div>
             ) : (
               <div className="text-[12px] text-slate-500">לחץ על צומת חוק כדי לראות פרטים מלאים (cosine, פילטרים, סיבות דחייה, החלק המקושר).</div>

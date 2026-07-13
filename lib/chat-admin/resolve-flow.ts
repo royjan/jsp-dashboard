@@ -69,3 +69,29 @@ export async function resolveFlowByPartId(partId: string, vin?: string): Promise
     return { found: false, error: e?.message || 'PSA lookup failed.' }
   }
 }
+
+/** Ground-truth verify: FORCE the PSA lambda (skip the cache) so we can compare a rule's
+ *  schema against what PSA actually says the part belongs to. Returns all matched schemas. */
+export async function verifyPartSchemaViaPsa(
+  partId: string,
+  vin: string,
+): Promise<{ found: boolean; schemas?: string[]; matches?: any[]; error?: string }> {
+  const pid = (partId || '').trim()
+  const v = (vin || '').trim()
+  if (!pid) return { found: false, error: 'part id required' }
+  if (!v) return { found: false, error: 'VIN required to verify against PSA' }
+  try {
+    const { LambdaClient, InvokeCommand } = await import('@aws-sdk/client-lambda')
+    const client = new LambdaClient({ region: PSA_LAMBDA_REGION })
+    const resp = await client.send(new InvokeCommand({
+      FunctionName: PSA_LAMBDA_NAME,
+      Payload: Buffer.from(JSON.stringify({ vin: v, flow_lookup: [pid] })),
+    }))
+    const body = JSON.parse(Buffer.from(resp.Payload ?? new Uint8Array()).toString() || '{}')
+    const flow = (body.flows || []).find((f: any) => String(f.part_id) === pid)
+    const schemas = ((flow?.matches as any[]) || []).map((m) => m.schema).filter(Boolean)
+    return { found: !!flow?.found && schemas.length > 0, schemas, matches: flow?.matches || [] }
+  } catch (e: any) {
+    return { found: false, error: e?.message || 'PSA lookup failed.' }
+  }
+}
