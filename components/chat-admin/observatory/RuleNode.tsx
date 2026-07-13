@@ -30,6 +30,12 @@ function FilterChip({ label, state }: { label: string; state: 'ok' | 'bad' | 'un
   )
 }
 
+function isNeighbor(query?: string, desc?: string): boolean {
+  if (!query || !desc) return false
+  const q = query.toLowerCase().trim(), d = desc.toLowerCase().trim()
+  return !q.includes(d) && !d.includes(q)   // different part → the rule answers a different term
+}
+
 function filterState(reasons: string[], value: any, label: string, veh: any, key: string): 'ok' | 'bad' | 'unset' | 'unspec' {
   if (value == null || value === '') return 'unset'
   if (reasons.some((r) => r.startsWith(label) && r.includes('unspecified'))) return 'unspec'
@@ -98,9 +104,16 @@ export function RuleNode({ data }: { data: any }) {
   return (
     <div className={`w-72 rounded-lg border ${border} ${opacity} bg-slate-800/95 p-2.5 text-slate-100 shadow-lg`}>
       <Handle type="target" position={Position.Left} className="!bg-slate-500" />
+      {/* the term THIS rule answers — makes semantic neighbors ("fuel filter" for an "oil filter" query) obvious */}
+      <div className="mb-0.5 flex items-center gap-1">
+        <span className="truncate text-[12px] font-semibold text-slate-100">{data.partDescription}</span>
+        {isNeighbor(data.query, data.partDescription) && (
+          <span className="shrink-0 rounded bg-amber-500/15 px-1 text-[9px] text-amber-300">שכן סמנטי</span>
+        )}
+      </div>
       <div className="mb-1 flex items-center justify-between gap-1">
-        <div className="truncate text-[11px] leading-tight text-slate-300">
-          {data.category} › {data.subcategory} › <span className="font-semibold text-slate-100">{data.schema}</span>
+        <div className="truncate text-[10px] leading-tight text-slate-400">
+          {data.category} › {data.subcategory} › <span className="text-slate-200">{data.schema}</span>
         </div>
         <div className="flex shrink-0 gap-1">
           {data.isSelected && <span className="rounded bg-emerald-500/20 px-1 text-[9px] text-emerald-300">SIM ✓</span>}

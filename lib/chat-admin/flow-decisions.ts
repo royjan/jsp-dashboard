@@ -847,6 +847,7 @@ export async function simulateTrace(
 
   const candidates = scored.map((c) => ({
     id: c.row.id,
+    partDescription: c.row.part_description,   // the term THIS rule answers (≠ the query = a neighbor)
     category: c.row.category, subcategory: c.row.subcategory, schema: c.row.schema,
     status: c.row.status, source: c.row.source, isDefault: c.row.is_default, lambdaTarget: c.row.lambda_target,
     cosineSim: Math.round(c.sim * 1000) / 1000, matchScore: c.matchScore, vehicleScore: Math.round(c.score * 100) / 100,

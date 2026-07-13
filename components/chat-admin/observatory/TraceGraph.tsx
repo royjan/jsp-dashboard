@@ -25,7 +25,7 @@ export function TraceGraph({ trace, onSelect }: { trace: any; onSelect: (id: str
 
     const selected = cands.find((c) => c.isSelected)
     cands.forEach((c, i) => {
-      nodes.push({ id: c.id, type: 'rule', position: { x: COL.cand, y: i * ROW }, data: { ...c, kind: 'candidate', vehicle: trace.vehicleData } })
+      nodes.push({ id: c.id, type: 'rule', position: { x: COL.cand, y: i * ROW }, data: { ...c, kind: 'candidate', vehicle: trace.vehicleData, query: trace.partDescription } })
       edges.push({
         id: `in-${c.id}`, source: 'input', target: c.id,
         animated: c.isSelected,
