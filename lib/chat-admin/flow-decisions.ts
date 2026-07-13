@@ -866,3 +866,57 @@ export async function simulateTrace(
     vehicle,
   }
 }
+
+/** Catalog as a nested category → subcategory → schema tree (react-d3-tree shape) with counts. */
+export async function getCatalogTree(lambda?: string): Promise<any> {
+  const lam = lambda ? lambda.replace(/[^a-z0-9_]/gi, '') : ''
+  const res = await query(
+    `SELECT COALESCE(NULLIF(fd.category,''),'(none)') AS category,
+            COALESCE(NULLIF(fd.subcategory,''),'(none)') AS subcategory,
+            COALESCE(NULLIF(fd.schema,''),'(none)') AS schema,
+            fd.lambda_target,
+            count(*)::int AS rules,
+            count(*) FILTER (WHERE fd.status='approved')::int AS approved,
+            count(*) FILTER (WHERE fd.status='suggestion')::int AS suggestions,
+            bool_or(fd.is_default) AS has_generic,
+            count(dp.id)::int AS pinned
+     FROM flow_decisions_v2 fd
+     LEFT JOIN direct_parts dp ON dp.flow_decision_id = fd.id
+     WHERE fd.status <> 'rejected' ${lam ? `AND fd.lambda_target = '${lam}'` : ''}
+     GROUP BY 1,2,3,4 ORDER BY 1,2,3`,
+    [],
+  )
+  const root: any = { name: 'catalog', children: [], attributes: { rules: 0 } }
+  const cats = new Map<string, any>()
+  const subs = new Map<string, any>()
+  for (const r of res.rows as any[]) {
+    let cat = cats.get(r.category)
+    if (!cat) { cat = { name: r.category, children: [], attributes: { rules: 0, kind: 'category' } }; cats.set(r.category, cat); root.children.push(cat) }
+    const sk = `${r.category}||${r.subcategory}`
+    let sub = subs.get(sk)
+    if (!sub) { sub = { name: r.subcategory, children: [], attributes: { rules: 0, kind: 'subcategory' } }; subs.set(sk, sub); cat.children.push(sub) }
+    sub.children.push({ name: r.schema, attributes: { kind: 'schema', rules: r.rules, approved: r.approved, suggestions: r.suggestions, pinned: r.pinned, generic: !!r.has_generic, lambda: r.lambda_target } })
+    sub.attributes.rules += r.rules; cat.attributes.rules += r.rules; root.attributes.rules += r.rules
+  }
+  return root
+}
+
+/** Server-side rule-corpus aggregates for the Analytics tab (never pull the full corpus client-side). */
+export async function getRuleStats(): Promise<any> {
+  const rows = async (s: string) => (await query(s, [])).rows as any[]
+  const [status, source, byCategory, byLambda, scope, confidence, pins, embeddings, totals] = await Promise.all([
+    rows(`SELECT status, count(*)::int c FROM flow_decisions_v2 GROUP BY status`),
+    rows(`SELECT CASE WHEN source IS NULL OR source='' OR created_by NOT IN ('','system','diego') THEN 'manual' ELSE COALESCE(source,'auto') END src, count(*)::int c
+          FROM flow_decisions_v2 WHERE status<>'rejected' GROUP BY 1 ORDER BY c DESC`),
+    rows(`SELECT COALESCE(NULLIF(category,''),'(none)') name, count(*)::int c FROM flow_decisions_v2 WHERE status<>'rejected' GROUP BY 1 ORDER BY c DESC LIMIT 12`),
+    rows(`SELECT lambda_target name, count(*)::int c FROM flow_decisions_v2 WHERE status<>'rejected' GROUP BY 1 ORDER BY c DESC`),
+    rows(`SELECT CASE WHEN vehicle_year_from IS NULL AND vehicle_year_to IS NULL AND vehicle_model IS NULL AND vehicle_fuel_type IS NULL AND vehicle_engine_model IS NULL AND vin_pattern IS NULL THEN 'generic' ELSE 'scoped' END name, count(*)::int c
+          FROM flow_decisions_v2 WHERE status<>'rejected' GROUP BY 1`),
+    rows(`SELECT (floor(LEAST(GREATEST(COALESCE(confidence,0)::float,0),1)*10)/10)::float bucket, count(*)::int c
+          FROM flow_decisions_v2 WHERE status<>'rejected' GROUP BY 1 ORDER BY 1`),
+    rows(`SELECT count(*)::int total, count(*) FILTER (WHERE in_stock=false)::int oos FROM direct_parts`),
+    rows(`SELECT count(*) FILTER (WHERE embedding IS NOT NULL)::int have, count(*) FILTER (WHERE embedding IS NULL)::int missing FROM part_descriptions`).catch(() => [{ have: 0, missing: 0 }]),
+    rows(`SELECT count(*)::int rules, count(DISTINCT part_description)::int parts FROM flow_decisions_v2 WHERE status<>'rejected'`),
+  ])
+  return { status, source, byCategory, byLambda, scope, confidence, pins: pins[0], embeddings: embeddings[0], totals: totals[0] }
+}

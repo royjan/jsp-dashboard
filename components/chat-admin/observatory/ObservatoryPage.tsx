@@ -3,6 +3,8 @@
 import React, { useState } from 'react'
 import { Radar, Network, BarChart3 } from 'lucide-react'
 import DecisionTracer from './DecisionTracer'
+import CatalogGraph from './CatalogGraph'
+import RuleCorpusAnalytics from './RuleCorpusAnalytics'
 
 const TABS = [
   { key: 'tracer', label: 'Decision Tracer', he: 'עוקב החלטות', icon: Radar },
@@ -27,17 +29,8 @@ export default function ObservatoryPage({ initialQuery = '' }: { initialQuery?: 
         ))}
       </div>
       {tab === 'tracer' && <DecisionTracer initialQuery={initialQuery} />}
-      {tab === 'catalog' && <ComingSoon title="גרף קטלוג" note="עץ category → subcategory → schema עם ספירות חוקים (שלב 3)." />}
-      {tab === 'analytics' && <ComingSoon title="אנליטיקה" note="התפלגות סטטוס/מקור, כיסוי, היסטוגרמות confidence, כפילויות (שלב 4)." />}
-    </div>
-  )
-}
-
-function ComingSoon({ title, note }: { title: string; note: string }) {
-  return (
-    <div className="rounded-lg border border-dashed border-slate-700 bg-slate-800/30 p-8 text-center">
-      <div className="text-sm font-medium text-slate-300">{title}</div>
-      <div className="mt-1 text-[12px] text-slate-500">{note}</div>
+      {tab === 'catalog' && <CatalogGraph />}
+      {tab === 'analytics' && <RuleCorpusAnalytics />}
     </div>
   )
 }
