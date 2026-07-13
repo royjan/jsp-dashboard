@@ -54,10 +54,10 @@ export function RuleNode({ data }: { data: any }) {
     const isCat = data.kind === 'category'
     return (
       <div className={`rounded-md border px-2.5 py-1.5 text-center shadow ${isCat ? 'border-sky-500/50 bg-sky-950/50 text-sky-100' : 'border-indigo-500/40 bg-indigo-950/40 text-indigo-100'}`}>
-        <Handle type="target" position={Position.Top} className="!bg-slate-500" />
+        <Handle type="target" position={Position.Left} className="!bg-slate-500" />
         <div className="whitespace-nowrap text-[12px] font-semibold">{data.name}</div>
         <div className="text-[10px] opacity-70">{data.count} {isCat ? 'תת-קטגוריות' : 'חוקים'}</div>
-        <Handle type="source" position={Position.Bottom} className="!bg-slate-500" />
+        <Handle type="source" position={Position.Right} className="!bg-slate-500" />
       </div>
     )
   }
@@ -81,7 +81,7 @@ export function RuleNode({ data }: { data: any }) {
             {[data.vehicle.year, data.vehicle.model, data.vehicle.fuelType, data.vehicle.engineModel].filter(Boolean).join(' · ')}
           </div>
         )}
-        <Handle type="source" position={Position.Bottom} className="!bg-sky-400" />
+        <Handle type="source" position={Position.Right} className="!bg-sky-400" />
       </div>
     )
   }
@@ -109,7 +109,7 @@ export function RuleNode({ data }: { data: any }) {
         ) : (
           <div className="text-[11px] text-amber-300">אין חלק מקושר (direct_part)</div>
         )}
-        <Handle type="target" position={Position.Top} className="!bg-emerald-400" />
+        <Handle type="target" position={Position.Left} className="!bg-emerald-400" />
       </div>
     )
   }
@@ -129,7 +129,7 @@ export function RuleNode({ data }: { data: any }) {
   const cardOpacity = data.intensity != null ? 0.55 + 0.45 * data.intensity : 1
   return (
     <div className={`w-72 rounded-lg border ${border} bg-slate-800/95 p-2.5 text-slate-100 shadow-lg`} style={{ opacity: cardOpacity }}>
-      <Handle type="target" position={Position.Top} className="!bg-slate-500" />
+      <Handle type="target" position={Position.Left} className="!bg-slate-500" />
       {/* the term THIS rule answers — makes semantic neighbors ("fuel filter" for an "oil filter" query) obvious.
           Use the authoritative `related` flag (matches the orange-border logic) so an exact same-part rule is
           never mislabeled a neighbor; fall back to the local check only when `related` wasn't provided. */}
@@ -173,7 +173,7 @@ export function RuleNode({ data }: { data: any }) {
         <div className="mt-1 inline-flex items-center gap-0.5 text-[9px] text-amber-300"><AlertTriangle size={9} />{data.status}</div>
       )}
       {data.id && <div className="mt-1 truncate font-mono text-[9px] text-slate-500" title={data.id}>id: {data.id}</div>}
-      <Handle type="source" position={Position.Bottom} className="!bg-slate-500" />
+      <Handle type="source" position={Position.Right} className="!bg-slate-500" />
     </div>
   )
 }
