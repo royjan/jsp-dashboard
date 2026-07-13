@@ -25,9 +25,11 @@ function renderNode({ nodeDatum, toggleNode }: any) {
     // Reset it here (the circle re-declares its own stroke below).
     <g stroke="none" style={{ cursor: 'pointer' }} onClick={toggleNode}>
       <circle r={isLambda ? 9 : 7} fill={fill} stroke="#0f172a" strokeWidth={1.5} />
-      <text fill="#e2e8f0" stroke="none" x={13} dy={-2} fontSize={isLambda ? 13 : 12} style={{ fontWeight: isSchema ? 400 : isLambda ? 700 : 600 }}>{nodeDatum.name}</text>
+      {/* vertical (top→bottom) tree: center labels BELOW each node so long names
+          don't collide with horizontal siblings */}
+      <text fill="#e2e8f0" stroke="none" textAnchor="middle" x={0} dy={isLambda ? 26 : 22} fontSize={isLambda ? 13 : 12} style={{ fontWeight: isSchema ? 400 : isLambda ? 700 : 600 }}>{nodeDatum.name}</text>
       {a.rules != null && (
-        <text fill={isLambda ? '#f0abfc' : '#94a3b8'} stroke="none" x={13} dy={13} fontSize={10}>
+        <text fill={isLambda ? '#f0abfc' : '#94a3b8'} stroke="none" textAnchor="middle" x={0} dy={isLambda ? 40 : 36} fontSize={10}>
           {a.rules} rules{a.pinned ? ` · ${a.pinned}📌` : ''}
         </text>
       )}
@@ -59,11 +61,12 @@ export default function CatalogGraph() {
     return () => window.removeEventListener('keydown', h)
   }, [full])
 
-  // re-center whenever the tree loads or the container resizes (fullscreen toggle)
+  // vertical tree: center horizontally, anchor near the top. Re-center whenever the tree
+  // loads or the container resizes (fullscreen toggle).
   useEffect(() => {
     if (boxRef.current) {
-      const { height } = boxRef.current.getBoundingClientRect()
-      setTranslate({ x: 180, y: Math.max(height / 2, 100) })
+      const { width } = boxRef.current.getBoundingClientRect()
+      setTranslate({ x: Math.max(width / 2, 200), y: 60 })
     }
   }, [tree, full])
 
@@ -93,12 +96,12 @@ export default function CatalogGraph() {
         {tree && !loading && (
           <Tree
             data={tree}
-            orientation="horizontal"
+            orientation="vertical"
             translate={translate}
             collapsible
             initialDepth={1}
-            depthFactor={260}
-            separation={{ siblings: 0.7, nonSiblings: 1 }}
+            depthFactor={130}
+            separation={{ siblings: 1.6, nonSiblings: 2 }}
             renderCustomNodeElement={renderNode}
             pathFunc="diagonal"
             pathClassFunc={() => 'catalog-link'}
