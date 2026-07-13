@@ -126,13 +126,11 @@ export default function CatalogGraph() {
             separation={{ siblings: 1.6, nonSiblings: 2 }}
             renderCustomNodeElement={renderNode}
             pathFunc="diagonal"
-            pathClassFunc={() => 'catalog-link'}
             zoomable
             scaleExtent={{ min: 0.2, max: 2 }}
           />
         )}
       </div>
-      <style jsx global>{`.catalog-link { stroke: #475569; stroke-width: 1px; fill: none; }`}</style>
     </div>
   )
 }

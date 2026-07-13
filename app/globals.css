@@ -175,3 +175,12 @@
 .recharts-legend-item-text {
   color: var(--foreground) !important;
 }
+
+/* react-d3-tree (Decision Observatory catalog): the lib leaks an inherited black stroke
+   onto the link paths, so force a visible slate edge (matching the tracer's neutral edges).
+   !important beats the inherited value regardless of source. */
+.rd3t-link {
+  stroke: #64748b !important;
+  stroke-width: 1.5px !important;
+  fill: none !important;
+}
