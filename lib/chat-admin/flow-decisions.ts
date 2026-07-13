@@ -895,14 +895,24 @@ export async function resolveVehicleByPlateOrVin(
   }
 }
 
-/** Catalog as a nested category → subcategory → schema tree (react-d3-tree shape) with counts. */
+/** Friendly display name for a lambda_target (the manufacturer catalog / scheme). */
+const LAMBDA_LABEL: Record<string, string> = { psa: 'PSA', saic: 'SAIC', partslink: 'Partslink' }
+export function lambdaLabel(lt?: string | null): string {
+  const k = (lt || '').toLowerCase()
+  return LAMBDA_LABEL[k] || (lt ? lt.toUpperCase() : '(none)')
+}
+
+/** Catalog as a nested scheme → category → subcategory → schema tree (react-d3-tree shape).
+ *  The rules span multiple manufacturer catalogs (PSA / SAIC / Partslink) whose category and
+ *  subcategory names can collide, so the FIRST split is by lambda_target — otherwise PSA and
+ *  SAIC branches would intermix under a single root. */
 export async function getCatalogTree(lambda?: string): Promise<any> {
   const lam = lambda ? lambda.replace(/[^a-z0-9_]/gi, '') : ''
   const res = await query(
-    `SELECT COALESCE(NULLIF(fd.category,''),'(none)') AS category,
+    `SELECT COALESCE(NULLIF(fd.lambda_target,''),'(none)') AS lambda_target,
+            COALESCE(NULLIF(fd.category,''),'(none)') AS category,
             COALESCE(NULLIF(fd.subcategory,''),'(none)') AS subcategory,
             COALESCE(NULLIF(fd.schema,''),'(none)') AS schema,
-            fd.lambda_target,
             count(*)::int AS rules,
             count(*) FILTER (WHERE fd.status='approved')::int AS approved,
             count(*) FILTER (WHERE fd.status='suggestion')::int AS suggestions,
@@ -911,21 +921,29 @@ export async function getCatalogTree(lambda?: string): Promise<any> {
      FROM flow_decisions_v2 fd
      LEFT JOIN direct_parts dp ON dp.flow_decision_id = fd.id
      WHERE fd.status <> 'rejected' ${lam ? `AND fd.lambda_target = '${lam}'` : ''}
-     GROUP BY 1,2,3,4 ORDER BY 1,2,3`,
+     GROUP BY 1,2,3,4 ORDER BY 1,2,3,4`,
     [],
   )
-  const root: any = { name: 'catalog', children: [], attributes: { rules: 0 } }
+  const root: any = { name: 'catalog', children: [], attributes: { rules: 0, kind: 'root' } }
+  const lams = new Map<string, any>()
   const cats = new Map<string, any>()
   const subs = new Map<string, any>()
   for (const r of res.rows as any[]) {
-    let cat = cats.get(r.category)
-    if (!cat) { cat = { name: r.category, children: [], attributes: { rules: 0, kind: 'category' } }; cats.set(r.category, cat); root.children.push(cat) }
-    const sk = `${r.category}||${r.subcategory}`
+    let lamNode = lams.get(r.lambda_target)
+    if (!lamNode) {
+      lamNode = { name: lambdaLabel(r.lambda_target), children: [], attributes: { rules: 0, kind: 'lambda', lambda: r.lambda_target } }
+      lams.set(r.lambda_target, lamNode); root.children.push(lamNode)
+    }
+    const ck = `${r.lambda_target}||${r.category}`
+    let cat = cats.get(ck)
+    if (!cat) { cat = { name: r.category, children: [], attributes: { rules: 0, kind: 'category' } }; cats.set(ck, cat); lamNode.children.push(cat) }
+    const sk = `${ck}||${r.subcategory}`
     let sub = subs.get(sk)
     if (!sub) { sub = { name: r.subcategory, children: [], attributes: { rules: 0, kind: 'subcategory' } }; subs.set(sk, sub); cat.children.push(sub) }
     sub.children.push({ name: r.schema, attributes: { kind: 'schema', rules: r.rules, approved: r.approved, suggestions: r.suggestions, pinned: r.pinned, generic: !!r.has_generic, lambda: r.lambda_target } })
-    sub.attributes.rules += r.rules; cat.attributes.rules += r.rules; root.attributes.rules += r.rules
+    sub.attributes.rules += r.rules; cat.attributes.rules += r.rules; lamNode.attributes.rules += r.rules; root.attributes.rules += r.rules
   }
+  root.children.sort((a: any, b: any) => b.attributes.rules - a.attributes.rules)   // biggest catalog (PSA) first
   return root
 }
 

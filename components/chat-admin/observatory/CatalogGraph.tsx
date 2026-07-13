@@ -12,17 +12,23 @@ const Tree = nextDynamic(() => import('react-d3-tree'), { ssr: false }) as any
 function renderNode({ nodeDatum, toggleNode }: any) {
   const a = nodeDatum.attributes || {}
   const isSchema = a.kind === 'schema'
-  const fill = a.kind === 'category' ? '#38bdf8' : a.kind === 'subcategory' ? '#818cf8' : a.generic ? '#f59e0b' : '#34d399'
+  const isLambda = a.kind === 'lambda'
+  const fill =
+    a.kind === 'lambda' ? '#e879f9'          // manufacturer catalog (PSA / SAIC / Partslink)
+    : a.kind === 'category' ? '#38bdf8'
+    : a.kind === 'subcategory' ? '#818cf8'
+    : a.kind === 'schema' ? (a.generic ? '#f59e0b' : '#34d399')
+    : '#22d3ee'                              // root
   return (
     // stroke="none": react-d3-tree leaks an inherited black stroke onto <text>, which with
     // paint-order:normal paints over the light fill and renders labels near-black/unreadable.
     // Reset it here (the circle re-declares its own stroke below).
     <g stroke="none" style={{ cursor: 'pointer' }} onClick={toggleNode}>
-      <circle r={7} fill={fill} stroke="#0f172a" strokeWidth={1.5} />
-      <text fill="#e2e8f0" stroke="none" x={12} dy={-2} fontSize={12} style={{ fontWeight: isSchema ? 400 : 600 }}>{nodeDatum.name}</text>
+      <circle r={isLambda ? 9 : 7} fill={fill} stroke="#0f172a" strokeWidth={1.5} />
+      <text fill="#e2e8f0" stroke="none" x={13} dy={-2} fontSize={isLambda ? 13 : 12} style={{ fontWeight: isSchema ? 400 : isLambda ? 700 : 600 }}>{nodeDatum.name}</text>
       {a.rules != null && (
-        <text fill="#94a3b8" stroke="none" x={12} dy={13} fontSize={10}>
-          {a.rules} rules{a.pinned ? ` · ${a.pinned}📌` : ''}{a.lambda && isSchema ? ` · ${a.lambda}` : ''}
+        <text fill={isLambda ? '#f0abfc' : '#94a3b8'} stroke="none" x={13} dy={13} fontSize={10}>
+          {a.rules} rules{a.pinned ? ` · ${a.pinned}📌` : ''}
         </text>
       )}
     </g>
@@ -56,7 +62,9 @@ export default function CatalogGraph() {
   return (
     <div className="space-y-2">
       <div className="text-[12px] text-slate-400">
-        {count ? `${count} חוקים · ${tree?.children?.length || 0} קטגוריות — לחץ צומת כדי לפתוח/לסגור` : ''}
+        {tree
+          ? `${count} חוקים · ${tree.children?.length || 0} קטלוגים: ${(tree.children || []).map((c: any) => `${c.name} (${c.attributes?.rules ?? 0})`).join(' · ')} — לחץ צומת כדי לפתוח/לסגור`
+          : ''}
       </div>
       <div ref={boxRef} className="h-[64vh] w-full rounded-lg border border-slate-700 bg-slate-900/40">
         {loading && <div className="flex h-full items-center justify-center text-slate-400"><Loader2 className="animate-spin" size={18} /></div>}

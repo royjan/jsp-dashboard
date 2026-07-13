@@ -30,6 +30,12 @@ function FilterChip({ label, state }: { label: string; state: 'ok' | 'bad' | 'un
   )
 }
 
+/** Short label for the manufacturer catalog a rule belongs to (PSA / SAIC / PL). */
+function schemeLabel(lt?: string): string {
+  const k = (lt || '').toLowerCase()
+  return k === 'partslink' ? 'PL' : k ? k.toUpperCase() : ''
+}
+
 function isNeighbor(query?: string, desc?: string): boolean {
   if (!query || !desc) return false
   const q = query.toLowerCase().trim(), d = desc.toLowerCase().trim()
@@ -128,6 +134,7 @@ export function RuleNode({ data }: { data: any }) {
           {data.category} › {data.subcategory} › <span className="text-slate-200">{data.schema}</span>
         </div>
         <div className="flex shrink-0 gap-1">
+          {data.lambdaTarget && <span className="rounded bg-fuchsia-500/20 px-1 text-[9px] font-semibold text-fuchsia-300">{schemeLabel(data.lambdaTarget)}</span>}
           {data.isSelected && <span className="rounded bg-emerald-500/20 px-1 text-[9px] text-emerald-300">SIM ✓</span>}
           {data.isProduction && <span className="inline-flex items-center gap-0.5 rounded bg-indigo-500/20 px-1 text-[9px] text-indigo-300"><Cpu size={9} />PROD</span>}
           {data.nearMiss && <span className="rounded bg-amber-500/20 px-1 text-[9px] text-amber-300">near</span>}
