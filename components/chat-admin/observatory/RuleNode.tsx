@@ -117,7 +117,14 @@ export function RuleNode({ data }: { data: any }) {
   // candidate
   const veh = data.vehicle || {}
   const reasons: string[] = data.mismatchReasons || []
-  const border = data.isSelected ? 'border-emerald-500/60' : data.nearMiss ? 'border-amber-500/40' : 'border-slate-600/40'
+  // orange = another rule that answers the SAME part term but resolves elsewhere (not the winner)
+  const border = data.isSelected
+    ? 'border-emerald-500/60'
+    : data.related
+    ? 'border-orange-500/50'
+    : data.nearMiss
+    ? 'border-amber-500/40'
+    : 'border-slate-600/40'
   const opacity = data.nearMiss || (!data.isSelected && data.status !== 'approved') ? 'opacity-70' : ''
   return (
     <div className={`w-72 rounded-lg border ${border} ${opacity} bg-slate-800/95 p-2.5 text-slate-100 shadow-lg`}>

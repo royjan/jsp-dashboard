@@ -22,9 +22,21 @@ export function TraceGraph({ trace, onSelect }: { trace: any; onSelect: (id: str
     const at = (kind: string, centerX: number, y: number, data: any, id: string) =>
       nodes.push({ id, type: 'rule', position: { x: centerX - HALF[kind], y }, data: { ...data, kind } })
     const avg = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0)
-    const link = (source: string, target: string, hot = false, prod = false, dashed = false) =>
+    // A candidate is "related" (answers the SAME part term as the query) vs a semantic neighbor
+    // (a different part that merely embeds close by). Same logic the node uses for its "שכן סמנטי" tag.
+    const isNeighbor = (q?: string, d?: string) => {
+      if (!q || !d) return false
+      const a = q.toLowerCase().trim(), b = d.toLowerCase().trim()
+      return !a.includes(b) && !b.includes(a)
+    }
+    // Edge tiers: winner=green (animated) · another rule for the same part=orange · prod-disagrees=indigo · neighbor=slate.
+    const link = (source: string, target: string, hot = false, prod = false, dashed = false, related = false) =>
       edges.push({ id: `${source}->${target}`, source, target, animated: hot,
-        style: { stroke: hot ? '#34d399' : prod ? '#818cf8' : '#475569', strokeWidth: hot ? 2.5 : 1, strokeDasharray: dashed ? '4 4' : undefined },
+        style: {
+          stroke: hot ? '#34d399' : prod ? '#818cf8' : related ? '#fb923c' : '#475569',
+          strokeWidth: hot ? 2.5 : (prod || related) ? 1.75 : 1,
+          strokeDasharray: dashed ? '4 4' : undefined,
+        },
         markerEnd: { type: MarkerType.ArrowClosed } })
 
     // group: category → subcategory → candidates
@@ -35,6 +47,18 @@ export function TraceGraph({ trace, onSelect }: { trace: any; onSelect: (id: str
       const sm = cats.get(cat)!
       if (!sm.has(sub)) sm.set(sub, [])
       sm.get(sub)!.push(c)
+    }
+
+    // Terms the query resolved to (raw + English canonical + synonyms) — used to decide, per
+    // candidate, whether it answers the SAME part (language-robust: a Hebrew query still matches
+    // its English canonical term against the candidate's English part_description).
+    const queryTerms: string[] = [
+      ...((trace?.expansion || []) as any[]).map((e) => e.term),
+      trace?.partDescription,
+    ].filter(Boolean)
+    const isRelated = (desc?: string, winningTerm?: string) => {
+      const terms = [winningTerm, ...queryTerms].filter(Boolean) as string[]
+      return !!desc && terms.some((t) => !isNeighbor(t, desc))
     }
 
     let slot = 0
@@ -51,8 +75,10 @@ export function TraceGraph({ trace, onSelect }: { trace: any; onSelect: (id: str
         for (const c of cs) {
           const cx = slot * CW; slot++
           candCenters.push(cx)
-          at('candidate', cx, Y.cand, { ...c, vehicle: trace.vehicleData, query: trace.partDescription }, c.id)
-          link(subId, c.id, c.isSelected, c.isProduction, c.nearMiss || (!c.isSelected && !c.isProduction))
+          const related = isRelated(c.partDescription, c.winningTerm)   // same part term → orange
+          at('candidate', cx, Y.cand, { ...c, vehicle: trace.vehicleData, query: trace.partDescription, related }, c.id)
+          // solid orange for "another rule for this part", dashed slate for semantic neighbors
+          link(subId, c.id, c.isSelected, c.isProduction, !c.isSelected && !c.isProduction && !related, related)
           if (c.isSelected) selectedCenter = cx
         }
         const subX = avg(candCenters)
@@ -97,6 +123,15 @@ export function TraceGraph({ trace, onSelect }: { trace: any; onSelect: (id: str
       <Background color="#334155" gap={18} />
       <Controls showInteractive={false} />
       <MiniMap pannable zoomable className="!bg-slate-800" nodeColor="#475569" />
+      <Panel position="bottom-left">
+        <div className="rounded-md border border-slate-700 bg-slate-900/85 px-2.5 py-1.5 text-[11px] text-slate-300 backdrop-blur">
+          <div className="mb-1 font-semibold text-slate-200">מקרא</div>
+          <LegendRow color="#34d399" label="נבחר (התוצאה)" />
+          <LegendRow color="#fb923c" label="חוק נוסף לאותו חלק (סכמה אחרת)" />
+          <LegendRow color="#818cf8" label="בחירת פרודקשן (שונה)" />
+          <LegendRow color="#475569" label="שכן סמנטי / לא קשור" dashed />
+        </div>
+      </Panel>
       <Panel position="top-right">
         {full ? (
           <button onClick={() => setFull(false)} className="inline-flex items-center gap-1 rounded-md bg-slate-800/90 px-2.5 py-1.5 text-[12px] text-slate-100 hover:bg-slate-700 border border-slate-600">
@@ -115,4 +150,15 @@ export function TraceGraph({ trace, onSelect }: { trace: any; onSelect: (id: str
     return <div className="fixed inset-0 z-[100] bg-slate-950">{canvas}</div>
   }
   return <div className="h-[62vh] w-full rounded-lg border border-slate-700 bg-slate-900/40">{canvas}</div>
+}
+
+function LegendRow({ color, label, dashed }: { color: string; label: string; dashed?: boolean }) {
+  return (
+    <div className="flex items-center gap-1.5 leading-5">
+      <svg width="18" height="6" className="shrink-0">
+        <line x1="0" y1="3" x2="18" y2="3" stroke={color} strokeWidth="2.5" strokeDasharray={dashed ? '3 3' : undefined} />
+      </svg>
+      <span>{label}</span>
+    </div>
+  )
 }
