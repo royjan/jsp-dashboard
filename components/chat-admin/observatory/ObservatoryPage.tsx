@@ -5,6 +5,7 @@ import { Radar, Network, BarChart3 } from 'lucide-react'
 import DecisionTracer from './DecisionTracer'
 import CatalogGraph from './CatalogGraph'
 import RuleCorpusAnalytics from './RuleCorpusAnalytics'
+import type { VehicleInputData } from '@/components/chat-admin/SimulatorVehicleInput'
 
 const TABS = [
   { key: 'tracer', label: 'Decision Tracer', he: 'עוקב החלטות', icon: Radar },
@@ -12,8 +13,16 @@ const TABS = [
   { key: 'analytics', label: 'Analytics', he: 'אנליטיקה', icon: BarChart3 },
 ] as const
 
-export default function ObservatoryPage({ initialQuery = '' }: { initialQuery?: string }) {
-  const [tab, setTab] = useState<string>('tracer')
+export default function ObservatoryPage({
+  initialQuery = '',
+  initialTab = 'tracer',
+  initialVehicle,
+}: {
+  initialQuery?: string
+  initialTab?: string
+  initialVehicle?: VehicleInputData
+}) {
+  const [tab, setTab] = useState<string>(TABS.some((t) => t.key === initialTab) ? initialTab : 'tracer')
   return (
     <div className="p-4 text-slate-100">
       <div className="mb-3">
@@ -28,7 +37,7 @@ export default function ObservatoryPage({ initialQuery = '' }: { initialQuery?: 
           </button>
         ))}
       </div>
-      {tab === 'tracer' && <DecisionTracer initialQuery={initialQuery} />}
+      {tab === 'tracer' && <DecisionTracer initialQuery={initialQuery} initialVehicle={initialVehicle} />}
       {tab === 'catalog' && <CatalogGraph />}
       {tab === 'analytics' && <RuleCorpusAnalytics />}
     </div>

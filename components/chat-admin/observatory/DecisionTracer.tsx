@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { Search, Loader2, AlertTriangle, GitBranch, ExternalLink, Car, ShieldCheck, ShieldAlert } from 'lucide-react'
 import SimulatorVehicleInput, { type VehicleInputData } from '@/components/chat-admin/SimulatorVehicleInput'
 import { TraceGraph } from './TraceGraph'
@@ -13,9 +13,15 @@ const STATUS_OPTS = [
   { key: 'rejected', label: 'נדחה' },
 ] as const
 
-export default function DecisionTracer({ initialQuery = '' }: { initialQuery?: string }) {
+export default function DecisionTracer({
+  initialQuery = '',
+  initialVehicle,
+}: {
+  initialQuery?: string
+  initialVehicle?: VehicleInputData
+}) {
   const [part, setPart] = useState(initialQuery)
-  const [vehicle, setVehicle] = useState<VehicleInputData>({})
+  const [vehicle, setVehicle] = useState<VehicleInputData>(initialVehicle || {})
   const [statuses, setStatuses] = useState<string[]>(['approved'])
   const [nearMiss, setNearMiss] = useState(true)
   const [loading, setLoading] = useState(false)
@@ -61,6 +67,19 @@ export default function DecisionTracer({ initialQuery = '' }: { initialQuery?: s
     } finally { setLoading(false) }
   }
 
+  // Auto-run once on mount when the page was opened via a deep link with a query
+  // (e.g. ?query=oil%20filter&license_plate=38985802). The vehicle state is already
+  // seeded from initialVehicle, and the /trace API decodes the plate/VIN server-side.
+  const didAutoRun = useRef(false)
+  useEffect(() => {
+    if (didAutoRun.current) return
+    if (initialQuery.trim()) {
+      didAutoRun.current = true
+      run()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const sel = trace?.candidates?.find((c: any) => c.id === selected)
 
   return (
@@ -93,7 +112,7 @@ export default function DecisionTracer({ initialQuery = '' }: { initialQuery?: s
             </label>
           </div>
         </div>
-        <div className="min-w-[260px]"><SimulatorVehicleInput onVehicleDataChange={setVehicle} /></div>
+        <div className="min-w-[260px]"><SimulatorVehicleInput onVehicleDataChange={setVehicle} initialData={initialVehicle} /></div>
       </div>
 
       {/* banners */}

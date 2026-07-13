@@ -21,7 +21,9 @@ export default function SimulatorVehicleInput({
   onVehicleDataChange,
   initialData = {}
 }: SimulatorVehicleInputProps) {
-  const [inputMethod, setInputMethod] = useState<'vin' | 'plate' | 'manual'>('manual')
+  const [inputMethod, setInputMethod] = useState<'vin' | 'plate' | 'manual'>(
+    initialData.vin ? 'vin' : initialData.licensePlate ? 'plate' : 'manual'
+  )
   const [vin, setVin] = useState(initialData.vin || '')
   const [licensePlate, setLicensePlate] = useState(initialData.licensePlate || '')
   const [year, setYear] = useState(initialData.year?.toString() || '')
