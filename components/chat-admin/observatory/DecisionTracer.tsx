@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useEffect, useRef, useState } from 'react'
-import { Search, Loader2, AlertTriangle, GitBranch, ExternalLink, Car, ShieldCheck, ShieldAlert } from 'lucide-react'
+import { Search, Loader2, AlertTriangle, GitBranch, ExternalLink, Car, ShieldCheck, ShieldAlert, Copy } from 'lucide-react'
 import SimulatorVehicleInput, { type VehicleInputData } from '@/components/chat-admin/SimulatorVehicleInput'
 import { TraceGraph } from './TraceGraph'
 
@@ -140,6 +140,14 @@ export default function DecisionTracer({
             {sel ? (
               <div className="space-y-2">
                 <div className="text-[11px] leading-tight text-slate-300">{sel.category} › {sel.subcategory} › <b>{sel.schema}</b></div>
+                <div className="flex items-center gap-1 text-[10px] text-slate-400">
+                  <span>id:</span>
+                  <code className="truncate rounded bg-slate-900/70 px-1 py-0.5 font-mono text-slate-300" title={sel.id}>{sel.id}</code>
+                  <button
+                    onClick={() => navigator.clipboard?.writeText(sel.id)} title="העתק מזהה"
+                    className="shrink-0 rounded p-0.5 text-slate-400 hover:bg-white/10 hover:text-slate-200"
+                  ><Copy size={11} /></button>
+                </div>
                 <div className="grid grid-cols-2 gap-1 text-[11px]">
                   <span>cosine: <b>{sel.cosineSim ?? '—'}</b></span>
                   <span>score: <b>{sel.matchScore ?? '—'}</b></span>

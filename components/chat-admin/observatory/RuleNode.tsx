@@ -172,6 +172,7 @@ export function RuleNode({ data }: { data: any }) {
       {data.status !== 'approved' && (
         <div className="mt-1 inline-flex items-center gap-0.5 text-[9px] text-amber-300"><AlertTriangle size={9} />{data.status}</div>
       )}
+      {data.id && <div className="mt-1 truncate font-mono text-[9px] text-slate-500" title={data.id}>id: {data.id}</div>}
       <Handle type="source" position={Position.Bottom} className="!bg-slate-500" />
     </div>
   )

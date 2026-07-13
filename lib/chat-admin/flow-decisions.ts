@@ -842,8 +842,12 @@ export async function simulateTrace(
   }
 
   const selected = scored.filter((c) => !c.nearMiss)   // above threshold = eligible to win
-  const best = selected[0] ?? null
   const productionId = pickProduction(selected.map((c) => ({ row: c.row, filterCount: c.filterCount, matched: c.matched })))
+  // The simulator MIRRORS production's selection instead of breaking an equal matchScore tie
+  // arbitrarily. Otherwise a generic and a fully-matching 4/4 rule both score 1.0 and whichever the
+  // search happened to return first would "win" — making SIM disagree with PROD for no real reason.
+  // Production prefers the most-specific fully-matching rule (else a generic), so the winner does too.
+  const best = selected.find((c) => c.row.id === productionId) ?? selected[0] ?? null
 
   const candidates = scored.map((c) => ({
     id: c.row.id,
