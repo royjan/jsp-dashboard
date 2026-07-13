@@ -14,11 +14,14 @@ function renderNode({ nodeDatum, toggleNode }: any) {
   const isSchema = a.kind === 'schema'
   const fill = a.kind === 'category' ? '#38bdf8' : a.kind === 'subcategory' ? '#818cf8' : a.generic ? '#f59e0b' : '#34d399'
   return (
-    <g style={{ cursor: 'pointer' }} onClick={toggleNode}>
+    // stroke="none": react-d3-tree leaks an inherited black stroke onto <text>, which with
+    // paint-order:normal paints over the light fill and renders labels near-black/unreadable.
+    // Reset it here (the circle re-declares its own stroke below).
+    <g stroke="none" style={{ cursor: 'pointer' }} onClick={toggleNode}>
       <circle r={7} fill={fill} stroke="#0f172a" strokeWidth={1.5} />
-      <text fill="#e2e8f0" x={12} dy={-2} fontSize={12} style={{ fontWeight: isSchema ? 400 : 600 }}>{nodeDatum.name}</text>
+      <text fill="#e2e8f0" stroke="none" x={12} dy={-2} fontSize={12} style={{ fontWeight: isSchema ? 400 : 600 }}>{nodeDatum.name}</text>
       {a.rules != null && (
-        <text fill="#94a3b8" x={12} dy={13} fontSize={10}>
+        <text fill="#94a3b8" stroke="none" x={12} dy={13} fontSize={10}>
           {a.rules} rules{a.pinned ? ` · ${a.pinned}📌` : ''}{a.lambda && isSchema ? ` · ${a.lambda}` : ''}
         </text>
       )}
