@@ -14,8 +14,9 @@ export function TraceGraph({ trace, onSelect }: { trace: any; onSelect: (id: str
   const { nodes, edges } = useMemo(() => {
     // Grouped top-down TREE: input → category → subcategory → candidate rules → resolved.
     const cands: any[] = trace?.candidates || []
-    const CW = 320                                   // horizontal slot per candidate
-    const Y = { input: 0, cat: 180, sub: 330, cand: 500, resolved: 800 }
+    const COL_W = 340                                // horizontal spacing per subcategory COLUMN
+    const CAND_STEP = 150                            // vertical spacing between STACKED candidate cards
+    const Y = { input: 0, cat: 150, sub: 300, candTop: 470 }
     const HALF: Record<string, number> = { input: 128, category: 70, subcategory: 90, candidate: 144, resolved: 128 }
     const nodes: Node[] = []
     const edges: Edge[] = []
@@ -71,32 +72,37 @@ export function TraceGraph({ trace, onSelect }: { trace: any; onSelect: (id: str
       return !!desc && terms.some((t) => !isNeighbor(t, desc))
     }
 
-    let slot = 0
-    let selectedCenter: number | null = null
+    // Layout: each subcategory gets its own COLUMN; its candidate rules STACK VERTICALLY beneath it.
+    // (A single horizontal candidate row blew up to thousands of px wide for parts with many rules,
+    //  forcing min-zoom and rendering every card as an unreadable speck — so multiple options looked
+    //  like one. Stacking keeps the graph narrow and makes "N options" read as an obvious list.)
+    let col = 0
+    let selectedX: number | null = null
+    let selectedColLen = 1
     const selected = cands.find((c) => c.isSelected)
     const catCenters: number[] = []
     for (const [cat, sm] of cats) {
       const catId = `cat:${cat}`
       const subCenters: number[] = []
-      let catCount = 0
       for (const [sub, cs] of sm) {
         const subId = `sub:${cat}:${sub}`
-        const candCenters: number[] = []
-        for (const c of cs) {
-          const cx = slot * CW; slot++
-          candCenters.push(cx)
+        const subX = col * COL_W; col++
+        subCenters.push(subX)
+        // strongest vehicle match first; the WINNER sinks to the bottom of its column so the result
+        // node can sit right beneath it (short green edge, no line drawn through the other options)
+        const ordered = [...cs].sort((a, b) =>
+          (a.isSelected ? 1 : 0) - (b.isSelected ? 1 : 0) || (b.matchScore || 0) - (a.matchScore || 0))
+        ordered.forEach((c, i) => {
+          const cy = Y.candTop + i * CAND_STEP
           const related = isRelated(c.partDescription, c.winningTerm)   // same part term → orange
           const norm = normOf(c)                                        // 0..1 vehicle-match strength → brightness
-          at('candidate', cx, Y.cand, { ...c, vehicle: trace.vehicleData, query: trace.partDescription, related, intensity: norm }, c.id)
+          at('candidate', subX, cy, { ...c, vehicle: trace.vehicleData, query: trace.partDescription, related, intensity: norm }, c.id)
           // solid orange for "another rule for this part", dashed slate for semantic neighbors; brighter = more conditions match
           link(subId, c.id, c.isSelected, c.isProduction, !c.isSelected && !c.isProduction && !related, related, 0.3 + 0.7 * norm)
-          if (c.isSelected) selectedCenter = cx
-        }
-        const subX = avg(candCenters)
-        subCenters.push(subX)
+          if (c.isSelected) { selectedX = subX; selectedColLen = ordered.length }
+        })
         at('subcategory', subX, Y.sub, { name: sub, count: cs.length }, subId)
         link(catId, subId, !!selected && cat === selected.category && sub === selected.subcategory)  // highlight winning path
-        catCount += cs.length
       }
       const catX = avg(subCenters)
       catCenters.push(catX)
@@ -108,7 +114,10 @@ export function TraceGraph({ trace, onSelect }: { trace: any; onSelect: (id: str
     at('input', inputX, Y.input, { query: trace.partDescription, expansion: trace.expansion, vehicle: trace.vehicleData }, 'input')
 
     if (selected) {
-      at('resolved', selectedCenter ?? inputX, Y.resolved,
+      // result sits just below the winner's column (winner is the bottom card), so the green edge is
+      // a short clean hop into free space rather than a line drawn through the other options.
+      const resolvedY = Y.candTop + selectedColLen * CAND_STEP + 20
+      at('resolved', selectedX ?? inputX, resolvedY,
         { category: selected.category, subcategory: selected.subcategory, schema: selected.schema, directPart: selected.directPart }, 'resolved')
       link(selected.id, 'resolved', true)
     }

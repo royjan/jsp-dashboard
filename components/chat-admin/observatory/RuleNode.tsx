@@ -130,10 +130,12 @@ export function RuleNode({ data }: { data: any }) {
   return (
     <div className={`w-72 rounded-lg border ${border} bg-slate-800/95 p-2.5 text-slate-100 shadow-lg`} style={{ opacity: cardOpacity }}>
       <Handle type="target" position={Position.Top} className="!bg-slate-500" />
-      {/* the term THIS rule answers — makes semantic neighbors ("fuel filter" for an "oil filter" query) obvious */}
+      {/* the term THIS rule answers — makes semantic neighbors ("fuel filter" for an "oil filter" query) obvious.
+          Use the authoritative `related` flag (matches the orange-border logic) so an exact same-part rule is
+          never mislabeled a neighbor; fall back to the local check only when `related` wasn't provided. */}
       <div className="mb-0.5 flex items-center gap-1">
         <span className="truncate text-[12px] font-semibold text-slate-100">{data.partDescription}</span>
-        {isNeighbor(data.query, data.partDescription) && (
+        {(data.related != null ? !data.related : isNeighbor(data.query, data.partDescription)) && (
           <span className="shrink-0 rounded bg-amber-500/15 px-1 text-[9px] text-amber-300">שכן סמנטי</span>
         )}
       </div>
