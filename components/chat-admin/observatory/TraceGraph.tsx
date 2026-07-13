@@ -11,37 +11,68 @@ import { nodeTypes } from './RuleNode'
  *  needed for this DAG shape, so the canvas is robust and never blank. */
 export function TraceGraph({ trace, onSelect }: { trace: any; onSelect: (id: string | null) => void }) {
   const { nodes, edges } = useMemo(() => {
-    // Top-down TREE: input on top → candidates fan out below → resolved at the bottom.
+    // Grouped top-down TREE: input → category → subcategory → candidate rules → resolved.
     const cands: any[] = trace?.candidates || []
-    const CW = 320                                   // horizontal spacing between candidates
-    const ROW_Y = { input: 0, cand: 230, resolved: 470 }
+    const CW = 320                                   // horizontal slot per candidate
+    const Y = { input: 0, cat: 180, sub: 330, cand: 500, resolved: 800 }
+    const HALF: Record<string, number> = { input: 128, category: 70, subcategory: 90, candidate: 144, resolved: 128 }
     const nodes: Node[] = []
     const edges: Edge[] = []
+    const at = (kind: string, centerX: number, y: number, data: any, id: string) =>
+      nodes.push({ id, type: 'rule', position: { x: centerX - HALF[kind], y }, data: { ...data, kind } })
+    const avg = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0)
+    const link = (source: string, target: string, hot = false, prod = false, dashed = false) =>
+      edges.push({ id: `${source}->${target}`, source, target, animated: hot,
+        style: { stroke: hot ? '#34d399' : prod ? '#818cf8' : '#475569', strokeWidth: hot ? 2.5 : 1, strokeDasharray: dashed ? '4 4' : undefined },
+        markerEnd: { type: MarkerType.ArrowClosed } })
 
-    const n = Math.max(cands.length, 1)
-    const centerX = ((n - 1) * CW) / 2
-    nodes.push({
-      id: 'input', type: 'rule', position: { x: centerX - 12, y: ROW_Y.input },
-      data: { kind: 'input', query: trace.partDescription, expansion: trace.expansion, vehicle: trace.vehicleData },
-    })
+    // group: category → subcategory → candidates
+    const cats = new Map<string, Map<string, any[]>>()
+    for (const c of cands) {
+      const cat = c.category || '(none)', sub = c.subcategory || '(none)'
+      if (!cats.has(cat)) cats.set(cat, new Map())
+      const sm = cats.get(cat)!
+      if (!sm.has(sub)) sm.set(sub, [])
+      sm.get(sub)!.push(c)
+    }
 
+    let slot = 0
+    let selectedCenter: number | null = null
     const selected = cands.find((c) => c.isSelected)
-    cands.forEach((c, i) => {
-      nodes.push({ id: c.id, type: 'rule', position: { x: i * CW, y: ROW_Y.cand }, data: { ...c, kind: 'candidate', vehicle: trace.vehicleData, query: trace.partDescription } })
-      edges.push({
-        id: `in-${c.id}`, source: 'input', target: c.id,
-        animated: c.isSelected,
-        style: { stroke: c.isSelected ? '#34d399' : c.isProduction ? '#818cf8' : '#475569', strokeWidth: c.isSelected ? 2.5 : 1, strokeDasharray: c.nearMiss || (!c.isSelected && !c.isProduction) ? '4 4' : undefined },
-        markerEnd: { type: MarkerType.ArrowClosed },
-      })
-    })
+    const catCenters: number[] = []
+    for (const [cat, sm] of cats) {
+      const catId = `cat:${cat}`
+      const subCenters: number[] = []
+      let catCount = 0
+      for (const [sub, cs] of sm) {
+        const subId = `sub:${cat}:${sub}`
+        const candCenters: number[] = []
+        for (const c of cs) {
+          const cx = slot * CW; slot++
+          candCenters.push(cx)
+          at('candidate', cx, Y.cand, { ...c, vehicle: trace.vehicleData, query: trace.partDescription }, c.id)
+          link(subId, c.id, c.isSelected, c.isProduction, c.nearMiss || (!c.isSelected && !c.isProduction))
+          if (c.isSelected) selectedCenter = cx
+        }
+        const subX = avg(candCenters)
+        subCenters.push(subX)
+        at('subcategory', subX, Y.sub, { name: sub, count: cs.length }, subId)
+        link(catId, subId)
+        catCount += cs.length
+      }
+      const catX = avg(subCenters)
+      catCenters.push(catX)
+      at('category', catX, Y.cat, { name: cat, count: sm.size }, catId)
+      link('input', catId)
+    }
+
+    const inputX = catCenters.length ? avg(catCenters) : 0
+    at('input', inputX, Y.input, { query: trace.partDescription, expansion: trace.expansion, vehicle: trace.vehicleData }, 'input')
 
     if (selected) {
-      nodes.push({
-        id: 'resolved', type: 'rule', position: { x: centerX - 12, y: ROW_Y.resolved },
-        data: { kind: 'resolved', category: selected.category, subcategory: selected.subcategory, schema: selected.schema, directPart: selected.directPart },
-      })
-      edges.push({ id: `sel-res`, source: selected.id, target: 'resolved', animated: true, style: { stroke: '#34d399', strokeWidth: 2.5 }, markerEnd: { type: MarkerType.ArrowClosed } })
+      at('resolved', selectedCenter ?? inputX, Y.resolved,
+        { category: selected.category, subcategory: selected.subcategory, schema: selected.schema, directPart: selected.directPart }, 'resolved')
+      link(selected.id, 'resolved', true)
     }
     return { nodes, edges }
   }, [trace])

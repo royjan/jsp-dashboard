@@ -44,6 +44,18 @@ function filterState(reasons: string[], value: any, label: string, veh: any, key
 }
 
 export function RuleNode({ data }: { data: any }) {
+  if (data.kind === 'category' || data.kind === 'subcategory') {
+    const isCat = data.kind === 'category'
+    return (
+      <div className={`rounded-md border px-2.5 py-1.5 text-center shadow ${isCat ? 'border-sky-500/50 bg-sky-950/50 text-sky-100' : 'border-indigo-500/40 bg-indigo-950/40 text-indigo-100'}`}>
+        <Handle type="target" position={Position.Top} className="!bg-slate-500" />
+        <div className="whitespace-nowrap text-[12px] font-semibold">{data.name}</div>
+        <div className="text-[10px] opacity-70">{data.count} {isCat ? 'תת-קטגוריות' : 'חוקים'}</div>
+        <Handle type="source" position={Position.Bottom} className="!bg-slate-500" />
+      </div>
+    )
+  }
+
   if (data.kind === 'input') {
     return (
       <div className="w-64 rounded-lg border border-sky-500/40 bg-slate-800/95 p-3 text-slate-100 shadow-lg">
