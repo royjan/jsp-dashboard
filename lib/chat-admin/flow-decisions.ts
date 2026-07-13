@@ -936,10 +936,10 @@ export async function getCatalogTree(lambda?: string): Promise<any> {
     }
     const ck = `${r.lambda_target}||${r.category}`
     let cat = cats.get(ck)
-    if (!cat) { cat = { name: r.category, children: [], attributes: { rules: 0, kind: 'category' } }; cats.set(ck, cat); lamNode.children.push(cat) }
+    if (!cat) { cat = { name: r.category, children: [], attributes: { rules: 0, kind: 'category', lambda: r.lambda_target } }; cats.set(ck, cat); lamNode.children.push(cat) }
     const sk = `${ck}||${r.subcategory}`
     let sub = subs.get(sk)
-    if (!sub) { sub = { name: r.subcategory, children: [], attributes: { rules: 0, kind: 'subcategory' } }; subs.set(sk, sub); cat.children.push(sub) }
+    if (!sub) { sub = { name: r.subcategory, children: [], attributes: { rules: 0, kind: 'subcategory', lambda: r.lambda_target } }; subs.set(sk, sub); cat.children.push(sub) }
     sub.children.push({ name: r.schema, attributes: { kind: 'schema', rules: r.rules, approved: r.approved, suggestions: r.suggestions, pinned: r.pinned, generic: !!r.has_generic, lambda: r.lambda_target } })
     sub.attributes.rules += r.rules; cat.attributes.rules += r.rules; lamNode.attributes.rules += r.rules; root.attributes.rules += r.rules
   }
