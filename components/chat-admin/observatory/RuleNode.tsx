@@ -63,7 +63,7 @@ export function RuleNode({ data }: { data: any }) {
             {[data.vehicle.year, data.vehicle.model, data.vehicle.fuelType, data.vehicle.engineModel].filter(Boolean).join(' · ')}
           </div>
         )}
-        <Handle type="source" position={Position.Right} className="!bg-sky-400" />
+        <Handle type="source" position={Position.Bottom} className="!bg-sky-400" />
       </div>
     )
   }
@@ -91,7 +91,7 @@ export function RuleNode({ data }: { data: any }) {
         ) : (
           <div className="text-[11px] text-amber-300">אין חלק מקושר (direct_part)</div>
         )}
-        <Handle type="target" position={Position.Left} className="!bg-emerald-400" />
+        <Handle type="target" position={Position.Top} className="!bg-emerald-400" />
       </div>
     )
   }
@@ -103,7 +103,7 @@ export function RuleNode({ data }: { data: any }) {
   const opacity = data.nearMiss || (!data.isSelected && data.status !== 'approved') ? 'opacity-70' : ''
   return (
     <div className={`w-72 rounded-lg border ${border} ${opacity} bg-slate-800/95 p-2.5 text-slate-100 shadow-lg`}>
-      <Handle type="target" position={Position.Left} className="!bg-slate-500" />
+      <Handle type="target" position={Position.Top} className="!bg-slate-500" />
       {/* the term THIS rule answers — makes semantic neighbors ("fuel filter" for an "oil filter" query) obvious */}
       <div className="mb-0.5 flex items-center gap-1">
         <span className="truncate text-[12px] font-semibold text-slate-100">{data.partDescription}</span>
@@ -143,7 +143,7 @@ export function RuleNode({ data }: { data: any }) {
       {data.status !== 'approved' && (
         <div className="mt-1 inline-flex items-center gap-0.5 text-[9px] text-amber-300"><AlertTriangle size={9} />{data.status}</div>
       )}
-      <Handle type="source" position={Position.Right} className="!bg-slate-500" />
+      <Handle type="source" position={Position.Bottom} className="!bg-slate-500" />
     </div>
   )
 }

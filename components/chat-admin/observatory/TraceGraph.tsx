@@ -11,21 +11,23 @@ import { nodeTypes } from './RuleNode'
  *  needed for this DAG shape, so the canvas is robust and never blank. */
 export function TraceGraph({ trace, onSelect }: { trace: any; onSelect: (id: string | null) => void }) {
   const { nodes, edges } = useMemo(() => {
+    // Top-down TREE: input on top → candidates fan out below → resolved at the bottom.
     const cands: any[] = trace?.candidates || []
-    const COL = { input: 0, cand: 360, resolved: 780 }
-    const ROW = 150
+    const CW = 320                                   // horizontal spacing between candidates
+    const ROW_Y = { input: 0, cand: 230, resolved: 470 }
     const nodes: Node[] = []
     const edges: Edge[] = []
 
-    const laneH = Math.max(cands.length, 1) * ROW
+    const n = Math.max(cands.length, 1)
+    const centerX = ((n - 1) * CW) / 2
     nodes.push({
-      id: 'input', type: 'rule', position: { x: COL.input, y: laneH / 2 - 60 },
+      id: 'input', type: 'rule', position: { x: centerX - 12, y: ROW_Y.input },
       data: { kind: 'input', query: trace.partDescription, expansion: trace.expansion, vehicle: trace.vehicleData },
     })
 
     const selected = cands.find((c) => c.isSelected)
     cands.forEach((c, i) => {
-      nodes.push({ id: c.id, type: 'rule', position: { x: COL.cand, y: i * ROW }, data: { ...c, kind: 'candidate', vehicle: trace.vehicleData, query: trace.partDescription } })
+      nodes.push({ id: c.id, type: 'rule', position: { x: i * CW, y: ROW_Y.cand }, data: { ...c, kind: 'candidate', vehicle: trace.vehicleData, query: trace.partDescription } })
       edges.push({
         id: `in-${c.id}`, source: 'input', target: c.id,
         animated: c.isSelected,
@@ -36,7 +38,7 @@ export function TraceGraph({ trace, onSelect }: { trace: any; onSelect: (id: str
 
     if (selected) {
       nodes.push({
-        id: 'resolved', type: 'rule', position: { x: COL.resolved, y: laneH / 2 - 60 },
+        id: 'resolved', type: 'rule', position: { x: centerX - 12, y: ROW_Y.resolved },
         data: { kind: 'resolved', category: selected.category, subcategory: selected.subcategory, schema: selected.schema, directPart: selected.directPart },
       })
       edges.push({ id: `sel-res`, source: selected.id, target: 'resolved', animated: true, style: { stroke: '#34d399', strokeWidth: 2.5 }, markerEnd: { type: MarkerType.ArrowClosed } })
