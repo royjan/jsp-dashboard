@@ -114,12 +114,19 @@ export function RuleNode({ data }: { data: any }) {
         <span className="text-slate-400">score {data.matchScore ?? '—'}</span>
         <Bar value={data.matchScore} tone={data.isSelected ? 'bg-emerald-400' : 'bg-slate-400'} />
       </div>
-      <div className="flex flex-wrap gap-1">
-        <FilterChip label={`שנה`} state={filterState(reasons, veh.year, 'year', veh, 'year')} />
-        <FilterChip label={`דגם`} state={filterState(reasons, veh.model, 'model', veh, 'model')} />
-        <FilterChip label={`דלק`} state={filterState(reasons, veh.fuelType, 'fuel', veh, 'fuel')} />
-        <FilterChip label={`מנוע`} state={filterState(reasons, veh.engineModel, 'engine', veh, 'engine')} />
-      </div>
+      {data.filterCount === 0 ? (
+        <span className="inline-flex items-center gap-1 rounded border border-slate-500/40 bg-slate-600/25 px-1.5 py-0.5 text-[10px] text-slate-300">
+          <Minus size={11} /> חוק גנרי · חל על כל הרכבים
+        </span>
+      ) : (
+        <div className="flex flex-wrap items-center gap-1">
+          <FilterChip label={`שנה`} state={filterState(reasons, veh.year, 'year', veh, 'year')} />
+          <FilterChip label={`דגם`} state={filterState(reasons, veh.model, 'model', veh, 'model')} />
+          <FilterChip label={`דלק`} state={filterState(reasons, veh.fuelType, 'fuel', veh, 'fuel')} />
+          <FilterChip label={`מנוע`} state={filterState(reasons, veh.engineModel, 'engine', veh, 'engine')} />
+          <span className="text-[10px] text-slate-400">{data.matched}/{data.filterCount}</span>
+        </div>
+      )}
       {data.status !== 'approved' && (
         <div className="mt-1 inline-flex items-center gap-0.5 text-[9px] text-amber-300"><AlertTriangle size={9} />{data.status}</div>
       )}

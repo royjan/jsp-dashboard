@@ -90,6 +90,11 @@ export default function DecisionTracer({ initialQuery = '' }: { initialQuery?: s
       {trace?.vehicleNote && <div className="flex items-center gap-2 rounded-md border border-amber-500/40 bg-amber-950/30 px-3 py-2 text-sm text-amber-200"><AlertTriangle size={15} /> {trace.vehicleNote}</div>}
       {trace?.mode === 'lexical' && <div className="flex items-center gap-2 rounded-md border border-amber-500/40 bg-amber-950/30 px-3 py-2 text-sm text-amber-200"><AlertTriangle size={15} /> אין embeddings — מציג התאמות לקסיקליות (ILIKE) בלבד.</div>}
       {trace?.disagree && <div className="flex items-center gap-2 rounded-md border border-indigo-500/40 bg-indigo-950/30 px-3 py-2 text-sm text-indigo-200"><GitBranch size={15} /> הסימולטור והפרודקשן בחרו חוקים <b>שונים</b> — ראה תג PROD מול SIM✓.</div>}
+      {trace?.candidates?.length > 0 && trace.candidates.every((c: any) => c.filterCount === 0) && (trace.resolvedVehicle || Object.values(trace.vehicleData || {}).some(Boolean)) && (
+        <div className="flex items-center gap-2 rounded-md border border-slate-500/40 bg-slate-700/30 px-3 py-2 text-sm text-slate-200">
+          <AlertTriangle size={15} className="text-slate-400" /> אין חוק <b>ממוקד-רכב</b> לחלק זה — כל ההתאמות <b>גנריות</b> (חלות על כל הרכבים), כך שנתוני הרכב לא משפיעים על הבחירה. הבחירה סמנטית בלבד.
+        </div>
+      )}
 
       {/* graph + detail */}
       {trace?.candidates?.length ? (
