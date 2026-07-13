@@ -867,6 +867,33 @@ export async function simulateTrace(
   }
 }
 
+/** Decode a license plate (or VIN) → vehicle facts from car_records, like Diego does.
+ *  decisions store the COMMERCIAL name (trade_name, e.g. '3008'), not the VIN model code. */
+export async function resolveVehicleByPlateOrVin(
+  idRaw: string,
+): Promise<(SimulateVehicle & { vin?: string; note?: string }) | null> {
+  const id = (idRaw || '').trim()
+  if (!id) return null
+  const cols = `vin, model_name, trade_name, engine_model, year_of_manufacture, fuel_type`
+  let res = await query(
+    `SELECT ${cols} FROM car_records WHERE license_plate=$1 AND vin IS NOT NULL AND vin<>'' ORDER BY date_inserted DESC LIMIT 1`,
+    [id],
+  ).catch(() => ({ rows: [] as any[] }))
+  if (!(res.rows as any[]).length) {
+    res = await query(`SELECT ${cols} FROM car_records WHERE vin=$1 ORDER BY date_inserted DESC LIMIT 1`, [id])
+      .catch(() => ({ rows: [] as any[] }))
+  }
+  const r = (res.rows as any[])[0]
+  if (!r) return null
+  return {
+    vin: r.vin,
+    model: r.trade_name || r.model_name,
+    engineModel: r.engine_model,
+    year: r.year_of_manufacture ? Number(r.year_of_manufacture) : undefined,
+    fuelType: r.fuel_type,
+  }
+}
+
 /** Catalog as a nested category → subcategory → schema tree (react-d3-tree shape) with counts. */
 export async function getCatalogTree(lambda?: string): Promise<any> {
   const lam = lambda ? lambda.replace(/[^a-z0-9_]/gi, '') : ''

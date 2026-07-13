@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
-import { Search, Loader2, AlertTriangle, GitBranch, ExternalLink } from 'lucide-react'
+import { Search, Loader2, AlertTriangle, GitBranch, ExternalLink, Car } from 'lucide-react'
 import SimulatorVehicleInput, { type VehicleInputData } from '@/components/chat-admin/SimulatorVehicleInput'
 import { TraceGraph } from './TraceGraph'
 
@@ -81,6 +81,13 @@ export default function DecisionTracer({ initialQuery = '' }: { initialQuery?: s
 
       {/* banners */}
       {error && <div className="flex items-center gap-2 rounded-md border border-rose-500/40 bg-rose-950/40 px-3 py-2 text-sm text-rose-200"><AlertTriangle size={15} /> {error}</div>}
+      {trace?.resolvedVehicle && (
+        <div className="flex items-center gap-2 rounded-md border border-emerald-500/40 bg-emerald-950/30 px-3 py-2 text-sm text-emerald-200">
+          <Car size={15} /> פוענח מהלוחית: <b>{[trace.resolvedVehicle.model, trace.resolvedVehicle.year, trace.resolvedVehicle.engineModel, trace.resolvedVehicle.fuelType].filter(Boolean).join(' · ')}</b>
+          {trace.resolvedVehicle.vin && <span className="text-emerald-400/70">({trace.resolvedVehicle.vin})</span>}
+        </div>
+      )}
+      {trace?.vehicleNote && <div className="flex items-center gap-2 rounded-md border border-amber-500/40 bg-amber-950/30 px-3 py-2 text-sm text-amber-200"><AlertTriangle size={15} /> {trace.vehicleNote}</div>}
       {trace?.mode === 'lexical' && <div className="flex items-center gap-2 rounded-md border border-amber-500/40 bg-amber-950/30 px-3 py-2 text-sm text-amber-200"><AlertTriangle size={15} /> אין embeddings — מציג התאמות לקסיקליות (ILIKE) בלבד.</div>}
       {trace?.disagree && <div className="flex items-center gap-2 rounded-md border border-indigo-500/40 bg-indigo-950/30 px-3 py-2 text-sm text-indigo-200"><GitBranch size={15} /> הסימולטור והפרודקשן בחרו חוקים <b>שונים</b> — ראה תג PROD מול SIM✓.</div>}
 

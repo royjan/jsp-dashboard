@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { initializeSecrets } from '@/lib/aws-secrets'
-import { simulateTrace, type TraceStatus } from '@/lib/chat-admin/flow-decisions'
+import { simulateTrace, resolveVehicleByPlateOrVin, type TraceStatus } from '@/lib/chat-admin/flow-decisions'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -30,16 +30,30 @@ export async function POST(request: NextRequest) {
     if (!partDescription) {
       return NextResponse.json({ error: 'Part description is required' }, { status: 400 })
     }
-    const vehicleNote =
-      vin || licensePlate
-        ? 'VIN/license-plate decode is not available in the dashboard — enter vehicle fields manually.'
-        : undefined
+    // Decode plate/VIN from car_records (like Diego), filling any vehicle fields not typed manually.
+    let vehicle = { ...(vehicleData || {}) }
+    let resolvedVehicle: any = null
+    let vehicleNote: string | undefined
+    if (licensePlate || vin) {
+      resolvedVehicle = await resolveVehicleByPlateOrVin(licensePlate || vin || '')
+      if (resolvedVehicle) {
+        vehicle = {
+          year: vehicle.year ?? resolvedVehicle.year,
+          model: vehicle.model ?? resolvedVehicle.model,
+          fuelType: vehicle.fuelType ?? resolvedVehicle.fuelType,
+          engineModel: vehicle.engineModel ?? resolvedVehicle.engineModel,
+        }
+      } else {
+        vehicleNote = `לא נמצא רכב עבור ${licensePlate || vin} ב-car_records — הזן נתוני רכב ידנית.`
+      }
+    }
 
-    const result = await simulateTrace(partDescription, vehicleData || {}, { includeStatuses, nearMissFloor, threshold })
+    const result = await simulateTrace(partDescription, vehicle, { includeStatuses, nearMissFloor, threshold })
 
     return NextResponse.json({
       partDescription,
-      vehicleData: vehicleData || {},
+      vehicleData: vehicle,
+      resolvedVehicle,
       vehicleNote,
       ...result,
       timestamp: new Date().toISOString(),
