@@ -125,9 +125,10 @@ export function RuleNode({ data }: { data: any }) {
     : data.nearMiss
     ? 'border-amber-500/40'
     : 'border-slate-600/40'
-  const opacity = data.nearMiss || (!data.isSelected && data.status !== 'approved') ? 'opacity-70' : ''
+  // brightness = how many of this rule's vehicle conditions the target car satisfies (floored so text stays legible)
+  const cardOpacity = data.intensity != null ? 0.55 + 0.45 * data.intensity : 1
   return (
-    <div className={`w-72 rounded-lg border ${border} ${opacity} bg-slate-800/95 p-2.5 text-slate-100 shadow-lg`}>
+    <div className={`w-72 rounded-lg border ${border} bg-slate-800/95 p-2.5 text-slate-100 shadow-lg`} style={{ opacity: cardOpacity }}>
       <Handle type="target" position={Position.Top} className="!bg-slate-500" />
       {/* the term THIS rule answers — makes semantic neighbors ("fuel filter" for an "oil filter" query) obvious */}
       <div className="mb-0.5 flex items-center gap-1">

@@ -30,14 +30,22 @@ export function TraceGraph({ trace, onSelect }: { trace: any; onSelect: (id: str
       return !a.includes(b) && !b.includes(a)
     }
     // Edge tiers: winner=green (animated) · another rule for the same part=orange · prod-disagrees=indigo · neighbor=slate.
-    const link = (source: string, target: string, hot = false, prod = false, dashed = false, related = false) =>
+    // opacity encodes match STRENGTH — how many of the rule's vehicle conditions the target car satisfies (brighter = more).
+    const link = (source: string, target: string, hot = false, prod = false, dashed = false, related = false, opacity = 1) =>
       edges.push({ id: `${source}->${target}`, source, target, animated: hot,
         style: {
           stroke: hot ? '#34d399' : prod ? '#818cf8' : related ? '#fb923c' : '#475569',
           strokeWidth: hot ? 2.5 : (prod || related) ? 1.75 : 1,
           strokeDasharray: dashed ? '4 4' : undefined,
+          opacity,
         },
         markerEnd: { type: MarkerType.ArrowClosed } })
+
+    // Brightness driver: number of the rule's vehicle filters the target car satisfies (`matched`),
+    // normalized to the best match in view. Generic rules (no conditions) sit at a neutral mid-level;
+    // the winner is always fully bright.
+    const maxMatched = Math.max(1, ...cands.map((c: any) => c.matched || 0))
+    const normOf = (c: any) => (c.isSelected ? 1 : c.filterCount === 0 ? 0.5 : (c.matched || 0) / maxMatched)
 
     // group: category → subcategory → candidates
     const cats = new Map<string, Map<string, any[]>>()
@@ -76,9 +84,10 @@ export function TraceGraph({ trace, onSelect }: { trace: any; onSelect: (id: str
           const cx = slot * CW; slot++
           candCenters.push(cx)
           const related = isRelated(c.partDescription, c.winningTerm)   // same part term → orange
-          at('candidate', cx, Y.cand, { ...c, vehicle: trace.vehicleData, query: trace.partDescription, related }, c.id)
-          // solid orange for "another rule for this part", dashed slate for semantic neighbors
-          link(subId, c.id, c.isSelected, c.isProduction, !c.isSelected && !c.isProduction && !related, related)
+          const norm = normOf(c)                                        // 0..1 vehicle-match strength → brightness
+          at('candidate', cx, Y.cand, { ...c, vehicle: trace.vehicleData, query: trace.partDescription, related, intensity: norm }, c.id)
+          // solid orange for "another rule for this part", dashed slate for semantic neighbors; brighter = more conditions match
+          link(subId, c.id, c.isSelected, c.isProduction, !c.isSelected && !c.isProduction && !related, related, 0.3 + 0.7 * norm)
           if (c.isSelected) selectedCenter = cx
         }
         const subX = avg(candCenters)
@@ -130,6 +139,7 @@ export function TraceGraph({ trace, onSelect }: { trace: any; onSelect: (id: str
           <LegendRow color="#fb923c" label="חוק נוסף לאותו חלק (סכמה אחרת)" />
           <LegendRow color="#818cf8" label="בחירת פרודקשן (שונה)" />
           <LegendRow color="#475569" label="שכן סמנטי / לא קשור" dashed />
+          <div className="mt-1 border-t border-slate-700 pt-1 text-[10px] text-slate-400">בהיר יותר = יותר תנאי רכב מתקיימים</div>
         </div>
       </Panel>
       <Panel position="top-right">
