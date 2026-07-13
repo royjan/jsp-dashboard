@@ -966,3 +966,34 @@ export async function getRuleStats(): Promise<any> {
   ])
   return { status, source, byCategory, byLambda, scope, confidence, pins: pins[0], embeddings: embeddings[0], totals: totals[0] }
 }
+
+/** Generate OpenAI embeddings for part_descriptions rows that are missing them (embedding IS NULL).
+ *  Idempotent maintenance action — only fills nulls, never overwrites existing vectors. Sequential
+ *  so a burst can't rate-limit / starve the pooled DB connection. Returns null-key signal so the UI
+ *  can tell "OpenAI key missing" apart from "nothing to do". */
+export async function backfillEmbeddings(limit = 500): Promise<{
+  total: number; filled: number; failed: number; remaining: number; noKey: boolean
+}> {
+  const res = await query(
+    `SELECT description FROM part_descriptions
+     WHERE embedding IS NULL AND description IS NOT NULL AND description <> ''
+     ORDER BY last_accessed DESC NULLS LAST LIMIT $1`,
+    [limit],
+  )
+  const descs = (res.rows as any[]).map((r) => r.description as string)
+  const total = descs.length
+  let filled = 0, failed = 0
+  for (const desc of descs) {
+    const vec = await embedText(desc)
+    if (!vec) { failed++; continue }
+    await query(
+      `UPDATE part_descriptions SET embedding = $2::vector, updated_at = NOW() WHERE description = $1`,
+      [desc, toVectorLiteral(vec)],
+    )
+    filled++
+  }
+  const remRes = await query(`SELECT count(*)::int c FROM part_descriptions WHERE embedding IS NULL`, [])
+  const remaining = (remRes.rows[0] as any)?.c ?? 0
+  // all attempts failed → almost always a missing OPENAI_API_KEY (embedText returns null then)
+  return { total, filled, failed, remaining, noKey: total > 0 && filled === 0 }
+}
