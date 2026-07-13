@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { Radar, Network, BarChart3 } from 'lucide-react'
 import DecisionTracer from './DecisionTracer'
 import CatalogGraph from './CatalogGraph'
@@ -23,6 +24,20 @@ export default function ObservatoryPage({
   initialVehicle?: VehicleInputData
 }) {
   const [tab, setTab] = useState<string>(TABS.some((t) => t.key === initialTab) ? initialTab : 'tracer')
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+
+  // Reflect the active tab in the URL (?tab=...) so the whole window — catalog, tracer,
+  // analytics, incl. fullscreen entry point — is a shareable deep link. Preserve any other
+  // params already present (q / license_plate / vin / ...).
+  const changeTab = (key: string) => {
+    setTab(key)
+    const params = new URLSearchParams(searchParams.toString())
+    params.set('tab', key)
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false })
+  }
+
   return (
     <div className="p-4 text-slate-100">
       <div className="mb-3">
@@ -31,7 +46,7 @@ export default function ObservatoryPage({
       </div>
       <div className="mb-3 flex gap-1 border-b border-slate-700">
         {TABS.map((t) => (
-          <button key={t.key} onClick={() => setTab(t.key)}
+          <button key={t.key} onClick={() => changeTab(t.key)}
             className={`inline-flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm ${tab === t.key ? 'border-sky-400 text-sky-300' : 'border-transparent text-slate-400 hover:text-slate-200'}`}>
             <t.icon size={14} /> {t.he}
           </button>

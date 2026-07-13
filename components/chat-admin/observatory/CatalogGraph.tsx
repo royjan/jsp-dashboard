@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import nextDynamic from 'next/dynamic'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Maximize2, X } from 'lucide-react'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -41,6 +41,7 @@ export default function CatalogGraph() {
   const [error, setError] = useState<string | null>(null)
   const boxRef = useRef<HTMLDivElement>(null)
   const [translate, setTranslate] = useState({ x: 140, y: 200 })
+  const [full, setFull] = useState(false)
 
   useEffect(() => {
     fetch('/api/flow-decisions/catalog-tree')
@@ -50,12 +51,21 @@ export default function CatalogGraph() {
       .finally(() => setLoading(false))
   }, [])
 
+  // close fullscreen on Escape (matches the tracer graph)
+  useEffect(() => {
+    if (!full) return
+    const h = (e: KeyboardEvent) => e.key === 'Escape' && setFull(false)
+    window.addEventListener('keydown', h)
+    return () => window.removeEventListener('keydown', h)
+  }, [full])
+
+  // re-center whenever the tree loads or the container resizes (fullscreen toggle)
   useEffect(() => {
     if (boxRef.current) {
       const { height } = boxRef.current.getBoundingClientRect()
-      setTranslate({ x: 160, y: Math.max(height / 2, 100) })
+      setTranslate({ x: 180, y: Math.max(height / 2, 100) })
     }
-  }, [tree])
+  }, [tree, full])
 
   const count = useMemo(() => tree?.attributes?.rules ?? 0, [tree])
 
@@ -66,7 +76,18 @@ export default function CatalogGraph() {
           ? `${count} חוקים · ${tree.children?.length || 0} קטלוגים: ${(tree.children || []).map((c: any) => `${c.name} (${c.attributes?.rules ?? 0})`).join(' · ')} — לחץ צומת כדי לפתוח/לסגור`
           : ''}
       </div>
-      <div ref={boxRef} className="h-[64vh] w-full rounded-lg border border-slate-700 bg-slate-900/40">
+      <div
+        ref={boxRef}
+        className={full
+          ? 'fixed inset-0 z-[100] bg-slate-950'
+          : 'relative h-[64vh] w-full rounded-lg border border-slate-700 bg-slate-900/40'}
+      >
+        <button
+          onClick={() => setFull((v) => !v)}
+          className="absolute top-2 right-2 z-10 inline-flex items-center gap-1 rounded-md border border-slate-600 bg-slate-800/90 px-2.5 py-1.5 text-[12px] text-slate-100 hover:bg-slate-700"
+        >
+          {full ? <><X size={13} /> סגור (Esc)</> : <><Maximize2 size={13} /> מסך מלא</>}
+        </button>
         {loading && <div className="flex h-full items-center justify-center text-slate-400"><Loader2 className="animate-spin" size={18} /></div>}
         {error && <div className="p-4 text-sm text-rose-300">שגיאה: {error}</div>}
         {tree && !loading && (
