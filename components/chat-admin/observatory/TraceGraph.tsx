@@ -1,8 +1,9 @@
 'use client'
 
-import React, { useMemo } from 'react'
-import { ReactFlow, Background, Controls, MiniMap, type Node, type Edge, MarkerType } from '@xyflow/react'
+import React, { useEffect, useMemo, useState } from 'react'
+import { ReactFlow, Background, Controls, MiniMap, Panel, type Node, type Edge, MarkerType } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
+import { Maximize2, X } from 'lucide-react'
 import { nodeTypes } from './RuleNode'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -57,13 +58,13 @@ export function TraceGraph({ trace, onSelect }: { trace: any; onSelect: (id: str
         const subX = avg(candCenters)
         subCenters.push(subX)
         at('subcategory', subX, Y.sub, { name: sub, count: cs.length }, subId)
-        link(catId, subId)
+        link(catId, subId, !!selected && cat === selected.category && sub === selected.subcategory)  // highlight winning path
         catCount += cs.length
       }
       const catX = avg(subCenters)
       catCenters.push(catX)
       at('category', catX, Y.cat, { name: cat, count: sm.size }, catId)
-      link('input', catId)
+      link('input', catId, !!selected && cat === selected.category)                                   // highlight winning path
     }
 
     const inputX = catCenters.length ? avg(catCenters) : 0
@@ -77,18 +78,41 @@ export function TraceGraph({ trace, onSelect }: { trace: any; onSelect: (id: str
     return { nodes, edges }
   }, [trace])
 
-  return (
-    <div className="h-[62vh] w-full rounded-lg border border-slate-700 bg-slate-900/40">
-      <ReactFlow
-        nodes={nodes} edges={edges} nodeTypes={nodeTypes}
-        fitView colorMode="dark" minZoom={0.2} proOptions={{ hideAttribution: true }}
-        onNodeClick={(_, n) => onSelect(n.id === 'input' || n.id === 'resolved' ? null : n.id)}
-        onPaneClick={() => onSelect(null)}
-      >
-        <Background color="#334155" gap={18} />
-        <Controls showInteractive={false} />
-        <MiniMap pannable zoomable className="!bg-slate-800" nodeColor="#475569" />
-      </ReactFlow>
-    </div>
+  const [full, setFull] = useState(false)
+  // close fullscreen on Escape
+  useEffect(() => {
+    if (!full) return
+    const h = (e: KeyboardEvent) => e.key === 'Escape' && setFull(false)
+    window.addEventListener('keydown', h)
+    return () => window.removeEventListener('keydown', h)
+  }, [full])
+
+  const canvas = (
+    <ReactFlow
+      nodes={nodes} edges={edges} nodeTypes={nodeTypes}
+      fitView colorMode="dark" minZoom={0.15} proOptions={{ hideAttribution: true }}
+      onNodeClick={(_, n) => onSelect(n.id === 'input' || n.id === 'resolved' ? null : n.id)}
+      onPaneClick={() => onSelect(null)}
+    >
+      <Background color="#334155" gap={18} />
+      <Controls showInteractive={false} />
+      <MiniMap pannable zoomable className="!bg-slate-800" nodeColor="#475569" />
+      <Panel position="top-right">
+        {full ? (
+          <button onClick={() => setFull(false)} className="inline-flex items-center gap-1 rounded-md bg-slate-800/90 px-2.5 py-1.5 text-[12px] text-slate-100 hover:bg-slate-700 border border-slate-600">
+            <X size={13} /> סגור (Esc)
+          </button>
+        ) : (
+          <button onClick={() => setFull(true)} className="inline-flex items-center gap-1 rounded-md bg-slate-800/90 px-2.5 py-1.5 text-[12px] text-slate-100 hover:bg-slate-700 border border-slate-600">
+            <Maximize2 size={13} /> מסך מלא
+          </button>
+        )}
+      </Panel>
+    </ReactFlow>
   )
+
+  if (full) {
+    return <div className="fixed inset-0 z-[100] bg-slate-950">{canvas}</div>
+  }
+  return <div className="h-[62vh] w-full rounded-lg border border-slate-700 bg-slate-900/40">{canvas}</div>
 }
