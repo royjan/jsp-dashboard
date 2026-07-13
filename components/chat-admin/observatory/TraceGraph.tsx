@@ -41,11 +41,13 @@ export function TraceGraph({ trace, onSelect }: { trace: any; onSelect: (id: str
         },
         markerEnd: { type: MarkerType.ArrowClosed } })
 
-    // Brightness driver: number of the rule's vehicle filters the target car satisfies (`matched`),
-    // normalized to the best match in view. Generic rules (no conditions) sit at a neutral mid-level;
-    // the winner is always fully bright.
-    const maxMatched = Math.max(1, ...cands.map((c: any) => c.matched || 0))
-    const normOf = (c: any) => (c.isSelected ? 1 : c.filterCount === 0 ? 0.5 : (c.matched || 0) / maxMatched)
+    // Brightness driver: ABSOLUTE count of the rule's vehicle conditions the target car satisfies
+    // (`matched`), on a fixed 0..MAX scale — NOT relative to the best match in view. So a 4/4 is
+    // bright but a hypothetical 5/5 (same 100%, one more true condition) is brighter, and a rule's
+    // brightness doesn't change just because the query returned a stronger/weaker set. Generic rules
+    // (0 conditions → 0 true) land at the dim floor; the winner stays fully bright for visibility.
+    const MAX_CONDITIONS = 5   // year · model · fuel · engine · VIN
+    const normOf = (c: any) => (c.isSelected ? 1 : Math.min(1, (c.matched || 0) / MAX_CONDITIONS))
 
     // group: category → subcategory → candidates
     const cats = new Map<string, Map<string, any[]>>()
