@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import { Plus, Download, ScanSearch, Map, FlaskConical } from 'lucide-react'
 import { useFlowDecisions } from '@/lib/chat-admin/use-flow-decisions'
-import type { FlowDecisionRecord } from '@/types/chat-admin/flow-decision'
+import type { FlowDecisionRecord, FlowDecisionStatus } from '@/types/chat-admin/flow-decision'
 import { RulesTable } from './RulesTable'
 import { RuleFilterBar, type RuleFilters } from './RuleFilterBar'
 import { RuleEditorPanel } from './RuleEditorPanel'
@@ -90,6 +90,17 @@ export default function FlowDecisionsPage({ initialEditId }: FlowDecisionsPagePr
     setEditingId(id)
     setCreating(false)
   }, [])
+
+  // Inline single-row status change (from the table's hover actions).
+  const handleRowStatus = useCallback(async (id: string, status: FlowDecisionStatus) => {
+    try {
+      await updateFlowDecisionStatus(id, status)
+      toast.success(status === 'approved' ? 'Approved' : status === 'rejected' ? 'Rejected' : 'Updated')
+    } catch (e) {
+      logger.error('Row status update failed:', e)
+      toast.error('Status update failed')
+    }
+  }, [updateFlowDecisionStatus])
 
   const handleCreate = useCallback(() => {
     setCreating(true)
@@ -220,12 +231,21 @@ export default function FlowDecisionsPage({ initialEditId }: FlowDecisionsPagePr
                 {error}
               </div>
             )}
+            <div className="mb-2 flex items-center justify-between text-xs text-slate-400">
+              <span>
+                {filtered.length === counts.total
+                  ? <>All <b className="text-slate-200">{counts.total}</b> rules</>
+                  : <>Showing <b className="text-slate-200">{filtered.length}</b> of {counts.total} rules <span className="text-slate-500">(filtered)</span></>}
+                {selectedIds.length > 0 && <span className="ml-2 text-primary">· {selectedIds.length} selected</span>}
+              </span>
+            </div>
             <RulesTable
               rules={filtered}
               loading={loading}
               selectedIds={selectedIds}
               onSelectionChange={setSelectedIds}
               onRowClick={handleRowClick}
+              onSetStatus={handleRowStatus}
               activeId={editingId}
             />
           </div>
