@@ -62,9 +62,23 @@ export async function normalizeFlowDescriptionsToEnglish(opts: { dryRun?: boolea
         deletedDup++; translated++; newDescs.add(en)
       }
     } else {
-      actions.push({ id: r.id, from: r.part_description, to: en, action: 'translate' })
-      if (!dry) await query(`UPDATE flow_decisions_v2 SET part_description = $2, updated_at = now() WHERE id = $1`, [r.id, en])
-      translated++; newDescs.add(en)
+      // No collision seen — but guard the write anyway: if a same-scope English row snuck in
+      // (e.g. a prior row in this same run translated to the same term), the unique constraint
+      // fires; treat this row as the duplicate and drop it instead of aborting the whole migration.
+      if (!dry) {
+        try {
+          await query(`UPDATE flow_decisions_v2 SET part_description = $2, updated_at = now() WHERE id = $1`, [r.id, en])
+          translated++; newDescs.add(en)
+          actions.push({ id: r.id, from: r.part_description, to: en, action: 'translate' })
+        } catch {
+          await query(`DELETE FROM flow_decisions_v2 WHERE id = $1`, [r.id])
+          deletedDup++
+          actions.push({ id: r.id, from: r.part_description, to: en, action: 'translate collided → deleted as duplicate' })
+        }
+      } else {
+        translated++; newDescs.add(en)
+        actions.push({ id: r.id, from: r.part_description, to: en, action: 'translate' })
+      }
     }
   }
 
