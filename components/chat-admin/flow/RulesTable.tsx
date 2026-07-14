@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import type { FlowDecisionRecord, FlowDecisionStatus } from '@/types/chat-admin/flow-decision'
 import { toast } from '@/lib/toast'
+import { copyText } from '@/lib/chat-admin/clipboard'
 
 type SortKey = 'partDescription' | 'lambdaTarget' | 'status' | 'updatedAt' | 'category' | 'feedbackCount'
 type SortDir = 'asc' | 'desc'
@@ -161,7 +162,7 @@ export function RulesTable({ rules, loading, selectedIds, onSelectionChange, onR
                     </div>
                     {/* click to copy the flow-decision id */}
                     <button
-                      onClick={e => { e.stopPropagation(); navigator.clipboard?.writeText(rule.id); toast.success('Copied id') }}
+                      onClick={e => { e.stopPropagation(); copyText(rule.id).then(ok => (ok ? toast.success('Copied id') : toast.error('Copy failed'))) }}
                       title={`Copy id: ${rule.id}`}
                       className="mt-0.5 inline-flex max-w-full items-center gap-1 font-mono text-[10px] text-slate-500 transition-colors hover:text-sky-300"
                     >

@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { Search, Loader2, AlertTriangle, GitBranch, ExternalLink, Car, ShieldCheck, ShieldAlert, Copy } from 'lucide-react'
 import SimulatorVehicleInput, { type VehicleInputData } from '@/components/chat-admin/SimulatorVehicleInput'
 import { TraceGraph } from './TraceGraph'
+import { copyText } from '@/lib/chat-admin/clipboard'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -144,7 +145,7 @@ export default function DecisionTracer({
                   <span>id:</span>
                   <code className="truncate rounded bg-slate-900/70 px-1 py-0.5 font-mono text-slate-300" title={sel.id}>{sel.id}</code>
                   <button
-                    onClick={() => navigator.clipboard?.writeText(sel.id)} title="העתק מזהה"
+                    onClick={() => copyText(sel.id)} title="העתק מזהה"
                     className="shrink-0 rounded p-0.5 text-slate-400 hover:bg-white/10 hover:text-slate-200"
                   ><Copy size={11} /></button>
                 </div>
