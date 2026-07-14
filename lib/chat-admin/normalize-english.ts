@@ -1,6 +1,6 @@
 import { query } from '@/lib/db'
 import { translateTerm } from '@/lib/gemini'
-import { embedText, toVectorLiteral } from '@/lib/chat-admin/embeddings'
+import { backfillEmbeddings } from '@/lib/chat-admin/flow-decisions'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -82,18 +82,18 @@ export async function normalizeFlowDescriptionsToEnglish(opts: { dryRun?: boolea
     }
   }
 
-  // Make sure each new English description exists in part_descriptions WITH an embedding.
+  // Make sure every (now-English) flow-decision part_description exists in part_descriptions, then
+  // embed the gaps (reuses the shared backfill so the simulator/tracer can match the new terms).
   let embedded = 0
   if (!dry) {
-    for (const d of newDescs) {
-      await query(`INSERT INTO part_descriptions (description, original_description, updated_at)
-                   VALUES ($1, $1, now()) ON CONFLICT (description) DO NOTHING`, [d])
-      const missing = (await query(`SELECT embedding IS NULL AS missing FROM part_descriptions WHERE description = $1`, [d])).rows[0] as any
-      if (missing?.missing) {
-        const vec = await embedText(d)
-        if (vec) { await query(`UPDATE part_descriptions SET embedding = $2::vector, updated_at = now() WHERE description = $1`, [d, toVectorLiteral(vec)]); embedded++ }
-      }
-    }
+    void newDescs
+    await query(
+      `INSERT INTO part_descriptions (description, original_description, updated_at)
+       SELECT DISTINCT part_description, part_description, now()
+       FROM flow_decisions_v2 WHERE part_description IS NOT NULL AND part_description <> ''
+       ON CONFLICT (description) DO NOTHING`, [],
+    )
+    embedded = (await backfillEmbeddings()).filled
   }
 
   const remaining = ((await query(`SELECT count(*)::int c FROM flow_decisions_v2 WHERE part_description ~ '[^[:ascii:]]'`, [])).rows[0] as any).c
