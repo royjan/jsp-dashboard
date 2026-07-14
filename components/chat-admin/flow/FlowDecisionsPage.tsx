@@ -71,6 +71,17 @@ export default function FlowDecisionsPage({ initialEditId }: FlowDecisionsPagePr
 
   const filtered = useMemo(() => filterRules(flowDecisions, filters), [flowDecisions, filters])
 
+  // When the search is a flow-decision id, surface the found rule + let the user expand to its
+  // related rules (all rules that answer the same part description).
+  const foundById = useMemo(() => {
+    const s = filters.search.trim()
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)) return null
+    return flowDecisions.find(r => r.id.toLowerCase() === s.toLowerCase()) ?? null
+  }, [filters.search, flowDecisions])
+  const relatedCount = useMemo(() => (foundById
+    ? flowDecisions.filter(r => (r.partDescription || '').toLowerCase() === (foundById.partDescription || '').toLowerCase()).length
+    : 0), [foundById, flowDecisions])
+
   // Keep the selection in sync with what's visible — a bulk action must never
   // operate on rows the user has filtered out (or that were deleted).
   useEffect(() => {
@@ -229,6 +240,19 @@ export default function FlowDecisionsPage({ initialEditId }: FlowDecisionsPagePr
             {error && (
               <div className="mb-4 rounded-lg border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
                 {error}
+              </div>
+            )}
+            {foundById && (
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-md border border-sky-500/30 bg-sky-950/30 px-3 py-2 text-xs text-sky-200">
+                <span>Found <b>{foundById.partDescription}</b> · <code className="rounded bg-slate-900/60 px-1 font-mono text-sky-300">{foundById.id}</code></span>
+                {relatedCount > 1 && (
+                  <button
+                    onClick={() => setFilters({ ...EMPTY_FILTERS, search: foundById.partDescription })}
+                    className="inline-flex items-center gap-1 rounded-md bg-sky-600/80 px-2.5 py-1 font-medium text-white transition-colors hover:bg-sky-500"
+                  >
+                    Show {relatedCount} related rules for “{foundById.partDescription}”
+                  </button>
+                )}
               </div>
             )}
             <div className="mb-2 flex items-center justify-between text-xs text-slate-400">
@@ -420,7 +444,8 @@ function filterRules(rules: FlowDecisionRecord[], f: RuleFilters): FlowDecisionR
   const search = f.search.trim().toLowerCase()
   return rules.filter(r => {
     if (search) {
-      const hay = `${r.partDescription} ${r.category} ${r.subcategory} ${r.schema} ${r.lambdaTarget}`.toLowerCase()
+      // include the id so pasting a flow-decision id finds its row
+      const hay = `${r.id} ${r.partDescription} ${r.category} ${r.subcategory} ${r.schema} ${r.lambdaTarget}`.toLowerCase()
       if (!hay.includes(search)) return false
     }
     // exact catalog-path scope (case-insensitive) — distinct from the substring `search`

@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import {
-  ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Car, Package, Loader2, Zap, Activity, Check, X, Pencil,
+  ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Car, Package, Loader2, Zap, Activity, Check, X, Pencil, Copy,
 } from 'lucide-react'
 import type { FlowDecisionRecord, FlowDecisionStatus } from '@/types/chat-admin/flow-decision'
+import { toast } from '@/lib/toast'
 
 type SortKey = 'partDescription' | 'lambdaTarget' | 'status' | 'updatedAt' | 'category' | 'feedbackCount'
 type SortDir = 'asc' | 'desc'
@@ -158,6 +159,14 @@ export function RulesTable({ rules, loading, selectedIds, onSelectionChange, onR
                     <div className="truncate font-medium" dir="auto" title={rule.partDescription}>
                       {rule.partDescription}
                     </div>
+                    {/* click to copy the flow-decision id */}
+                    <button
+                      onClick={e => { e.stopPropagation(); navigator.clipboard?.writeText(rule.id); toast.success('Copied id') }}
+                      title={`Copy id: ${rule.id}`}
+                      className="mt-0.5 inline-flex max-w-full items-center gap-1 font-mono text-[10px] text-slate-500 transition-colors hover:text-sky-300"
+                    >
+                      <Copy className="h-3 w-3 shrink-0" /> {rule.id.slice(0, 8)}…
+                    </button>
                   </td>
                   <td className="px-3 py-2.5 text-sm">
                     <span className="inline-block max-w-full truncate rounded bg-white/5 px-2 py-0.5 font-mono text-xs text-slate-300 ring-1 ring-inset ring-white/10">
