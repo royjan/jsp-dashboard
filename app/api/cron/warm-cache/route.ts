@@ -315,6 +315,11 @@ async function runWarmCache(mode: string, from?: number, to?: number) {
       ['getConversionAnalysis', () => getConversionAnalysis(yearStart, today)],
       ['getABCClassification', getABCClassification],
       ['getCustomerAnalytics', () => getCustomerAnalytics(yearStart, today)],
+      // Gap analysis lives in its own route (needs per-item FINAPI stock
+      // verification) — warm it via a local self-fetch so /gap is never cold.
+      ['gapAnalysis', () =>
+        fetch(`http://127.0.0.1:${process.env.PORT || '3000'}/api/analytics/gap`)
+          .then(r => r.json())],
     ]
 
     for (const [label, fn] of warmSteps) {
