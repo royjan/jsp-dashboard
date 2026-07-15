@@ -22,6 +22,7 @@ type Payload = {
 
 const PER = 50
 const nf = (n: number) => n.toLocaleString('en-US')
+const UPLOADER_RECO_URL = `${process.env.NEXT_PUBLIC_EBAY_UPLOADER_URL || 'http://192.168.0.112:3003'}/batch-editor?tab=recommended`
 
 type SortKey = keyof Row
 const NUMERIC: SortKey[] = ['price', 'stock', 'sold_this_year', 'sold_2025', 'sold_2024', 'demand', 'years_of_stock', 'match', 'age_years', 'ebay_ils']
@@ -89,7 +90,7 @@ function EbayRecoContent() {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [sending, setSending] = useState(false)
   const [sendResult, setSendResult] = useState<
-    { added: number; skipped_listed: string[]; skipped_recommended: string[]; error?: string } | null
+    { added: number; skipped_listed: string[]; skipped_recommended: string[]; ai_queued?: boolean; error?: string } | null
   >(null)
   // code → 'added' (new suggestion) | 'exists' (already listed / already suggested)
   const [sentCodes, setSentCodes] = useState<Map<string, 'added' | 'exists'>>(new Map())
@@ -281,6 +282,19 @@ function EbayRecoContent() {
         ) : (
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm">
             <span className="font-bold text-emerald-600">✓ נוספו {nf(sendResult.added)} הצעות ל-eBay Uploader</span>
+            {sendResult.added > 0 && (
+              <a
+                href={UPLOADER_RECO_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-bold text-primary hover:underline"
+              >
+                פתח ב-eBay Uploader ↗
+              </a>
+            )}
+            {sendResult.added > 0 && sendResult.ai_queued && (
+              <span className="text-muted-foreground">תוכן AI (כותרת ותיאור) נוצר ברקע</span>
+            )}
             {sendResult.skipped_listed.length > 0 && (
               <span className="text-muted-foreground" title={sendResult.skipped_listed.join(', ')}>
                 {nf(sendResult.skipped_listed.length)} דולגו — כבר קיימים ב-Uploader

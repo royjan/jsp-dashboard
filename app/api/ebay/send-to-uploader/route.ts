@@ -21,6 +21,28 @@ type InItem = {
 
 const MAX_ITEMS = 500
 const OPEN_STATUSES = ['pending', 'approved', 'listed']
+const UPLOADER_URL = process.env.EBAY_UPLOADER_URL || 'http://192.168.0.112:3003'
+
+// Ask the uploader to generate AI title/description for the new rows.
+// The uploader queues and returns immediately; failures are non-fatal —
+// its "השלם תוכן AI" button (or approve flow) covers any gap.
+async function requestAiBackfill(ids: number[]): Promise<boolean> {
+  try {
+    const res = await fetch(`${UPLOADER_URL}/api/recommendations/backfill-ai`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(process.env.EBAY_UPLOADER_API_KEY ? { 'x-api-key': process.env.EBAY_UPLOADER_API_KEY } : {}),
+      },
+      body: JSON.stringify({ ids }),
+      signal: AbortSignal.timeout(5000),
+    })
+    return res.ok
+  } catch (e) {
+    console.warn('[send-to-uploader] AI backfill request failed:', e)
+    return false
+  }
+}
 
 // GET → codes already in the uploader, so the reco table can badge them up front.
 export async function GET() {
@@ -72,6 +94,7 @@ export async function POST(req: Request) {
     let ilsPerUsd: number | null = null
     try { ilsPerUsd = (await getFxToIls()).USD || null } catch { /* keep null */ }
 
+    let aiQueued = false
     if (fresh.length) {
       const rows: NewEbayRecommendation[] = fresh.map(it => {
         const price = Number(it.price) || 0
@@ -96,7 +119,8 @@ export async function POST(req: Request) {
           source: 'dashboard',
         }
       })
-      await db.insert(ebayRecommendations).values(rows)
+      const inserted = await db.insert(ebayRecommendations).values(rows).returning({ id: ebayRecommendations.id })
+      aiQueued = await requestAiBackfill(inserted.map(r => r.id))
     }
 
     return NextResponse.json({
@@ -104,6 +128,7 @@ export async function POST(req: Request) {
       added_codes: fresh.map(i => i.code),
       skipped_listed: codes.filter(c => skipListed.has(c)),
       skipped_recommended: codes.filter(c => skipRec.has(c)),
+      ai_queued: aiQueued,
     })
   } catch (e) {
     console.error('[send-to-uploader] POST', e)
