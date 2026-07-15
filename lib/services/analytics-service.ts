@@ -234,18 +234,23 @@ let inMemoryItemsCache: { data: FinansitItem[]; time: number } | null = null
 const IN_MEMORY_FRESH_TTL = 30 * 60 * 1000  // 30 min
 const IN_MEMORY_STALE_TTL = 6 * 60 * 60 * 1000  // 6 hours
 
+// A healthy items snapshot has tens of thousands of rows; anything smaller is
+// a degraded invoice-discovery fallback and must never masquerade as the catalog.
+const HEALTHY_SNAPSHOT_FLOOR = 1000
+
 export async function getItems(): Promise<FinansitItem[]> {
   const cacheKey = CACHE_VERSIONS.ITEMS_ENRICHED
   const staleCacheKey = `${CACHE_VERSIONS.ITEMS_ENRICHED}:stale`
 
   // Try in-memory fresh cache first (always populated, Redis may skip large payloads)
-  if (inMemoryItemsCache && Date.now() - inMemoryItemsCache.time < IN_MEMORY_FRESH_TTL) {
+  if (inMemoryItemsCache && Date.now() - inMemoryItemsCache.time < IN_MEMORY_FRESH_TTL
+      && inMemoryItemsCache.data.length >= HEALTHY_SNAPSHOT_FLOOR) {
     return inMemoryItemsCache.data
   }
 
-  // Then try Redis
+  // Then try Redis (ignore degraded snapshots — see floor note above)
   const cached = await getCached<FinansitItem[]>(cacheKey)
-  if (cached) return cached
+  if (cached && cached.length >= HEALTHY_SNAPSHOT_FLOOR) return cached
 
   // Stale-while-revalidate: return stale data immediately, refresh in background
   const stale = await getCached<FinansitItem[]>(staleCacheKey)

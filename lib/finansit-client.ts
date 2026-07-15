@@ -55,6 +55,26 @@ const client = createClient({
   timeout: 15000,
 })
 
+// Bulk-feed client: /api/stock/all streams the entire catalog (~36MB, can take
+// 1-2 min when FINAPI is loaded or freshly rebuilt). The default 15s timeout
+// aborts it mid-stream, which silently degrades getItems() into the tiny
+// invoice-discovery fallback. Bulk pulls get their own generous timeout.
+const bulkClient = createClient({
+  baseUrls: finansitBaseUrls.length ? finansitBaseUrls : undefined,
+  baseUrl: process.env.FINANSIT_BASE_URL || FINANSIT_PRIMARY,
+  credentials: async () => {
+    await initializeSecrets()
+    return getSecret('FINANSIT_API_CREDENTIALS', '')
+  },
+  credentialsByUrl: async (base: string) => {
+    if (!base.includes('192.168.0.109')) return undefined
+    await initializeSecrets()
+    return getSecret('FINANSIT_API_CREDENTIALS_FALLBACK', '') || undefined
+  },
+  concurrency: 1,
+  timeout: 180000,
+})
+
 // Dedicated client pinned to the FALLBACK box (192.168.0.109). The primary box
 // (.111) has broken AR Btrieve files: balance 500s (which does fail over) but
 // aging returns 200 with WRONG residual data (which does NOT fail over). So for
@@ -212,7 +232,7 @@ export async function waitForStockCache(maxWaitMs = 60000): Promise<boolean> {
     }
     if (!isLoading && stockCount === 0) {
       try {
-        const data = await client.stock.getAll()
+        const data = await bulkClient.stock.getAll()
         if (data.items && data.items.length > 0) {
           console.log(`[FINAPI] Stock /all available with ${data.items.length} items after ${Date.now() - start}ms`)
           return true
@@ -231,7 +251,7 @@ let stockRebuildInFlight = false
 
 export async function fetchAllStockItems(): Promise<any[]> {
   try {
-    const data = await client.stock.getAll()
+    const data = await bulkClient.stock.getAll()
     return data.items || []
   } catch (e: any) {
     if (e?.message?.includes('404') || e?.message?.includes('503')) {
@@ -252,7 +272,7 @@ export async function fetchAllStockItems(): Promise<any[]> {
 
 export async function fetchAllStockItemsBlocking(maxWaitMs = 180000): Promise<any[]> {
   try {
-    const data = await client.stock.getAll()
+    const data = await bulkClient.stock.getAll()
     return data.items || []
   } catch (e: any) {
     if (e?.message?.includes('404') || e?.message?.includes('503')) {
@@ -260,7 +280,7 @@ export async function fetchAllStockItemsBlocking(maxWaitMs = 180000): Promise<an
       try { await refreshCache('stock') } catch (err) { console.warn('[FINAPI] Stock refresh trigger failed:', err) }
       const ready = await waitForStockCache(maxWaitMs)
       if (!ready) return []
-      const data = await client.stock.getAll()
+      const data = await bulkClient.stock.getAll()
       return data.items || []
     }
     throw e
