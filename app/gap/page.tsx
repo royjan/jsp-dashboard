@@ -19,7 +19,7 @@ import {
 } from 'recharts'
 import { NUMBER_FORMAT, formatNumber } from '@/lib/constants'
 
-type SortField = 'name' | 'total_qty' | 'quote_count' | 'last_quoted' | 'stock_qty' | 'incoming_qty'
+type SortField = 'name' | 'total_qty' | 'quote_count' | 'last_quoted' | 'stock_qty' | 'incoming_qty' | 'ordered_qty'
 type SortDir = 'asc' | 'desc'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -261,6 +261,9 @@ export default function GapAnalysisPage() {
                   <th className="text-end p-2 cursor-pointer" onClick={() => toggleSort('incoming_qty')}>
                     <span className="flex items-center justify-end gap-1">{t('incoming')} <ArrowUpDown className="h-3 w-3" /></span>
                   </th>
+                  <th className="text-end p-2 cursor-pointer" onClick={() => toggleSort('ordered_qty')}>
+                    <span className="flex items-center justify-end gap-1">{t('orderedQty')} <ArrowUpDown className="h-3 w-3" /></span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -288,6 +291,12 @@ export default function GapAnalysisPage() {
                     <td className="p-2 text-end">
                       {item.incoming_qty > 0
                         ? <Badge variant="secondary">{formatNumber(item.incoming_qty)}</Badge>
+                        : <span className="text-muted-foreground">0</span>
+                      }
+                    </td>
+                    <td className="p-2 text-end">
+                      {item.ordered_qty > 0
+                        ? <Badge variant="outline">{formatNumber(item.ordered_qty)}</Badge>
                         : <span className="text-muted-foreground">0</span>
                       }
                     </td>

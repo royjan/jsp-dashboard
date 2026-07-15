@@ -22,7 +22,7 @@ export async function GET(request: Request) {
     const limit = Math.min(parseInt(searchParams.get('limit') || '200', 10), 500)
     const format = searchParams.get('format') || '31' // quotes
 
-    const cacheKey = `analytics:gap:v3:${format}:${limit}`
+    const cacheKey = `analytics:gap:v4:${format}:${limit}`
     const cached = await getCached<any>(cacheKey)
     if (cached) return NextResponse.json(cached)
 
@@ -78,12 +78,13 @@ export async function GET(request: Request) {
           ordered_qty: Number(s.ordered_qty ?? 0),
         }
       })
-      .filter((i: any) => i.stock_qty <= 0 && i.incoming_qty <= 0)
+      .filter((i: any) => i.stock_qty <= 0)
       .slice(0, limit)
 
     // 4) The batch stock feed sometimes reports 0 for items that ARE in stock
-    //    (FINAPI quirk — items.get is the authoritative source, matches hover).
-    //    Verify every claimed-0 candidate per-item and drop the false gaps.
+    //    or DO have incoming/ordered qty (FINAPI quirk — items.get is the
+    //    authoritative source, matches hover). Verify every claimed-0 candidate
+    //    per-item: drop false gaps, and take all quantities from the truth.
     const verified: typeof candidates = []
     const CONCURRENCY = 10
     for (let i = 0; i < candidates.length; i += CONCURRENCY) {
@@ -93,7 +94,12 @@ export async function GET(request: Request) {
             const item: any = await client.items.get(c.item_code)
             const realQty = Number(item?.stock_qty ?? 0)
             if (realQty > 0) return null // false gap — actually in stock
-            return { ...c, stock_qty: realQty }
+            return {
+              ...c,
+              stock_qty: realQty,
+              incoming_qty: Number(item?.incoming_qty ?? 0),
+              ordered_qty: Number(item?.ordered_qty ?? 0),
+            }
           } catch {
             return c // FINAPI hiccup → keep the candidate rather than hide it
           }
