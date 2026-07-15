@@ -282,16 +282,14 @@ function EbayRecoContent() {
         ) : (
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm">
             <span className="font-bold text-emerald-600">✓ נוספו {nf(sendResult.added)} הצעות ל-eBay Uploader</span>
-            {sendResult.added > 0 && (
-              <a
-                href={UPLOADER_RECO_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="font-bold text-primary hover:underline"
-              >
-                פתח ב-eBay Uploader ↗
-              </a>
-            )}
+            <a
+              href={UPLOADER_RECO_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-bold text-primary hover:underline"
+            >
+              פתח ב-eBay Uploader ↗
+            </a>
             {sendResult.added > 0 && sendResult.ai_queued && (
               <span className="text-muted-foreground">תוכן AI (כותרת ותיאור) נוצר ברקע</span>
             )}
