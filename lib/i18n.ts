@@ -327,6 +327,7 @@ export const translations = {
     lostValue: 'ערך שאבד',
     lostQty: 'כמות שאבדה',
     gapItems: 'פריטים חסרים',
+    gapSubtitle: 'פריטים שהוצעו בהצעות מחיר ב-12 החודשים האחרונים ואינם במלאי כרגע (מלאי נוכחי מאומת מול FINAPI)',
     demandFrequency: 'תדירות ביקוש',
     customerDemand: 'לקוחות ביקשו',
 
@@ -895,6 +896,7 @@ export const translations = {
     lostValue: 'Lost Value',
     lostQty: 'Lost Quantity',
     gapItems: 'Gap Items',
+    gapSubtitle: 'Items quoted in the last 12 months that are currently out of stock (live stock verified against FINAPI)',
     demandFrequency: 'Demand Frequency',
     customerDemand: 'Customers Requested',
 

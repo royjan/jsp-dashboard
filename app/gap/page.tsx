@@ -169,7 +169,10 @@ export default function GapAnalysisPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-xl sm:text-2xl font-bold">{t('page.gap')}</h1>
+      <div>
+        <h1 className="text-xl sm:text-2xl font-bold">{t('page.gap')}</h1>
+        <p className="text-sm text-muted-foreground mt-1">{t('gapSubtitle')}</p>
+      </div>
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3">
