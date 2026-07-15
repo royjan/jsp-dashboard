@@ -307,6 +307,8 @@ export default function GapAnalysisPage() {
           </div>
         </CardContent>
       </Card>
+
+      <p className="text-xs text-muted-foreground/70 max-w-3xl">{t('gapMethodology')}</p>
     </div>
   )
 }

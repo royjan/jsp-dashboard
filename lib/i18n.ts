@@ -329,6 +329,7 @@ export const translations = {
     gapItems: 'פריטים חסרים',
     gapSubtitle: 'פריטים שהוצעו בהצעות מחיר ב-12 החודשים האחרונים ואינם במלאי כרגע (מלאי נוכחי מאומת מול FINAPI)',
     orderedQty: 'הוזמן',
+    gapMethodology: 'איך זה מחושב: החלון הוא 12 חודשים אחורה מהיום — חלון נע, לא שנה קלנדרית ולא מתחילת השנה. פריט נכנס לרשימה אם הופיע בהצעת מחיר (מסמך 31) לפחות פעם אחת ב-12 החודשים האחרונים וכרגע אין ממנו מלאי. המלאי, ״בדרך״ ו״הוזמן״ נבדקים חיים מול FINAPI פריט-פריט (ולא מהפיד הקבוצתי, שלעיתים מדווח 0 בטעות). התוצאות נשמרות במטמון לשעה ומתחממות אוטומטית כל שעתיים בשעות הפעילות.',
     demandFrequency: 'תדירות ביקוש',
     customerDemand: 'לקוחות ביקשו',
 
@@ -899,6 +900,7 @@ export const translations = {
     gapItems: 'Gap Items',
     gapSubtitle: 'Items quoted in the last 12 months that are currently out of stock (live stock verified against FINAPI)',
     orderedQty: 'Ordered',
+    gapMethodology: "How it's computed: the window is a rolling 12 months back from today — not a calendar year and not YTD. An item enters the list if it appeared on at least one quote (format 31) in the trailing 12 months and is currently out of stock. Stock, incoming and ordered quantities are verified live against FINAPI per item (not the batch feed, which sometimes wrongly reports 0). Results are cached for one hour and auto-warmed every 2 hours during business hours.",
     demandFrequency: 'Demand Frequency',
     customerDemand: 'Customers Requested',
 
