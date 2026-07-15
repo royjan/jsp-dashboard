@@ -1,4 +1,4 @@
-import { client, fetchItems, fetchDocuments, fetchDocumentDetail, fetchBatchStock, searchDocuments, fetchAllStockItems, fetchBatchPrices, fetchAllCustomers } from '../finansit-client'
+import { client, fetchItems, fetchDocuments, fetchDocumentDetail, fetchBatchStock, searchDocuments, fetchAllStockItems, fetchBatchPrices, fetchAllCustomers, refreshCache } from '../finansit-client'
 import { getCached, setCache, deleteCache } from '../redis-client'
 import { query as dbQuery } from '../db'
 import { readQueryAsync } from '../neon-read'
@@ -321,7 +321,27 @@ async function _getItemsImpl(cacheKey: string, staleCacheKey?: string): Promise<
   ])
   console.log(`[Analytics] getItems SDK calls took ${Date.now() - t0}ms (stock: ${stockItems?.length ?? 0}, catalog: ${catalogItems.length})`)
 
-  const effectiveStockItems = stockItems
+  // A healthy bulk stock feed has thousands of rows. FINAPI returns HTTP 200
+  // with a tiny/empty list while its own stock cache is rebuilding — if we
+  // build a snapshot from that, every analytics page shrinks to a handful of
+  // items until the next refresh. Treat it as unavailable, kick a rebuild,
+  // and serve the previous (stale) snapshot instead.
+  const STOCK_FEED_FLOOR = 1000
+  let effectiveStockItems = stockItems
+  if (stockItems && stockItems.length > 0 && stockItems.length < STOCK_FEED_FLOOR) {
+    console.warn(`[Analytics] stock feed returned only ${stockItems.length} rows — treating as unavailable, triggering stock rebuild`)
+    refreshCache('stock').catch((err) => console.warn('[FINAPI] stock refresh failed:', err))
+    effectiveStockItems = null
+  }
+  if (!effectiveStockItems || effectiveStockItems.length === 0) {
+    const stalePrev = staleCacheKey ? await getCached<FinansitItem[]>(staleCacheKey) : null
+    const candidate = (stalePrev && stalePrev.length >= STOCK_FEED_FLOOR) ? stalePrev
+      : (inMemoryItemsCache && inMemoryItemsCache.data.length >= STOCK_FEED_FLOOR ? inMemoryItemsCache.data : null)
+    if (candidate) {
+      console.warn(`[Analytics] stock feed unavailable — serving previous snapshot (${candidate.length} items) while it rebuilds`)
+      return candidate
+    }
+  }
 
   const catalogMap = new Map<string, any>()
   for (const raw of catalogItems) {
@@ -546,8 +566,9 @@ async function _getItemsImpl(cacheKey: string, staleCacheKey?: string): Promise<
   cachedChainMap = resolved.codeToCanonical
   chainMapCacheTime = Date.now()
   console.log(`[Analytics] Chain resolution: ${items.length} → ${resolved.items.length} items`)
-  await setCache(cacheKey, resolved.items, CACHE_TTL.ITEMS)
-  if (staleCacheKey) await setCache(staleCacheKey, resolved.items, STALE_TTL)
+  // Degraded discovery snapshot: cache briefly so we retry the real feed soon,
+  // and never overwrite the stale key — it holds the last HEALTHY snapshot.
+  await setCache(cacheKey, resolved.items, 10 * 60)
   inMemoryItemsCache = { data: resolved.items, time: Date.now() }
   return resolved.items
 }
