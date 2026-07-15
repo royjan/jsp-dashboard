@@ -84,11 +84,30 @@ function EbayRecoContent() {
   })
   const [page, setPage] = useState(0)
 
+  // Multi-select → send to the eBay uploader as pending suggestions (both apps
+  // share the Neon DB; the API route inserts into ebay_uploader.recommendations).
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [sending, setSending] = useState(false)
+  const [sendResult, setSendResult] = useState<
+    { added: number; skipped_listed: string[]; skipped_recommended: string[]; error?: string } | null
+  >(null)
+  // code → 'added' (new suggestion) | 'exists' (already listed / already suggested)
+  const [sentCodes, setSentCodes] = useState<Map<string, 'added' | 'exists'>>(new Map())
+
   useEffect(() => {
     fetch('/api/analytics/ebay-recommend')
       .then(r => r.json())
       .then(d => (d.error ? setErr(d.error) : setData(d)))
       .catch(e => setErr(String(e)))
+    // Badge parts that are already in the uploader (open suggestion or listed item)
+    fetch('/api/ebay/send-to-uploader')
+      .then(r => r.json())
+      .then(d => {
+        const m = new Map<string, 'added' | 'exists'>()
+        for (const c of [...(d.recommended || []), ...(d.listed || [])]) m.set(c, 'exists')
+        if (m.size) setSentCodes(prev => new Map([...m, ...prev]))
+      })
+      .catch(() => { /* badge info is best-effort */ })
   }, [])
 
   const rows = useMemo(() => {
@@ -115,6 +134,50 @@ function EbayRecoContent() {
   const pages = Math.max(1, Math.ceil(rows.length / PER))
   const cur = Math.min(page, pages - 1)
   const slice = rows.slice(cur * PER, cur * PER + PER)
+
+  function toggleOne(code: string) {
+    setSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(code)) next.delete(code)
+      else next.add(code)
+      return next
+    })
+  }
+
+  async function sendToUploader() {
+    if (!data || selected.size === 0 || sending) return
+    setSending(true)
+    setSendResult(null)
+    try {
+      const items = data.items
+        .filter(r => selected.has(r.code))
+        .map(r => ({
+          code: r.code, name: r.name, price: r.price, stock: r.stock,
+          sold_this_year: r.sold_this_year, sold_2025: r.sold_2025, sold_2024: r.sold_2024,
+          match: r.match, years_of_stock: r.years_of_stock,
+          ebay_ils: r.ebay_ils, ebay_url: r.ebay_url,
+        }))
+      const res = await fetch('/api/ebay/send-to-uploader', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items }),
+      })
+      const d = await res.json()
+      if (!res.ok || d.error) throw new Error(d.error || res.statusText)
+      setSentCodes(prev => {
+        const next = new Map(prev)
+        for (const c of d.added_codes || []) next.set(c, 'added')
+        for (const c of [...(d.skipped_listed || []), ...(d.skipped_recommended || [])]) next.set(c, 'exists')
+        return next
+      })
+      setSendResult(d)
+      setSelected(new Set())
+    } catch (e) {
+      setSendResult({ added: 0, skipped_listed: [], skipped_recommended: [], error: e instanceof Error ? e.message : String(e) })
+    } finally {
+      setSending(false)
+    }
+  }
 
   function sortBy(k: SortKey) {
     const nextDir: 1 | -1 = sortKey === k ? (sortDir === 1 ? -1 : 1) : (NUMERIC.includes(k) ? -1 : 1)
@@ -198,7 +261,40 @@ function EbayRecoContent() {
           />
         </label>
         <span className="ms-auto text-sm text-muted-foreground">{nf(rows.length)} פריטים</span>
+        {selected.size > 0 && (
+          <button
+            onClick={sendToUploader}
+            disabled={sending}
+            className="rounded-lg bg-primary text-primary-foreground px-3.5 py-2 text-sm font-bold disabled:opacity-50"
+          >
+            {sending ? 'שולח…' : `שלח ל-eBay Uploader (${nf(selected.size)})`}
+          </button>
+        )}
       </div>
+
+      {/* Send-to-uploader result */}
+      {sendResult && (
+        sendResult.error ? (
+          <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-600">
+            השליחה ל-eBay Uploader נכשלה: {sendResult.error}
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm">
+            <span className="font-bold text-emerald-600">✓ נוספו {nf(sendResult.added)} הצעות ל-eBay Uploader</span>
+            {sendResult.skipped_listed.length > 0 && (
+              <span className="text-muted-foreground" title={sendResult.skipped_listed.join(', ')}>
+                {nf(sendResult.skipped_listed.length)} דולגו — כבר קיימים ב-Uploader
+              </span>
+            )}
+            {sendResult.skipped_recommended.length > 0 && (
+              <span className="text-muted-foreground" title={sendResult.skipped_recommended.join(', ')}>
+                {nf(sendResult.skipped_recommended.length)} דולגו — כבר ממתינים כהצעה
+              </span>
+            )}
+            <button onClick={() => setSendResult(null)} className="ms-auto text-muted-foreground hover:text-foreground">✕</button>
+          </div>
+        )
+      )}
 
       {/* Map view */}
       {view === 'map' && <LiquidationMap rows={rows} />}
@@ -206,9 +302,25 @@ function EbayRecoContent() {
       {/* Table */}
       {view === 'table' && (<>
       <div className="overflow-x-auto rounded-xl border">
-        <table className="w-full text-sm min-w-[1140px]">
+        <table className="w-full text-sm min-w-[1180px]">
           <thead>
             <tr>
+              <Th className="w-9">
+                <input
+                  type="checkbox"
+                  aria-label="בחר את כל העמוד"
+                  className="accent-primary cursor-pointer"
+                  checked={slice.length > 0 && slice.every(r => selected.has(r.code))}
+                  onChange={() => {
+                    const all = slice.every(r => selected.has(r.code))
+                    setSelected(prev => {
+                      const next = new Set(prev)
+                      for (const r of slice) { if (all) next.delete(r.code); else next.add(r.code) }
+                      return next
+                    })
+                  }}
+                />
+              </Th>
               <Th>#</Th>
               <Th k="code">קוד פריט</Th>
               <Th k="name">שם</Th>
@@ -226,12 +338,29 @@ function EbayRecoContent() {
           </thead>
           <tbody>
             {slice.map((r, i) => (
-              <tr key={r.code} className="border-b hover:bg-muted/40">
+              <tr key={r.code} className={`border-b hover:bg-muted/40 ${selected.has(r.code) ? 'bg-primary/5' : ''}`}>
+                <td className="px-3 py-2">
+                  <input
+                    type="checkbox"
+                    aria-label={`בחר ${r.code}`}
+                    className="accent-primary cursor-pointer"
+                    checked={selected.has(r.code)}
+                    onChange={() => toggleOne(r.code)}
+                  />
+                </td>
                 <td className="px-3 py-2 text-xs text-muted-foreground tabular-nums">{cur * PER + i + 1}</td>
                 <td className="px-3 py-2 font-mono text-xs text-muted-foreground" dir="ltr" style={{ textAlign: 'right' }}>
                   <ItemLink code={r.code} />
                 </td>
-                <td className="px-3 py-2 min-w-[220px]">{r.name}</td>
+                <td className="px-3 py-2 min-w-[220px]">
+                  {r.name}
+                  {sentCodes.get(r.code) === 'added' && (
+                    <span className="ms-2 inline-block text-[10px] font-bold px-1.5 py-0.5 rounded-full text-emerald-600 bg-emerald-500/15" title="נוסף כהצעה ב-eBay Uploader">נשלח ✓</span>
+                  )}
+                  {sentCodes.get(r.code) === 'exists' && (
+                    <span className="ms-2 inline-block text-[10px] font-bold px-1.5 py-0.5 rounded-full text-muted-foreground bg-muted" title="כבר קיים ב-eBay Uploader (פריט או הצעה ממתינה)">קיים ב-Uploader</span>
+                  )}
+                </td>
                 <td className="px-3 py-2">
                   <span className={`inline-block text-[11px] font-bold px-2 py-0.5 rounded-full ${r.size === 'small' ? 'text-emerald-600 bg-emerald-500/15' : 'text-amber-600 bg-amber-500/15'}`}>
                     {r.size === 'small' ? 'קטן' : 'בינוני'}
