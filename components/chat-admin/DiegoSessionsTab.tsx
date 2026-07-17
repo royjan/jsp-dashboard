@@ -230,6 +230,35 @@ function FlowDecisionLine({ line }: { line: string }) {
   )
 }
 
+// '#1) התאמה=87, תיאור=..., מק"ט: X, מספר בשרטוט=5, במלאי=..., מחיר=..., קישור=...'
+// Anchored on the field names because במלאי can itself contain commas (the Lubinski phrase).
+const PART_LINE_RE =
+  /^#(\d+)\)\s*(?:התאמה=(\d+),\s*)?תיאור=(.*?),\s*מק"ט:\s*(\S+),\s*מספר בשרטוט=(.*?),\s*במלאי=(.*?),\s*מחיר=(.*?),\s*קישור=(\S+)$/
+
+/** One answer part-line as a compact card with bullets (name header, then SKU / diagram
+ *  number / stock / price). The קישור field is dropped — the SKU itself is the ItemLink. */
+function PartLine({ line }: { line: string }) {
+  const m = line.trim().match(PART_LINE_RE)
+  if (!m) return <LinkifiedLine line={line} />
+  const [, idx, conf, name, pn, num, stock, price] = m
+  const fromSupplier = stock.includes('לובינסקי')
+  return (
+    <div dir="rtl" className="my-1 rounded-lg border border-[var(--color-border-default)] bg-black/20 px-3 py-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-mono text-xs text-gray-500">#{idx}</span>
+        <span dir="auto" className="text-sm font-medium text-gray-100">{name}</span>
+        {conf && <span className="text-[10px] text-gray-500">התאמה {conf}%</span>}
+      </div>
+      <ul className="mt-1 list-disc space-y-0.5 ps-5 text-sm text-gray-300 marker:text-gray-600">
+        <li>מק״ט: <ItemLink code={pn} showCode /></li>
+        <li>מספר בשרטוט: <span className="font-mono text-gray-200">{num}</span></li>
+        <li className={fromSupplier ? 'text-sky-400' : undefined}>במלאי: {stock}</li>
+        <li>מחיר: <span className="font-mono text-gray-200">{price}</span></li>
+      </ul>
+    </div>
+  )
+}
+
 /** Event body: pretty-print pure-JSON content (extract_slots), otherwise line-by-line with
  *  links; bare image-URL lines are dropped (the diagram renders below anyway). */
 function EventBody({ text }: { text: string }) {
@@ -245,7 +274,13 @@ function EventBody({ text }: { text: string }) {
   return (
     <div className="space-y-0.5 text-sm text-gray-200">
       {lines.map((l, i) =>
-        l.trim().startsWith(FLOW_PREFIX) ? <FlowDecisionLine key={i} line={l} /> : <LinkifiedLine key={i} line={l} />
+        l.trim().startsWith(FLOW_PREFIX) ? (
+          <FlowDecisionLine key={i} line={l} />
+        ) : PART_LINE_RE.test(l.trim()) ? (
+          <PartLine key={i} line={l} />
+        ) : (
+          <LinkifiedLine key={i} line={l} />
+        )
       )}
     </div>
   )
