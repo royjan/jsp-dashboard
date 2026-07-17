@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Bot, Car, ExternalLink, RefreshCw, User } from 'lucide-react'
 import { Panel } from '@/components/chat-admin/Panel'
+import { CustomerLink } from '@/components/shared/CustomerLink'
 
 const ADK_WEB = process.env.NEXT_PUBLIC_ADK_WEB_BASE ?? 'http://192.168.0.230:8000'
 
@@ -39,6 +40,74 @@ const AUTHOR_STYLE: Record<string, string> = {
   search_parts: 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30',
   enrich_parts: 'bg-teal-500/15 text-teal-300 border-teal-500/30',
   format_v2: 'bg-green-500/15 text-green-300 border-green-500/30',
+}
+
+const URL_SPLIT = /(https?:\/\/\S+)/g
+const IMG_LINE = /^https?:\/\/\S+\.(?:png|jpe?g|webp)\s*$/i
+const ITEM_URL = /\/items\/([\w.%-]+)/
+
+/** ADK user ids are zero-padded Finansit customer codes ("0000032722") — link them. */
+function customerCode(uid: string): string | null {
+  return /^\d+$/.test(uid) ? String(Number(uid)) : null
+}
+
+function tryPrettyJson(text: string): string | null {
+  const t = text.trim()
+  if (!t.startsWith('{') && !t.startsWith('[')) return null
+  try {
+    return JSON.stringify(JSON.parse(t), null, 2)
+  } catch {
+    return null
+  }
+}
+
+/** One line of bot/customer text: natural direction per line, URLs become real links —
+ *  item pages show just the part code, other URLs a shortened label. */
+function LinkifiedLine({ line }: { line: string }) {
+  const parts = line.split(URL_SPLIT)
+  return (
+    <div dir="auto" className="whitespace-pre-wrap break-words">
+      {parts.map((p, i) => {
+        if (!/^https?:\/\//i.test(p)) return <span key={i}>{p}</span>
+        const item = p.match(ITEM_URL)
+        const label = item ? item[1] : p.replace(/^https?:\/\//i, '').slice(0, 44) + (p.length > 52 ? '…' : '')
+        return (
+          <a
+            key={i}
+            href={p}
+            target="_blank"
+            rel="noreferrer"
+            dir="ltr"
+            className="inline-flex items-baseline gap-0.5 font-mono text-blue-400 hover:underline"
+          >
+            {label}
+            <ExternalLink className="inline h-3 w-3 opacity-60" />
+          </a>
+        )
+      })}
+    </div>
+  )
+}
+
+/** Event body: pretty-print pure-JSON content (extract_slots), otherwise line-by-line with
+ *  links; bare image-URL lines are dropped (the diagram renders below anyway). */
+function EventBody({ text }: { text: string }) {
+  const pretty = tryPrettyJson(text)
+  if (pretty) {
+    return (
+      <pre className="max-h-72 overflow-auto rounded bg-black/40 p-2 text-xs leading-5 text-amber-200/90">
+        {pretty}
+      </pre>
+    )
+  }
+  const lines = text.split('\n').filter((l) => !IMG_LINE.test(l.trim()))
+  return (
+    <div className="space-y-0.5 text-sm text-gray-200">
+      {lines.map((l, i) => (
+        <LinkifiedLine key={i} line={l} />
+      ))}
+    </div>
+  )
 }
 
 function fmtTime(ts: string) {
@@ -130,11 +199,15 @@ export default function DiegoSessionsTab() {
         <div className="max-h-[75vh] space-y-2 overflow-y-auto pr-1">
           {sessions.map((s) => {
             const active = selected?.user === s.userId && selected?.id === s.sessionId
+            const cust = customerCode(s.userId)
             return (
-              <button
+              <div
                 key={`${s.userId}/${s.sessionId}`}
+                role="button"
+                tabIndex={0}
                 onClick={() => setSelected({ user: s.userId, id: s.sessionId })}
-                className={`w-full rounded-lg border p-3 text-left transition-colors ${
+                onKeyDown={(ev) => ev.key === 'Enter' && setSelected({ user: s.userId, id: s.sessionId })}
+                className={`w-full cursor-pointer rounded-lg border p-3 text-left transition-colors ${
                   active
                     ? 'border-blue-500/60 bg-blue-500/10'
                     : 'border-[var(--color-border-default)] bg-black/20 hover:border-gray-500'
@@ -146,7 +219,13 @@ export default function DiegoSessionsTab() {
                 </div>
                 <div className="mt-1 flex items-center gap-2 text-xs text-gray-400">
                   <User className="h-3 w-3" />
-                  <span className="font-mono">{s.userId}</span>
+                  {cust ? (
+                    <span onClick={(ev) => ev.stopPropagation()}>
+                      <CustomerLink code={cust} showCode className="font-mono text-xs" />
+                    </span>
+                  ) : (
+                    <span className="font-mono">{s.userId}</span>
+                  )}
                   <span>· {s.turns} turns</span>
                   <span>· {s.events} events</span>
                 </div>
@@ -156,7 +235,7 @@ export default function DiegoSessionsTab() {
                     {s.lastUserText}
                   </div>
                 )}
-              </button>
+              </div>
             )
           })}
           {!loading && sessions.length === 0 && (
@@ -175,14 +254,19 @@ export default function DiegoSessionsTab() {
         icon={<Bot className="h-4 w-4" />}
         action={
           selected ? (
-            <a
-              href={`${ADK_WEB}/dev-ui/?app=diego_v3&userId=${encodeURIComponent(selected.user)}&session=${encodeURIComponent(selected.id)}`}
-              target="_blank"
-              rel="noreferrer"
-              className="flex items-center gap-1 rounded-md border border-[var(--color-border-default)] px-2 py-1 text-xs text-gray-300 hover:text-white"
-            >
-              adk web <ExternalLink className="h-3 w-3" />
-            </a>
+            <div className="flex items-center gap-2">
+              {customerCode(selected.user) && (
+                <CustomerLink code={customerCode(selected.user)!} showCode className="font-mono text-xs" />
+              )}
+              <a
+                href={`${ADK_WEB}/dev-ui/?app=diego_v3&userId=${encodeURIComponent(selected.user)}&session=${encodeURIComponent(selected.id)}`}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-1 rounded-md border border-[var(--color-border-default)] px-2 py-1 text-xs text-gray-300 hover:text-white"
+              >
+                adk web <ExternalLink className="h-3 w-3" />
+              </a>
+            </div>
           ) : undefined
         }
       >
@@ -206,11 +290,7 @@ export default function DiegoSessionsTab() {
                   )}
                   <span className="ml-auto text-[11px] text-gray-500">{fmtTime(e.timestamp)}</span>
                 </div>
-                {e.text && (
-                  <div className="whitespace-pre-wrap break-words text-sm text-gray-200" dir="auto">
-                    {e.text}
-                  </div>
-                )}
+                {e.text && <EventBody text={e.text} />}
                 {e.images.length > 0 && (
                   <div className="mt-2 flex flex-wrap gap-2">
                     {e.images.map((u) => (
