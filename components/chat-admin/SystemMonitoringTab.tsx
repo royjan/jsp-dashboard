@@ -595,15 +595,7 @@ export function SystemMonitoringTab() {
                         <XCircle className="w-4 h-4" />
                       </button>
                     </td>
-                    <td className="px-6 py-4">
-                      <Link
-                        href="/chat/analytics"
-                        className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1"
-                        title="View conversation"
-                      >
-                        <ExternalLink className="w-4 h-4" />
-                      </Link>
-                    </td>
+                    <td className="px-6 py-4" />
                   </tr>
                 ))
               )}
@@ -734,9 +726,7 @@ export function SystemMonitoringTab() {
                     paginatedSearches.map((search) => (
                       <tr
                         key={search.searchId}
-                        onClick={() => router.push('/chat/analytics')}
-                        className="hover:bg-slate-50 dark:hover:bg-slate-700/30 cursor-pointer group transition-colors"
-                        title={`Click to view conversation ${search.conversationId}`}
+                        className="hover:bg-slate-50 dark:hover:bg-slate-700/30 group transition-colors"
                       >
                         <td className="px-6 py-4 text-slate-500 dark:text-slate-400 text-xs">
                           {formatTimeAgo(search.completedAt || search.createdAt)}

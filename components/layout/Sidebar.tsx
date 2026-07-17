@@ -87,7 +87,6 @@ const navSections: Array<{ id: string; labelKey: TranslationKey; items: NavItem[
       { href: '/chat/flow-decisions/observatory', labelKey: 'chatFlowObservatory', icon: Radar },
       { href: '/chat/word-mappings', labelKey: 'chatWordMappings', icon: Languages },
       { href: '/chat/monitoring', labelKey: 'chatMonitoring', icon: Activity },
-      { href: '/chat/analytics', labelKey: 'chatAnalytics', icon: MessagesSquare },
       { href: '/chat/parts-analytics', labelKey: 'chatPartsAnalytics', icon: Bot },
       { href: '/chat/diego', labelKey: 'chatDiego', icon: BotMessageSquare },
     ],
