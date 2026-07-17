@@ -6,6 +6,7 @@
  * Read-only over the diego_v3 schema via /api/diego/sessions.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { usePathname, useSearchParams } from 'next/navigation'
 import { Bot, Car, ChevronRight, ExternalLink, ListFilter, RefreshCw, User, X } from 'lucide-react'
 import { Panel } from '@/components/chat-admin/Panel'
 import { CustomerLink } from '@/components/shared/CustomerLink'
@@ -21,6 +22,7 @@ interface SessionSummary {
   turns: number
   vehicle: string | null
   lastUserText: string | null
+  customerName: string | null
 }
 
 interface DiegoEvent {
@@ -260,22 +262,57 @@ function fmtTime(ts: string) {
   }
 }
 
-export default function DiegoSessionsTab({ initialPath = [] }: { initialPath?: string[] }) {
+export default function DiegoSessionsTab() {
   const [sessions, setSessions] = useState<SessionSummary[]>([])
-  // /chat/diego/<user> filters the list; /chat/diego/<user>/<session> deep-links a trace
-  const [userFilter, setUserFilter] = useState<string | null>(initialPath.length === 1 ? initialPath[0] : null)
-  const [selected, setSelected] = useState<{ user: string; id: string } | null>(() =>
-    initialPath.length >= 2 ? { user: normalizeUser(initialPath[0]), id: initialPath[1] } : null
-  )
   const [detail, setDetail] = useState<{ key: string; events: DiegoEvent[] } | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const pickSession = useCallback((user: string, id: string) => {
-    setSelected({ user, id })
-    // keep the URL shareable without a Next.js navigation (page state is all client-side)
-    window.history.replaceState(null, '', `/chat/diego/${encodeURIComponent(user)}/${encodeURIComponent(id)}`)
-  }, [])
+  // The URL is the single source of truth for filter + selection — changing path
+  // segments remounts the page (Next.js), so component state would be wiped.
+  //   /chat/diego/<user>            — filter by user
+  //   /chat/diego/<user>/<session>  — filter + open that trace
+  //   /chat/diego?u=<user>&s=<id>   — open a trace with NO list filter (in-UI click)
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const segs = useMemo(
+    () => pathname.split('/').filter(Boolean).slice(2).map(decodeURIComponent),
+    [pathname]
+  )
+  const userFilter = segs[0] ?? null
+  const selected = useMemo(() => {
+    if (segs.length >= 2) return { user: normalizeUser(segs[0]), id: segs[1] }
+    const s = searchParams.get('s')
+    const u = searchParams.get('u')
+    return s && u ? { user: normalizeUser(u), id: s } : null
+  }, [segs, searchParams])
+
+  const pickSession = useCallback(
+    (user: string, id: string) => {
+      window.history.replaceState(
+        null,
+        '',
+        userFilter
+          ? `/chat/diego/${encodeURIComponent(userFilter)}/${encodeURIComponent(id)}`
+          : `/chat/diego?u=${encodeURIComponent(user)}&s=${encodeURIComponent(id)}`
+      )
+    },
+    [userFilter]
+  )
+
+  const applyUserFilter = useCallback(
+    (user: string | null) => {
+      const url = !user
+        ? selected
+          ? `/chat/diego?u=${encodeURIComponent(selected.user)}&s=${encodeURIComponent(selected.id)}`
+          : '/chat/diego'
+        : selected && sameUser(user, selected.user)
+          ? `/chat/diego/${encodeURIComponent(user)}/${encodeURIComponent(selected.id)}`
+          : `/chat/diego/${encodeURIComponent(user)}`
+      window.history.replaceState(null, '', url)
+    },
+    [selected]
+  )
 
   const loadList = useCallback(async () => {
     // no setState before the first await — `loading` starts true, refresh sets it in the handler
@@ -330,20 +367,20 @@ export default function DiegoSessionsTab({ initialPath = [] }: { initialPath?: s
   )
 
   const distinctUsers = useMemo(() => {
-    const counts = new Map<string, number>()
-    for (const s of sessions) counts.set(s.userId, (counts.get(s.userId) ?? 0) + 1)
-    return [...counts.entries()]
-      .map(([id, count]) => ({ id, count }))
+    const byId = new Map<string, { count: number; name: string | null }>()
+    for (const s of sessions) {
+      const e = byId.get(s.userId) ?? { count: 0, name: s.customerName }
+      e.count += 1
+      if (!e.name && s.customerName) e.name = s.customerName
+      byId.set(s.userId, e)
+    }
+    return [...byId.entries()]
+      .map(([id, { count, name }]) => ({ id, count, name }))
       .sort((a, b) => b.count - a.count || a.id.localeCompare(b.id))
   }, [sessions])
 
   // the URL segment may be the bare code ("32722") while the stored id is padded
   const filterSelectValue = userFilter ? distinctUsers.find((u) => sameUser(userFilter, u.id))?.id ?? userFilter : ''
-
-  const applyUserFilter = useCallback((user: string | null) => {
-    setUserFilter(user)
-    window.history.replaceState(null, '', user ? `/chat/diego/${encodeURIComponent(user)}` : '/chat/diego')
-  }, [])
 
   return (
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-[420px_1fr]">
@@ -377,7 +414,7 @@ export default function DiegoSessionsTab({ initialPath = [] }: { initialPath?: s
             <option value="">All users ({sessions.length})</option>
             {distinctUsers.map((u) => (
               <option key={u.id} value={u.id}>
-                {customerCode(u.id) ?? u.id} · {u.count}
+                {u.name ? `${u.name} (${customerCode(u.id) ?? u.id})` : customerCode(u.id) ?? u.id} · {u.count}
               </option>
             ))}
           </select>
@@ -421,6 +458,11 @@ export default function DiegoSessionsTab({ initialPath = [] }: { initialPath?: s
                   ) : (
                     <span className="font-mono">{s.userId}</span>
                   )}
+                  {s.customerName && (
+                    <span dir="rtl" className="max-w-[140px] truncate text-gray-300" title={s.customerName}>
+                      {s.customerName}
+                    </span>
+                  )}
                   <button
                     onClick={(ev) => {
                       ev.stopPropagation()
@@ -462,6 +504,11 @@ export default function DiegoSessionsTab({ initialPath = [] }: { initialPath?: s
         action={
           selected ? (
             <div className="flex items-center gap-2">
+              {selectedSummary?.customerName && (
+                <span dir="rtl" className="max-w-[180px] truncate text-xs text-gray-300" title={selectedSummary.customerName}>
+                  {selectedSummary.customerName}
+                </span>
+              )}
               {customerCode(selected.user) && (
                 <CustomerLink code={customerCode(selected.user)!} showCode className="font-mono text-xs" />
               )}

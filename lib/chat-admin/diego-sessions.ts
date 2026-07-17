@@ -21,6 +21,7 @@ export interface DiegoSessionSummary {
   turns: number
   vehicle: string | null // "פיג'ו צרפת 3008 2021" from state.search.vehicle_ctx
   lastUserText: string | null
+  customerName: string | null // from synced documents; null for non-customer ids (test_user, wa-*)
 }
 
 export interface DiegoEvent {
@@ -64,6 +65,24 @@ export async function listDiegoSessions(limit = 200): Promise<DiegoSessionSummar
      LIMIT $1`,
     [limit]
   )
+  // Customer display names: ADK user ids are zero-padded Finansit codes, exactly the
+  // customer_code format in dashboard.documents. Non-numeric ids (test_user, wa-*) skip this.
+  const codes = [...new Set(res.rows.map((r: Json) => r.user_id).filter((u: string) => /^\d+$/.test(u)))]
+  let names = new Map<string, string>()
+  if (codes.length) {
+    try {
+      const nr = await query(
+        `SELECT DISTINCT ON (customer_code) customer_code, customer_name
+           FROM dashboard.documents
+          WHERE customer_code = ANY($1) AND customer_name IS NOT NULL
+          ORDER BY customer_code, doc_date DESC`,
+        [codes]
+      )
+      names = new Map(nr.rows.map((r: Json) => [r.customer_code, r.customer_name]))
+    } catch (e) {
+      console.warn('[diego-sessions] customer-name lookup failed:', e)
+    }
+  }
   return res.rows.map((r: Json) => ({
     userId: r.user_id,
     sessionId: r.id,
@@ -73,6 +92,7 @@ export async function listDiegoSessions(limit = 200): Promise<DiegoSessionSummar
     turns: r.turns,
     vehicle: describeVehicle(r.vehicle_ctx),
     lastUserText: r.last_user_text ?? null,
+    customerName: names.get(r.user_id) ?? null,
   }))
 }
 
