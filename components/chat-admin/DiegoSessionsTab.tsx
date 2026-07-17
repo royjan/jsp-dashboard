@@ -6,7 +6,7 @@
  * Read-only over the diego_v3 schema via /api/diego/sessions.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Bot, Car, ExternalLink, RefreshCw, User } from 'lucide-react'
+import { Bot, Car, ChevronRight, ExternalLink, RefreshCw, User, X } from 'lucide-react'
 import { Panel } from '@/components/chat-admin/Panel'
 import { CustomerLink } from '@/components/shared/CustomerLink'
 import { ItemLink } from '@/components/shared/ItemLink'
@@ -51,6 +51,17 @@ const ITEM_URL = /\/items\/([\w.%-]+)/
 /** ADK user ids are zero-padded Finansit customer codes ("0000032722") — link them. */
 function customerCode(uid: string): string | null {
   return /^\d+$/.test(uid) ? String(Number(uid)) : null
+}
+
+/** "32722" and "0000032722" are the same ADK user; non-numeric ids match exactly. */
+function sameUser(a: string, b: string): boolean {
+  if (a === b) return true
+  return /^\d+$/.test(a) && /^\d+$/.test(b) && Number(a) === Number(b)
+}
+
+/** URL user segment -> the id ADK stores (numeric codes are zero-padded to 10). */
+function normalizeUser(u: string): string {
+  return /^\d+$/.test(u) ? u.padStart(10, '0') : u
 }
 
 function tryPrettyJson(text: string): string | null {
@@ -141,6 +152,82 @@ function LinkifiedLine({ line }: { line: string }) {
   )
 }
 
+const FLOW_PREFIX = '🧭 החלטת זרימה:'
+
+/** One breadcrumb chip: "HEADLIGHT - GLASS - LAMP [100]" -> label + score badge. */
+function FlowSegment({ seg }: { seg: string }) {
+  const m = seg.match(/^(.*?)\s*\[(\d+)\]$/)
+  const label = m ? m[1] : seg
+  const score = m ? m[2] : null
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-md border border-indigo-500/30 bg-indigo-500/10 px-2 py-0.5 text-xs text-indigo-200">
+      {label}
+      {score && (
+        <span className="rounded bg-indigo-500/20 px-1 font-mono text-[10px] leading-4 text-indigo-300/80">{score}</span>
+      )}
+    </span>
+  )
+}
+
+/** The 🧭 flow-decision line as a breadcrumb: chips joined by arrows, the rule id as a short
+ *  link (new full-URL format and the older bare "#<uuid>" both), source tag ("PSA"/"מוצמד") at the end. */
+function FlowDecisionLine({ line }: { line: string }) {
+  let rest = line.trim().slice(FLOW_PREFIX.length).trim()
+  let tag: string | null = null
+  const tagM = rest.match(/\(([^()]+)\)\s*$/)
+  if (tagM) {
+    tag = tagM[1]
+    rest = rest.slice(0, tagM.index).trim()
+  }
+  return (
+    <div dir="ltr" className="flex flex-wrap items-center gap-1.5 py-0.5">
+      <span title="החלטת זרימה">🧭</span>
+      {rest.split(' | ').map((item, i) => {
+        let path = item.trim()
+        let ruleId: string | null = null
+        const urlM = path.match(/https?:\/\/\S+\/chat\/flow-decisions\?q=([0-9a-f-]{36})/i)
+        const idM = urlM ? null : path.match(/#([0-9a-f-]{36})/i)
+        if (urlM) {
+          ruleId = urlM[1]
+          path = path.replace(urlM[0], '').trim()
+        } else if (idM) {
+          ruleId = idM[1]
+          path = path.replace(idM[0], '').trim()
+        }
+        const segs = path.split('→').map((s) => s.trim()).filter(Boolean)
+        return (
+          <span key={i} className="inline-flex flex-wrap items-center gap-1.5">
+            {i > 0 && <span className="text-gray-600">|</span>}
+            {segs.map((s, j) => (
+              <span key={j} className="inline-flex items-center gap-1.5">
+                {j > 0 && <ChevronRight className="h-3.5 w-3.5 text-gray-500" />}
+                <FlowSegment seg={s} />
+              </span>
+            ))}
+            {ruleId && (
+              <a
+                href={`/chat/flow-decisions?q=${ruleId}`}
+                target="_blank"
+                rel="noreferrer"
+                title={ruleId}
+                className="inline-flex items-baseline gap-0.5 font-mono text-xs text-emerald-400 hover:underline"
+              >
+                #{ruleId.slice(0, 8)}
+                <ExternalLink className="inline h-3 w-3 opacity-60" />
+              </a>
+            )}
+          </span>
+        )
+      })}
+      {tag && (
+        <span className="rounded-full border border-purple-500/30 bg-purple-500/10 px-2 py-0.5 text-[10px] text-purple-300">
+          {tag}
+        </span>
+      )}
+    </div>
+  )
+}
+
 /** Event body: pretty-print pure-JSON content (extract_slots), otherwise line-by-line with
  *  links; bare image-URL lines are dropped (the diagram renders below anyway). */
 function EventBody({ text }: { text: string }) {
@@ -155,9 +242,9 @@ function EventBody({ text }: { text: string }) {
   const lines = text.split('\n').filter((l) => !IMG_LINE.test(l.trim()))
   return (
     <div className="space-y-0.5 text-sm text-gray-200">
-      {lines.map((l, i) => (
-        <LinkifiedLine key={i} line={l} />
-      ))}
+      {lines.map((l, i) =>
+        l.trim().startsWith(FLOW_PREFIX) ? <FlowDecisionLine key={i} line={l} /> : <LinkifiedLine key={i} line={l} />
+      )}
     </div>
   )
 }
@@ -173,12 +260,22 @@ function fmtTime(ts: string) {
   }
 }
 
-export default function DiegoSessionsTab() {
+export default function DiegoSessionsTab({ initialPath = [] }: { initialPath?: string[] }) {
   const [sessions, setSessions] = useState<SessionSummary[]>([])
-  const [selected, setSelected] = useState<{ user: string; id: string } | null>(null)
+  // /chat/diego/<user> filters the list; /chat/diego/<user>/<session> deep-links a trace
+  const [userFilter, setUserFilter] = useState<string | null>(initialPath.length === 1 ? initialPath[0] : null)
+  const [selected, setSelected] = useState<{ user: string; id: string } | null>(() =>
+    initialPath.length >= 2 ? { user: normalizeUser(initialPath[0]), id: initialPath[1] } : null
+  )
   const [detail, setDetail] = useState<{ key: string; events: DiegoEvent[] } | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  const pickSession = useCallback((user: string, id: string) => {
+    setSelected({ user, id })
+    // keep the URL shareable without a Next.js navigation (page state is all client-side)
+    window.history.replaceState(null, '', `/chat/diego/${encodeURIComponent(user)}/${encodeURIComponent(id)}`)
+  }, [])
 
   const loadList = useCallback(async () => {
     // no setState before the first await — `loading` starts true, refresh sets it in the handler
@@ -227,11 +324,16 @@ export default function DiegoSessionsTab() {
     [sessions, selected]
   )
 
+  const visibleSessions = useMemo(
+    () => (userFilter ? sessions.filter((s) => sameUser(userFilter, s.userId)) : sessions),
+    [sessions, userFilter]
+  )
+
   return (
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-[420px_1fr]">
       {/* ---- session list ---- */}
       <Panel
-        title={`Sessions (${sessions.length})`}
+        title={`Sessions (${visibleSessions.length}${userFilter ? ` / ${sessions.length}` : ''})`}
         subtitle="One session per car — id is the VIN, user is the customer code"
         icon={<Car className="h-4 w-4" />}
         action={
@@ -248,8 +350,24 @@ export default function DiegoSessionsTab() {
         }
       >
         {error && <div className="mb-2 rounded bg-red-500/10 p-2 text-xs text-red-400">{error}</div>}
+        {userFilter && (
+          <div className="mb-2 flex items-center gap-2 rounded-md border border-blue-500/30 bg-blue-500/10 px-2 py-1 text-xs text-blue-300">
+            <User className="h-3 w-3" />
+            user: <span className="font-mono">{userFilter}</span>
+            <button
+              onClick={() => {
+                setUserFilter(null)
+                window.history.replaceState(null, '', '/chat/diego')
+              }}
+              className="ml-auto rounded p-0.5 hover:bg-blue-500/20 hover:text-white"
+              title="Clear user filter"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+        )}
         <div className="max-h-[75vh] space-y-2 overflow-y-auto pr-1">
-          {sessions.map((s) => {
+          {visibleSessions.map((s) => {
             const active = selected?.user === s.userId && selected?.id === s.sessionId
             const cust = customerCode(s.userId)
             return (
@@ -257,8 +375,8 @@ export default function DiegoSessionsTab() {
                 key={`${s.userId}/${s.sessionId}`}
                 role="button"
                 tabIndex={0}
-                onClick={() => setSelected({ user: s.userId, id: s.sessionId })}
-                onKeyDown={(ev) => ev.key === 'Enter' && setSelected({ user: s.userId, id: s.sessionId })}
+                onClick={() => pickSession(s.userId, s.sessionId)}
+                onKeyDown={(ev) => ev.key === 'Enter' && pickSession(s.userId, s.sessionId)}
                 className={`w-full cursor-pointer rounded-lg border p-3 text-left transition-colors ${
                   active
                     ? 'border-blue-500/60 bg-blue-500/10'
@@ -290,8 +408,10 @@ export default function DiegoSessionsTab() {
               </div>
             )
           })}
-          {!loading && sessions.length === 0 && (
-            <div className="p-4 text-center text-sm text-gray-500">No sessions yet</div>
+          {!loading && visibleSessions.length === 0 && (
+            <div className="p-4 text-center text-sm text-gray-500">
+              {userFilter ? `No sessions for user ${userFilter}` : 'No sessions yet'}
+            </div>
           )}
         </div>
       </Panel>
