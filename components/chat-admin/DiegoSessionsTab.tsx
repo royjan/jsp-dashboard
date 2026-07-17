@@ -6,7 +6,7 @@
  * Read-only over the diego_v3 schema via /api/diego/sessions.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Bot, Car, ChevronRight, ExternalLink, RefreshCw, User, X } from 'lucide-react'
+import { Bot, Car, ChevronRight, ExternalLink, ListFilter, RefreshCw, User, X } from 'lucide-react'
 import { Panel } from '@/components/chat-admin/Panel'
 import { CustomerLink } from '@/components/shared/CustomerLink'
 import { ItemLink } from '@/components/shared/ItemLink'
@@ -329,6 +329,22 @@ export default function DiegoSessionsTab({ initialPath = [] }: { initialPath?: s
     [sessions, userFilter]
   )
 
+  const distinctUsers = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const s of sessions) counts.set(s.userId, (counts.get(s.userId) ?? 0) + 1)
+    return [...counts.entries()]
+      .map(([id, count]) => ({ id, count }))
+      .sort((a, b) => b.count - a.count || a.id.localeCompare(b.id))
+  }, [sessions])
+
+  // the URL segment may be the bare code ("32722") while the stored id is padded
+  const filterSelectValue = userFilter ? distinctUsers.find((u) => sameUser(userFilter, u.id))?.id ?? userFilter : ''
+
+  const applyUserFilter = useCallback((user: string | null) => {
+    setUserFilter(user)
+    window.history.replaceState(null, '', user ? `/chat/diego/${encodeURIComponent(user)}` : '/chat/diego')
+  }, [])
+
   return (
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-[420px_1fr]">
       {/* ---- session list ---- */}
@@ -350,22 +366,31 @@ export default function DiegoSessionsTab({ initialPath = [] }: { initialPath?: s
         }
       >
         {error && <div className="mb-2 rounded bg-red-500/10 p-2 text-xs text-red-400">{error}</div>}
-        {userFilter && (
-          <div className="mb-2 flex items-center gap-2 rounded-md border border-blue-500/30 bg-blue-500/10 px-2 py-1 text-xs text-blue-300">
-            <User className="h-3 w-3" />
-            user: <span className="font-mono">{userFilter}</span>
+        <div className="mb-2 flex items-center gap-2">
+          <User className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+          <select
+            value={filterSelectValue}
+            onChange={(ev) => applyUserFilter(ev.target.value || null)}
+            className="min-w-0 flex-1 rounded-md border border-[var(--color-border-default)] bg-black/30 px-2 py-1.5 font-mono text-xs text-gray-200 focus:border-blue-500/60 focus:outline-none"
+            title="Filter sessions by user"
+          >
+            <option value="">All users ({sessions.length})</option>
+            {distinctUsers.map((u) => (
+              <option key={u.id} value={u.id}>
+                {customerCode(u.id) ?? u.id} · {u.count}
+              </option>
+            ))}
+          </select>
+          {userFilter && (
             <button
-              onClick={() => {
-                setUserFilter(null)
-                window.history.replaceState(null, '', '/chat/diego')
-              }}
-              className="ml-auto rounded p-0.5 hover:bg-blue-500/20 hover:text-white"
+              onClick={() => applyUserFilter(null)}
+              className="rounded-md border border-[var(--color-border-default)] p-1.5 text-gray-400 hover:text-white"
               title="Clear user filter"
             >
-              <X className="h-3 w-3" />
+              <X className="h-3.5 w-3.5" />
             </button>
-          </div>
-        )}
+          )}
+        </div>
         <div className="max-h-[75vh] space-y-2 overflow-y-auto pr-1">
           {visibleSessions.map((s) => {
             const active = selected?.user === s.userId && selected?.id === s.sessionId
@@ -396,6 +421,16 @@ export default function DiegoSessionsTab({ initialPath = [] }: { initialPath?: s
                   ) : (
                     <span className="font-mono">{s.userId}</span>
                   )}
+                  <button
+                    onClick={(ev) => {
+                      ev.stopPropagation()
+                      applyUserFilter(s.userId)
+                    }}
+                    className="rounded p-0.5 text-gray-500 hover:bg-white/10 hover:text-white"
+                    title={`Show only ${cust ?? s.userId}'s sessions`}
+                  >
+                    <ListFilter className="h-3 w-3" />
+                  </button>
                   <span>· {s.turns} turns</span>
                   <span>· {s.events} events</span>
                 </div>
