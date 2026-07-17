@@ -339,6 +339,32 @@ const STATUS_DOT: Record<string, string> = {
   err: 'bg-red-400',
 }
 
+/** Header line for a collapsed turn: what was searched, how it went, how long it took. */
+function turnSummary(turn: Turn) {
+  const slots: any = turn.nodes.find((n) => n.e.author === 'extract_slots')?.e.stateDelta
+  const parts: string[] = Array.isArray(slots?.stock_query?.part_descriptions)
+    ? slots.stock_query.part_descriptions
+    : []
+  let label =
+    (turn.user?.text || '')
+      .replace(/^\[👤[^\]]*\]\s*/, '')
+      .split('\n')
+      .map((l) => l.trim())
+      .find(Boolean) || ''
+  if (label.length > 90) label = label.slice(0, 90) + '…'
+  const t0 = turn.user ? parseTs(turn.user.timestamp) : null
+  const last = turn.answer ?? turn.nodes[turn.nodes.length - 1]?.e ?? turn.user
+  const t1 = last ? parseTs(last.timestamp) : null
+  const durS = t0 != null && t1 != null ? Math.max(0, (t1 - t0) / 1000) : null
+  let status: 'ok' | 'slow' | 'err' = 'ok'
+  for (const n of turn.nodes) {
+    const s = nodeStatus(n.e, n.dur)
+    if (s === 'err') { status = 'err'; break }
+    if (s === 'slow') status = 'slow'
+  }
+  return { label, parts, durS, status }
+}
+
 /** "find_part vehicle='X' descs=['a','b'] via=portal-pilot source=native cached=True -> 2 schema(s)"
  *  parsed into fields for a readable bullet list; null when the note isn't in that shape. */
 function parseFindPart(text: string) {
@@ -743,21 +769,53 @@ export default function DiegoSessionsTab() {
         {loadingDetail && <div className="p-6 text-center text-sm text-gray-500">Loading…</div>}
         {!loadingDetail && detail && (
           <div className="max-h-[75vh] space-y-4 overflow-y-auto pr-1">
-            {/* newest turn first; inside a turn the order stays user → pipeline → answer */}
-            {groupTurns(detail.events).reverse().map((turn, ti) => (
-              <div key={ti} className="space-y-2">
-                {turn.user && <EventCard e={turn.user} />}
-                {turn.nodes.length > 0 && (
-                  <PipelineStrip
-                    nodes={turn.nodes}
-                    openId={openNode}
-                    onToggle={(id) => setOpenNode(openNode === id ? null : id)}
-                    turnKey={ti}
-                  />
-                )}
-                {turn.answer && <EventCard e={turn.answer} />}
-              </div>
-            ))}
+            {/* newest turn first; each turn is a collapsible group — latest open, older
+                ones fold to a one-line summary (query · status · duration · time) */}
+            {(() => {
+              const turns = groupTurns(detail.events).reverse()
+              return turns.map((turn, ti) => {
+                const s = turnSummary(turn)
+                return (
+                  <details
+                    key={ti}
+                    open={ti === 0}
+                    className="group rounded-xl border border-[var(--color-border-default)] bg-black/10"
+                  >
+                    <summary className="flex cursor-pointer select-none flex-wrap items-center gap-2 px-3 py-2 text-sm [&::-webkit-details-marker]:hidden">
+                      <ChevronRight className="h-4 w-4 shrink-0 text-gray-500 transition-transform group-open:rotate-90" />
+                      <span className="font-mono text-[11px] text-gray-600">#{turns.length - ti}</span>
+                      <span className={`inline-block h-2 w-2 shrink-0 rounded-full ${STATUS_DOT[s.status]}`} />
+                      {s.parts.length > 0 ? (
+                        <>
+                          <span dir="ltr" className="font-medium text-gray-200">🔎 {s.parts.join(' · ')}</span>
+                          {s.label && (
+                            <span dir="auto" className="max-w-[280px] truncate text-xs text-gray-500">{s.label}</span>
+                          )}
+                        </>
+                      ) : (
+                        <span dir="auto" className="max-w-[420px] truncate font-medium text-gray-200">{s.label || '—'}</span>
+                      )}
+                      <span className="ms-auto flex items-center gap-2 text-[11px] text-gray-500">
+                        {s.durS != null && <span className="font-mono">{fmtDur(s.durS)}</span>}
+                        {turn.user && <span>{fmtTime(turn.user.timestamp)}</span>}
+                      </span>
+                    </summary>
+                    <div className="space-y-2 border-t border-[var(--color-border-default)] p-3">
+                      {turn.user && <EventCard e={turn.user} />}
+                      {turn.nodes.length > 0 && (
+                        <PipelineStrip
+                          nodes={turn.nodes}
+                          openId={openNode}
+                          onToggle={(id) => setOpenNode(openNode === id ? null : id)}
+                          turnKey={ti}
+                        />
+                      )}
+                      {turn.answer && <EventCard e={turn.answer} />}
+                    </div>
+                  </details>
+                )
+              })
+            })()}
             {detail.events.length === 0 && (
               <div className="p-6 text-center text-sm text-gray-500">No events in this session</div>
             )}
