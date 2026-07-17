@@ -147,6 +147,20 @@
 }
 
 /* Recharts theme-aware fixes */
+/* Default tooltip (charts that never pass contentStyle): the library ships a WHITE box with
+   dark text and a light-gray #ccc hover-cursor — unreadable/glaring on the dark theme. Inline
+   styles win over plain CSS, hence the !important; charts that DO pass contentStyle use the
+   same popover vars, so this changes nothing for them. */
+.recharts-default-tooltip {
+  background-color: var(--popover) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 8px;
+  color: var(--popover-foreground) !important;
+}
+.recharts-tooltip-cursor {
+  fill: var(--muted);
+  fill-opacity: 0.35;
+}
 .recharts-cartesian-grid line {
   stroke: var(--chart-grid);
 }

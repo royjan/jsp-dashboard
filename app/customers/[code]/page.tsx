@@ -143,7 +143,11 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ code:
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" tick={{ fontSize: 10 }} />
                 <YAxis tickFormatter={(v) => ILS_FORMAT.format(v)} tick={{ fontSize: 10 }} />
-                <Tooltip formatter={(v) => ILS_FORMAT.format(v as number)} />
+                <Tooltip
+                  contentStyle={{ backgroundColor: 'var(--popover)', borderColor: 'var(--border)', borderRadius: '8px', color: 'var(--popover-foreground)' }}
+                  itemStyle={{ color: 'var(--popover-foreground)' }}
+                  formatter={(v) => [ILS_FORMAT.format(v as number), t('amount')]}
+                />
                 <Bar dataKey="value" radius={[4, 4, 0, 0]}>
                   {agingData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
                 </Bar>
