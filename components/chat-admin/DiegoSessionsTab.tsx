@@ -743,7 +743,8 @@ export default function DiegoSessionsTab() {
         {loadingDetail && <div className="p-6 text-center text-sm text-gray-500">Loading…</div>}
         {!loadingDetail && detail && (
           <div className="max-h-[75vh] space-y-4 overflow-y-auto pr-1">
-            {groupTurns(detail.events).map((turn, ti) => (
+            {/* newest turn first; inside a turn the order stays user → pipeline → answer */}
+            {groupTurns(detail.events).reverse().map((turn, ti) => (
               <div key={ti} className="space-y-2">
                 {turn.user && <EventCard e={turn.user} />}
                 {turn.nodes.length > 0 && (
