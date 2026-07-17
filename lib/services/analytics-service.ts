@@ -8,9 +8,9 @@ import { fixRtlItemName } from '../rtl-fix'
 
 // ── Dashboard KPIs ──
 
-export async function getDashboardData(): Promise<DashboardData> {
+export async function getDashboardData(forceRefresh = false): Promise<DashboardData> {
   const cacheKey = 'dashboard:kpis'
-  const cached = await getCached<DashboardData>(cacheKey)
+  const cached = forceRefresh ? null : await getCached<DashboardData>(cacheKey)
   if (cached) return cached
 
   const data = await client.dashboard.get()
@@ -580,9 +580,9 @@ async function _getItemsImpl(cacheKey: string, staleCacheKey?: string): Promise<
 
 // ── Demand Analysis ──
 
-export async function getDemandAnalysis(dateFrom?: string, dateTo?: string): Promise<DemandItem[]> {
+export async function getDemandAnalysis(dateFrom?: string, dateTo?: string, forceRefresh = false): Promise<DemandItem[]> {
   const cacheKey = `analytics:demand:${dateFrom || 'all'}:${dateTo || 'all'}`
-  const cached = await getCached<DemandItem[]>(cacheKey)
+  const cached = forceRefresh ? null : await getCached<DemandItem[]>(cacheKey)
   if (cached) return cached
 
   // Fetch quotes with Redis-first approach, then items in parallel
@@ -831,9 +831,9 @@ export async function getSalesData(period: string = '30d', overrideDateFrom?: st
 
 // ── Seasonal Correlation ──
 
-export async function getSeasonalData(dateFrom?: string, dateTo?: string): Promise<SeasonalDataPoint[]> {
+export async function getSeasonalData(dateFrom?: string, dateTo?: string, forceRefresh = false): Promise<SeasonalDataPoint[]> {
   const cacheKey = `analytics:seasonal:v11:${dateFrom || 'all'}:${dateTo || 'all'}`
-  const cached = await getCached<SeasonalDataPoint[]>(cacheKey)
+  const cached = forceRefresh ? null : await getCached<SeasonalDataPoint[]>(cacheKey)
   if (cached) return cached
 
   // Strategy 1: PostgreSQL monthly_sales — fast, uses year/month columns directly
@@ -1232,9 +1232,9 @@ export async function getSeasonalData(dateFrom?: string, dateTo?: string): Promi
 
 // ── Dead Stock ──
 
-export async function getDeadStock(yearsThreshold: number = 1): Promise<DeadStockItem[]> {
+export async function getDeadStock(yearsThreshold: number = 1, forceRefresh = false): Promise<DeadStockItem[]> {
   const cacheKey = `analytics:dead-stock:v2:${yearsThreshold}`
-  const cached = await getCached<DeadStockItem[]>(cacheKey)
+  const cached = forceRefresh ? null : await getCached<DeadStockItem[]>(cacheKey)
   if (cached) return cached
 
   const items = await getItems()
@@ -1292,9 +1292,9 @@ export async function getDeadStock(yearsThreshold: number = 1): Promise<DeadStoc
 
 // ── Reorder Recommendations ──
 
-export async function getReorderRecommendations(dateFrom?: string, dateTo?: string): Promise<ReorderItem[]> {
+export async function getReorderRecommendations(dateFrom?: string, dateTo?: string, forceRefresh = false): Promise<ReorderItem[]> {
   const cacheKey = `analytics:reorder:v2:${dateFrom || 'all'}:${dateTo || 'all'}`
-  const cached = await getCached<ReorderItem[]>(cacheKey)
+  const cached = forceRefresh ? null : await getCached<ReorderItem[]>(cacheKey)
   if (cached) return cached
 
   const items = await getItems()
@@ -1609,9 +1609,9 @@ async function getCustomerNameMap(): Promise<Map<string, string>> {
 
 // ── Quote-to-Invoice Conversion Analysis ──
 
-export async function getConversionAnalysis(dateFrom?: string, dateTo?: string) {
+export async function getConversionAnalysis(dateFrom?: string, dateTo?: string, forceRefresh = false) {
   const cacheKey = `analytics:conversion:${dateFrom || 'all'}:${dateTo || 'all'}`
-  const cached = await getCached<any>(cacheKey)
+  const cached = forceRefresh ? null : await getCached<any>(cacheKey)
   if (cached) return cached
 
   const now = new Date()
@@ -1801,9 +1801,9 @@ export async function getConversionAnalysis(dateFrom?: string, dateTo?: string) 
 
 // ── ABC Classification ──
 
-export async function getABCClassification(dateFrom?: string, dateTo?: string) {
+export async function getABCClassification(dateFrom?: string, dateTo?: string, forceRefresh = false) {
   const cacheKey = `analytics:abc:v4:${dateFrom || 'all'}:${dateTo || 'all'}`
-  const cached = await getCached<any>(cacheKey)
+  const cached = forceRefresh ? null : await getCached<any>(cacheKey)
   if (cached) return cached
 
   const now = new Date()
@@ -1953,9 +1953,9 @@ export async function getABCClassification(dateFrom?: string, dateTo?: string) {
 
 // ── Customer Analytics ──
 
-export async function getCustomerAnalytics(dateFrom?: string, dateTo?: string) {
+export async function getCustomerAnalytics(dateFrom?: string, dateTo?: string, forceRefresh = false) {
   const cacheKey = `analytics:customers:v7:${dateFrom || 'all'}:${dateTo || 'all'}`
-  const cached = await getCached<any>(cacheKey)
+  const cached = forceRefresh ? null : await getCached<any>(cacheKey)
   if (cached) return cached
 
   const now = new Date()

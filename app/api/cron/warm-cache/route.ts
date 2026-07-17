@@ -302,23 +302,27 @@ async function runWarmCache(mode: string, from?: number, to?: number) {
     const today = now.toISOString().split('T')[0]
     const twoYearsAgo = `${now.getFullYear() - 2}-01-01`
 
+    // Every step recomputes and re-SETs its key (forceRefresh) so the Redis TTL
+    // restarts on each warm. Warming through the cache-hit path would leave the
+    // original TTL counting down and let expiry land between warm runs, giving
+    // users the cold path mid-day.
     const warmSteps: [string, () => Promise<unknown>][] = [
-      ['getDashboardData', getDashboardData],
-      ['getDemandAnalysis', () => getDemandAnalysis(yearStart, today)],
+      ['getDashboardData', () => getDashboardData(true)],
+      ['getDemandAnalysis', () => getDemandAnalysis(yearStart, today, true)],
       ['getSalesData-ytd', () => getSalesData('ytd')],
-      ['getSeasonalData', () => getSeasonalData(twoYearsAgo, today)],
-      ['getDeadStock-1y', () => getDeadStock(1)],
-      ['getDeadStock-2y', () => getDeadStock(2)],
-      ['getDeadStock-3y', () => getDeadStock(3)],
-      ['getReorderRecommendations', () => getReorderRecommendations()],
-      ['getTopSellingItems-90d', () => getTopSellingItems('90d')],
-      ['getConversionAnalysis', () => getConversionAnalysis(yearStart, today)],
-      ['getABCClassification', getABCClassification],
-      ['getCustomerAnalytics', () => getCustomerAnalytics(yearStart, today)],
+      ['getSeasonalData', () => getSeasonalData(twoYearsAgo, today, true)],
+      ['getDeadStock-1y', () => getDeadStock(1, true)],
+      ['getDeadStock-2y', () => getDeadStock(2, true)],
+      ['getDeadStock-3y', () => getDeadStock(3, true)],
+      ['getReorderRecommendations', () => getReorderRecommendations(undefined, undefined, true)],
+      ['getTopSellingItems-90d', () => getTopSellingItems('90d', true)],
+      ['getConversionAnalysis', () => getConversionAnalysis(yearStart, today, true)],
+      ['getABCClassification', () => getABCClassification(undefined, undefined, true)],
+      ['getCustomerAnalytics', () => getCustomerAnalytics(yearStart, today, true)],
       // Gap analysis lives in its own route (needs per-item FINAPI stock
       // verification) — warm it via a local self-fetch so /gap is never cold.
       ['gapAnalysis', () =>
-        fetch(`http://127.0.0.1:${process.env.PORT || '3000'}/api/analytics/gap`)
+        fetch(`http://127.0.0.1:${process.env.PORT || '3000'}/api/analytics/gap?refresh=1`)
           .then(r => r.json())],
     ]
 

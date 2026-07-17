@@ -23,7 +23,8 @@ export async function GET(request: Request) {
     const format = searchParams.get('format') || '31' // quotes
 
     const cacheKey = `analytics:gap:v4:${format}:${limit}`
-    const cached = await getCached<any>(cacheKey)
+    const forceRefresh = searchParams.get('refresh') === '1'
+    const cached = forceRefresh ? null : await getCached<any>(cacheKey)
     if (cached) return NextResponse.json(cached)
 
     // 1) Most-quoted items in the last 12 months (Neon, fast). Over-fetch a bit
@@ -115,7 +116,7 @@ export async function GET(request: Request) {
       total_quoted_items: quoted.length,
       total_lost_qty: items.reduce((s: number, i: any) => s + i.total_qty, 0),
     }
-    await setCache(cacheKey, payload, 60 * 60) // 1h
+    await setCache(cacheKey, payload, 3 * 60 * 60) // 3h — the 2h warm cycle (refresh=1) keeps it fresh
     return NextResponse.json(payload)
   } catch (error) {
     console.error('[gap] Error:', error)
