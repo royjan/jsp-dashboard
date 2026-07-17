@@ -262,11 +262,196 @@ function fmtTime(ts: string) {
   }
 }
 
+// ── per-turn pipeline grouping ────────────────────────────────────────────────
+// A turn = a user event plus everything until the next user event. The event
+// stamped output_for (format_v2's final answer) renders as the answer bubble;
+// the intermediate node events render as a clickable pipeline strip.
+
+interface TurnNode {
+  e: DiegoEvent
+  /** seconds since the previous event — the node's wall time */
+  dur: number | null
+}
+interface Turn {
+  user: DiegoEvent | null
+  nodes: TurnNode[]
+  answer: DiegoEvent | null
+}
+
+function parseTs(ts: string): number | null {
+  const t = Date.parse(ts + (ts.endsWith('Z') ? '' : 'Z'))
+  return Number.isNaN(t) ? null : t
+}
+
+function groupTurns(events: DiegoEvent[]): Turn[] {
+  const turns: Turn[] = []
+  let cur: Turn | null = null
+  let prev: DiegoEvent | null = null
+  for (const e of events) {
+    if (e.author === 'user') {
+      cur = { user: e, nodes: [], answer: null }
+      turns.push(cur)
+      prev = e
+      continue
+    }
+    if (!cur) {
+      cur = { user: null, nodes: [], answer: null }
+      turns.push(cur)
+    }
+    const a = parseTs(e.timestamp)
+    const b = prev ? parseTs(prev.timestamp) : null
+    cur.nodes.push({ e, dur: a != null && b != null ? Math.max(0, (a - b) / 1000) : null })
+    prev = e
+  }
+  for (const t of turns) {
+    const idx = t.nodes.map((n) => !!n.e.outputFor).lastIndexOf(true)
+    if (idx >= 0) t.answer = t.nodes.splice(idx, 1)[0].e
+  }
+  return turns
+}
+
+function fmtDur(d: number | null): string {
+  if (d == null) return ''
+  if (d >= 60) return `${Math.floor(d / 60)}m ${Math.round(d % 60)}s`
+  if (d >= 10) return `${Math.round(d)}s`
+  return `${d.toFixed(1)}s`
+}
+
+function nodeStatus(e: DiegoEvent, dur: number | null): 'ok' | 'slow' | 'err' {
+  const sd: any = e.stateDelta || {}
+  for (const [k, v] of Object.entries(sd)) {
+    if (k.endsWith('error') && v) return 'err'
+  }
+  if (sd.search?.error) return 'err'
+  if (dur != null && dur > 20) return 'slow'
+  return 'ok'
+}
+
+/** "checked 2 zero-stock part(s) at Lubinski -> 0 available" → "2→0" */
+function nodeBadge(e: DiegoEvent): string | null {
+  const m = e.text.match(/checked (\d+) zero-stock part\(s\) at Lubinski -> (\d+)/)
+  return m ? `${m[1]}→${m[2]}` : null
+}
+
+const STATUS_DOT: Record<string, string> = {
+  ok: 'bg-emerald-400',
+  slow: 'bg-amber-400',
+  err: 'bg-red-400',
+}
+
+/** One full event rendered as a card — used for user messages, final answers, and the
+ *  opened node detail panel. */
+function EventCard({ e }: { e: DiegoEvent }) {
+  return (
+    <div className="rounded-lg border border-[var(--color-border-default)] bg-black/20 p-3">
+      <div className="mb-1 flex flex-wrap items-center gap-2">
+        <span
+          className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${
+            AUTHOR_STYLE[e.author] ?? 'bg-gray-500/15 text-gray-300 border-gray-500/30'
+          }`}
+        >
+          {e.author}
+        </span>
+        {e.outputFor && (
+          <span className="rounded-full border border-green-500/30 bg-green-500/10 px-2 py-0.5 text-[11px] text-green-400">
+            output
+          </span>
+        )}
+        <span className="ml-auto text-[11px] text-gray-500">{fmtTime(e.timestamp)}</span>
+      </div>
+      {e.text && <EventBody text={e.text} />}
+      {(e.toolEvents ?? []).length > 0 && (
+        <div className="space-y-0.5">
+          {e.toolEvents.map((t, j) => (
+            <div key={j} dir="ltr" className="break-all font-mono text-xs text-purple-300/80">
+              {t}
+            </div>
+          ))}
+        </div>
+      )}
+      {e.images.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {e.images.map((u) => (
+            <a key={u} href={u} target="_blank" rel="noreferrer">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={u} alt="schema" className="h-32 rounded-md border border-gray-700 object-contain" />
+            </a>
+          ))}
+        </div>
+      )}
+      {e.stateDelta && (
+        <details className="mt-2" open={!e.text && !(e.toolEvents ?? []).length}>
+          <summary className="cursor-pointer text-[11px] text-gray-400">
+            State: {Object.keys(e.stateDelta).join(', ')}
+          </summary>
+          <pre className="mt-1 max-h-72 overflow-auto rounded bg-black/40 p-2 text-[11px] leading-4 text-gray-300">
+            {JSON.stringify(e.stateDelta, null, 2)}
+          </pre>
+        </details>
+      )}
+    </div>
+  )
+}
+
+/** The turn's intermediate node events as a horizontal clickable pipeline; the open
+ *  node's full EventCard renders right below the strip. */
+function PipelineStrip({
+  nodes, openId, onToggle, turnKey,
+}: {
+  nodes: TurnNode[]
+  openId: string | null
+  onToggle: (id: string) => void
+  turnKey: number
+}) {
+  const nodeId = (n: TurnNode, i: number) => n.e.id || `t${turnKey}-n${i}`
+  const open = nodes.find((n, i) => nodeId(n, i) === openId)
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-1 overflow-x-auto py-0.5">
+        {nodes.map((n, i) => {
+          const id = nodeId(n, i)
+          const status = nodeStatus(n.e, n.dur)
+          const badge = nodeBadge(n.e)
+          const active = openId === id
+          return (
+            <span key={id} className="flex shrink-0 items-center gap-1">
+              {i > 0 && <ChevronRight className="h-3.5 w-3.5 shrink-0 text-gray-600" />}
+              <button
+                onClick={() => onToggle(id)}
+                className={`flex flex-col items-start rounded-lg border px-2.5 py-1 text-left transition-colors ${
+                  active
+                    ? 'border-blue-500/60 bg-blue-500/10'
+                    : 'border-[var(--color-border-default)] bg-black/20 hover:border-gray-500'
+                }`}
+                title={n.e.text || n.e.author}
+              >
+                <span className="font-mono text-[11px] font-semibold text-gray-200">{n.e.author}</span>
+                <span className="flex items-center gap-1.5 text-[10px] text-gray-400">
+                  <span className={`inline-block h-1.5 w-1.5 rounded-full ${STATUS_DOT[status]}`} />
+                  {fmtDur(n.dur)}
+                  {badge && <span className="font-mono text-sky-400">{badge}</span>}
+                </span>
+              </button>
+            </span>
+          )
+        })}
+      </div>
+      {open && (
+        <div className="rounded-lg border border-blue-500/40 p-1">
+          <EventCard e={open.e} />
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function DiegoSessionsTab() {
   const [sessions, setSessions] = useState<SessionSummary[]>([])
   const [detail, setDetail] = useState<{ key: string; events: DiegoEvent[] } | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  // which pipeline node's detail panel is open (event id; one at a time)
+  const [openNode, setOpenNode] = useState<string | null>(null)
 
   // The URL is the single source of truth for filter + selection — changing path
   // segments remounts the page (Next.js), so component state would be wiped.
@@ -528,54 +713,19 @@ export default function DiegoSessionsTab() {
       >
         {loadingDetail && <div className="p-6 text-center text-sm text-gray-500">Loading…</div>}
         {!loadingDetail && detail && (
-          <div className="max-h-[75vh] space-y-3 overflow-y-auto pr-1">
-            {detail.events.map((e, i) => (
-              <div key={e.id || i} className="rounded-lg border border-[var(--color-border-default)] bg-black/20 p-3">
-                <div className="mb-1 flex flex-wrap items-center gap-2">
-                  <span
-                    className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${
-                      AUTHOR_STYLE[e.author] ?? 'bg-gray-500/15 text-gray-300 border-gray-500/30'
-                    }`}
-                  >
-                    {e.author}
-                  </span>
-                  {e.outputFor && (
-                    <span className="rounded-full border border-green-500/30 bg-green-500/10 px-2 py-0.5 text-[11px] text-green-400">
-                      output
-                    </span>
-                  )}
-                  <span className="ml-auto text-[11px] text-gray-500">{fmtTime(e.timestamp)}</span>
-                </div>
-                {e.text && <EventBody text={e.text} />}
-                {(e.toolEvents ?? []).length > 0 && (
-                  <div className="space-y-0.5">
-                    {e.toolEvents.map((t, j) => (
-                      <div key={j} dir="ltr" className="break-all font-mono text-xs text-purple-300/80">
-                        {t}
-                      </div>
-                    ))}
-                  </div>
+          <div className="max-h-[75vh] space-y-4 overflow-y-auto pr-1">
+            {groupTurns(detail.events).map((turn, ti) => (
+              <div key={ti} className="space-y-2">
+                {turn.user && <EventCard e={turn.user} />}
+                {turn.nodes.length > 0 && (
+                  <PipelineStrip
+                    nodes={turn.nodes}
+                    openId={openNode}
+                    onToggle={(id) => setOpenNode(openNode === id ? null : id)}
+                    turnKey={ti}
+                  />
                 )}
-                {e.images.length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {e.images.map((u) => (
-                      <a key={u} href={u} target="_blank" rel="noreferrer">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={u} alt="schema" className="h-32 rounded-md border border-gray-700 object-contain" />
-                      </a>
-                    ))}
-                  </div>
-                )}
-                {e.stateDelta && (
-                  <details className="mt-2">
-                    <summary className="cursor-pointer text-[11px] text-gray-400">
-                      State: {Object.keys(e.stateDelta).join(', ')}
-                    </summary>
-                    <pre className="mt-1 max-h-72 overflow-auto rounded bg-black/40 p-2 text-[11px] leading-4 text-gray-300">
-                      {JSON.stringify(e.stateDelta, null, 2)}
-                    </pre>
-                  </details>
-                )}
+                {turn.answer && <EventCard e={turn.answer} />}
               </div>
             ))}
             {detail.events.length === 0 && (
