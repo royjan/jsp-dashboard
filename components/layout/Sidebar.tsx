@@ -33,6 +33,7 @@ import {
   Activity,
   MessagesSquare,
   Bot,
+  BotMessageSquare,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
@@ -88,6 +89,7 @@ const navSections: Array<{ id: string; labelKey: TranslationKey; items: NavItem[
       { href: '/chat/monitoring', labelKey: 'chatMonitoring', icon: Activity },
       { href: '/chat/analytics', labelKey: 'chatAnalytics', icon: MessagesSquare },
       { href: '/chat/parts-analytics', labelKey: 'chatPartsAnalytics', icon: Bot },
+      { href: '/chat/diego', labelKey: 'chatDiego', icon: BotMessageSquare },
     ],
   },
 ]

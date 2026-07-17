@@ -27,6 +27,7 @@ export const translations = {
     chatAnalytics: 'אנליטיקת צ׳אט',
     chatPartsAnalytics: 'אנליטיקת בוט',
     chatLearnedPins: 'חלקים מוצמדים',
+    chatDiego: 'שיחות דייגו',
 
     // Page titles
     'page.overview': 'סקירת לוח בקרה',
@@ -607,6 +608,7 @@ export const translations = {
     chatAnalytics: 'Chat Analytics',
     chatPartsAnalytics: 'Bot Analytics',
     chatLearnedPins: 'Learned Pins',
+    chatDiego: 'Diego Sessions',
 
     'page.overview': 'Dashboard Overview',
     'page.demand': 'Demand Analysis',
