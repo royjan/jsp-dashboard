@@ -10,6 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
 import { useSortable, SortableTh } from '@/components/shared/sortable-table'
+import { ItemLink } from '@/components/shared/ItemLink'
 import Link from 'next/link'
 import {
   User, DollarSign, Clock, FileText, Receipt, ArrowLeft, AlertTriangle, ShoppingCart, ExternalLink,
@@ -248,8 +249,10 @@ function PurchasesTable({
             <tbody>
               {sorted.map(item => (
                 <tr key={item.item_code} className="border-b last:border-0 hover:bg-accent/40">
-                  <td className="p-2 font-mono text-xs">{item.item_code}</td>
-                  <td className="p-2 max-w-[220px] truncate" title={item.item_name}>{item.item_name}</td>
+                  <td className="p-2 font-mono text-xs"><ItemLink code={item.item_code} showCode /></td>
+                  <td className="p-2 max-w-[220px] truncate" title={item.item_name}>
+                    <ItemLink code={item.item_code} name={item.item_name} />
+                  </td>
                   <td className="p-2 text-end tabular-nums">
                     {formatNumber(item.total_qty)}
                     {item.returned_qty > 0 && <span className="text-red-500 text-[10px] ms-1">(-{formatNumber(item.returned_qty)})</span>}
