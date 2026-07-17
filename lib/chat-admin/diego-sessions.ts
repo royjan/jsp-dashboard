@@ -28,6 +28,8 @@ export interface DiegoEvent {
   author: string
   timestamp: string
   text: string
+  /** function_call / function_response parts, one compact line each (e.g. "→ transfer_to_agent(agent_name=stock_flow)") */
+  toolEvents: string[]
   stateDelta: Record<string, unknown> | null
   nodePath: string | null
   outputFor: string[] | null
@@ -99,11 +101,38 @@ export async function getDiegoSession(userId: string, sessionId: string): Promis
 
 const IMG_RE = /https?:\/\/\S+\.(?:png|jpe?g|webp)/gi
 
+const TOOL_LINE_MAX = 140
+
+function compactArgs(args: Json): string {
+  const s = Object.entries(args ?? {})
+    .map(([k, v]) => `${k}=${typeof v === 'string' ? v : JSON.stringify(v)}`)
+    .join(', ')
+  return s.length > TOOL_LINE_MAX ? s.slice(0, TOOL_LINE_MAX) + '…' : s
+}
+
 function mapEvent(d: Json, ts: string): DiegoEvent {
-  const text: string = (d?.content?.parts ?? [])
+  const parts: Json[] = d?.content?.parts ?? []
+  const text: string = parts
     .map((p: Json) => p?.text ?? '')
     .filter(Boolean)
     .join('')
+  // Agent-routing / tool events have no text parts (they used to render as empty
+  // bubbles) — surface them as compact call/response lines instead.
+  const toolEvents: string[] = []
+  for (const p of parts) {
+    if (p?.function_call) {
+      toolEvents.push(`→ ${p.function_call.name}(${compactArgs(p.function_call.args)})`)
+    } else if (p?.function_response) {
+      let resp = ''
+      try {
+        const s = JSON.stringify(p.function_response.response ?? null)
+        if (s && s !== 'null' && s !== '{"result":null}') {
+          resp = ' ' + (s.length > TOOL_LINE_MAX ? s.slice(0, TOOL_LINE_MAX) + '…' : s)
+        }
+      } catch { /* unserializable response — name alone is enough */ }
+      toolEvents.push(`↩ ${p.function_response.name}${resp}`)
+    }
+  }
   const delta = d?.actions?.state_delta
   const images = new Set<string>(text.match(IMG_RE) ?? [])
   for (const u of (delta?.images as string[] | undefined) ?? []) images.add(u)
@@ -112,6 +141,7 @@ function mapEvent(d: Json, ts: string): DiegoEvent {
     author: d?.author ?? '?',
     timestamp: ts,
     text,
+    toolEvents,
     stateDelta: delta && Object.keys(delta).length ? delta : null,
     nodePath: d?.node_info?.path || null,
     outputFor: d?.node_info?.output_for ?? null,

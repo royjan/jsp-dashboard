@@ -28,6 +28,7 @@ interface DiegoEvent {
   author: string
   timestamp: string
   text: string
+  toolEvents: string[]
   stateDelta: Record<string, unknown> | null
   nodePath: string | null
   outputFor: string[] | null
@@ -324,6 +325,15 @@ export default function DiegoSessionsTab() {
                   <span className="ml-auto text-[11px] text-gray-500">{fmtTime(e.timestamp)}</span>
                 </div>
                 {e.text && <EventBody text={e.text} />}
+                {(e.toolEvents ?? []).length > 0 && (
+                  <div className="space-y-0.5">
+                    {e.toolEvents.map((t, j) => (
+                      <div key={j} dir="ltr" className="break-all font-mono text-xs text-purple-300/80">
+                        {t}
+                      </div>
+                    ))}
+                  </div>
+                )}
                 {e.images.length > 0 && (
                   <div className="mt-2 flex flex-wrap gap-2">
                     {e.images.map((u) => (
