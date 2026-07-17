@@ -79,6 +79,24 @@ function LinkifiedLine({ line }: { line: string }) {
             // part code with the live stock/price hover card (same as /customers/<code>)
             return <ItemLink key={i} code={decodeURIComponent(item[1])} showCode copyable={false} />
           }
+          // flow-decision URL (diego-adk emits these since 97d843a) -> short "#4d5acaa1" link
+          const flow = p.match(/\/chat\/flow-decisions\?q=([0-9a-f]{8})[0-9a-f-]{28}/i)
+          if (flow) {
+            return (
+              <a
+                key={i}
+                href={p.slice(p.indexOf('/chat/'))}
+                target="_blank"
+                rel="noreferrer"
+                dir="ltr"
+                title={p}
+                className="inline-flex items-baseline gap-0.5 font-mono text-emerald-400 hover:underline"
+              >
+                #{flow[1]}
+                <ExternalLink className="inline h-3 w-3 opacity-60" />
+              </a>
+            )
+          }
           const label = p.replace(/^https?:\/\//i, '').slice(0, 44) + (p.length > 52 ? '…' : '')
           return (
             <a
