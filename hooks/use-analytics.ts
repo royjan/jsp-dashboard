@@ -426,6 +426,21 @@ export function useCustomerDetail(code: string | null) {
   })
 }
 
+export function useCustomerHistory(code: string | null) {
+  return useQuery({
+    queryKey: ['customer-history', code],
+    queryFn: async () => {
+      const res = await fetch(`/api/customers/${encodeURIComponent(code!)}/history`)
+      if (!res.ok) throw new Error('Failed')
+      return res.json()
+    },
+    enabled: !!code,
+    staleTime: 10 * 60 * 1000,
+    // The cold path is a long FINAPI scan — one retry is plenty.
+    retry: 1,
+  })
+}
+
 export function useItemDetail(code: string | null) {
   return useQuery({
     queryKey: ['item-detail', code],

@@ -100,6 +100,40 @@ export async function fetchCustomerBalanceFallback(code: string): Promise<any> {
   return fallbackClient.customers.getBalance(code)
 }
 
+// Customer order/receipt/document history: FINAPI walks a whole Btrieve file per
+// call (40-60s for busy customers; its own gateway 504s at 60s), so the default
+// 15s client aborts these and the customer page silently loses its tabs. History
+// pulls get a dedicated client whose timeout sits under FINAPI's 60s ceiling but
+// far above the warm-path cost, and a small concurrency so the three history
+// calls of one page view can't crowd FINAPI's 20-seat limiter.
+const historyClient = createClient({
+  baseUrls: finansitBaseUrls.length ? finansitBaseUrls : undefined,
+  baseUrl: process.env.FINANSIT_BASE_URL || FINANSIT_PRIMARY,
+  credentials: async () => {
+    await initializeSecrets()
+    return getSecret('FINANSIT_API_CREDENTIALS', '')
+  },
+  credentialsByUrl: async (base: string) => {
+    if (!base.includes('192.168.0.109')) return undefined
+    await initializeSecrets()
+    return getSecret('FINANSIT_API_CREDENTIALS_FALLBACK', '') || undefined
+  },
+  concurrency: 3,
+  timeout: 55000,
+})
+
+export async function fetchCustomerOrdersSlow(code: string, params?: Record<string, any>): Promise<any> {
+  return historyClient.customers.getOrders(code, params as any)
+}
+
+export async function fetchCustomerReceiptsSlow(code: string, params?: Record<string, any>): Promise<any> {
+  return historyClient.customers.getReceipts(code, params as any)
+}
+
+export async function fetchCustomerDocumentsSlow(code: string, params?: Record<string, any>): Promise<any> {
+  return historyClient.customers.getDocuments(code, params as any)
+}
+
 export async function fetchCustomerAgingFallback(code: string, params?: Record<string, any>): Promise<any> {
   return fallbackClient.customers.getAging(code, params as any)
 }

@@ -14,18 +14,14 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Missing code parameter' }, { status: 400 })
     }
 
-    // Fetch all customer data in parallel
+    // Fast header data only (each sub-second) — order/receipt/document history
+    // moved to /api/customers/[code]/history (FINAPI Btrieve walks, 40-60s cold)
+    // so the page header never waits on it.
     // Balance + aging come from the healthy .109 box (primary AR Btrieve files are broken).
-    const [profile, balance, aging, orders, receipts, documents] = await Promise.all([
+    const [profile, balance, aging] = await Promise.all([
       client.customers.get(code),
       fetchCustomerBalanceFallback(code).catch(() => null),
       fetchCustomerAgingFallback(code, { include_documents: false }).catch(() => null),
-      // FINAPI ignores offset and has no total-count, so fetch up to a high cap
-      // (1000 works; 5000 errors) and paginate client-side. A returned length of
-      // exactly the cap means "at least this many".
-      client.customers.getOrders(code, { limit: 1000, direction: 'desc' }).catch(() => null),
-      client.customers.getReceipts(code, { limit: 1000, direction: 'desc' }).catch(() => null),
-      client.customers.getDocuments(code, { limit: 1000, direction: 'desc' }).catch(() => null),
     ])
 
     return NextResponse.json({
@@ -38,9 +34,6 @@ export async function GET(request: Request) {
         days_90: Number(aging?.buckets?.['61_90']?.total ?? aging?.['61_90'] ?? 0) || 0,
         over_90: Number(aging?.buckets?.over_90?.total ?? aging?.['90_plus'] ?? 0) || 0,
       },
-      orders: orders?.orders || orders?.documents || orders || [],
-      receipts: receipts?.receipts || receipts?.documents || receipts || [],
-      documents: documents?.documents || documents || [],
     })
   } catch (error) {
     return NextResponse.json(

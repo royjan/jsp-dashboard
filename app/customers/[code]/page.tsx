@@ -2,7 +2,7 @@
 
 import { use, useMemo, useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { useCustomerDetail, useCustomerPurchases } from '@/hooks/use-analytics'
+import { useCustomerDetail, useCustomerHistory, useCustomerPurchases } from '@/hooks/use-analytics'
 import { useLocale } from '@/lib/locale-context'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -57,6 +57,9 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ code:
   const { code } = use(params)
   const { t } = useLocale()
   const { data, isLoading, error } = useCustomerDetail(code)
+  // Order/receipt/document history loads separately (long FINAPI scans) so the
+  // header/KPIs/aging paint immediately instead of waiting ~30s behind it.
+  const { data: historyData, isLoading: historyLoading } = useCustomerHistory(code)
   const [purchaseDays, setPurchaseDays] = useState(90)
   const { data: purchasesData, isLoading: purchasesLoading } = useCustomerPurchases(code, purchaseDays)
 
@@ -67,18 +70,21 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ code:
   useEffect(() => {
     if (tabTouched) return
     const best = (purchasesData?.item_count ?? 0) > 0 ? 'purchases'
-      : (data?.documents?.length ?? 0) > 0 ? 'documents'
-      : (data?.orders?.length ?? 0) > 0 ? 'orders'
-      : (data?.receipts?.length ?? 0) > 0 ? 'receipts'
+      : (historyData?.documents?.length ?? 0) > 0 ? 'documents'
+      : (historyData?.orders?.length ?? 0) > 0 ? 'orders'
+      : (historyData?.receipts?.length ?? 0) > 0 ? 'receipts'
       : 'purchases'
     setTab(best)
-  }, [purchasesData, data, tabTouched])
+  }, [purchasesData, historyData, tabTouched])
 
   if (isLoading) return <LoadingSkeleton />
   if (error) return <div className="text-destructive p-4">Error: {(error as Error).message}</div>
   if (!data) return null
 
-  const { profile, balance, aging, orders, receipts, documents } = data
+  const { profile, balance, aging } = data
+  const orders = historyData?.orders ?? []
+  const receipts = historyData?.receipts ?? []
+  const documents = historyData?.documents ?? []
 
   const agingData = [
     { name: t('currentDebt'), value: aging.current, color: AGING_COLORS[0] },
@@ -111,7 +117,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ code:
           { label: t('creditLimit'), value: profile?.credit_limit ? ILS_FORMAT.format(profile.credit_limit) : '-', icon: DollarSign, color: 'text-blue-600' },
           { label: t('paymentTerms'), value: profile?.payment_terms ? `${profile.payment_terms} ${t('daysAgo')}` : '-', icon: Clock, color: 'text-purple-600' },
           { label: t('priceCode'), value: profile?.price_code || '-', icon: FileText, color: 'text-orange-600' },
-          { label: t('invoices'), value: NUMBER_FORMAT.format(documents?.length ?? 0), icon: Receipt, color: 'text-teal-600' },
+          { label: t('invoices'), value: historyLoading ? '…' : NUMBER_FORMAT.format(documents.length), icon: Receipt, color: 'text-teal-600' },
         ].map((kpi, i) => (
           <motion.div key={kpi.label} custom={i} variants={cardVariants} initial="hidden" animate="visible">
             <Card>
@@ -153,9 +159,9 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ code:
           <CardHeader>
             <TabsList className="flex-wrap h-auto gap-1">
               <TabsTrigger value="purchases" className="gap-1"><ShoppingCart className="h-3.5 w-3.5" />קניות אחרונות ({purchasesData?.item_count ?? 0})</TabsTrigger>
-              <TabsTrigger value="orders">{t('recentOrders')} ({orders?.length ?? 0})</TabsTrigger>
-              <TabsTrigger value="receipts">{t('recentReceipts')} ({receipts?.length ?? 0})</TabsTrigger>
-              <TabsTrigger value="documents">{t('invoices')} ({documents?.length ?? 0})</TabsTrigger>
+              <TabsTrigger value="orders">{t('recentOrders')} ({historyLoading ? '…' : orders.length})</TabsTrigger>
+              <TabsTrigger value="receipts">{t('recentReceipts')} ({historyLoading ? '…' : receipts.length})</TabsTrigger>
+              <TabsTrigger value="documents">{t('invoices')} ({historyLoading ? '…' : documents.length})</TabsTrigger>
             </TabsList>
           </CardHeader>
           <CardContent>
@@ -168,13 +174,13 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ code:
               />
             </TabsContent>
             <TabsContent value="orders">
-              <DocumentTable items={orders} t={t} />
+              <DocumentTable items={orders} t={t} isLoading={historyLoading} />
             </TabsContent>
             <TabsContent value="receipts">
-              <DocumentTable items={receipts} t={t} isReceipt />
+              <DocumentTable items={receipts} t={t} isReceipt isLoading={historyLoading} />
             </TabsContent>
             <TabsContent value="documents">
-              <DocumentTable items={documents} t={t} />
+              <DocumentTable items={documents} t={t} isLoading={historyLoading} />
             </TabsContent>
           </CardContent>
         </Tabs>
@@ -285,7 +291,7 @@ interface DocRow {
 
 const PAGE_SIZE = 30
 
-function DocumentTable({ items, t, isReceipt }: { items: any[]; t: (k: any) => string; isReceipt?: boolean }) {
+function DocumentTable({ items, t, isReceipt, isLoading }: { items: any[]; t: (k: any) => string; isReceipt?: boolean; isLoading?: boolean }) {
   const [page, setPage] = useState(0)
   const rows: DocRow[] = useMemo(
     () =>
@@ -306,6 +312,10 @@ function DocumentTable({ items, t, isReceipt }: { items: any[]; t: (k: any) => s
   )
 
   const { sorted, sortKey, sortDir, toggleSort } = useSortable<DocRow>(rows)
+
+  if (isLoading) {
+    return <div className="space-y-2 py-2">{[...Array(5)].map((_, i) => <Skeleton key={i} className="h-9 w-full" />)}</div>
+  }
 
   if (!items || items.length === 0) {
     return <p className="text-muted-foreground text-sm py-4 text-center">-</p>
@@ -367,7 +377,8 @@ function DocumentTable({ items, t, isReceipt }: { items: any[]; t: (k: any) => s
 
       {/* Pagination */}
       <div className="flex items-center justify-between text-xs text-muted-foreground pt-1">
-        <span>{start + 1}–{Math.min(start + PAGE_SIZE, total)} מתוך {formatNumber(total)}{total >= 1000 ? '+' : ''}</span>
+        {/* The history API caps at 250 per list — a full page means "at least this many". */}
+        <span>{start + 1}–{Math.min(start + PAGE_SIZE, total)} מתוך {formatNumber(total)}{total >= 250 ? '+' : ''}</span>
         <div className="flex items-center gap-1">
           <button
             onClick={() => setPage(Math.max(0, current - 1))}
