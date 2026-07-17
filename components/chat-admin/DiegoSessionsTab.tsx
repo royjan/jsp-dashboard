@@ -339,6 +339,35 @@ const STATUS_DOT: Record<string, string> = {
   err: 'bg-red-400',
 }
 
+/** "find_part vehicle='X' descs=['a','b'] via=portal-pilot source=native cached=True -> 2 schema(s)"
+ *  parsed into fields for a readable bullet list; null when the note isn't in that shape. */
+function parseFindPart(text: string) {
+  const m = text.match(
+    /^find_part vehicle='([^']*)' descs=\[(.*?)\] via=(\S+) source=(\S+) cached=(\S+) (?:→|->) (\d+) schema/
+  )
+  if (!m) return null
+  const descs = m[2]
+    .split(/,\s*/)
+    .map((s) => s.replace(/^['"]|['"]$/g, '').trim())
+    .filter(Boolean)
+  return { vehicle: m[1], descs, via: m[3], source: m[4], cached: m[5], schemas: m[6] }
+}
+
+function FindPartBullets({ text }: { text: string }) {
+  const fp = parseFindPart(text)
+  if (!fp) return <EventBody text={text} />
+  const mono = 'font-mono text-gray-200'
+  return (
+    <ul dir="ltr" className="list-disc space-y-0.5 ps-5 text-sm text-gray-300 marker:text-gray-600">
+      <li>vehicle: <span className={mono}>{fp.vehicle || '—'}</span></li>
+      <li>parts: <span className={mono}>{fp.descs.join(', ') || '—'}</span></li>
+      <li>via: <span className={mono}>{fp.via}</span> · source: <span className={mono}>{fp.source}</span></li>
+      <li>cached: <span className={mono}>{/true/i.test(fp.cached) ? 'yes' : /none/i.test(fp.cached) ? 'unknown' : 'no'}</span></li>
+      <li>schemas found: <span className={mono}>{fp.schemas}</span></li>
+    </ul>
+  )
+}
+
 /** One full event rendered as a card — used for user messages, final answers, and the
  *  opened node detail panel. */
 function EventCard({ e }: { e: DiegoEvent }) {
@@ -359,7 +388,7 @@ function EventCard({ e }: { e: DiegoEvent }) {
         )}
         <span className="ml-auto text-[11px] text-gray-500">{fmtTime(e.timestamp)}</span>
       </div>
-      {e.text && <EventBody text={e.text} />}
+      {e.text && (e.author === 'search_parts' ? <FindPartBullets text={e.text} /> : <EventBody text={e.text} />)}
       {(e.toolEvents ?? []).length > 0 && (
         <div className="space-y-0.5">
           {e.toolEvents.map((t, j) => (
