@@ -383,7 +383,9 @@ export default function DiegoSessionsTab() {
   const filterSelectValue = userFilter ? distinctUsers.find((u) => sameUser(userFilter, u.id))?.id ?? userFilter : ''
 
   return (
-    <div className="grid grid-cols-1 gap-4 xl:grid-cols-[420px_1fr]">
+    // minmax(0,1fr): a plain 1fr column refuses to shrink below its content
+    // (long mono lines / JSON blocks), pushing the page under the fixed sidebar.
+    <div className="grid grid-cols-1 gap-4 xl:grid-cols-[420px_minmax(0,1fr)]">
       {/* ---- session list ---- */}
       <Panel
         title={`Sessions (${visibleSessions.length}${userFilter ? ` / ${sessions.length}` : ''})`}
