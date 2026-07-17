@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Bot, Car, ExternalLink, RefreshCw, User } from 'lucide-react'
 import { Panel } from '@/components/chat-admin/Panel'
 import { CustomerLink } from '@/components/shared/CustomerLink'
+import { ItemLink } from '@/components/shared/ItemLink'
 
 const ADK_WEB = process.env.NEXT_PUBLIC_ADK_WEB_BASE ?? 'http://192.168.0.230:8000'
 
@@ -61,28 +62,60 @@ function tryPrettyJson(text: string): string | null {
   }
 }
 
+const FLOW_ID = /(#[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/g
+
 /** One line of bot/customer text: natural direction per line, URLs become real links —
- *  item pages show just the part code, other URLs a shortened label. */
+ *  item codes get the customers-page hover card (ItemLink), the 🧭 flow line's #<uuid>
+ *  links the exact flow_decisions_v2 row, other URLs get a shortened label. */
 function LinkifiedLine({ line }: { line: string }) {
   const parts = line.split(URL_SPLIT)
   return (
     <div dir="auto" className="whitespace-pre-wrap break-words">
       {parts.map((p, i) => {
-        if (!/^https?:\/\//i.test(p)) return <span key={i}>{p}</span>
-        const item = p.match(ITEM_URL)
-        const label = item ? item[1] : p.replace(/^https?:\/\//i, '').slice(0, 44) + (p.length > 52 ? '…' : '')
+        if (/^https?:\/\//i.test(p)) {
+          const item = p.match(ITEM_URL)
+          if (item) {
+            // part code with the live stock/price hover card (same as /customers/<code>)
+            return <ItemLink key={i} code={decodeURIComponent(item[1])} showCode copyable={false} />
+          }
+          const label = p.replace(/^https?:\/\//i, '').slice(0, 44) + (p.length > 52 ? '…' : '')
+          return (
+            <a
+              key={i}
+              href={p}
+              target="_blank"
+              rel="noreferrer"
+              dir="ltr"
+              className="inline-flex items-baseline gap-0.5 font-mono text-blue-400 hover:underline"
+            >
+              {label}
+              <ExternalLink className="inline h-3 w-3 opacity-60" />
+            </a>
+          )
+        }
+        if (!line.includes('החלטת זרימה')) return <span key={i}>{p}</span>
+        // flow line: "#<uuid>" -> short link to the flow-decision editor
         return (
-          <a
-            key={i}
-            href={p}
-            target="_blank"
-            rel="noreferrer"
-            dir="ltr"
-            className="inline-flex items-baseline gap-0.5 font-mono text-blue-400 hover:underline"
-          >
-            {label}
-            <ExternalLink className="inline h-3 w-3 opacity-60" />
-          </a>
+          <span key={i}>
+            {p.split(FLOW_ID).map((s, j) =>
+              /^#[0-9a-f-]{36}$/.test(s) ? (
+                <a
+                  key={j}
+                  href={`/chat/flow-decisions/edit/${s.slice(1)}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  dir="ltr"
+                  title={s}
+                  className="inline-flex items-baseline gap-0.5 font-mono text-emerald-400 hover:underline"
+                >
+                  #{s.slice(1, 9)}
+                  <ExternalLink className="inline h-3 w-3 opacity-60" />
+                </a>
+              ) : (
+                <span key={j}>{s}</span>
+              )
+            )}
+          </span>
         )
       })}
     </div>
