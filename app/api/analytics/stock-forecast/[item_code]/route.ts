@@ -13,7 +13,7 @@ export async function GET(
   try {
     const { item_code } = await params
 
-    const cacheKey = `stock-forecast:item:${item_code}`
+    const cacheKey = `stock-forecast:item:v2:${item_code}`
     const cached = await getCached<any>(cacheKey)
     if (cached) return NextResponse.json(cached)
 
@@ -127,6 +127,8 @@ export async function GET(
       item_code: item.code,
       item_name: item.name,
       current_stock: stock,
+      incoming_qty: item.incoming_qty || 0,
+      ordered_qty: item.ordered_qty || 0,
       predicted_monthly_demand: Math.round(avgMonthlyDemand * 10) / 10,
       stock_out_date: stockOutDate,
       days_until_stockout: daysUntilStockout,

@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { AnimatedCounter } from '@/components/shared/AnimatedCounter'
 import { cn } from '@/lib/utils'
-import { AlertTriangle, Clock, ShieldAlert, Eye, TrendingDown, ArrowLeft, Search, Filter, X } from 'lucide-react'
+import { AlertTriangle, Clock, ShieldAlert, Eye, TrendingDown, ArrowLeft, Search, Filter, Truck, X } from 'lucide-react'
 import { EbayRecommendButton } from '@/components/shared/EbayRecommendButton'
 import { ItemLink } from '@/components/shared/ItemLink'
 import { useSortable, SortableTh } from '@/components/shared/sortable-table'
@@ -66,10 +66,16 @@ function ForecastChart({ itemCode }: { itemCode: string }) {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         <div className="text-center">
           <div className="text-xs text-muted-foreground">{locale === 'he' ? 'מלאי נוכחי' : 'Current Stock'}</div>
           <div className="text-lg font-bold">{formatNumber(data.current_stock)}</div>
+        </div>
+        <div className="text-center">
+          <div className="text-xs text-muted-foreground">{locale === 'he' ? 'הוזמן / בדרך' : 'Ordered / In Transit'}</div>
+          <div className="text-lg font-bold">
+            {formatNumber(data.ordered_qty ?? 0)} / {formatNumber(data.incoming_qty ?? 0)}
+          </div>
         </div>
         <div className="text-center">
           <div className="text-xs text-muted-foreground">{locale === 'he' ? 'ביקוש חודשי צפוי' : 'Predicted Monthly Demand'}</div>
@@ -308,12 +314,13 @@ export default function StockForecastPage() {
             </div>
           ) : (
             <div className="overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0">
-              <table className="w-full text-xs sm:text-sm min-w-[700px]">
+              <table className="w-full text-xs sm:text-sm min-w-[780px]">
                 <thead>
                   <tr className="border-b text-muted-foreground [&>th]:py-2">
                     <SortableTh<any> label={he ? 'קוד' : 'Code'} sortKey="item_code" align="end" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                     <SortableTh<any> label={he ? 'שם' : 'Name'} sortKey="item_name" align="end" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                     <SortableTh<any> label={he ? 'מלאי' : 'Stock'} sortKey="current_stock" align="center" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                    <SortableTh<any> label={he ? 'הוזמן/בדרך' : 'On Order'} sortKey="pipeline_qty" align="center" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                     <SortableTh<any> label={he ? 'ביקוש/חודש' : 'Demand/Mo'} sortKey="predicted_monthly_demand" align="center" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                     <SortableTh<any> label={he ? 'תאריך אזילה' : 'Stock-out Date'} sortKey="stock_out_date" align="center" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                     <SortableTh<any> label={he ? 'ימים' : 'Days'} sortKey="days_until_stockout" align="center" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
@@ -343,6 +350,21 @@ export default function StockForecastPage() {
                         </td>
                         <td className="py-2.5 max-w-[200px] truncate text-end" title={item.item_name}><ItemLink code={item.item_code} name={item.item_name || '-'} /></td>
                         <td className="py-2.5 text-center tabular-nums">{formatNumber(item.current_stock)}</td>
+                        <td className="py-2.5 text-center tabular-nums">
+                          {(item.pipeline_qty ?? 0) > 0 ? (
+                            <span
+                              className="inline-flex items-center gap-1 text-sky-600 dark:text-sky-400"
+                              title={he
+                                ? `הוזמן: ${formatNumber(item.ordered_qty ?? 0)} · בדרך: ${formatNumber(item.incoming_qty ?? 0)}`
+                                : `Ordered: ${formatNumber(item.ordered_qty ?? 0)} · In transit: ${formatNumber(item.incoming_qty ?? 0)}`}
+                            >
+                              <Truck className="h-3.5 w-3.5" />
+                              {formatNumber(item.pipeline_qty)}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </td>
                         <td className="py-2.5 text-center tabular-nums">{formatNumber(item.predicted_monthly_demand)}</td>
                         <td className="py-2.5 text-center text-xs">{formatDate(item.stock_out_date, locale)}</td>
                         <td className="py-2.5 text-center tabular-nums">
@@ -353,12 +375,27 @@ export default function StockForecastPage() {
                               'text-muted-foreground'
                             )}>
                               {item.days_until_stockout}
+                              {item.days_with_pipeline != null && item.days_with_pipeline !== item.days_until_stockout && (
+                                <span
+                                  className="text-sky-600 dark:text-sky-400"
+                                  title={he ? 'כולל הוזמן/בדרך' : 'Including on-order/in-transit'}
+                                >
+                                  {' '}→ {item.days_with_pipeline}
+                                </span>
+                              )}
                             </span>
                           ) : '-'}
                         </td>
                         <td className="py-2.5 text-center text-xs text-muted-foreground">{Math.round((item.confidence || 0) * 100)}%</td>
                         <td className="py-2.5 text-center">
-                          <UrgencyBadge urgency={item.urgency} locale={locale} />
+                          <span className="inline-flex items-center gap-1">
+                            <UrgencyBadge urgency={item.urgency} locale={locale} />
+                            {item.stock_urgency && item.stock_urgency !== item.urgency && (
+                              <span title={he ? 'הדחיפות חושבה כולל הוזמן/בדרך' : 'Urgency includes on-order/in-transit'}>
+                                <Truck className="h-3.5 w-3.5 text-sky-500" />
+                              </span>
+                            )}
+                          </span>
                         </td>
                       </motion.tr>
                     ))}

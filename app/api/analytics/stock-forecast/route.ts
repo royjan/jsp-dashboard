@@ -23,7 +23,7 @@ export async function GET(request: Request) {
     const limit = parseInt(searchParams.get('limit') || '50', 10)
     const urgencyFilter = searchParams.get('urgency') || ''
 
-    const cacheKey = `stock-forecast:list:${limit}:${urgencyFilter}`
+    const cacheKey = `stock-forecast:list:v2:${limit}:${urgencyFilter}`
     const cached = await getCached<any>(cacheKey)
     if (cached) return NextResponse.json(cached)
 
@@ -66,6 +66,10 @@ export async function GET(request: Request) {
       .map(item => {
         const stock = item.stock_qty || 0
         const price = item.price || 0
+        // Inbound supply that's already committed: on order from supplier + in transit.
+        const incomingQty = item.incoming_qty || 0
+        const orderedQty = item.ordered_qty || 0
+        const pipelineQty = incomingQty + orderedQty
 
         // Calculate avg monthly demand from monthly_sales if available,
         // otherwise estimate from sold_this_year / sold_last_year
@@ -118,18 +122,33 @@ export async function GET(request: Request) {
           stockOutDate = now.toISOString().split('T')[0]
         }
 
-        const urgency = getUrgency(daysUntilStockout)
+        // Coverage including inbound pipeline — an item with plenty already ordered /
+        // on the way shouldn't scream critical. No ETA data exists, so this assumes
+        // the pipeline lands before the shelves empty; both day-counts are returned
+        // so the operator can judge.
+        let daysWithPipeline: number | null = daysUntilStockout
+        if (avgMonthlyDemand > 0 && pipelineQty > 0) {
+          daysWithPipeline = Math.round(((stock + pipelineQty) / avgMonthlyDemand) * 30.44)
+        }
+
+        const stockUrgency = getUrgency(daysUntilStockout)
+        const urgency = getUrgency(daysWithPipeline)
 
         return {
           item_code: item.code,
           item_name: fixRtlItemName(item.name),
           current_stock: stock,
+          incoming_qty: incomingQty,
+          ordered_qty: orderedQty,
+          pipeline_qty: pipelineQty,
           price,
           predicted_monthly_demand: Math.round(avgMonthlyDemand * 10) / 10,
           stock_out_date: stockOutDate,
           days_until_stockout: daysUntilStockout,
+          days_with_pipeline: daysWithPipeline,
           confidence: Math.round(confidence * 100) / 100,
           urgency,
+          stock_urgency: stockUrgency,
         }
       })
       // Filter by urgency if requested
@@ -143,7 +162,7 @@ export async function GET(request: Request) {
         const urgencyOrder: Record<string, number> = { critical: 0, warning: 1, watch: 2, ok: 3 }
         const diff = (urgencyOrder[a.urgency] || 3) - (urgencyOrder[b.urgency] || 3)
         if (diff !== 0) return diff
-        return (a.days_until_stockout ?? 9999) - (b.days_until_stockout ?? 9999)
+        return (a.days_with_pipeline ?? 9999) - (b.days_with_pipeline ?? 9999)
       })
       .slice(0, limit)
 
