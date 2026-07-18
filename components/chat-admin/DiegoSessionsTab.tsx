@@ -40,9 +40,12 @@ interface DiegoEvent {
 const AUTHOR_STYLE: Record<string, string> = {
   user: 'bg-blue-500/15 text-blue-300 border-blue-500/30',
   Diego_Clone: 'bg-purple-500/15 text-purple-300 border-purple-500/30',
+  JSP_Assistant: 'bg-purple-500/15 text-purple-300 border-purple-500/30',
   extract_slots: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
   search_parts: 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30',
   enrich_parts: 'bg-teal-500/15 text-teal-300 border-teal-500/30',
+  lubinski_stock: 'bg-sky-500/15 text-sky-300 border-sky-500/30',
+  dora_flow: 'bg-rose-500/15 text-rose-300 border-rose-500/30',
   format_v2: 'bg-green-500/15 text-green-300 border-green-500/30',
 }
 
@@ -432,6 +435,8 @@ function FindPartBullets({ text }: { text: string }) {
 /** What each pipeline node does — shown in the node detail panel. */
 const NODE_INFO: Record<string, string> = {
   Diego_Clone: 'Root router — reads the message and transfers to the right flow; owns the flow-teaching tools',
+  JSP_Assistant: 'Root router (Jan Spare Parts assistant) — stock → stock_flow, credits/returns/reminders/deliveries → dora_flow, feedback → feedback_flow',
+  dora_flow: 'Dora — credits/returns, replacement cases, reminders, outgoing deliveries (hermes-agent relay on LXC 104)',
   extract_slots: 'Gemini extraction — vehicle (plate/VIN) + part descriptions in English from the conversation',
   search_parts: 'find_part via portal-pilot (PSA diagram scrape); finansit lambda only as transport fallback',
   enrich_parts: 'Best variant(s) per diagram + live stock & price per part from the ERP',
