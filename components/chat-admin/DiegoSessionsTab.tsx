@@ -429,9 +429,64 @@ function FindPartBullets({ text }: { text: string }) {
   )
 }
 
+/** What each pipeline node does — shown in the node detail panel. */
+const NODE_INFO: Record<string, string> = {
+  Diego_Clone: 'Root router — reads the message and transfers to the right flow; owns the flow-teaching tools',
+  extract_slots: 'Gemini extraction — vehicle (plate/VIN) + part descriptions in English from the conversation',
+  search_parts: 'find_part via portal-pilot (PSA diagram scrape); finansit lambda only as transport fallback',
+  enrich_parts: 'Best variant(s) per diagram + live stock & price per part from the ERP',
+  lubinski_stock: 'Supplier (Lubinski importer) availability for parts with zero own stock',
+  format_v2: 'Deterministic v2-style answer: header, flow line, part lines, diagrams',
+  record_feedback: 'Stores 👍/👎 feedback on an answer',
+  respond_feedback: 'Acknowledges the feedback to the customer',
+}
+
+/** A part from the enriched/lubinski state JSON — the structured source the answer text is
+ *  rendered from. Rendering from state keeps the dashboard immune to message-format changes. */
+interface EnrichedPart {
+  pn: string
+  name?: string
+  num?: string | number
+  conf?: number | null
+  total?: number | null
+  wh?: string
+  price?: number | null
+  stock_ok?: boolean
+  lub_qty?: number
+}
+
+function PartCardFromState({ p, idx }: { p: EnrichedPart; idx: number }) {
+  let stock: { text: string; cls?: string }
+  if (p.stock_ok === false) stock = { text: 'לא ניתן לבדוק כרגע', cls: 'text-amber-400' }
+  else if ((p.total || 0) > 0) stock = { text: `${p.total}${p.wh ? ` (מחסן ${p.wh})` : ''}` }
+  else if ((p.lub_qty || 0) > 0)
+    stock = { text: `אין אצלנו — זמין מהספק לובינסקי (${p.lub_qty}), הזמנה תוך יום עסקים`, cls: 'text-sky-400' }
+  else stock = { text: 'אין במלאי', cls: 'text-red-400' }
+  return (
+    <div dir="rtl" className="my-1 rounded-lg border border-[var(--color-border-default)] bg-black/20 px-3 py-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-mono text-xs text-gray-500">#{idx}</span>
+        <span dir="auto" className="text-sm font-medium text-gray-100">{p.name || p.pn}</span>
+        {p.conf != null && <span className="text-[10px] text-gray-500">התאמה {p.conf}%</span>}
+      </div>
+      <ul className="mt-1 list-disc space-y-0.5 ps-5 text-sm text-gray-300 marker:text-gray-600">
+        <li>מק״ט: <ItemLink code={p.pn} showCode /></li>
+        {p.num != null && p.num !== '' && p.num !== '-' && (
+          <li>מספר בשרטוט: <span className="font-mono text-gray-200">{p.num}</span></li>
+        )}
+        <li className={stock.cls}>במלאי: {stock.text}</li>
+        {typeof p.price === 'number' && (
+          <li>מחיר: <span className="font-mono text-gray-200">₪{p.price.toFixed(2)}</span></li>
+        )}
+      </ul>
+    </div>
+  )
+}
+
 /** One full event rendered as a card — used for user messages, final answers, and the
- *  opened node detail panel. */
-function EventCard({ e }: { e: DiegoEvent }) {
+ *  opened node detail panel. `enriched` (the turn's part-state JSON) replaces the answer's
+ *  raw part text-lines with structured cards. */
+function EventCard({ e, enriched }: { e: DiegoEvent; enriched?: EnrichedPart[] }) {
   return (
     <div className="rounded-lg border border-[var(--color-border-default)] bg-black/20 p-3">
       <div className="mb-1 flex flex-wrap items-center gap-2">
@@ -449,7 +504,24 @@ function EventCard({ e }: { e: DiegoEvent }) {
         )}
         <span className="ml-auto text-[11px] text-gray-500">{fmtTime(e.timestamp)}</span>
       </div>
-      {e.text && (e.author === 'search_parts' ? <FindPartBullets text={e.text} /> : <EventBody text={e.text} />)}
+      {NODE_INFO[e.author] && (
+        <div dir="ltr" className="mb-1.5 text-[11px] italic text-gray-500">{NODE_INFO[e.author]}</div>
+      )}
+      {(() => {
+        const parts = (enriched ?? []).filter((p) => p?.pn)
+        // With structured parts available, the raw '#N) ...' text lines are redundant.
+        const bodyText = parts.length
+          ? e.text.split('\n').filter((l) => !PART_LINE_RE.test(l.trim())).join('\n')
+          : e.text
+        return (
+          <>
+            {bodyText && (e.author === 'search_parts' ? <FindPartBullets text={bodyText} /> : <EventBody text={bodyText} />)}
+            {parts.map((p, i) => (
+              <PartCardFromState key={`${p.pn}-${i}`} p={p} idx={i + 1} />
+            ))}
+          </>
+        )
+      })()}
       {(e.toolEvents ?? []).length > 0 && (
         <div className="space-y-0.5">
           {e.toolEvents.map((t, j) => (
@@ -810,6 +882,11 @@ export default function DiegoSessionsTab() {
               const turns = groupTurns(detail.events).reverse()
               return turns.map((turn, ti) => {
                 const s = turnSummary(turn)
+                // Latest part-state in the turn (lubinski_stock re-emits enriched with lub_qty
+                // after enrich_parts) — the answer renders its part cards from this JSON.
+                const enriched = [...turn.nodes].reverse()
+                  .map((n) => (n.e.stateDelta as any)?.enriched)
+                  .find((x) => Array.isArray(x) && x.length)
                 return (
                   <details
                     key={ti}
@@ -845,7 +922,7 @@ export default function DiegoSessionsTab() {
                           turnKey={ti}
                         />
                       )}
-                      {turn.answer && <EventCard e={turn.answer} />}
+                      {turn.answer && <EventCard e={turn.answer} enriched={enriched} />}
                     </div>
                   </details>
                 )
