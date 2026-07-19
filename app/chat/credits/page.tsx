@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { ReceiptText, RefreshCw, Search } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ItemLink } from '@/components/shared/ItemLink'
@@ -38,6 +39,7 @@ const IMG_KIND_HE: Record<string, string> = {
 function CaseImages({ caseRef }: { caseRef: string }) {
   const [images, setImages] = useState<CaseImage[] | null>(null)
   const [failed, setFailed] = useState(false)
+  const [viewer, setViewer] = useState<CaseImage | null>(null)
 
   useEffect(() => {
     let alive = true
@@ -54,13 +56,11 @@ function CaseImages({ caseRef }: { caseRef: string }) {
   return (
     <div className="flex flex-wrap gap-2">
       {images.map((img) => (
-        <a
+        <button
           key={img.rel_path}
-          href={`${IMG_BASE}${img.url}`}
-          target="_blank"
-          rel="noreferrer"
-          onClick={(ev) => ev.stopPropagation()}
-          className="group"
+          type="button"
+          onClick={(ev) => { ev.stopPropagation(); setViewer(img) }}
+          className="group text-start"
           title={img.caption || img.rel_path}
         >
           <img
@@ -72,8 +72,39 @@ function CaseImages({ caseRef }: { caseRef: string }) {
           <span className="mt-0.5 block text-center text-[10px] text-muted-foreground">
             {IMG_KIND_HE[img.kind] || img.kind}
           </span>
-        </a>
+        </button>
       ))}
+      <Dialog open={viewer !== null} onOpenChange={(open) => { if (!open) setViewer(null) }}>
+        <DialogContent
+          className="max-w-4xl p-2 sm:p-4"
+          onClick={(ev) => ev.stopPropagation()}
+        >
+          {viewer && (
+            <div className="space-y-2">
+              <DialogTitle className="text-sm font-medium pe-8">
+                {IMG_KIND_HE[viewer.kind] || viewer.kind}
+                {viewer.caption ? ` — ${viewer.caption}` : ''}
+              </DialogTitle>
+              <img
+                src={`${IMG_BASE}${viewer.url}`}
+                alt={viewer.caption || viewer.kind}
+                className="max-h-[75vh] w-full rounded-md object-contain"
+              />
+              <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted-foreground">
+                <span dir="ltr">{viewer.rel_path}</span>
+                <a
+                  href={`${IMG_BASE}${viewer.url}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-primary hover:underline"
+                >
+                  פתיחה בכרטיסייה חדשה ↗
+                </a>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
