@@ -12,6 +12,68 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { ItemLink } from '@/components/shared/ItemLink'
 import { cn } from '@/lib/utils'
 
+// Read-only image server on the openclaw box (VM 102) — serves Dora's credit-note
+// scans from /home/avi/.openclaw/credits-images (LAN/Tailscale only, like portal-pilot diagrams).
+const IMG_BASE = process.env.NEXT_PUBLIC_CREDITS_IMG_BASE || 'http://192.168.0.161:8620'
+
+interface CaseImage {
+  kind: string
+  rel_path: string
+  caption: string
+  added_at: string
+  url: string
+}
+
+const IMG_KIND_HE: Record<string, string> = {
+  credit_note: 'תעודת זיכוי',
+  delivery_note: 'תעודת משלוח',
+  part_photo: 'תמונת חלק',
+  invoice: 'חשבונית',
+}
+
+function CaseImages({ caseRef }: { caseRef: string }) {
+  const [images, setImages] = useState<CaseImage[] | null>(null)
+  const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    let alive = true
+    fetch(`${IMG_BASE}/cases/${encodeURIComponent(caseRef)}/images`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((j) => { if (alive) setImages(j.images || []) })
+      .catch(() => { if (alive) setFailed(true) })
+    return () => { alive = false }
+  }, [caseRef])
+
+  if (failed) return <p className="text-xs text-muted-foreground">שרת התמונות לא זמין</p>
+  if (images === null) return <Skeleton className="h-32 w-24" />
+  if (images.length === 0) return null
+  return (
+    <div className="flex flex-wrap gap-2">
+      {images.map((img) => (
+        <a
+          key={img.rel_path}
+          href={`${IMG_BASE}${img.url}`}
+          target="_blank"
+          rel="noreferrer"
+          onClick={(ev) => ev.stopPropagation()}
+          className="group"
+          title={img.caption || img.rel_path}
+        >
+          <img
+            src={`${IMG_BASE}${img.url}`}
+            alt={img.caption || img.kind}
+            className="h-32 rounded-md border object-contain transition-transform group-hover:scale-[1.03]"
+            loading="lazy"
+          />
+          <span className="mt-0.5 block text-center text-[10px] text-muted-foreground">
+            {IMG_KIND_HE[img.kind] || img.kind}
+          </span>
+        </a>
+      ))}
+    </div>
+  )
+}
+
 interface CreditCase {
   id: string
   external_ref: string | null
@@ -169,7 +231,8 @@ export default function CreditsPage() {
                     )}
                   </div>
                   {isOpen && (
-                    <div className="mt-2 space-y-1 border-t pt-2 text-sm">
+                    <div className="mt-2 space-y-2 border-t pt-2 text-sm">
+                      {c.external_ref && <CaseImages caseRef={c.external_ref} />}
                       {c.notes && <p className="whitespace-pre-wrap text-muted-foreground">{c.notes}</p>}
                       <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                         <span>נפתח: {fmtDate(md.opened_at || c.created_at)}</span>
