@@ -22,6 +22,8 @@ export interface DiegoSessionSummary {
   vehicle: string | null // "פיג'ו צרפת 3008 2021" from state.search.vehicle_ctx
   lastUserText: string | null
   customerName: string | null // from synced documents; null for non-customer ids (test_user, wa-*)
+  doraEvents: number // turns routed to Dora (dora_flow author)
+  stockEvents: number // turns routed to the stock pipeline
 }
 
 export interface DiegoEvent {
@@ -52,6 +54,8 @@ export async function listDiegoSessions(limit = 200): Promise<DiegoSessionSummar
             s.state #> '{search,vehicle_ctx}'                        AS vehicle_ctx,
             count(e.id)::int                                         AS events,
             count(e.id) FILTER (WHERE e.event_data->>'author'='user')::int AS turns,
+            count(e.id) FILTER (WHERE e.event_data->>'author'='dora_flow')::int AS dora_events,
+            count(e.id) FILTER (WHERE e.event_data->>'author'='search_parts')::int AS stock_events,
             (SELECT e2.event_data #>> '{content,parts,0,text}'
                FROM diego_v3.events e2
               WHERE e2.app_name=s.app_name AND e2.user_id=s.user_id AND e2.session_id=s.id
@@ -93,7 +97,17 @@ export async function listDiegoSessions(limit = 200): Promise<DiegoSessionSummar
     vehicle: describeVehicle(r.vehicle_ctx),
     lastUserText: r.last_user_text ?? null,
     customerName: names.get(r.user_id) ?? null,
+    doraEvents: r.dora_events ?? 0,
+    stockEvents: r.stock_events ?? 0,
   }))
+}
+
+/** Hard-delete a session and its events (events→sessions FK is ON DELETE CASCADE,
+ *  but we delete events explicitly for clarity/back-compat). */
+export async function deleteDiegoSession(userId: string, sessionId: string): Promise<number> {
+  await query(`DELETE FROM diego_v3.events WHERE user_id=$1 AND session_id=$2`, [userId, sessionId])
+  const res = await query(`DELETE FROM diego_v3.sessions WHERE user_id=$1 AND id=$2`, [userId, sessionId])
+  return res.rowCount ?? 0
 }
 
 export async function getDiegoSession(userId: string, sessionId: string): Promise<DiegoSessionDetail | null> {

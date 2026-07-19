@@ -7,7 +7,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { usePathname, useSearchParams } from 'next/navigation'
-import { Bot, Car, ChevronRight, ExternalLink, ListFilter, RefreshCw, User, X } from 'lucide-react'
+import { Bot, Car, ChevronRight, ExternalLink, ListFilter, RefreshCw, Trash2, User, X } from 'lucide-react'
 import { Panel } from '@/components/chat-admin/Panel'
 import { CustomerLink } from '@/components/shared/CustomerLink'
 import { ItemLink } from '@/components/shared/ItemLink'
@@ -23,6 +23,8 @@ interface SessionSummary {
   vehicle: string | null
   lastUserText: string | null
   customerName: string | null
+  doraEvents: number
+  stockEvents: number
 }
 
 interface DiegoEvent {
@@ -715,10 +717,35 @@ export default function DiegoSessionsTab() {
     [sessions, selected]
   )
 
-  const visibleSessions = useMemo(
-    () => (userFilter ? sessions.filter((s) => sameUser(userFilter, s.userId)) : sessions),
-    [sessions, userFilter]
-  )
+  // Separate Dora sessions from Diego sessions: classify by which flow the
+  // session's events actually used (a session can be both — shows in both).
+  const [flowFilter, setFlowFilter] = useState<'all' | 'diego' | 'dora'>('all')
+
+  const visibleSessions = useMemo(() => {
+    let list = userFilter ? sessions.filter((s) => sameUser(userFilter, s.userId)) : sessions
+    if (flowFilter === 'dora') list = list.filter((s) => (s.doraEvents ?? 0) > 0)
+    if (flowFilter === 'diego') list = list.filter((s) => (s.stockEvents ?? 0) > 0 || (s.doraEvents ?? 0) === 0)
+    return list
+  }, [sessions, userFilter, flowFilter])
+
+  const deleteSession = useCallback(async (user: string, id: string) => {
+    if (!window.confirm(`למחוק את הסשן ${id} לצמיתות?`)) return
+    try {
+      const r = await fetch(
+        `/api/diego/sessions?user=${encodeURIComponent(user)}&id=${encodeURIComponent(id)}`,
+        { method: 'DELETE' }
+      )
+      const j = await r.json()
+      if (!j.success) throw new Error(j.error)
+      setSessions((prev) => prev.filter((s) => !(s.userId === user && s.sessionId === id)))
+      if (selected && selected.id === id && sameUser(selected.user, user)) {
+        setDetail(null)
+        window.history.replaceState(null, '', userFilter ? `/chat/diego/${encodeURIComponent(userFilter)}` : '/chat/diego')
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }, [selected, userFilter])
 
   const distinctUsers = useMemo(() => {
     const byId = new Map<string, { count: number; name: string | null }>()
@@ -783,6 +810,23 @@ export default function DiegoSessionsTab() {
               <X className="h-3.5 w-3.5" />
             </button>
           )}
+          <div className="flex gap-1">
+            {([['all', 'הכל'], ['diego', 'Diego'], ['dora', 'Dora']] as const).map(([key, label]) => (
+              <button
+                key={key}
+                onClick={() => setFlowFilter(key)}
+                className={`rounded-md border px-2 py-1 text-xs transition-colors ${
+                  flowFilter === key
+                    ? key === 'dora'
+                      ? 'border-rose-500/60 bg-rose-500/10 text-rose-300'
+                      : 'border-blue-500/60 bg-blue-500/10 text-blue-300'
+                    : 'border-[var(--color-border-default)] text-gray-400 hover:text-white'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
         <div className="max-h-[75vh] space-y-2 overflow-y-auto pr-1">
           {visibleSessions.map((s) => {
@@ -802,8 +846,28 @@ export default function DiegoSessionsTab() {
                 }`}
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="font-mono text-sm text-white">{s.sessionId}</span>
-                  <span className="text-[11px] text-gray-500">{fmtTime(s.updateTime)}</span>
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <span className="truncate font-mono text-sm text-white">{s.sessionId}</span>
+                    {(s.stockEvents ?? 0) > 0 && (
+                      <span className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-1.5 text-[10px] text-cyan-300">diego</span>
+                    )}
+                    {(s.doraEvents ?? 0) > 0 && (
+                      <span className="rounded-full border border-rose-500/30 bg-rose-500/10 px-1.5 text-[10px] text-rose-300">dora</span>
+                    )}
+                  </span>
+                  <span className="flex shrink-0 items-center gap-1.5">
+                    <span className="text-[11px] text-gray-500">{fmtTime(s.updateTime)}</span>
+                    <button
+                      onClick={(ev) => {
+                        ev.stopPropagation()
+                        void deleteSession(s.userId, s.sessionId)
+                      }}
+                      className="rounded p-0.5 text-gray-600 hover:bg-red-500/15 hover:text-red-400"
+                      title="מחק סשן"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </span>
                 </div>
                 <div className="mt-1 flex items-center gap-2 text-xs text-gray-400">
                   <User className="h-3 w-3" />
