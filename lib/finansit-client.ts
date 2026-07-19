@@ -353,14 +353,26 @@ export async function fetchDocumentLines(params: {
   return client.documents.getLines(params as any)
 }
 
+// Bulk line scans on the active year ride FINAPI's Btrieve tier — 45-120s per
+// month window. Needs its own client: a generous timeout AND NO failover — the
+// fallback box answers this endpoint with 503 ("SQL unavailable and no cached
+// documents"), so failing over just converts a slow answer into an error.
+const linesClient = createClient({
+  baseUrl: process.env.FINANSIT_BASE_URL || FINANSIT_PRIMARY,
+  baseUrls: [process.env.FINANSIT_BASE_URL || FINANSIT_PRIMARY],
+  credentials: async () => {
+    await initializeSecrets()
+    return getSecret('FINANSIT_API_CREDENTIALS', '')
+  },
+  concurrency: 1,
+  timeout: 240000,
+})
+
 export async function fetchDocumentLinesSlow(params: {
   doc_format?: string; item_code?: string; date_from?: string
   date_to?: string; limit?: number; offset?: number; year?: string
 }): Promise<any> {
-  // Bulk line scans on the active year go down FINAPI's Btrieve tier (~45s per
-  // month window) — far beyond the default client's 15s timeout. Reuses the
-  // long-timeout client (55s) added for customer history.
-  return historyClient.documents.getLines(params as any)
+  return linesClient.documents.getLines(params as any)
 }
 
 export async function fetchDocumentPdf(format: number | string, number: number | string, year?: string): Promise<Response> {
