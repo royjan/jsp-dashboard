@@ -87,7 +87,13 @@ interface CreditCase {
   updated_at: string
   follow_up_at: string | null
   closed_at: string | null
-  supplier_match: { code: string; name: string; score: number } | null
+  supplier_match: {
+    code: string
+    name: string
+    score: number
+    customer_code: string | null
+    customer_name: string | null
+  } | null
 }
 
 const MCP_STATUS_HE: Record<string, { label: string; cls: string }> = {
@@ -227,11 +233,17 @@ export default function CreditsPage() {
                   </div>
                   <div className="mt-1 flex flex-wrap items-center gap-3 text-sm">
                     {c.supplier_match ? (
+                      // The customer twin card (3xxxx "לקוח") has the rich page;
+                      // the 4xxxx supplier card page is empty for non-import suppliers.
                       <Link
-                        href={`/suppliers/${c.supplier_match.code}`}
+                        href={c.supplier_match.customer_code
+                          ? `/customers/${c.supplier_match.customer_code}`
+                          : `/suppliers/${c.supplier_match.code}`}
                         onClick={(ev) => ev.stopPropagation()}
                         className="font-medium text-primary hover:underline"
-                        title={`כרטיס ספק ${c.supplier_match.code} (התאמה ${Math.round(c.supplier_match.score * 100)}%)`}
+                        title={c.supplier_match.customer_code
+                          ? `כרטיס לקוח ${c.supplier_match.customer_code} · כרטיס ספק ${c.supplier_match.code} (התאמה ${Math.round(c.supplier_match.score * 100)}%)`
+                          : `כרטיס ספק ${c.supplier_match.code} (התאמה ${Math.round(c.supplier_match.score * 100)}%)`}
                       >
                         {c.supplier_match.name}
                       </Link>

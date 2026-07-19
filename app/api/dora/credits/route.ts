@@ -35,6 +35,12 @@ interface SupplierMatch {
   code: string
   name: string
   score: number
+  // Most local suppliers are also clients under a separate 3xxxx card (often
+  // literally named "...לקוח"). The /customers page is the rich view, so the UI
+  // links there when a twin exists; the 4xxxx supplier card has no usable page
+  // for non-import suppliers.
+  customer_code: string | null
+  customer_name: string | null
 }
 
 // Strips legal/generic boilerplate so "חלקי חילוף לרכב בע"מ" can't dominate the
@@ -54,6 +60,33 @@ function variantsFor(name: string | null, slug: string | null): string[] {
   return [...out]
 }
 
+async function bestCard(variants: string[], formats: string[]): Promise<{ code: string; name: string; best: number } | null> {
+  const res = await query(
+    `SELECT code, name, best, cnt FROM (
+       SELECT customer_code AS code, MAX(customer_name) AS name, COUNT(*)::int AS cnt,
+              MAX((SELECT MAX(similarity(
+                regexp_replace(regexp_replace(customer_name,
+                  'בע["״׳'']?מ|חלקי חילוף|לרכב|חברה|לקוח|ספק|בעמ', '', 'g'),
+                  '[^א-תa-zA-Z0-9 ]', ' ', 'g'),
+                v)) FROM unnest($1::text[]) v)) AS best
+         FROM dashboard.documents
+        WHERE format = ANY($2::text[]) AND customer_code <> ''
+        GROUP BY customer_code) t
+      WHERE best >= 0.3
+      ORDER BY best DESC, cnt DESC
+      LIMIT 5`,
+    [variants, formats]
+  )
+  if (res.rows.length === 0) return null
+  // Near-tied scores (e.g. "סוכניות אפק -רקורד" vs "רקורד-סמי אהרון") resolve
+  // to the card with the most documents.
+  const top = Number(res.rows[0].best)
+  const pick = res.rows
+    .filter((r: any) => top - Number(r.best) <= 0.05)
+    .sort((a: any, b: any) => b.cnt - a.cnt)[0]
+  return { code: pick.code, name: pick.name, best: Number(pick.best) }
+}
+
 async function matchSuppliers(
   keys: Array<{ key: string; name: string | null; slug: string | null }>
 ): Promise<Record<string, SupplierMatch | null>> {
@@ -64,33 +97,21 @@ async function matchSuppliers(
       result[key] = null
       continue
     }
-    const res = await query(
-      `SELECT code, name, best, cnt FROM (
-         SELECT customer_code AS code, MAX(customer_name) AS name, COUNT(*)::int AS cnt,
-                MAX((SELECT MAX(similarity(
-                  regexp_replace(regexp_replace(customer_name,
-                    'בע["״׳'']?מ|חלקי חילוף|לרכב|חברה|לקוח|ספק|בעמ', '', 'g'),
-                    '[^א-תa-zA-Z0-9 ]', ' ', 'g'),
-                  v)) FROM unnest($1::text[]) v)) AS best
-           FROM dashboard.documents
-          WHERE format IN ('51','53','58','61','62','66') AND customer_code <> ''
-          GROUP BY customer_code) t
-        WHERE best >= 0.3
-        ORDER BY best DESC, cnt DESC
-        LIMIT 5`,
-      [variants]
-    )
-    if (res.rows.length === 0) {
+    const supplier = await bestCard(variants, ['51', '53', '58', '61', '62', '66'])
+    if (!supplier) {
       result[key] = null
       continue
     }
-    // Near-tied scores (e.g. "סוכניות אפק -רקורד" vs "רקורד-סמי אהרון") resolve
-    // to the card we actually buy from the most.
-    const top = Number(res.rows[0].best)
-    const pick = res.rows
-      .filter((r: any) => top - Number(r.best) <= 0.05)
-      .sort((a: any, b: any) => b.cnt - a.cnt)[0]
-    result[key] = { code: pick.code, name: pick.name, score: Number(Number(pick.best).toFixed(3)) }
+    let customer = await bestCard(variants, ['11', '12', '14', '21', '31', '35'])
+    // Supplier cards can carry a few stray sales docs — a twin must be a different card.
+    if (customer && customer.code === supplier.code) customer = null
+    result[key] = {
+      code: supplier.code,
+      name: supplier.name,
+      score: Number(supplier.best.toFixed(3)),
+      customer_code: customer?.code ?? null,
+      customer_name: customer?.name ?? null,
+    }
   }
   return result
 }
@@ -126,7 +147,7 @@ export async function GET() {
 
     let matches: Record<string, SupplierMatch | null> = {}
     if (distinct.size > 0) {
-      const cacheKey = `dora:supplier-match:v1:${[...distinct.keys()].sort().join('~')}`
+      const cacheKey = `dora:supplier-match:v2:${[...distinct.keys()].sort().join('~')}`
       const cached = await getCached<Record<string, SupplierMatch | null>>(cacheKey)
       if (cached) {
         matches = cached
