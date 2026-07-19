@@ -5,6 +5,7 @@
  * Neon mirror of her brain DB (schema `dora`, trigger-synced in real time).
  */
 import { useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import { ReceiptText, RefreshCw, Search } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -37,7 +38,7 @@ function CaseImages({ caseRef }: { caseRef: string }) {
 
   useEffect(() => {
     let alive = true
-    fetch(`${IMG_BASE}/cases/${encodeURIComponent(caseRef)}/images`)
+    fetch(`${IMG_BASE}/cases/${encodeURIComponent(caseRef)}/images`, { signal: AbortSignal.timeout(8000) })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
       .then((j) => { if (alive) setImages(j.images || []) })
       .catch(() => { if (alive) setFailed(true) })
@@ -86,6 +87,7 @@ interface CreditCase {
   updated_at: string
   follow_up_at: string | null
   closed_at: string | null
+  supplier_match: { code: string; name: string; score: number } | null
 }
 
 const MCP_STATUS_HE: Record<string, { label: string; cls: string }> = {
@@ -224,7 +226,18 @@ export default function CreditsPage() {
                     <span className="ms-auto text-xs text-muted-foreground">{fmtDate(c.updated_at)}</span>
                   </div>
                   <div className="mt-1 flex flex-wrap items-center gap-3 text-sm">
-                    <span className="font-medium">{md.supplier_name || c.title}</span>
+                    {c.supplier_match ? (
+                      <Link
+                        href={`/suppliers/${c.supplier_match.code}`}
+                        onClick={(ev) => ev.stopPropagation()}
+                        className="font-medium text-primary hover:underline"
+                        title={`כרטיס ספק ${c.supplier_match.code} (התאמה ${Math.round(c.supplier_match.score * 100)}%)`}
+                      >
+                        {c.supplier_match.name}
+                      </Link>
+                    ) : (
+                      <span className="font-medium">{md.supplier_name || c.title}</span>
+                    )}
                     {c.owner && <span className="text-xs text-muted-foreground">אחראי: {c.owner}</span>}
                     {c.follow_up_at && !c.closed_at && (
                       <span className="text-xs text-amber-600">מעקב: {fmtDate(c.follow_up_at)}</span>
