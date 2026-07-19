@@ -60,36 +60,74 @@ function variantsFor(name: string | null, slug: string | null): string[] {
   return [...out]
 }
 
-async function bestCard(variants: string[], formats: string[]): Promise<{ code: string; name: string; best: number } | null> {
+// pg_trgm-style trigram similarity computed in JS: SQL-side similarity over the
+// whole documents table timed out (each call is a full-table scan), while the
+// card pools themselves are small enough to score in-process.
+function trigrams(s: string): Set<string> {
+  const out = new Set<string>()
+  for (const w of s.toLowerCase().split(/\s+/).filter(Boolean)) {
+    const padded = `  ${w} `
+    for (let i = 0; i + 3 <= padded.length; i++) out.add(padded.slice(i, i + 3))
+  }
+  return out
+}
+
+function similarity(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 || b.size === 0) return 0
+  let inter = 0
+  for (const t of a) if (b.has(t)) inter++
+  return inter / (a.size + b.size - inter)
+}
+
+interface Card {
+  code: string
+  name: string
+  cnt: number
+  tri: Set<string>
+}
+
+function cleanName(s: string): string {
+  return s.replace(GENERIC_RE, ' ').replace(/[^א-תa-zA-Z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim()
+}
+
+async function cardPool(formats: string[]): Promise<Card[]> {
   const res = await query(
-    `SELECT code, name, best, cnt FROM (
-       SELECT customer_code AS code, MAX(customer_name) AS name, COUNT(*)::int AS cnt,
-              MAX((SELECT MAX(similarity(
-                regexp_replace(regexp_replace(customer_name,
-                  'בע["״׳'']?מ|חלקי חילוף|לרכב|חברה|לקוח|ספק|בעמ', '', 'g'),
-                  '[^א-תa-zA-Z0-9 ]', ' ', 'g'),
-                v)) FROM unnest($1::text[]) v)) AS best
-         FROM dashboard.documents
-        WHERE format = ANY($2::text[]) AND customer_code <> ''
-        GROUP BY customer_code) t
-      WHERE best >= 0.3
-      ORDER BY best DESC, cnt DESC
-      LIMIT 5`,
-    [variants, formats]
+    `SELECT customer_code AS code, MAX(customer_name) AS name, COUNT(*)::int AS cnt
+       FROM dashboard.documents
+      WHERE format = ANY($1::text[]) AND customer_code <> '' AND customer_name IS NOT NULL
+      GROUP BY customer_code`,
+    [formats]
   )
-  if (res.rows.length === 0) return null
+  return res.rows.map((r: any) => ({
+    code: r.code,
+    name: r.name,
+    cnt: r.cnt,
+    tri: trigrams(cleanName(r.name)),
+  }))
+}
+
+function bestCard(variants: string[], pool: Card[], excludeCode?: string): { code: string; name: string; best: number } | null {
+  const varTris = variants.map(trigrams)
+  const scored = pool
+    .filter((c) => c.code !== excludeCode)
+    .map((c) => ({ ...c, best: Math.max(...varTris.map((v) => similarity(v, c.tri))) }))
+    .filter((c) => c.best >= 0.3)
+    .sort((a, b) => b.best - a.best)
+  if (scored.length === 0) return null
   // Near-tied scores (e.g. "סוכניות אפק -רקורד" vs "רקורד-סמי אהרון") resolve
   // to the card with the most documents.
-  const top = Number(res.rows[0].best)
-  const pick = res.rows
-    .filter((r: any) => top - Number(r.best) <= 0.05)
-    .sort((a: any, b: any) => b.cnt - a.cnt)[0]
-  return { code: pick.code, name: pick.name, best: Number(pick.best) }
+  const top = scored[0].best
+  const pick = scored.filter((c) => top - c.best <= 0.05).sort((a, b) => b.cnt - a.cnt)[0]
+  return { code: pick.code, name: pick.name, best: pick.best }
 }
 
 async function matchSuppliers(
   keys: Array<{ key: string; name: string | null; slug: string | null }>
 ): Promise<Record<string, SupplierMatch | null>> {
+  const [supplierPool, customerPool] = await Promise.all([
+    cardPool(['51', '53', '58', '61', '62', '66']),
+    cardPool(['11', '12', '14', '21', '31', '35']),
+  ])
   const result: Record<string, SupplierMatch | null> = {}
   for (const { key, name, slug } of keys) {
     const variants = variantsFor(name, slug)
@@ -97,14 +135,16 @@ async function matchSuppliers(
       result[key] = null
       continue
     }
-    const supplier = await bestCard(variants, ['51', '53', '58', '61', '62', '66'])
+    const supplier = bestCard(variants, supplierPool)
     if (!supplier) {
       result[key] = null
       continue
     }
-    let customer = await bestCard(variants, ['11', '12', '14', '21', '31', '35'])
-    // Supplier cards can carry a few stray sales docs — a twin must be a different card.
-    if (customer && customer.code === supplier.code) customer = null
+    // The twin is the same company as the matched supplier card, so its cleaned
+    // name is the strongest signal ("רקורד-סמי אהרון כהן" finds "רקורד-סמי אהרון
+    // בע\"מ לקוח" where Dora's bare "רקורד" would drift to a lookalike card).
+    // Supplier cards can carry stray sales docs — the twin must be a different card.
+    const customer = bestCard([cleanName(supplier.name), ...variants], customerPool, supplier.code)
     result[key] = {
       code: supplier.code,
       name: supplier.name,
@@ -147,7 +187,7 @@ export async function GET() {
 
     let matches: Record<string, SupplierMatch | null> = {}
     if (distinct.size > 0) {
-      const cacheKey = `dora:supplier-match:v2:${[...distinct.keys()].sort().join('~')}`
+      const cacheKey = `dora:supplier-match:v3:${[...distinct.keys()].sort().join('~')}`
       const cached = await getCached<Record<string, SupplierMatch | null>>(cacheKey)
       if (cached) {
         matches = cached
