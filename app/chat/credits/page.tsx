@@ -30,6 +30,9 @@ const IMG_KIND_HE: Record<string, string> = {
   delivery_note: 'תעודת משלוח',
   part_photo: 'תמונת חלק',
   invoice: 'חשבונית',
+  return: 'החזרה',
+  receipt: 'קבלה',
+  other: 'אחר',
 }
 
 function CaseImages({ caseRef }: { caseRef: string }) {
