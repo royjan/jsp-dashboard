@@ -6,7 +6,7 @@
  */
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { ReceiptText, RefreshCw, Search } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ReceiptText, RefreshCw, Search } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
@@ -39,7 +39,7 @@ const IMG_KIND_HE: Record<string, string> = {
 function CaseImages({ caseRef }: { caseRef: string }) {
   const [images, setImages] = useState<CaseImage[] | null>(null)
   const [failed, setFailed] = useState(false)
-  const [viewer, setViewer] = useState<CaseImage | null>(null)
+  const [viewerIdx, setViewerIdx] = useState<number | null>(null)
 
   useEffect(() => {
     let alive = true
@@ -53,13 +53,21 @@ function CaseImages({ caseRef }: { caseRef: string }) {
   if (failed) return <p className="text-xs text-muted-foreground">שרת התמונות לא זמין</p>
   if (images === null) return <Skeleton className="h-32 w-24" />
   if (images.length === 0) return null
+
+  const count = images.length
+  const viewer = viewerIdx !== null ? images[viewerIdx] : null
+  // Thumbnails flow RTL (first image on the right), so the visually-left
+  // neighbor is the NEXT index — the physical arrow keys follow the eye.
+  const goLeft = () => setViewerIdx((i) => (i === null ? i : (i + 1) % count))
+  const goRight = () => setViewerIdx((i) => (i === null ? i : (i - 1 + count) % count))
+
   return (
     <div className="flex flex-wrap gap-2">
-      {images.map((img) => (
+      {images.map((img, i) => (
         <button
           key={img.rel_path}
           type="button"
-          onClick={(ev) => { ev.stopPropagation(); setViewer(img) }}
+          onClick={(ev) => { ev.stopPropagation(); setViewerIdx(i) }}
           className="group text-start"
           title={img.caption || img.rel_path}
         >
@@ -74,10 +82,14 @@ function CaseImages({ caseRef }: { caseRef: string }) {
           </span>
         </button>
       ))}
-      <Dialog open={viewer !== null} onOpenChange={(open) => { if (!open) setViewer(null) }}>
+      <Dialog open={viewer !== null} onOpenChange={(open) => { if (!open) setViewerIdx(null) }}>
         <DialogContent
           className="max-w-4xl p-2 sm:p-4"
           onClick={(ev) => ev.stopPropagation()}
+          onKeyDown={(ev) => {
+            if (ev.key === 'ArrowLeft') { ev.preventDefault(); goLeft() }
+            if (ev.key === 'ArrowRight') { ev.preventDefault(); goRight() }
+          }}
         >
           {viewer && (
             <div className="space-y-2">
@@ -85,13 +97,38 @@ function CaseImages({ caseRef }: { caseRef: string }) {
                 {IMG_KIND_HE[viewer.kind] || viewer.kind}
                 {viewer.caption ? ` — ${viewer.caption}` : ''}
               </DialogTitle>
-              <img
-                src={`${IMG_BASE}${viewer.url}`}
-                alt={viewer.caption || viewer.kind}
-                className="max-h-[75vh] w-full rounded-md object-contain"
-              />
+              <div className="relative">
+                <img
+                  src={`${IMG_BASE}${viewer.url}`}
+                  alt={viewer.caption || viewer.kind}
+                  className="max-h-[75vh] w-full rounded-md object-contain"
+                />
+                {count > 1 && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={goLeft}
+                      aria-label="תמונה הבאה"
+                      className="absolute left-1 top-1/2 -translate-y-1/2 rounded-full bg-background/80 border p-1.5 text-foreground hover:bg-background shadow"
+                    >
+                      <ChevronLeft className="h-5 w-5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={goRight}
+                      aria-label="תמונה קודמת"
+                      className="absolute right-1 top-1/2 -translate-y-1/2 rounded-full bg-background/80 border p-1.5 text-foreground hover:bg-background shadow"
+                    >
+                      <ChevronRight className="h-5 w-5" />
+                    </button>
+                  </>
+                )}
+              </div>
               <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted-foreground">
                 <span dir="ltr">{viewer.rel_path}</span>
+                {count > 1 && (
+                  <span dir="ltr" className="tabular-nums">{(viewerIdx ?? 0) + 1} / {count}</span>
+                )}
                 <a
                   href={`${IMG_BASE}${viewer.url}`}
                   target="_blank"
