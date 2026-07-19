@@ -1,4 +1,4 @@
-export const maxDuration = 60
+export const maxDuration = 600
 
 import { NextResponse } from 'next/server'
 import { initializeSecrets } from '@/lib/aws-secrets'
@@ -22,32 +22,71 @@ export async function GET(request: Request) {
     const limit = Math.min(parseInt(searchParams.get('limit') || '200', 10), 500)
     const format = searchParams.get('format') || '31' // quotes
 
-    const cacheKey = `analytics:gap:v4:${format}:${limit}`
+    const cacheKey = `analytics:gap:v5:${format}:${limit}`
     const forceRefresh = searchParams.get('refresh') === '1'
     const cached = forceRefresh ? null : await getCached<any>(cacheKey)
     if (cached) return NextResponse.json(cached)
 
-    // 1) Most-quoted items in the last 12 months (Neon, fast). Over-fetch a bit
-    //    since many will turn out to be in stock and get filtered below.
+    // 1) Most-quoted items in the last 12 months — HYBRID per the data-source
+    //    doctrine: years ≤ active-1 from frozen Neon (the retired ETL's data is
+    //    complete through 2025), the ACTIVE year live from Btrieve via FINAPI
+    //    (month-chunked Redis cache, see lib/services/live-doc-lines.ts).
     const probe = Math.min(limit * 2, 300)
-    const res = await query(
-      `SELECT dl.item_code,
-              MAX(dl.item_name) AS item_name,
-              COUNT(DISTINCT dl.doc_number)::int AS times_quoted,
-              SUM(dl.quantity::numeric) AS total_qty_quoted,
-              MAX(d.doc_date)::text AS last_quoted_date
+    const now = new Date()
+    const from12 = new Date(now.getTime() - 365 * 86400000).toISOString().slice(0, 10)
+    const activeYearStart = `${now.getFullYear()}-01-01`
+
+    const agg = new Map<string, {
+      item_code: string; item_name: string; docs: Set<string>
+      total_qty_quoted: number; last_quoted_date: string
+    }>()
+    const bump = (code: string, name: string, docKey: string, qty: number, date: string) => {
+      let e = agg.get(code)
+      if (!e) {
+        e = { item_code: code, item_name: name, docs: new Set(), total_qty_quoted: 0, last_quoted_date: '' }
+        agg.set(code, e)
+      }
+      e.docs.add(docKey)
+      e.total_qty_quoted += qty
+      if (name && name.length > (e.item_name || '').length) e.item_name = name
+      if (date > e.last_quoted_date) e.last_quoted_date = date
+    }
+
+    // Previous year(s) within the window — frozen Neon.
+    const neon = await query(
+      `SELECT dl.item_code, dl.item_name, dl.doc_number, dl.quantity::numeric AS qty,
+              d.doc_date::text AS doc_date
        FROM dashboard.document_lines dl
        JOIN dashboard.documents d
          ON d.year=dl.year AND d.format=dl.format AND d.doc_number=dl.doc_number
        WHERE dl.format = $1
          AND length(dl.item_code) > 1
-         AND d.doc_date >= (CURRENT_DATE - INTERVAL '12 months')
-       GROUP BY dl.item_code
-       ORDER BY times_quoted DESC
-       LIMIT $2`,
-      [format, probe],
+         AND d.doc_date >= $2 AND d.doc_date < $3`,
+      [format, from12, activeYearStart],
     )
-    const quoted = res.rows
+    for (const r of neon.rows) {
+      bump(r.item_code, r.item_name || '', `n:${r.doc_number}`, Number(r.qty) || 0, r.doc_date || '')
+    }
+
+    // Active year — live Btrieve.
+    const { getLiveYearLines } = await import('@/lib/services/live-doc-lines')
+    const liveLines = await getLiveYearLines(format, activeYearStart)
+    for (const l of liveLines) {
+      const code = (l.item_code || '').trim()
+      if (code.length <= 1) continue
+      bump(code, l.item_name || '', `l:${l.doc_num}`, Number(l.quantity) || 0, l.doc_date || '')
+    }
+
+    const quoted = [...agg.values()]
+      .map((e) => ({
+        item_code: e.item_code,
+        item_name: e.item_name,
+        times_quoted: e.docs.size,
+        total_qty_quoted: e.total_qty_quoted,
+        last_quoted_date: e.last_quoted_date,
+      }))
+      .sort((a, b) => b.times_quoted - a.times_quoted)
+      .slice(0, probe)
 
     // 2) Current stock for those items (one FINAPI batch — accurate).
     const codes = quoted.map((r: any) => r.item_code)

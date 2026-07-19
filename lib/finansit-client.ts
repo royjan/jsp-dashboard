@@ -353,6 +353,16 @@ export async function fetchDocumentLines(params: {
   return client.documents.getLines(params as any)
 }
 
+export async function fetchDocumentLinesSlow(params: {
+  doc_format?: string; item_code?: string; date_from?: string
+  date_to?: string; limit?: number; offset?: number; year?: string
+}): Promise<any> {
+  // Bulk line scans on the active year go down FINAPI's Btrieve tier (~45s per
+  // month window) — far beyond the default client's 15s timeout. Reuses the
+  // long-timeout client (55s) added for customer history.
+  return historyClient.documents.getLines(params as any)
+}
+
 export async function fetchDocumentPdf(format: number | string, number: number | string, year?: string): Promise<Response> {
   return client.documents.getPdf(String(format), String(number), year ? { year } : undefined)
 }
