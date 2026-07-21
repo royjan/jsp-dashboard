@@ -27,6 +27,7 @@ export const translations = {
     chatPartsAnalytics: 'אנליטיקת בוט',
     chatLearnedPins: 'חלקים מוצמדים',
     chatDiego: 'שיחות דייגו',
+    chatFeedback: 'משוב לקוחות',
     chatCredits: 'זיכויים והחזרות',
 
     // Page titles
@@ -608,6 +609,7 @@ export const translations = {
     chatPartsAnalytics: 'Bot Analytics',
     chatLearnedPins: 'Learned Pins',
     chatDiego: 'Diego Sessions',
+    chatFeedback: 'Bot Feedback',
     chatCredits: 'Supplier Credits',
 
     'page.overview': 'Dashboard Overview',

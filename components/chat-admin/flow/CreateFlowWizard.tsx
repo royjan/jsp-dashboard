@@ -31,6 +31,14 @@ import { toast } from '@/lib/toast'
 
 interface Props {
   seedDescription?: string
+  /** Vehicle filters pre-filled from a real conversation turn ("create rule from this turn"). */
+  seedVehicle?: {
+    yearFrom?: string
+    yearTo?: string
+    model?: string
+    fuelType?: string
+    engineModel?: string
+  }
   /** Existing rules, used to warn before creating a duplicate/conflict. */
   existingRules?: FlowDecisionRecord[]
   onClose: () => void
@@ -154,7 +162,7 @@ interface SimulateResult {
 // Component
 // ────────────────────────────────────────────────────────────────────────────
 
-export default function CreateFlowWizard({ seedDescription, existingRules = [], onClose, onSaved }: Props) {
+export default function CreateFlowWizard({ seedDescription, seedVehicle, existingRules = [], onClose, onSaved }: Props) {
   const [step, setStep] = useState<StepIndex>(0)
   const [direction, setDirection] = useState<1 | -1>(1)
   const [saving, setSaving] = useState(false)
@@ -164,12 +172,12 @@ export default function CreateFlowWizard({ seedDescription, existingRules = [], 
   const [form, setForm] = useState<WizardState>(() => ({
     partDescription: seedDescription || '',
     suppliers: ['partslink'],
-    vehicleScope: 'all',
-    yearFrom: '',
-    yearTo: '',
-    model: '',
-    fuelType: '',
-    engineModel: '',
+    vehicleScope: seedVehicle && Object.values(seedVehicle).some(Boolean) ? 'specific' : 'all',
+    yearFrom: seedVehicle?.yearFrom || '',
+    yearTo: seedVehicle?.yearTo || '',
+    model: seedVehicle?.model || '',
+    fuelType: seedVehicle?.fuelType || '',
+    engineModel: seedVehicle?.engineModel || '',
     vinPattern: '',
     category: '',
     subcategory: '',

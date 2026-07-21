@@ -24,6 +24,19 @@ export interface DiegoSessionSummary {
   customerName: string | null // from synced documents; null for non-customer ids (test_user, wa-*)
   doraEvents: number // turns routed to Dora (dora_flow author)
   stockEvents: number // turns routed to the stock pipeline
+  errEvents: number // events whose state_delta carries a truthy *error key
+  /** last user message arrived after the last bot answer, and the session has been
+   *  quiet ≥3 min — the customer was likely left hanging */
+  unanswered: boolean
+}
+
+export interface ListDiegoSessionsOptions {
+  limit?: number
+  offset?: number
+  /** free-text search: session id (VIN), user id, vehicle ctx, or any user-message text */
+  q?: string
+  /** only sessions updated in the last N days */
+  days?: number
 }
 
 export interface DiegoEvent {
@@ -37,6 +50,8 @@ export interface DiegoEvent {
   nodePath: string | null
   outputFor: string[] | null
   images: string[]
+  /** the untrimmed ADK event JSON — the "raw" escape hatch that replaces adk web */
+  raw: unknown
 }
 
 export interface DiegoSessionDetail {
@@ -48,7 +63,13 @@ export interface DiegoSessionDetail {
   events: DiegoEvent[]
 }
 
-export async function listDiegoSessions(limit = 200): Promise<DiegoSessionSummary[]> {
+export async function listDiegoSessions(
+  opts: ListDiegoSessionsOptions = {}
+): Promise<{ sessions: DiegoSessionSummary[]; hasMore: boolean }> {
+  const limit = Math.min(Math.max(opts.limit ?? 200, 1), 1000)
+  const offset = Math.max(opts.offset ?? 0, 0)
+  const q = opts.q?.trim() || null
+  const days = opts.days && opts.days > 0 ? opts.days : null
   const res = await query(
     `SELECT s.user_id, s.id, s.create_time, s.update_time,
             s.state #> '{search,vehicle_ctx}'                        AS vehicle_ctx,
@@ -56,6 +77,21 @@ export async function listDiegoSessions(limit = 200): Promise<DiegoSessionSummar
             count(e.id) FILTER (WHERE e.event_data->>'author'='user')::int AS turns,
             count(e.id) FILTER (WHERE e.event_data->>'author'='dora_flow')::int AS dora_events,
             count(e.id) FILTER (WHERE e.event_data->>'author'='search_parts')::int AS stock_events,
+            count(e.id) FILTER (WHERE
+              (e.event_data#>>'{actions,state_delta,search,error}') IS NOT NULL
+              OR EXISTS (
+                SELECT 1 FROM jsonb_each_text(
+                  CASE WHEN jsonb_typeof(e.event_data#>'{actions,state_delta}')='object'
+                       THEN e.event_data#>'{actions,state_delta}' ELSE '{}'::jsonb END) kv
+                WHERE kv.key LIKE '%error' AND kv.value IS NOT NULL AND kv.value NOT IN ('', 'null', 'false')
+              ))::int                                                AS err_events,
+            max(e.timestamp) FILTER (WHERE e.event_data->>'author'='user') AS last_user_ts,
+            -- an "answer" is an output_for-stamped event, or (newer traces leave output_for
+            -- null) a format_v2 / dora_flow event that actually said something
+            max(e.timestamp) FILTER (WHERE
+              (jsonb_typeof(e.event_data#>'{node_info,output_for}') NOT IN ('null') AND e.event_data#>'{node_info,output_for}' IS NOT NULL)
+              OR (e.event_data->>'author' IN ('format_v2','dora_flow')
+                  AND coalesce(e.event_data#>>'{content,parts,0,text}','') <> '')) AS last_answer_ts,
             (SELECT e2.event_data #>> '{content,parts,0,text}'
                FROM diego_v3.events e2
               WHERE e2.app_name=s.app_name AND e2.user_id=s.user_id AND e2.session_id=s.id
@@ -64,11 +100,23 @@ export async function listDiegoSessions(limit = 200): Promise<DiegoSessionSummar
      FROM diego_v3.sessions s
      LEFT JOIN diego_v3.events e
        ON e.app_name=s.app_name AND e.user_id=s.user_id AND e.session_id=s.id
+     WHERE ($3::text IS NULL
+            OR s.id ILIKE '%'||$3||'%'
+            OR s.user_id ILIKE '%'||$3||'%'
+            OR (s.state #>> '{search,vehicle_ctx}') ILIKE '%'||$3||'%'
+            OR EXISTS (
+                SELECT 1 FROM diego_v3.events eq
+                WHERE eq.app_name=s.app_name AND eq.user_id=s.user_id AND eq.session_id=s.id
+                  AND eq.event_data->>'author'='user'
+                  AND eq.event_data#>>'{content,parts,0,text}' ILIKE '%'||$3||'%'))
+       AND ($4::int IS NULL OR s.update_time > now() - ($4 || ' days')::interval)
      GROUP BY s.app_name, s.user_id, s.id, s.create_time, s.update_time, s.state
      ORDER BY s.update_time DESC
-     LIMIT $1`,
-    [limit]
+     LIMIT $1 OFFSET $2`,
+    [limit + 1, offset, q, days]
   )
+  const hasMore = res.rows.length > limit
+  if (hasMore) res.rows.pop()
   // Customer display names: ADK user ids are zero-padded Finansit codes, exactly the
   // customer_code format in dashboard.documents. Non-numeric ids (test_user, wa-*) skip this.
   const codes = [...new Set(res.rows.map((r: Json) => r.user_id).filter((u: string) => /^\d+$/.test(u)))]
@@ -87,19 +135,32 @@ export async function listDiegoSessions(limit = 200): Promise<DiegoSessionSummar
       console.warn('[diego-sessions] customer-name lookup failed:', e)
     }
   }
-  return res.rows.map((r: Json) => ({
-    userId: r.user_id,
-    sessionId: r.id,
-    createTime: r.create_time,
-    updateTime: r.update_time,
-    events: r.events,
-    turns: r.turns,
-    vehicle: describeVehicle(r.vehicle_ctx),
-    lastUserText: r.last_user_text ?? null,
-    customerName: names.get(r.user_id) ?? null,
-    doraEvents: r.dora_events ?? 0,
-    stockEvents: r.stock_events ?? 0,
-  }))
+  const sessions = res.rows.map((r: Json) => {
+    const lastUser = r.last_user_ts ? new Date(r.last_user_ts).getTime() : null
+    const lastAnswer = r.last_answer_ts ? new Date(r.last_answer_ts).getTime() : null
+    // "left hanging": last customer message got no answer AND the session has been quiet
+    // ≥3 min (a fresher one is likely mid-pipeline, not stuck)
+    const unanswered =
+      lastUser != null &&
+      (lastAnswer == null || lastAnswer < lastUser) &&
+      Date.now() - lastUser > 3 * 60_000
+    return {
+      userId: r.user_id,
+      sessionId: r.id,
+      createTime: r.create_time,
+      updateTime: r.update_time,
+      events: r.events,
+      turns: r.turns,
+      vehicle: describeVehicle(r.vehicle_ctx),
+      lastUserText: r.last_user_text ?? null,
+      customerName: names.get(r.user_id) ?? null,
+      doraEvents: r.dora_events ?? 0,
+      stockEvents: r.stock_events ?? 0,
+      errEvents: r.err_events ?? 0,
+      unanswered,
+    }
+  })
+  return { sessions, hasMore }
 }
 
 /** Hard-delete a session and its events (events→sessions FK is ON DELETE CASCADE,
@@ -180,7 +241,87 @@ function mapEvent(d: Json, ts: string): DiegoEvent {
     nodePath: d?.node_info?.path || null,
     outputFor: d?.node_info?.output_for ?? null,
     images: [...images],
+    raw: d ?? null,
   }
+}
+
+export interface DiegoHealthSignals {
+  lastEventAgeMin: number | null
+  events24h: number
+  turns24h: number
+  errEvents24h: number
+  /** avg seconds from a user message to the answer that followed it (last 24h) */
+  avgAnswerSec: number | null
+}
+
+/** Derived "is Diego alive?" signals straight from diego_v3 — no host access needed. */
+export async function diegoHealthSignals(): Promise<DiegoHealthSignals> {
+  const res = await query(
+    `WITH recent AS (
+       SELECT timestamp, event_data FROM diego_v3.events
+        WHERE timestamp > now() - interval '24 hours'
+     ),
+     answers AS (
+       SELECT u.timestamp AS asked,
+              (SELECT min(a.timestamp) FROM recent a
+                WHERE a.timestamp > u.timestamp
+                  AND ((jsonb_typeof(a.event_data#>'{node_info,output_for}') NOT IN ('null')
+                        AND a.event_data#>'{node_info,output_for}' IS NOT NULL)
+                       OR (a.event_data->>'author' IN ('format_v2','dora_flow')
+                           AND coalesce(a.event_data#>>'{content,parts,0,text}','') <> ''))) AS answered
+         FROM recent u WHERE u.event_data->>'author'='user'
+     )
+     SELECT
+       (SELECT extract(epoch FROM now() - max(timestamp)) / 60 FROM diego_v3.events)::float AS last_age_min,
+       (SELECT count(*) FROM recent)::int AS events_24h,
+       (SELECT count(*) FROM recent WHERE event_data->>'author'='user')::int AS turns_24h,
+       (SELECT count(*) FROM recent WHERE
+          (event_data#>>'{actions,state_delta,search,error}') IS NOT NULL
+          OR EXISTS (
+            SELECT 1 FROM jsonb_each_text(
+              CASE WHEN jsonb_typeof(event_data#>'{actions,state_delta}')='object'
+                   THEN event_data#>'{actions,state_delta}' ELSE '{}'::jsonb END) kv
+            WHERE kv.key LIKE '%error' AND kv.value IS NOT NULL AND kv.value NOT IN ('', 'null', 'false')))::int AS err_24h,
+       (SELECT avg(extract(epoch FROM answered - asked)) FROM answers WHERE answered IS NOT NULL)::float AS avg_answer_sec`
+  )
+  const r = res.rows[0] ?? {}
+  return {
+    lastEventAgeMin: r.last_age_min != null ? Math.round(r.last_age_min) : null,
+    events24h: r.events_24h ?? 0,
+    turns24h: r.turns_24h ?? 0,
+    errEvents24h: r.err_24h ?? 0,
+    avgAnswerSec: r.avg_answer_sec != null ? Math.round(r.avg_answer_sec) : null,
+  }
+}
+
+export interface DiegoFeedbackItem {
+  userId: string
+  sessionId: string
+  timestamp: string
+  text: string
+  stateDelta: Record<string, unknown> | null
+}
+
+/** Customer 👍/👎 events (record_feedback author), newest first. */
+export async function listDiegoFeedback(limit = 100): Promise<DiegoFeedbackItem[]> {
+  const res = await query(
+    `SELECT user_id, session_id, timestamp, event_data
+       FROM diego_v3.events
+      WHERE event_data->>'author' IN ('record_feedback','respond_feedback')
+      ORDER BY timestamp DESC LIMIT $1`,
+    [limit]
+  )
+  return res.rows.map((r: Json) => {
+    const d = r.event_data ?? {}
+    const parts: Json[] = d?.content?.parts ?? []
+    return {
+      userId: r.user_id,
+      sessionId: r.session_id,
+      timestamp: r.timestamp,
+      text: parts.map((p: Json) => p?.text ?? '').filter(Boolean).join(''),
+      stateDelta: d?.actions?.state_delta ?? null,
+    }
+  })
 }
 
 function describeVehicle(ctx: Json): string | null {

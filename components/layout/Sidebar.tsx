@@ -34,6 +34,7 @@ import {
   MessagesSquare,
   Bot,
   BotMessageSquare,
+  ThumbsUp,
   ReceiptText,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -90,6 +91,7 @@ const navSections: Array<{ id: string; labelKey: TranslationKey; items: NavItem[
       { href: '/chat/monitoring', labelKey: 'chatMonitoring', icon: Activity },
       { href: '/chat/parts-analytics', labelKey: 'chatPartsAnalytics', icon: Bot },
       { href: '/chat/diego', labelKey: 'chatDiego', icon: BotMessageSquare },
+      { href: '/chat/feedback', labelKey: 'chatFeedback', icon: ThumbsUp },
       { href: '/chat/credits', labelKey: 'chatCredits', icon: ReceiptText },
     ],
   },

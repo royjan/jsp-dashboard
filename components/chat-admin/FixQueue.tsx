@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState } from 'react'
 import Link from 'next/link'
-import { ArrowRight } from 'lucide-react'
+import { ArrowRight, MessagesSquare } from 'lucide-react'
 import { AdminPagination, StatusBadge } from './shared'
 
 export interface FixRow {
@@ -98,12 +98,22 @@ export function FixQueue({ notFound, oos, schemaFlips }: FixQueueProps) {
                   <td className="px-3 py-2 text-right tabular-nums text-[var(--color-text-secondary,#c7c7cc)]">{r.count.toLocaleString()}</td>
                   <td className="px-3 py-2 text-xs text-[var(--color-text-secondary,#c7c7cc)]">{meta.action}</td>
                   <td className="px-3 py-2 text-right">
-                    <Link
-                      href={pinHref(r.query)}
-                      className="inline-flex items-center gap-1 rounded-md border border-[var(--color-border-default)] px-2 py-1 text-xs text-[var(--color-text-secondary,#c7c7cc)] hover:bg-white/5"
-                    >
-                      Fix <ArrowRight className="h-3.5 w-3.5" />
-                    </Link>
+                    <span className="inline-flex items-center gap-1.5">
+                      {/* real conversations where this query failed — judge extraction vs routing vs catalog */}
+                      <Link
+                        href={`/chat/diego?q=${encodeURIComponent(r.query)}`}
+                        title="View example sessions with this query"
+                        className="inline-flex items-center gap-1 rounded-md border border-[var(--color-border-default)] px-2 py-1 text-xs text-[var(--color-text-secondary,#c7c7cc)] hover:bg-white/5"
+                      >
+                        <MessagesSquare className="h-3.5 w-3.5" /> Examples
+                      </Link>
+                      <Link
+                        href={pinHref(r.query)}
+                        className="inline-flex items-center gap-1 rounded-md border border-[var(--color-border-default)] px-2 py-1 text-xs text-[var(--color-text-secondary,#c7c7cc)] hover:bg-white/5"
+                      >
+                        Fix <ArrowRight className="h-3.5 w-3.5" />
+                      </Link>
+                    </span>
                   </td>
                 </tr>
               )

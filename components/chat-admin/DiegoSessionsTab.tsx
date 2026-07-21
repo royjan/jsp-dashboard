@@ -4,13 +4,24 @@
  * Diego v3 (ADK) sessions browser — session list (one per car/VIN) + full turn-by-turn
  * trace: customer messages, per-node outputs (state deltas), schema diagrams, final answers.
  * Read-only over the diego_v3 schema via /api/diego/sessions.
+ *
+ * The trace doubles as the debugging workbench: per-turn permalinks, latency bar,
+ * observatory deep links ("why this rule?"), re-check-vs-current-rules, and a raw-JSON
+ * escape hatch — adk web is only the fallback.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { usePathname, useSearchParams } from 'next/navigation'
-import { Bot, Car, ChevronRight, ExternalLink, ListFilter, RefreshCw, Trash2, User, X } from 'lucide-react'
+import {
+  Bot, Car, CheckCheck, ChevronLeft, ChevronRight, ExternalLink, Link2, ListFilter,
+  Plus, Radar, RefreshCw, Radio, Search, Trash2, User, X,
+} from 'lucide-react'
 import { Panel } from '@/components/chat-admin/Panel'
 import { CustomerLink } from '@/components/shared/CustomerLink'
 import { ItemLink } from '@/components/shared/ItemLink'
+import { NODE_COLORS, TURN_STATUS_BAR, TURN_STATUS_DOT, type TurnStatus } from '@/components/chat-admin/shared/colors'
+import { dayKey, fmtDateTime, fmtDayLabel, fmtTimeShort, relTime } from '@/lib/chat-admin/format'
+import { copyText } from '@/lib/chat-admin/clipboard'
+import { toast } from '@/lib/toast'
 
 const ADK_WEB = process.env.NEXT_PUBLIC_ADK_WEB_BASE ?? 'http://192.168.0.230:8000'
 
@@ -25,6 +36,8 @@ interface SessionSummary {
   customerName: string | null
   doraEvents: number
   stockEvents: number
+  errEvents: number
+  unanswered: boolean
 }
 
 interface DiegoEvent {
@@ -37,19 +50,7 @@ interface DiegoEvent {
   nodePath: string | null
   outputFor: string[] | null
   images: string[]
-}
-
-const AUTHOR_STYLE: Record<string, string> = {
-  user: 'bg-blue-500/15 text-blue-300 border-blue-500/30',
-  Diego_Clone: 'bg-purple-500/15 text-purple-300 border-purple-500/30',
-  JSP_Assistant: 'bg-purple-500/15 text-purple-300 border-purple-500/30',
-  jsp_router: 'bg-purple-500/15 text-purple-300 border-purple-500/30',
-  extract_slots: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
-  search_parts: 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30',
-  enrich_parts: 'bg-teal-500/15 text-teal-300 border-teal-500/30',
-  lubinski_stock: 'bg-sky-500/15 text-sky-300 border-sky-500/30',
-  dora_flow: 'bg-rose-500/15 text-rose-300 border-rose-500/30',
-  format_v2: 'bg-green-500/15 text-green-300 border-green-500/30',
+  raw?: unknown
 }
 
 const URL_SPLIT = /(https?:\/\/\S+)/g
@@ -82,80 +83,110 @@ function tryPrettyJson(text: string): string | null {
   }
 }
 
+/** Message-level base direction (first strong character) — the whole message aligns to one
+ *  edge instead of per-line "ping-pong" when a Hebrew answer contains English/SKU lines. */
+function baseDir(text: string): 'rtl' | 'ltr' {
+  const m = text.match(/[֐-׿]|[A-Za-z]/)
+  return m && /[֐-׿]/.test(m[0]) ? 'rtl' : 'ltr'
+}
+
+// Bare part-number/VIN-ish tokens inside Hebrew text (must contain a digit, ≥5 chars) get
+// BiDi-isolated so "מק״ט 9812345680-A" never reorders around the punctuation.
+const CODE_TOKEN = /((?=[A-Z0-9./-]*\d)[A-Z0-9][A-Z0-9./-]{4,})/g
+
+function PlainWithCodes({ text }: { text: string }) {
+  const segs = text.split(CODE_TOKEN)
+  if (segs.length === 1) return <>{text}</>
+  return (
+    <>
+      {segs.map((s, i) =>
+        /^(?=[A-Z0-9./-]*\d)[A-Z0-9][A-Z0-9./-]{4,}$/.test(s) ? (
+          <bdi key={i} dir="ltr" className="font-mono">{s}</bdi>
+        ) : (
+          <span key={i}>{s}</span>
+        )
+      )}
+    </>
+  )
+}
+
 const FLOW_ID = /(#[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/g
 
-/** One line of bot/customer text: natural direction per line, URLs become real links —
- *  item codes get the customers-page hover card (ItemLink), the 🧭 flow line's #<uuid>
- *  links the exact flow_decisions_v2 row, other URLs get a shortened label. */
+/** One line of bot/customer text: BiDi-ordered per line (dir=auto on an inline span) while
+ *  the alignment edge comes from the message container's base direction. URLs become real
+ *  links — item codes get the customers-page hover card (ItemLink), the 🧭 flow line's
+ *  #<uuid> links the exact flow_decisions_v2 row, other URLs get a shortened label. */
 function LinkifiedLine({ line }: { line: string }) {
   const parts = line.split(URL_SPLIT)
   return (
-    <div dir="auto" className="whitespace-pre-wrap break-words">
-      {parts.map((p, i) => {
-        if (/^https?:\/\//i.test(p)) {
-          const item = p.match(ITEM_URL)
-          if (item) {
-            // part code with the live stock/price hover card (same as /customers/<code>)
-            return <ItemLink key={i} code={decodeURIComponent(item[1])} showCode copyable={false} />
-          }
-          // flow-decision URL (diego-adk emits these since 97d843a) -> short "#4d5acaa1" link
-          const flow = p.match(/\/chat\/flow-decisions\?q=([0-9a-f]{8})[0-9a-f-]{28}/i)
-          if (flow) {
+    <div className="whitespace-pre-wrap break-words">
+      <span dir="auto">
+        {parts.map((p, i) => {
+          if (/^https?:\/\//i.test(p)) {
+            const item = p.match(ITEM_URL)
+            if (item) {
+              // part code with the live stock/price hover card (same as /customers/<code>)
+              return <ItemLink key={i} code={decodeURIComponent(item[1])} showCode copyable={false} />
+            }
+            // flow-decision URL (diego-adk emits these since 97d843a) -> short "#4d5acaa1" link
+            const flow = p.match(/\/chat\/flow-decisions\?q=([0-9a-f]{8})[0-9a-f-]{28}/i)
+            if (flow) {
+              return (
+                <a
+                  key={i}
+                  href={p.slice(p.indexOf('/chat/'))}
+                  target="_blank"
+                  rel="noreferrer"
+                  dir="ltr"
+                  title={p}
+                  className="inline-flex items-baseline gap-0.5 font-mono text-emerald-400 hover:underline"
+                >
+                  #{flow[1]}
+                  <ExternalLink className="inline h-3 w-3 opacity-60" />
+                </a>
+              )
+            }
+            const label = p.replace(/^https?:\/\//i, '').slice(0, 44) + (p.length > 52 ? '…' : '')
             return (
               <a
                 key={i}
-                href={p.slice(p.indexOf('/chat/'))}
+                href={p}
                 target="_blank"
                 rel="noreferrer"
                 dir="ltr"
-                title={p}
-                className="inline-flex items-baseline gap-0.5 font-mono text-emerald-400 hover:underline"
+                className="inline-flex items-baseline gap-0.5 font-mono text-blue-400 hover:underline"
               >
-                #{flow[1]}
+                {label}
                 <ExternalLink className="inline h-3 w-3 opacity-60" />
               </a>
             )
           }
-          const label = p.replace(/^https?:\/\//i, '').slice(0, 44) + (p.length > 52 ? '…' : '')
+          if (!line.includes('החלטת זרימה')) return <PlainWithCodes key={i} text={p} />
+          // flow line: "#<uuid>" -> short link to the flow-decision editor
           return (
-            <a
-              key={i}
-              href={p}
-              target="_blank"
-              rel="noreferrer"
-              dir="ltr"
-              className="inline-flex items-baseline gap-0.5 font-mono text-blue-400 hover:underline"
-            >
-              {label}
-              <ExternalLink className="inline h-3 w-3 opacity-60" />
-            </a>
+            <span key={i}>
+              {p.split(FLOW_ID).map((s, j) =>
+                /^#[0-9a-f-]{36}$/.test(s) ? (
+                  <a
+                    key={j}
+                    href={`/chat/flow-decisions/edit/${s.slice(1)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    dir="ltr"
+                    title={s}
+                    className="inline-flex items-baseline gap-0.5 font-mono text-emerald-400 hover:underline"
+                  >
+                    #{s.slice(1, 9)}
+                    <ExternalLink className="inline h-3 w-3 opacity-60" />
+                  </a>
+                ) : (
+                  <span key={j}>{s}</span>
+                )
+              )}
+            </span>
           )
-        }
-        if (!line.includes('החלטת זרימה')) return <span key={i}>{p}</span>
-        // flow line: "#<uuid>" -> short link to the flow-decision editor
-        return (
-          <span key={i}>
-            {p.split(FLOW_ID).map((s, j) =>
-              /^#[0-9a-f-]{36}$/.test(s) ? (
-                <a
-                  key={j}
-                  href={`/chat/flow-decisions/edit/${s.slice(1)}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  dir="ltr"
-                  title={s}
-                  className="inline-flex items-baseline gap-0.5 font-mono text-emerald-400 hover:underline"
-                >
-                  #{s.slice(1, 9)}
-                  <ExternalLink className="inline h-3 w-3 opacity-60" />
-                </a>
-              ) : (
-                <span key={j}>{s}</span>
-              )
-            )}
-          </span>
-        )
-      })}
+        })}
+      </span>
     </div>
   )
 }
@@ -266,7 +297,8 @@ function PartLine({ line }: { line: string }) {
 }
 
 /** Event body: pretty-print pure-JSON content (extract_slots), otherwise line-by-line with
- *  links; bare image-URL lines are dropped (the diagram renders below anyway). */
+ *  links; bare image-URL lines are dropped (the diagram renders below anyway). The container
+ *  carries the message's base direction so all lines share one alignment edge. */
 function EventBody({ text }: { text: string }) {
   const pretty = tryPrettyJson(text)
   if (pretty) {
@@ -278,7 +310,7 @@ function EventBody({ text }: { text: string }) {
   }
   const lines = text.split('\n').filter((l) => !IMG_LINE.test(l.trim()))
   return (
-    <div className="space-y-0.5 text-sm text-gray-200">
+    <div dir={baseDir(text)} className="space-y-0.5 text-start text-sm text-gray-200">
       {lines.map((l, i) =>
         l.trim().startsWith(FLOW_PREFIX) ? (
           <FlowDecisionLine key={i} line={l} />
@@ -290,17 +322,6 @@ function EventBody({ text }: { text: string }) {
       )}
     </div>
   )
-}
-
-function fmtTime(ts: string) {
-  try {
-    return new Date(ts + (ts.endsWith('Z') ? '' : 'Z')).toLocaleString('he-IL', {
-      dateStyle: 'short',
-      timeStyle: 'medium',
-    })
-  } catch {
-    return ts
-  }
 }
 
 // ── per-turn pipeline grouping ────────────────────────────────────────────────
@@ -345,7 +366,13 @@ function groupTurns(events: DiegoEvent[]): Turn[] {
     prev = e
   }
   for (const t of turns) {
-    const idx = t.nodes.map((n) => !!n.e.outputFor).lastIndexOf(true)
+    // output_for marks the final answer; newer traces leave it null, so fall back to the
+    // last format_v2/dora_flow node that actually said something (= the customer-facing reply)
+    let idx = t.nodes.map((n) => !!n.e.outputFor).lastIndexOf(true)
+    if (idx < 0)
+      idx = t.nodes
+        .map((n) => (n.e.author === 'format_v2' || n.e.author === 'dora_flow') && !!n.e.text.trim())
+        .lastIndexOf(true)
     if (idx >= 0) t.answer = t.nodes.splice(idx, 1)[0].e
   }
   return turns
@@ -358,7 +385,8 @@ function fmtDur(d: number | null): string {
   return `${d.toFixed(1)}s`
 }
 
-function nodeStatus(e: DiegoEvent, dur: number | null): 'ok' | 'slow' | 'err' {
+function nodeStatus(e: DiegoEvent, dur: number | null): TurnStatus {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sd: any = e.stateDelta || {}
   for (const [k, v] of Object.entries(sd)) {
     if (k.endsWith('error') && v) return 'err'
@@ -374,14 +402,9 @@ function nodeBadge(e: DiegoEvent): string | null {
   return m ? `${m[1]}→${m[2]}` : null
 }
 
-const STATUS_DOT: Record<string, string> = {
-  ok: 'bg-emerald-400',
-  slow: 'bg-amber-400',
-  err: 'bg-red-400',
-}
-
 /** Header line for a collapsed turn: what was searched, how it went, how long it took. */
 function turnSummary(turn: Turn) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const slots: any = turn.nodes.find((n) => n.e.author === 'extract_slots')?.e.stateDelta
   const parts: string[] = Array.isArray(slots?.stock_query?.part_descriptions)
     ? slots.stock_query.part_descriptions
@@ -397,7 +420,7 @@ function turnSummary(turn: Turn) {
   const last = turn.answer ?? turn.nodes[turn.nodes.length - 1]?.e ?? turn.user
   const t1 = last ? parseTs(last.timestamp) : null
   const durS = t0 != null && t1 != null ? Math.max(0, (t1 - t0) / 1000) : null
-  let status: 'ok' | 'slow' | 'err' = 'ok'
+  let status: TurnStatus = 'ok'
   for (const n of turn.nodes) {
     const s = nodeStatus(n.e, n.dur)
     if (s === 'err') { status = 'err'; break }
@@ -492,28 +515,114 @@ function PartCardFromState({ p, idx }: { p: EnrichedPart; idx: number }) {
   )
 }
 
-/** One full event rendered as a card — used for user messages, final answers, and the
- *  opened node detail panel. `enriched` (the turn's part-state JSON) replaces the answer's
- *  raw part text-lines with structured cards. */
-function EventCard({ e, enriched }: { e: DiegoEvent; enriched?: EnrichedPart[] }) {
+/** Fullscreen in-page image viewer — arrow keys navigate, Escape closes.
+ *  Same interaction as the credits scan modal, so the dashboard stays consistent. */
+function ImageLightbox({
+  images, index, caption, onClose, onNav,
+}: {
+  images: string[]
+  index: number
+  caption?: string
+  onClose: () => void
+  onNav: (i: number) => void
+}) {
+  useEffect(() => {
+    const onKey = (ev: KeyboardEvent) => {
+      if (ev.key === 'Escape') onClose()
+      else if (ev.key === 'ArrowRight') onNav(Math.min(index + 1, images.length - 1))
+      else if (ev.key === 'ArrowLeft') onNav(Math.max(index - 1, 0))
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [index, images.length, onClose, onNav])
   return (
-    <div className="rounded-lg border border-[var(--color-border-default)] bg-black/20 p-3">
-      <div className="mb-1 flex flex-wrap items-center gap-2">
-        <span
-          className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${
-            AUTHOR_STYLE[e.author] ?? 'bg-gray-500/15 text-gray-300 border-gray-500/30'
-          }`}
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-6"
+      onClick={onClose}
+      role="dialog"
+      aria-modal
+    >
+      <button
+        onClick={onClose}
+        className="absolute end-4 top-4 rounded-full bg-white/10 p-2 text-gray-200 hover:bg-white/20"
+        title="Close (Esc)"
+      >
+        <X className="h-5 w-5" />
+      </button>
+      {index > 0 && (
+        <button
+          onClick={(ev) => { ev.stopPropagation(); onNav(index - 1) }}
+          className="absolute start-4 rounded-full bg-white/10 p-2 text-gray-200 hover:bg-white/20"
+          title="Previous (←)"
         >
-          {e.author}
-        </span>
-        {e.outputFor && (
+          <ChevronLeft className="h-6 w-6" />
+        </button>
+      )}
+      {index < images.length - 1 && (
+        <button
+          onClick={(ev) => { ev.stopPropagation(); onNav(index + 1) }}
+          className="absolute end-4 top-1/2 rounded-full bg-white/10 p-2 text-gray-200 hover:bg-white/20"
+          title="Next (→)"
+        >
+          <ChevronRight className="h-6 w-6" />
+        </button>
+      )}
+      <figure className="max-h-full max-w-full" onClick={(ev) => ev.stopPropagation()}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={images[index]} alt="schema" className="max-h-[85vh] max-w-full rounded-lg object-contain" />
+        <figcaption className="mt-2 text-center text-xs text-gray-400">
+          {caption ? `${caption} · ` : ''}{index + 1}/{images.length}
+        </figcaption>
+      </figure>
+    </div>
+  )
+}
+
+type CardVariant = 'card' | 'user' | 'answer'
+
+const VARIANT_WRAP: Record<CardVariant, string> = {
+  card: 'rounded-lg border border-[var(--color-border-default)] bg-black/20 p-3',
+  // customer bubble: end-aligned, blue — the WhatsApp mental model operators already have
+  user: 'w-fit min-w-[240px] max-w-[85%] ms-auto rounded-2xl rounded-se-md border border-blue-500/25 bg-blue-500/10 p-3',
+  // bot answer bubble: start-aligned, green-tinted
+  answer: 'w-fit min-w-[280px] max-w-[95%] me-auto rounded-2xl rounded-ss-md border border-emerald-500/20 bg-emerald-500/[0.06] p-3',
+}
+
+/** One full event — a debug card (pipeline nodes) or a chat bubble (customer / final answer).
+ *  `enriched` (the turn's part-state JSON) replaces the answer's raw part text-lines with
+ *  structured cards. */
+function EventCard({ e, enriched, variant = 'card' }: { e: DiegoEvent; enriched?: EnrichedPart[]; variant?: CardVariant }) {
+  const [lightbox, setLightbox] = useState<number | null>(null)
+  return (
+    <div className={VARIANT_WRAP[variant]}>
+      <div className="mb-1 flex flex-wrap items-center gap-2">
+        {variant === 'user' ? (
+          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-blue-300">
+            <User className="h-3.5 w-3.5" /> לקוח
+          </span>
+        ) : variant === 'answer' ? (
+          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-300">
+            <Bot className="h-3.5 w-3.5" /> Diego
+          </span>
+        ) : (
+          <span
+            className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${
+              NODE_COLORS[e.author] ?? 'bg-gray-500/15 text-gray-300 border-gray-500/30'
+            }`}
+          >
+            {e.author}
+          </span>
+        )}
+        {variant === 'card' && e.outputFor && (
           <span className="rounded-full border border-green-500/30 bg-green-500/10 px-2 py-0.5 text-[11px] text-green-400">
             output
           </span>
         )}
-        <span className="ml-auto text-[11px] text-gray-500">{fmtTime(e.timestamp)}</span>
+        <span className="ml-auto text-[11px] text-gray-500" title={fmtDateTime(e.timestamp)}>
+          {fmtTimeShort(e.timestamp)}
+        </span>
       </div>
-      {NODE_INFO[e.author] && (
+      {variant === 'card' && NODE_INFO[e.author] && (
         <div dir="ltr" className="mb-1.5 text-[11px] italic text-gray-500">{NODE_INFO[e.author]}</div>
       )}
       {(() => {
@@ -542,13 +651,22 @@ function EventCard({ e, enriched }: { e: DiegoEvent; enriched?: EnrichedPart[] }
       )}
       {e.images.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-2">
-          {e.images.map((u) => (
-            <a key={u} href={u} target="_blank" rel="noreferrer">
+          {e.images.map((u, i) => (
+            <button key={u} onClick={() => setLightbox(i)} title="הגדל (חצים לניווט)">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={u} alt="schema" className="h-32 rounded-md border border-gray-700 object-contain" />
-            </a>
+            </button>
           ))}
         </div>
+      )}
+      {lightbox != null && (
+        <ImageLightbox
+          images={e.images}
+          index={lightbox}
+          caption={`${e.author} · ${fmtDateTime(e.timestamp)}`}
+          onClose={() => setLightbox(null)}
+          onNav={setLightbox}
+        />
       )}
       {e.stateDelta && (
         <details className="mt-2" open={!e.text && !(e.toolEvents ?? []).length}>
@@ -560,12 +678,20 @@ function EventCard({ e, enriched }: { e: DiegoEvent; enriched?: EnrichedPart[] }
           </pre>
         </details>
       )}
+      {e.raw != null && (
+        <details className="mt-1">
+          <summary className="cursor-pointer text-[11px] text-gray-500">Raw event JSON</summary>
+          <pre className="mt-1 max-h-96 overflow-auto rounded bg-black/40 p-2 text-[11px] leading-4 text-gray-400">
+            {JSON.stringify(e.raw, null, 2)}
+          </pre>
+        </details>
+      )}
     </div>
   )
 }
 
-/** The turn's intermediate node events as a horizontal clickable pipeline; the open
- *  node's full EventCard renders right below the strip. */
+/** The turn's intermediate node events as a horizontal clickable pipeline + a proportional
+ *  latency bar ("where did the 40s go"); the open node's full EventCard renders below. */
 function PipelineStrip({
   nodes, openId, onToggle, turnKey,
 }: {
@@ -576,8 +702,31 @@ function PipelineStrip({
 }) {
   const nodeId = (n: TurnNode, i: number) => n.e.id || `t${turnKey}-n${i}`
   const open = nodes.find((n, i) => nodeId(n, i) === openId)
+  const total = nodes.reduce((a, n) => a + (n.dur || 0), 0)
   return (
     <div className="space-y-2">
+      {total > 0.5 && (
+        <div className="flex items-center gap-2 px-0.5">
+          <div className="flex h-1.5 flex-1 overflow-hidden rounded-full bg-white/5">
+            {nodes.map((n, i) => {
+              const id = nodeId(n, i)
+              const st = nodeStatus(n.e, n.dur)
+              return (
+                <button
+                  key={id}
+                  onClick={() => onToggle(id)}
+                  title={`${n.e.author} · ${fmtDur(n.dur)}`}
+                  style={{ flexGrow: Math.max(n.dur || 0, total * 0.02) }}
+                  className={`min-w-[6px] border-e border-black/40 last:border-e-0 ${TURN_STATUS_BAR[st]} ${
+                    openId === id ? 'opacity-100' : 'opacity-70 hover:opacity-100'
+                  }`}
+                />
+              )
+            })}
+          </div>
+          <span className="shrink-0 font-mono text-[10px] text-gray-500">{fmtDur(total)}</span>
+        </div>
+      )}
       <div className="flex items-center gap-1 overflow-x-auto py-0.5">
         {nodes.map((n, i) => {
           const id = nodeId(n, i)
@@ -598,7 +747,7 @@ function PipelineStrip({
               >
                 <span className="font-mono text-[11px] font-semibold text-gray-200">{n.e.author}</span>
                 <span className="flex items-center gap-1.5 text-[10px] text-gray-400">
-                  <span className={`inline-block h-1.5 w-1.5 rounded-full ${STATUS_DOT[status]}`} />
+                  <span className={`inline-block h-1.5 w-1.5 rounded-full ${TURN_STATUS_DOT[status]}`} />
                   {fmtDur(n.dur)}
                   {badge && <span className="font-mono text-sky-400">{badge}</span>}
                 </span>
@@ -616,19 +765,213 @@ function PipelineStrip({
   )
 }
 
+/** <details> with true default-open semantics: React never fights the user's toggles, and
+ *  a matching #turn-N hash opens + scrolls to the turn (per-turn permalinks). */
+function TurnGroup({
+  anchorId, defaultOpen, className, summary, children,
+}: {
+  anchorId: string
+  defaultOpen: boolean
+  className?: string
+  summary: ReactNode
+  children: ReactNode
+}) {
+  const ref = useRef<HTMLDetailsElement>(null)
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const isTarget = typeof window !== 'undefined' && window.location.hash === `#${anchorId}`
+    el.open = defaultOpen || isTarget
+    if (isTarget) el.scrollIntoView({ block: 'start' })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  return (
+    <details ref={ref} id={anchorId} className={className}>
+      {summary}
+      {children}
+    </details>
+  )
+}
+
+// ── health strip ─────────────────────────────────────────────────────────────
+
+interface HealthData {
+  services: { key: string; label: string; status: 'up' | 'down' }[]
+  signals: {
+    lastEventAgeMin: number | null
+    turns24h: number
+    errEvents24h: number
+    avgAnswerSec: number | null
+  } | null
+}
+
+/** "Is Diego answering right now?" — v3 stack pings + activity signals, refreshed every 60s. */
+function HealthStrip() {
+  const [h, setH] = useState<HealthData | null>(null)
+  useEffect(() => {
+    let dead = false
+    const load = () =>
+      fetch('/api/diego/health')
+        .then((r) => r.json())
+        .then((j) => { if (!dead && j.success) setH(j) })
+        .catch(() => {})
+    void load()
+    const t = setInterval(load, 60_000)
+    return () => { dead = true; clearInterval(t) }
+  }, [])
+  if (!h) return null
+  const age = h.signals?.lastEventAgeMin
+  const ageCls = age == null ? 'text-gray-500' : age > 240 ? 'text-red-400' : age > 60 ? 'text-amber-400' : 'text-gray-400'
+  const errs = h.signals?.errEvents24h ?? 0
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-[var(--color-border-default)] bg-black/20 px-3 py-1.5 text-[11px]">
+      {h.services.map((s) => (
+        <span key={s.key} className="inline-flex items-center gap-1.5 text-gray-300">
+          <span className={`inline-block h-2 w-2 rounded-full ${s.status === 'up' ? 'bg-emerald-400' : 'bg-red-400'}`} />
+          {s.label}
+        </span>
+      ))}
+      {h.signals && (
+        <>
+          <span className="h-3 w-px bg-white/10" />
+          <span className={ageCls}>
+            {age == null ? 'אין אירועים' : age < 1 ? 'אירוע אחרון: עכשיו' : `אירוע אחרון לפני ${age} דק׳`}
+          </span>
+          <span className="text-gray-400">{h.signals.turns24h} פניות/24ש</span>
+          <span className={errs > 0 ? 'text-red-400' : 'text-gray-500'}>{errs} שגיאות/24ש</span>
+          {h.signals.avgAnswerSec != null && (
+            <span className="text-gray-400">מענה ממוצע {h.signals.avgAnswerSec}s</span>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
+// ── per-turn debug actions ───────────────────────────────────────────────────
+
+interface TurnVehicle { year?: number; model?: string; fuelType?: string; engineModel?: string }
+
+function vehicleFromState(state: Record<string, unknown> | undefined): TurnVehicle | null {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const ctx: any = (state as { search?: { vehicle_ctx?: unknown } })?.search?.vehicle_ctx
+  if (!ctx || typeof ctx !== 'object') return null
+  const year = ctx.year != null && /^\d{4}$/.test(String(ctx.year)) ? Number(ctx.year) : undefined
+  return {
+    year,
+    model: ctx.model ?? ctx.tradeName ?? undefined,
+    fuelType: ctx.fuelType ?? undefined,
+    engineModel: ctx.engineModel ?? undefined,
+  }
+}
+
+/** Session ids are VINs, except WA sessions keyed by a 7-8 digit license plate. */
+function vehicleIdParam(sessionId: string): ['license_plate' | 'vin', string] {
+  return /^\d{7,8}$/.test(sessionId) ? ['license_plate', sessionId] : ['vin', sessionId]
+}
+
+function observatoryHref(desc: string, sessionId: string, v: TurnVehicle | null): string {
+  const p = new URLSearchParams({ query: desc })
+  const [k, val] = vehicleIdParam(sessionId)
+  p.set(k, val)
+  if (v?.year) p.set('year', String(v.year))
+  if (v?.model) p.set('model', v.model)
+  if (v?.fuelType) p.set('fuel', v.fuelType)
+  if (v?.engineModel) p.set('engine', v.engineModel)
+  return `/chat/flow-decisions/observatory?${p.toString()}`
+}
+
+function createRuleHref(desc: string, v: TurnVehicle | null): string {
+  const p = new URLSearchParams({ create: '1', seed: desc })
+  if (v?.year) { p.set('yearFrom', String(v.year)); p.set('yearTo', String(v.year)) }
+  if (v?.model) p.set('model', v.model)
+  if (v?.fuelType) p.set('fuel', v.fuelType)
+  if (v?.engineModel) p.set('engine', v.engineModel)
+  return `/chat/flow-decisions?${p.toString()}`
+}
+
+const RULE_UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i
+
+interface RecheckState { loading?: boolean; prodId?: string | null; same?: boolean; error?: string }
+
+const ACTION_BTN =
+  'inline-flex items-center gap-1 rounded-md border border-[var(--color-border-default)] px-2 py-1 text-[11px] text-gray-300 transition-colors hover:bg-white/5 hover:text-white'
+
+/** The find → diagnose → fix → verify toolbar for one turn: trace the decision in the
+ *  Observatory, re-run against the CURRENT rules ("did my fix work?"), seed a new rule
+ *  from this exact turn (vehicle filters included). */
+function TurnActions({
+  desc, sessionId, vehicle, recordedRuleId, recheck, onRecheck,
+}: {
+  desc: string
+  sessionId: string
+  vehicle: TurnVehicle | null
+  recordedRuleId: string | null
+  recheck: RecheckState | undefined
+  onRecheck: () => void
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <a href={observatoryHref(desc, sessionId, vehicle)} target="_blank" rel="noreferrer" className={ACTION_BTN}
+         title="פתח את ההחלטה במצפה — למה נבחר החוק הזה?">
+        <Radar className="h-3.5 w-3.5 text-sky-400" /> Trace decision
+      </a>
+      <button onClick={onRecheck} disabled={recheck?.loading} className={ACTION_BTN}
+              title="הרץ מחדש מול החוקים הנוכחיים — האם התיקון שלי שינה את התוצאה?">
+        <CheckCheck className="h-3.5 w-3.5 text-emerald-400" />
+        {recheck?.loading ? 'בודק…' : 'Re-check vs rules'}
+      </button>
+      {recheck && !recheck.loading && (
+        recheck.error ? (
+          <span className="text-[11px] text-red-400">{recheck.error}</span>
+        ) : recheck.same ? (
+          <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-300">
+            אותו חוק נבחר
+          </span>
+        ) : recheck.prodId ? (
+          <a href={`/chat/flow-decisions?q=${recheck.prodId}`} target="_blank" rel="noreferrer"
+             className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 font-mono text-[11px] text-amber-300 hover:underline">
+            עכשיו נבחר #{recheck.prodId.slice(0, 8)}
+          </a>
+        ) : (
+          <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[11px] text-amber-300">
+            אין חוק תואם כעת
+          </span>
+        )
+      )}
+      {recordedRuleId && (
+        <span className="font-mono text-[10px] text-gray-600" title="החוק שנבחר בשיחה המקורית">
+          then: #{recordedRuleId.slice(0, 8)}
+        </span>
+      )}
+      <a href={createRuleHref(desc, vehicle)} target="_blank" rel="noreferrer" className={ACTION_BTN}
+         title="צור חוק זרימה חדש מהפנייה הזו — כולל פילטרי הרכב">
+        <Plus className="h-3.5 w-3.5 text-indigo-400" /> Rule from turn
+      </a>
+    </div>
+  )
+}
+
+// ── main component ───────────────────────────────────────────────────────────
+
 export default function DiegoSessionsTab() {
   const [sessions, setSessions] = useState<SessionSummary[]>([])
-  const [detail, setDetail] = useState<{ key: string; events: DiegoEvent[] } | null>(null)
+  const [hasMore, setHasMore] = useState(false)
+  const [detail, setDetail] = useState<{ key: string; events: DiegoEvent[]; state: Record<string, unknown> } | null>(null)
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // which pipeline node's detail panel is open (event id; one at a time)
   const [openNode, setOpenNode] = useState<string | null>(null)
+  const [live, setLive] = useState(false)
+  const [recheck, setRecheck] = useState<Record<string, RecheckState>>({})
 
   // The URL is the single source of truth for filter + selection — changing path
   // segments remounts the page (Next.js), so component state would be wiped.
   //   /chat/diego/<user>            — filter by user
   //   /chat/diego/<user>/<session>  — filter + open that trace
   //   /chat/diego?u=<user>&s=<id>   — open a trace with NO list filter (in-UI click)
+  //   ?q=<text>                     — free-text search (also a FixQueue deep-link target)
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const segs = useMemo(
@@ -643,17 +986,30 @@ export default function DiegoSessionsTab() {
     return s && u ? { user: normalizeUser(u), id: s } : null
   }, [segs, searchParams])
 
+  const [q, setQ] = useState(() => searchParams.get('q') ?? '')
+  const [days, setDays] = useState<number | null>(null)
+
+  const withQ = useCallback(
+    (url: string) => {
+      if (!q.trim()) return url
+      return url + (url.includes('?') ? '&' : '?') + `q=${encodeURIComponent(q.trim())}`
+    },
+    [q]
+  )
+
   const pickSession = useCallback(
     (user: string, id: string) => {
       window.history.replaceState(
         null,
         '',
-        userFilter
-          ? `/chat/diego/${encodeURIComponent(userFilter)}/${encodeURIComponent(id)}`
-          : `/chat/diego?u=${encodeURIComponent(user)}&s=${encodeURIComponent(id)}`
+        withQ(
+          userFilter
+            ? `/chat/diego/${encodeURIComponent(userFilter)}/${encodeURIComponent(id)}`
+            : `/chat/diego?u=${encodeURIComponent(user)}&s=${encodeURIComponent(id)}`
+        )
       )
     },
-    [userFilter]
+    [userFilter, withQ]
   )
 
   const applyUserFilter = useCallback(
@@ -665,52 +1021,102 @@ export default function DiegoSessionsTab() {
         : selected && sameUser(user, selected.user)
           ? `/chat/diego/${encodeURIComponent(user)}/${encodeURIComponent(selected.id)}`
           : `/chat/diego/${encodeURIComponent(user)}`
-      window.history.replaceState(null, '', url)
+      window.history.replaceState(null, '', withQ(url))
     },
-    [selected]
+    [selected, withQ]
   )
 
-  const loadList = useCallback(async () => {
-    // no setState before the first await — `loading` starts true, refresh sets it in the handler
+  const listParams = useCallback(
+    (offset: number) => {
+      const p = new URLSearchParams()
+      if (q.trim()) p.set('q', q.trim())
+      if (days) p.set('days', String(days))
+      if (offset) p.set('offset', String(offset))
+      return p.toString()
+    },
+    [q, days]
+  )
+
+  const loadList = useCallback(
+    async (opts: { silent?: boolean } = {}) => {
+      if (!opts.silent) setLoading(true)
+      try {
+        const r = await fetch(`/api/diego/sessions?${listParams(0)}`)
+        const j = await r.json()
+        if (!j.success) throw new Error(j.error)
+        setSessions(j.sessions)
+        setHasMore(!!j.hasMore)
+        setError(null)
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e))
+      } finally {
+        setLoading(false)
+      }
+    },
+    [listParams]
+  )
+
+  const loadMore = useCallback(async () => {
+    setLoadingMore(true)
     try {
-      const r = await fetch('/api/diego/sessions')
+      const r = await fetch(`/api/diego/sessions?${listParams(sessions.length)}`)
       const j = await r.json()
       if (!j.success) throw new Error(j.error)
-      setSessions(j.sessions)
-      setError(null)
+      setSessions((prev) => [...prev, ...j.sessions])
+      setHasMore(!!j.hasMore)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
-      setLoading(false)
+      setLoadingMore(false)
     }
-  }, [])
+  }, [listParams, sessions.length])
 
+  // search + date filter are debounced into one list reload
   useEffect(() => {
-    void loadList()
+    const t = setTimeout(() => void loadList(), 350)
+    return () => clearTimeout(t)
   }, [loadList])
+
+  // live tail: poll the list every 10s, the open trace every 7s (silent — no spinners)
+  useEffect(() => {
+    if (!live) return
+    const t = setInterval(() => void loadList({ silent: true }), 10_000)
+    return () => clearInterval(t)
+  }, [live, loadList])
 
   // detail-loading is DERIVED (selected ≠ loaded key), so the effect never sets state synchronously
   const selKey = selected ? `${selected.user}/${selected.id}` : null
   const loadingDetail = !!selKey && detail?.key !== selKey
 
+  const loadDetail = useCallback(async () => {
+    if (!selected) return
+    const key = `${selected.user}/${selected.id}`
+    try {
+      const r = await fetch(
+        `/api/diego/sessions?user=${encodeURIComponent(selected.user)}&id=${encodeURIComponent(selected.id)}`
+      )
+      const j = await r.json()
+      if (j.success) setDetail({ key, events: j.session.events, state: j.session.state ?? {} })
+      else setError(j.error)
+    } catch (e) {
+      setError(String(e))
+    }
+  }, [selected])
+
   useEffect(() => {
     if (!selected) return
     let dead = false
-    const key = `${selected.user}/${selected.id}`
-    fetch(`/api/diego/sessions?user=${encodeURIComponent(selected.user)}&id=${encodeURIComponent(selected.id)}`)
-      .then((r) => r.json())
-      .then((j) => {
-        if (dead) return
-        if (j.success) setDetail({ key, events: j.session.events })
-        else setError(j.error)
-      })
-      .catch((e) => {
-        if (!dead) setError(String(e))
-      })
-    return () => {
-      dead = true
-    }
-  }, [selected])
+    void (async () => {
+      if (!dead) await loadDetail()
+    })()
+    return () => { dead = true }
+  }, [selected, loadDetail])
+
+  useEffect(() => {
+    if (!live || !selected) return
+    const t = setInterval(() => void loadDetail(), 7_000)
+    return () => clearInterval(t)
+  }, [live, selected, loadDetail])
 
   const selectedSummary = useMemo(
     () => sessions.find((s) => s.userId === selected?.user && s.sessionId === selected?.id),
@@ -719,14 +1125,21 @@ export default function DiegoSessionsTab() {
 
   // Separate Dora sessions from Diego sessions: classify by which flow the
   // session's events actually used (a session can be both — shows in both).
-  const [flowFilter, setFlowFilter] = useState<'all' | 'diego' | 'dora'>('all')
+  // "issues" turns the list into a triage inbox (errors / customers left hanging).
+  const [flowFilter, setFlowFilter] = useState<'all' | 'diego' | 'dora' | 'issues'>('all')
 
   const visibleSessions = useMemo(() => {
     let list = userFilter ? sessions.filter((s) => sameUser(userFilter, s.userId)) : sessions
     if (flowFilter === 'dora') list = list.filter((s) => (s.doraEvents ?? 0) > 0)
     if (flowFilter === 'diego') list = list.filter((s) => (s.stockEvents ?? 0) > 0 || (s.doraEvents ?? 0) === 0)
+    if (flowFilter === 'issues') list = list.filter((s) => (s.errEvents ?? 0) > 0 || s.unanswered)
     return list
   }, [sessions, userFilter, flowFilter])
+
+  const issueCount = useMemo(
+    () => sessions.filter((s) => (s.errEvents ?? 0) > 0 || s.unanswered).length,
+    [sessions]
+  )
 
   const deleteSession = useCallback(async (user: string, id: string) => {
     if (!window.confirm(`למחוק את הסשן ${id} לצמיתות?`)) return
@@ -763,29 +1176,111 @@ export default function DiegoSessionsTab() {
   // the URL segment may be the bare code ("32722") while the stored id is padded
   const filterSelectValue = userFilter ? distinctUsers.find((u) => sameUser(userFilter, u.id))?.id ?? userFilter : ''
 
+  const sessionVehicle = useMemo(() => vehicleFromState(detail?.state), [detail?.state])
+
+  const runRecheck = useCallback(
+    async (turnKey: string, desc: string, recordedRuleId: string | null) => {
+      if (!selected) return
+      setRecheck((prev) => ({ ...prev, [turnKey]: { loading: true } }))
+      try {
+        const [idKey, idVal] = vehicleIdParam(selected.id)
+        const r = await fetch('/api/flow-decisions/trace', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            partDescription: desc,
+            vehicleData: sessionVehicle ?? {},
+            [idKey === 'license_plate' ? 'licensePlate' : 'vin']: idVal,
+          }),
+        })
+        const j = await r.json()
+        if (j.error) throw new Error(j.details || j.error)
+        const prodId: string | null = j.productionId ?? null
+        setRecheck((prev) => ({
+          ...prev,
+          [turnKey]: {
+            prodId,
+            same: !!prodId && !!recordedRuleId && prodId.toLowerCase() === recordedRuleId.toLowerCase(),
+          },
+        }))
+      } catch (e) {
+        setRecheck((prev) => ({
+          ...prev,
+          [turnKey]: { error: e instanceof Error ? e.message : String(e) },
+        }))
+      }
+    },
+    [selected, sessionVehicle]
+  )
+
   return (
-    // minmax(0,1fr): a plain 1fr column refuses to shrink below its content
-    // (long mono lines / JSON blocks), pushing the page under the fixed sidebar.
-    <div className="grid grid-cols-1 gap-4 xl:grid-cols-[420px_minmax(0,1fr)]">
+    <div className="space-y-3">
+      <HealthStrip />
+      {/* minmax(0,1fr): a plain 1fr column refuses to shrink below its content
+          (long mono lines / JSON blocks), pushing the page under the fixed sidebar. */}
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[420px_minmax(0,1fr)]">
       {/* ---- session list ---- */}
       <Panel
         title={`Sessions (${visibleSessions.length}${userFilter ? ` / ${sessions.length}` : ''})`}
         subtitle="One session per car — id is the VIN, user is the customer code"
         icon={<Car className="h-4 w-4" />}
         action={
-          <button
-            onClick={() => {
-              setLoading(true)
-              void loadList()
-            }}
-            className="rounded-md border border-[var(--color-border-default)] p-1.5 text-gray-400 hover:text-white"
-            title="Refresh"
-          >
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-          </button>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setLive((v) => !v)}
+              className={`rounded-md border p-1.5 transition-colors ${
+                live
+                  ? 'border-emerald-500/60 bg-emerald-500/10 text-emerald-400'
+                  : 'border-[var(--color-border-default)] text-gray-400 hover:text-white'
+              }`}
+              title={live ? 'Live tail on — polling every 10s' : 'Live tail off'}
+            >
+              <Radio className={`h-4 w-4 ${live ? 'animate-pulse' : ''}`} />
+            </button>
+            <button
+              onClick={() => void loadList()}
+              className="rounded-md border border-[var(--color-border-default)] p-1.5 text-gray-400 hover:text-white"
+              title="Refresh"
+            >
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
         }
       >
         {error && <div className="mb-2 rounded bg-red-500/10 p-2 text-xs text-red-400">{error}</div>}
+        {/* free-text search: VIN / plate / customer / vehicle / any message text */}
+        <div className="mb-2 flex items-center gap-2">
+          <div className="relative min-w-0 flex-1">
+            <Search className="pointer-events-none absolute start-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-500" />
+            <input
+              value={q}
+              onChange={(ev) => setQ(ev.target.value)}
+              dir="auto"
+              placeholder="חיפוש: טקסט הודעה, לוחית, VIN, דגם…"
+              className="w-full rounded-md border border-[var(--color-border-default)] bg-black/30 py-1.5 ps-7 pe-7 text-xs text-gray-200 placeholder:text-gray-600 focus:border-blue-500/60 focus:outline-none"
+            />
+            {q && (
+              <button
+                onClick={() => setQ('')}
+                className="absolute end-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-gray-500 hover:text-white"
+                title="נקה חיפוש"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            )}
+          </div>
+          <select
+            value={days ?? ''}
+            onChange={(ev) => setDays(ev.target.value ? Number(ev.target.value) : null)}
+            className="shrink-0 rounded-md border border-[var(--color-border-default)] bg-black/30 px-1.5 py-1.5 text-xs text-gray-300 focus:outline-none"
+            title="טווח זמן"
+          >
+            <option value="">כל הזמן</option>
+            <option value="1">24 שעות</option>
+            <option value="7">שבוע</option>
+            <option value="30">חודש</option>
+          </select>
+        </div>
         <div className="mb-2 flex items-center gap-2">
           <User className="h-3.5 w-3.5 shrink-0 text-gray-400" />
           <select
@@ -811,7 +1306,7 @@ export default function DiegoSessionsTab() {
             </button>
           )}
           <div className="flex gap-1">
-            {([['all', 'הכל'], ['diego', 'Diego'], ['dora', 'Dora']] as const).map(([key, label]) => (
+            {([['all', 'הכל'], ['diego', 'Diego'], ['dora', 'Dora'], ['issues', `⚠ ${issueCount}`]] as const).map(([key, label]) => (
               <button
                 key={key}
                 onClick={() => setFlowFilter(key)}
@@ -819,19 +1314,23 @@ export default function DiegoSessionsTab() {
                   flowFilter === key
                     ? key === 'dora'
                       ? 'border-rose-500/60 bg-rose-500/10 text-rose-300'
-                      : 'border-blue-500/60 bg-blue-500/10 text-blue-300'
+                      : key === 'issues'
+                        ? 'border-amber-500/60 bg-amber-500/10 text-amber-300'
+                        : 'border-blue-500/60 bg-blue-500/10 text-blue-300'
                     : 'border-[var(--color-border-default)] text-gray-400 hover:text-white'
                 }`}
+                title={key === 'issues' ? 'רק סשנים עם שגיאות או לקוח ללא מענה' : undefined}
               >
                 {label}
               </button>
             ))}
           </div>
         </div>
-        <div className="max-h-[75vh] space-y-2 overflow-y-auto pr-1">
+        <div className="max-h-[75vh] space-y-2 overflow-y-auto pe-1">
           {visibleSessions.map((s) => {
             const active = selected?.user === s.userId && selected?.id === s.sessionId
             const cust = customerCode(s.userId)
+            const health: TurnStatus | null = (s.errEvents ?? 0) > 0 ? 'err' : s.unanswered ? 'slow' : null
             return (
               <div
                 key={`${s.userId}/${s.sessionId}`}
@@ -847,6 +1346,12 @@ export default function DiegoSessionsTab() {
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="flex min-w-0 items-center gap-1.5">
+                    {health && (
+                      <span
+                        className={`inline-block h-2 w-2 shrink-0 rounded-full ${TURN_STATUS_DOT[health]}`}
+                        title={health === 'err' ? `${s.errEvents} שגיאות בסשן` : 'הודעה אחרונה ללא מענה'}
+                      />
+                    )}
                     <span className="truncate font-mono text-sm text-white">{s.sessionId}</span>
                     {(s.stockEvents ?? 0) > 0 && (
                       <span className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-1.5 text-[10px] text-cyan-300">diego</span>
@@ -856,7 +1361,9 @@ export default function DiegoSessionsTab() {
                     )}
                   </span>
                   <span className="flex shrink-0 items-center gap-1.5">
-                    <span className="text-[11px] text-gray-500">{fmtTime(s.updateTime)}</span>
+                    <span className="text-[11px] text-gray-500" title={fmtDateTime(s.updateTime)}>
+                      {relTime(s.updateTime)}
+                    </span>
                     <button
                       onClick={(ev) => {
                         ev.stopPropagation()
@@ -907,8 +1414,17 @@ export default function DiegoSessionsTab() {
           })}
           {!loading && visibleSessions.length === 0 && (
             <div className="p-4 text-center text-sm text-gray-500">
-              {userFilter ? `No sessions for user ${userFilter}` : 'No sessions yet'}
+              {q ? `אין תוצאות ל"${q}"` : userFilter ? `No sessions for user ${userFilter}` : 'No sessions yet'}
             </div>
+          )}
+          {hasMore && (
+            <button
+              onClick={() => void loadMore()}
+              disabled={loadingMore}
+              className="w-full rounded-lg border border-dashed border-[var(--color-border-default)] p-2 text-xs text-gray-400 hover:text-white"
+            >
+              {loadingMore ? 'טוען…' : 'טען עוד'}
+            </button>
           )}
         </div>
       </Panel>
@@ -946,56 +1462,106 @@ export default function DiegoSessionsTab() {
       >
         {loadingDetail && <div className="p-6 text-center text-sm text-gray-500">Loading…</div>}
         {!loadingDetail && detail && (
-          <div className="max-h-[75vh] space-y-4 overflow-y-auto pr-1">
+          <div className="max-h-[75vh] space-y-4 overflow-y-auto pe-1">
             {/* newest turn first; each turn is a collapsible group — latest open, older
                 ones fold to a one-line summary (query · status · duration · time) */}
             {(() => {
               const turns = groupTurns(detail.events).reverse()
+              let prevDay: string | null = null
               return turns.map((turn, ti) => {
                 const s = turnSummary(turn)
+                const turnNo = turns.length - ti
+                const anchorId = `turn-${turnNo}`
+                const turnKey = turn.user?.id || anchorId
                 // Latest part-state in the turn (lubinski_stock re-emits enriched with lub_qty
                 // after enrich_parts) — the answer renders its part cards from this JSON.
                 const enriched = [...turn.nodes].reverse()
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
                   .map((n) => (n.e.stateDelta as any)?.enriched)
                   .find((x) => Array.isArray(x) && x.length)
+                const recordedRuleId = turn.answer?.text.match(RULE_UUID)?.[0] ?? null
+                const ts = turn.user?.timestamp ?? turn.nodes[0]?.e.timestamp
+                const day = ts ? dayKey(ts) : prevDay
+                const showDay = day !== prevDay && ts
+                prevDay = day
                 return (
-                  <details
-                    key={ti}
-                    open={ti === 0}
-                    className="group rounded-xl border border-[var(--color-border-default)] bg-black/10"
-                  >
-                    <summary className="flex cursor-pointer select-none flex-wrap items-center gap-2 px-3 py-2 text-sm [&::-webkit-details-marker]:hidden">
-                      <ChevronRight className="h-4 w-4 shrink-0 text-gray-500 transition-transform group-open:rotate-90" />
-                      <span className="font-mono text-[11px] text-gray-600">#{turns.length - ti}</span>
-                      <span className={`inline-block h-2 w-2 shrink-0 rounded-full ${STATUS_DOT[s.status]}`} />
-                      {s.parts.length > 0 ? (
-                        <>
-                          <span dir="ltr" className="font-medium text-gray-200">🔎 {s.parts.join(' · ')}</span>
-                          {s.label && (
-                            <span dir="auto" className="max-w-[280px] truncate text-xs text-gray-500">{s.label}</span>
+                  <div key={turnKey} className="space-y-4">
+                    {showDay && (
+                      <div className="flex items-center gap-3">
+                        <span className="h-px flex-1 bg-white/5" />
+                        <span dir="rtl" className="rounded-full border border-[var(--color-border-default)] bg-black/30 px-2.5 py-0.5 text-[11px] text-gray-500">
+                          {fmtDayLabel(ts!)}
+                        </span>
+                        <span className="h-px flex-1 bg-white/5" />
+                      </div>
+                    )}
+                    <TurnGroup
+                      anchorId={anchorId}
+                      defaultOpen={ti === 0}
+                      className="group rounded-xl border border-[var(--color-border-default)] bg-black/10"
+                      summary={
+                        <summary className="sticky top-0 z-[5] flex cursor-pointer select-none flex-wrap items-center gap-2 rounded-xl bg-[var(--color-bg-elevated,#1b1b1f)] px-3 py-2 text-sm group-open:rounded-b-none group-open:border-b group-open:border-[var(--color-border-default)] [&::-webkit-details-marker]:hidden">
+                          <ChevronRight className="h-4 w-4 shrink-0 text-gray-500 transition-transform group-open:rotate-90" />
+                          <span className="font-mono text-[11px] text-gray-600">#{turnNo}</span>
+                          <span className={`inline-block h-2 w-2 shrink-0 rounded-full ${TURN_STATUS_DOT[s.status]}`} />
+                          {s.parts.length > 0 ? (
+                            <>
+                              <span dir="ltr" className="font-medium text-gray-200">🔎 {s.parts.join(' · ')}</span>
+                              {s.label && (
+                                <span dir="auto" className="max-w-[280px] truncate text-xs text-gray-500">{s.label}</span>
+                              )}
+                            </>
+                          ) : (
+                            <span dir="auto" className="max-w-[420px] truncate font-medium text-gray-200">{s.label || '—'}</span>
                           )}
-                        </>
-                      ) : (
-                        <span dir="auto" className="max-w-[420px] truncate font-medium text-gray-200">{s.label || '—'}</span>
-                      )}
-                      <span className="ms-auto flex items-center gap-2 text-[11px] text-gray-500">
-                        {s.durS != null && <span className="font-mono">{fmtDur(s.durS)}</span>}
-                        {turn.user && <span>{fmtTime(turn.user.timestamp)}</span>}
-                      </span>
-                    </summary>
-                    <div className="space-y-2 border-t border-[var(--color-border-default)] p-3">
-                      {turn.user && <EventCard e={turn.user} />}
-                      {turn.nodes.length > 0 && (
-                        <PipelineStrip
-                          nodes={turn.nodes}
-                          openId={openNode}
-                          onToggle={(id) => setOpenNode(openNode === id ? null : id)}
-                          turnKey={ti}
-                        />
-                      )}
-                      {turn.answer && <EventCard e={turn.answer} enriched={enriched} />}
-                    </div>
-                  </details>
+                          <span className="ms-auto flex items-center gap-2 text-[11px] text-gray-500">
+                            {s.durS != null && <span className="font-mono">{fmtDur(s.durS)}</span>}
+                            {turn.user && (
+                              <span title={fmtDateTime(turn.user.timestamp)}>{fmtTimeShort(turn.user.timestamp)}</span>
+                            )}
+                            <button
+                              onClick={(ev) => {
+                                ev.preventDefault()
+                                ev.stopPropagation()
+                                const base = selected
+                                  ? `${window.location.origin}/chat/diego/${encodeURIComponent(selected.user)}/${encodeURIComponent(selected.id)}`
+                                  : window.location.origin + window.location.pathname
+                                void copyText(`${base}#${anchorId}`)
+                                toast.success('קישור לפנייה הועתק')
+                              }}
+                              className="rounded p-0.5 text-gray-600 hover:bg-white/10 hover:text-white"
+                              title="העתק קישור ישיר לפנייה זו"
+                            >
+                              <Link2 className="h-3.5 w-3.5" />
+                            </button>
+                          </span>
+                        </summary>
+                      }
+                    >
+                      <div className="space-y-2 p-3">
+                        {s.parts.length > 0 && selected && (
+                          <TurnActions
+                            desc={s.parts[0]}
+                            sessionId={selected.id}
+                            vehicle={sessionVehicle}
+                            recordedRuleId={recordedRuleId}
+                            recheck={recheck[turnKey]}
+                            onRecheck={() => void runRecheck(turnKey, s.parts[0], recordedRuleId)}
+                          />
+                        )}
+                        {turn.user && <EventCard e={turn.user} variant="user" />}
+                        {turn.nodes.length > 0 && (
+                          <PipelineStrip
+                            nodes={turn.nodes}
+                            openId={openNode}
+                            onToggle={(id) => setOpenNode(openNode === id ? null : id)}
+                            turnKey={ti}
+                          />
+                        )}
+                        {turn.answer && <EventCard e={turn.answer} enriched={enriched} variant="answer" />}
+                      </div>
+                    </TurnGroup>
+                  </div>
                 )
               })
             })()}
@@ -1008,6 +1574,7 @@ export default function DiegoSessionsTab() {
           <div className="p-10 text-center text-sm text-gray-500">← Pick a car session</div>
         )}
       </Panel>
+      </div>
     </div>
   )
 }

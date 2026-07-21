@@ -174,3 +174,38 @@ export const STATUS_COLORS = {
 } as const
 
 export type StatusType = keyof typeof STATUS_COLORS
+
+// ── Diego trace palette ──────────────────────────────────────────────────────
+// Pipeline-node author chips (DiegoSessionsTab) — one hue per pipeline stage.
+export const NODE_COLORS: Record<string, string> = {
+  user: 'bg-blue-500/15 text-blue-300 border-blue-500/30',
+  Diego_Clone: 'bg-purple-500/15 text-purple-300 border-purple-500/30',
+  JSP_Assistant: 'bg-purple-500/15 text-purple-300 border-purple-500/30',
+  jsp_router: 'bg-purple-500/15 text-purple-300 border-purple-500/30',
+  extract_slots: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
+  search_parts: 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30',
+  enrich_parts: 'bg-teal-500/15 text-teal-300 border-teal-500/30',
+  lubinski_stock: 'bg-sky-500/15 text-sky-300 border-sky-500/30',
+  dora_flow: 'bg-rose-500/15 text-rose-300 border-rose-500/30',
+  format_v2: 'bg-green-500/15 text-green-300 border-green-500/30',
+}
+
+// ok/slow/err dots + latency-bar segments for turns and pipeline nodes.
+export type TurnStatus = 'ok' | 'slow' | 'err'
+export const TURN_STATUS_DOT: Record<TurnStatus, string> = {
+  ok: 'bg-emerald-400',
+  slow: 'bg-amber-400',
+  err: 'bg-red-400',
+}
+export const TURN_STATUS_BAR: Record<TurnStatus, string> = {
+  ok: 'bg-emerald-500/60',
+  slow: 'bg-amber-500/70',
+  err: 'bg-red-500/80',
+}
+
+// Flow-decision status pills (RulesTable and friends).
+export const FLOW_STATUS_PILL: Record<string, string> = {
+  suggestion: 'bg-amber-500/15 text-amber-300 ring-amber-400/20',
+  approved: 'bg-emerald-500/15 text-emerald-300 ring-emerald-400/20',
+  rejected: 'bg-rose-500/15 text-rose-300 ring-rose-400/20',
+}

@@ -21,6 +21,15 @@ interface FlowDecisionsPageProps {
   initialEditId?: string
 }
 
+/** Vehicle filters seeded from a Diego turn's vehicle_ctx (all optional, string form). */
+export interface SeedVehicle {
+  yearFrom?: string
+  yearTo?: string
+  model?: string
+  fuelType?: string
+  engineModel?: string
+}
+
 // Flow decisions the bot taught itself (a "learned pin" = one of these + a direct part).
 const LEARNED_SOURCES = ['schema_ref_correction', 'agent_correction_seed', 'chat_correction']
 
@@ -59,8 +68,22 @@ export default function FlowDecisionsPage({ initialEditId }: FlowDecisionsPagePr
   const [filters, setFilters] = useState<RuleFilters>(() => readFiltersFromUrl(searchParams))
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [editingId, setEditingId] = useState<string | null>(initialEditId ?? null)
-  const [creating, setCreating] = useState(false)
-  const [seedDescription, setSeedDescription] = useState<string | undefined>(undefined)
+  // ?create=1&seed=<desc>&yearFrom=&model=&fuel=&engine= — "create rule from this turn"
+  // deep links from the Diego trace open the wizard pre-filled (vehicle filters included).
+  const [creating, setCreating] = useState(() => searchParams.get('create') === '1')
+  const [seedDescription, setSeedDescription] = useState<string | undefined>(
+    () => searchParams.get('seed') || undefined
+  )
+  const [seedVehicle] = useState<SeedVehicle | undefined>(() => {
+    const v: SeedVehicle = {
+      yearFrom: searchParams.get('yearFrom') || '',
+      yearTo: searchParams.get('yearTo') || '',
+      model: searchParams.get('model') || '',
+      fuelType: searchParams.get('fuel') || searchParams.get('fuelType') || '',
+      engineModel: searchParams.get('engine') || searchParams.get('engineModel') || '',
+    }
+    return Object.values(v).some(Boolean) ? v : undefined
+  })
   const [retroScanOpen, setRetroScanOpen] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
   const [view, setView] = useState<'rules' | 'coverage'>('rules')
@@ -301,6 +324,7 @@ export default function FlowDecisionsPage({ initialEditId }: FlowDecisionsPagePr
       {creating && (
         <CreateFlowWizard
           seedDescription={seedDescription}
+          seedVehicle={seedVehicle}
           existingRules={flowDecisions}
           onClose={handleEditorClose}
           onSaved={handleEditorSaved}

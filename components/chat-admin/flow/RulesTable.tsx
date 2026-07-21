@@ -7,6 +7,8 @@ import {
 import type { FlowDecisionRecord, FlowDecisionStatus } from '@/types/chat-admin/flow-decision'
 import { toast } from '@/lib/toast'
 import { copyText } from '@/lib/chat-admin/clipboard'
+import { FLOW_STATUS_PILL } from '@/components/chat-admin/shared/colors'
+import { compactCount, relTime } from '@/lib/chat-admin/format'
 
 type SortKey = 'partDescription' | 'lambdaTarget' | 'status' | 'updatedAt' | 'category' | 'feedbackCount'
 type SortDir = 'asc' | 'desc'
@@ -202,7 +204,7 @@ export function RulesTable({ rules, loading, selectedIds, onSelectionChange, onR
                       <span className="sr-only">No direct part</span>
                     )}
                   </td>
-                  <td className="px-3 py-2.5 text-xs text-slate-500">{formatDate(rule.updatedAt)}</td>
+                  <td className="px-3 py-2.5 text-xs text-slate-500">{relTime(rule.updatedAt)}</td>
                   <td className="px-2 py-2.5">
                     {/* inline quick actions — appear on row hover, no need to open the editor */}
                     <div className="flex items-center justify-end gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
@@ -315,25 +317,15 @@ function TrustSignal({ rule }: { rule: FlowDecisionRecord }) {
       title={`${count} feedback signal${count === 1 ? '' : 's'}${confPct ? ` · ${confPct} confidence` : ''}`}
     >
       <Activity className={`h-3.5 w-3.5 shrink-0 ${tone}`} />
-      <span className={`tabular-nums font-medium ${tone}`}>{formatCount(count)}</span>
+      <span className={`tabular-nums font-medium ${tone}`}>{compactCount(count)}</span>
       {confPct && <span className="text-slate-500">· {confPct}</span>}
     </div>
   )
 }
 
-function formatCount(n: number): string {
-  if (n >= 1000) return `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k`
-  return String(n)
-}
-
 function StatusPill({ status }: { status: string }) {
-  const styles: Record<string, string> = {
-    suggestion: 'bg-amber-500/15 text-amber-300 ring-amber-400/20',
-    approved: 'bg-emerald-500/15 text-emerald-300 ring-emerald-400/20',
-    rejected: 'bg-rose-500/15 text-rose-300 ring-rose-400/20',
-  }
   return (
-    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium capitalize ring-1 ring-inset ${styles[status] || 'bg-white/5 text-slate-300 ring-white/10'}`}>
+    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium capitalize ring-1 ring-inset ${FLOW_STATUS_PILL[status] || 'bg-white/5 text-slate-300 ring-white/10'}`}>
       {status}
     </span>
   )
@@ -351,20 +343,4 @@ function describeVehicle(r: FlowDecisionRecord): string | null {
   return parts.length ? parts.join(' · ') : null
 }
 
-function formatDate(d: Date | string): string {
-  const date = typeof d === 'string' ? new Date(d) : d
-  if (isNaN(date.getTime())) return ''
-  const now = Date.now()
-  const diff = now - date.getTime()
-  const day = 24 * 60 * 60 * 1000
-  if (diff < day) return relativeShort(diff)
-  if (diff < 7 * day) return `${Math.floor(diff / day)}d ago`
-  return date.toISOString().slice(0, 10)
-}
 
-function relativeShort(ms: number) {
-  const min = Math.floor(ms / 60000)
-  if (min < 1) return 'just now'
-  if (min < 60) return `${min}m ago`
-  return `${Math.floor(min / 60)}h ago`
-}

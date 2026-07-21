@@ -5,21 +5,30 @@ import { listDiegoSessions, getDiegoSession, deleteDiegoSession } from '@/lib/ch
 export const dynamic = 'force-dynamic'
 
 /**
- * GET /api/diego/sessions            -> session list (newest first)
- * GET /api/diego/sessions?user=&id=  -> one session with its full event timeline
+ * GET /api/diego/sessions                       -> session list (newest first)
+ *   ?q=<text>     free-text search (VIN / user / vehicle / user-message text)
+ *   ?days=<n>     only sessions updated in the last n days
+ *   ?limit=&offset=  pagination (response carries hasMore)
+ * GET /api/diego/sessions?user=&id=             -> one session with its full event timeline
  */
 export async function GET(req: NextRequest) {
   try {
     await initializeSecrets()
-    const user = req.nextUrl.searchParams.get('user')
-    const id = req.nextUrl.searchParams.get('id')
+    const sp = req.nextUrl.searchParams
+    const user = sp.get('user')
+    const id = sp.get('id')
     if (user && id) {
       const session = await getDiegoSession(user, id)
       if (!session) return NextResponse.json({ success: false, error: 'not found' }, { status: 404 })
       return NextResponse.json({ success: true, session })
     }
-    const sessions = await listDiegoSessions()
-    return NextResponse.json({ success: true, sessions })
+    const { sessions, hasMore } = await listDiegoSessions({
+      q: sp.get('q') ?? undefined,
+      days: sp.get('days') ? Number(sp.get('days')) : undefined,
+      limit: sp.get('limit') ? Number(sp.get('limit')) : undefined,
+      offset: sp.get('offset') ? Number(sp.get('offset')) : undefined,
+    })
+    return NextResponse.json({ success: true, sessions, hasMore })
   } catch (e) {
     console.error('[diego/sessions]', e)
     return NextResponse.json({ success: false, error: e instanceof Error ? e.message : String(e) }, { status: 500 })
