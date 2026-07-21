@@ -602,7 +602,7 @@ function EventCard({ e, enriched, variant = 'card' }: { e: DiegoEvent; enriched?
           </span>
         ) : variant === 'answer' ? (
           <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-300">
-            <Bot className="h-3.5 w-3.5" /> Diego
+            <Bot className="h-3.5 w-3.5" /> {e.author === 'dora_flow' ? 'Dora' : 'Diego'}
           </span>
         ) : (
           <span
@@ -989,6 +989,24 @@ export default function DiegoSessionsTab() {
   const [q, setQ] = useState(() => searchParams.get('q') ?? '')
   const [days, setDays] = useState<number | null>(null)
 
+  // Separate Dora sessions from Diego sessions: classify by which flow the
+  // session's events actually used (a session can be both — shows in both).
+  // "issues" turns the list into a triage inbox (errors / customers left hanging).
+  const [flowFilter, setFlowFilter] = useState<'all' | 'diego' | 'dora' | 'issues'>('all')
+
+  // ?flow=diego|dora scopes the TRACE to one flow's turns — a VIN session holds both
+  // flows, so this is what makes "share this session as Diego" / "as Dora" links possible.
+  const flowParam = searchParams.get('flow')
+  const traceFlow: 'diego' | 'dora' | null =
+    flowParam === 'diego' || flowParam === 'dora' ? flowParam : null
+
+  const setTraceFlow = useCallback((f: 'diego' | 'dora' | null) => {
+    const url = new URL(window.location.href)
+    if (f) url.searchParams.set('flow', f)
+    else url.searchParams.delete('flow')
+    window.history.replaceState(null, '', url.pathname + url.search + url.hash)
+  }, [])
+
   const withQ = useCallback(
     (url: string) => {
       if (!q.trim()) return url
@@ -998,18 +1016,18 @@ export default function DiegoSessionsTab() {
   )
 
   const pickSession = useCallback(
-    (user: string, id: string) => {
-      window.history.replaceState(
-        null,
-        '',
-        withQ(
-          userFilter
-            ? `/chat/diego/${encodeURIComponent(userFilter)}/${encodeURIComponent(id)}`
-            : `/chat/diego?u=${encodeURIComponent(user)}&s=${encodeURIComponent(id)}`
-        )
+    (user: string, id: string, flow?: 'diego' | 'dora') => {
+      let url = withQ(
+        userFilter
+          ? `/chat/diego/${encodeURIComponent(userFilter)}/${encodeURIComponent(id)}`
+          : `/chat/diego?u=${encodeURIComponent(user)}&s=${encodeURIComponent(id)}`
       )
+      // opening from a flow-filtered list (or a flow badge) scopes the trace the same way
+      const f = flow ?? (flowFilter === 'diego' || flowFilter === 'dora' ? flowFilter : undefined)
+      if (f) url += (url.includes('?') ? '&' : '?') + `flow=${f}`
+      window.history.replaceState(null, '', url)
     },
-    [userFilter, withQ]
+    [userFilter, withQ, flowFilter]
   )
 
   const applyUserFilter = useCallback(
@@ -1123,11 +1141,6 @@ export default function DiegoSessionsTab() {
     [sessions, selected]
   )
 
-  // Separate Dora sessions from Diego sessions: classify by which flow the
-  // session's events actually used (a session can be both — shows in both).
-  // "issues" turns the list into a triage inbox (errors / customers left hanging).
-  const [flowFilter, setFlowFilter] = useState<'all' | 'diego' | 'dora' | 'issues'>('all')
-
   const visibleSessions = useMemo(() => {
     let list = userFilter ? sessions.filter((s) => sameUser(userFilter, s.userId)) : sessions
     if (flowFilter === 'dora') list = list.filter((s) => (s.doraEvents ?? 0) > 0)
@@ -1177,6 +1190,24 @@ export default function DiegoSessionsTab() {
   const filterSelectValue = userFilter ? distinctUsers.find((u) => sameUser(userFilter, u.id))?.id ?? userFilter : ''
 
   const sessionVehicle = useMemo(() => vehicleFromState(detail?.state), [detail?.state])
+
+  // Turns annotated with their flow + stable numbering (permalinks #turn-N never shift
+  // when the trace is scoped to one flow).
+  const turnData = useMemo(() => {
+    if (!detail) return null
+    const annotated = groupTurns(detail.events).map((turn, i) => ({
+      turn,
+      no: i + 1,
+      flow:
+        turn.answer?.author === 'dora_flow' || turn.nodes.some((n) => n.e.author === 'dora_flow')
+          ? ('dora' as const)
+          : ('diego' as const),
+    }))
+    return {
+      annotated,
+      hasBoth: annotated.some((x) => x.flow === 'dora') && annotated.some((x) => x.flow === 'diego'),
+    }
+  }, [detail])
 
   const runRecheck = useCallback(
     async (turnKey: string, desc: string, recordedRuleId: string | null) => {
@@ -1353,11 +1384,30 @@ export default function DiegoSessionsTab() {
                       />
                     )}
                     <span className="truncate font-mono text-sm text-white">{s.sessionId}</span>
+                    {/* clicking a flow badge opens the trace scoped to that flow only */}
                     {(s.stockEvents ?? 0) > 0 && (
-                      <span className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-1.5 text-[10px] text-cyan-300">diego</span>
+                      <button
+                        onClick={(ev) => {
+                          ev.stopPropagation()
+                          pickSession(s.userId, s.sessionId, 'diego')
+                        }}
+                        className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-1.5 text-[10px] text-cyan-300 hover:bg-cyan-500/20"
+                        title="פתח רק את פניות המלאי (Diego) בסשן"
+                      >
+                        diego
+                      </button>
                     )}
                     {(s.doraEvents ?? 0) > 0 && (
-                      <span className="rounded-full border border-rose-500/30 bg-rose-500/10 px-1.5 text-[10px] text-rose-300">dora</span>
+                      <button
+                        onClick={(ev) => {
+                          ev.stopPropagation()
+                          pickSession(s.userId, s.sessionId, 'dora')
+                        }}
+                        className="rounded-full border border-rose-500/30 bg-rose-500/10 px-1.5 text-[10px] text-rose-300 hover:bg-rose-500/20"
+                        title="פתח רק את פניות הזיכויים/החזרות (Dora) בסשן"
+                      >
+                        dora
+                      </button>
                     )}
                   </span>
                   <span className="flex shrink-0 items-center gap-1.5">
@@ -1461,16 +1511,51 @@ export default function DiegoSessionsTab() {
         }
       >
         {loadingDetail && <div className="p-6 text-center text-sm text-gray-500">Loading…</div>}
-        {!loadingDetail && detail && (
+        {!loadingDetail && detail && turnData && (
+          <>
+            {/* a VIN session mixes Diego (stock) and Dora (credits) turns — these chips scope
+                the trace to one flow, and the scope lives in the URL (?flow=) so a "Diego view"
+                or "Dora view" of the SAME session is a shareable link */}
+            {(turnData.hasBoth || traceFlow) && (
+              <div className="mb-2 flex flex-wrap items-center gap-1.5 text-xs">
+                <span className="text-gray-500">שיחה משולבת — הצג:</span>
+                {([
+                  ['all', `הכל · ${turnData.annotated.length}`],
+                  ['diego', `Diego · ${turnData.annotated.filter((x) => x.flow === 'diego').length}`],
+                  ['dora', `Dora · ${turnData.annotated.filter((x) => x.flow === 'dora').length}`],
+                ] as const).map(([key, label]) => {
+                  const active = key === 'all' ? traceFlow === null : traceFlow === key
+                  return (
+                    <button
+                      key={key}
+                      onClick={() => setTraceFlow(key === 'all' ? null : key)}
+                      className={`rounded-md border px-2 py-0.5 transition-colors ${
+                        active
+                          ? key === 'dora'
+                            ? 'border-rose-500/60 bg-rose-500/10 text-rose-300'
+                            : key === 'diego'
+                              ? 'border-cyan-500/60 bg-cyan-500/10 text-cyan-300'
+                              : 'border-blue-500/60 bg-blue-500/10 text-blue-300'
+                          : 'border-[var(--color-border-default)] text-gray-400 hover:text-white'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
           <div className="max-h-[75vh] space-y-4 overflow-y-auto pe-1">
             {/* newest turn first; each turn is a collapsible group — latest open, older
                 ones fold to a one-line summary (query · status · duration · time) */}
             {(() => {
-              const turns = groupTurns(detail.events).reverse()
+              const rendered = (traceFlow
+                ? turnData.annotated.filter((x) => x.flow === traceFlow)
+                : turnData.annotated
+              ).slice().reverse()
               let prevDay: string | null = null
-              return turns.map((turn, ti) => {
+              return rendered.map(({ turn, no: turnNo, flow }, ti) => {
                 const s = turnSummary(turn)
-                const turnNo = turns.length - ti
                 const anchorId = `turn-${turnNo}`
                 const turnKey = turn.user?.id || anchorId
                 // Latest part-state in the turn (lubinski_stock re-emits enriched with lub_qty
@@ -1504,6 +1589,17 @@ export default function DiegoSessionsTab() {
                           <ChevronRight className="h-4 w-4 shrink-0 text-gray-500 transition-transform group-open:rotate-90" />
                           <span className="font-mono text-[11px] text-gray-600">#{turnNo}</span>
                           <span className={`inline-block h-2 w-2 shrink-0 rounded-full ${TURN_STATUS_DOT[s.status]}`} />
+                          {turnData.hasBoth && !traceFlow && (
+                            <span
+                              className={`rounded-full border px-1.5 text-[10px] ${
+                                flow === 'dora'
+                                  ? 'border-rose-500/30 bg-rose-500/10 text-rose-300'
+                                  : 'border-cyan-500/30 bg-cyan-500/10 text-cyan-300'
+                              }`}
+                            >
+                              {flow}
+                            </span>
+                          )}
                           {s.parts.length > 0 ? (
                             <>
                               <span dir="ltr" className="font-medium text-gray-200">🔎 {s.parts.join(' · ')}</span>
@@ -1526,7 +1622,8 @@ export default function DiegoSessionsTab() {
                                 const base = selected
                                   ? `${window.location.origin}/chat/diego/${encodeURIComponent(selected.user)}/${encodeURIComponent(selected.id)}`
                                   : window.location.origin + window.location.pathname
-                                void copyText(`${base}#${anchorId}`)
+                                // keep the flow scope in the shared link (Diego-view vs Dora-view)
+                                void copyText(`${base}${traceFlow ? `?flow=${traceFlow}` : ''}#${anchorId}`)
                                 toast.success('קישור לפנייה הועתק')
                               }}
                               className="rounded p-0.5 text-gray-600 hover:bg-white/10 hover:text-white"
@@ -1568,7 +1665,15 @@ export default function DiegoSessionsTab() {
             {detail.events.length === 0 && (
               <div className="p-6 text-center text-sm text-gray-500">No events in this session</div>
             )}
+            {detail.events.length > 0 &&
+              traceFlow &&
+              turnData.annotated.every((x) => x.flow !== traceFlow) && (
+                <div className="p-6 text-center text-sm text-gray-500">
+                  אין פניות {traceFlow === 'dora' ? 'Dora' : 'Diego'} בסשן הזה
+                </div>
+              )}
           </div>
+          </>
         )}
         {!loadingDetail && !detail && !selected && (
           <div className="p-10 text-center text-sm text-gray-500">← Pick a car session</div>
