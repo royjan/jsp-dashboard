@@ -117,24 +117,7 @@ export async function listDiegoSessions(
   )
   const hasMore = res.rows.length > limit
   if (hasMore) res.rows.pop()
-  // Customer display names: ADK user ids are zero-padded Finansit codes, exactly the
-  // customer_code format in dashboard.documents. Non-numeric ids (test_user, wa-*) skip this.
-  const codes = [...new Set(res.rows.map((r: Json) => r.user_id).filter((u: string) => /^\d+$/.test(u)))]
-  let names = new Map<string, string>()
-  if (codes.length) {
-    try {
-      const nr = await query(
-        `SELECT DISTINCT ON (customer_code) customer_code, customer_name
-           FROM dashboard.documents
-          WHERE customer_code = ANY($1) AND customer_name IS NOT NULL
-          ORDER BY customer_code, doc_date DESC`,
-        [codes]
-      )
-      names = new Map(nr.rows.map((r: Json) => [r.customer_code, r.customer_name]))
-    } catch (e) {
-      console.warn('[diego-sessions] customer-name lookup failed:', e)
-    }
-  }
+  const names = await customerNames(res.rows.map((r: Json) => r.user_id))
   const sessions = res.rows.map((r: Json) => {
     const lastUser = r.last_user_ts ? new Date(r.last_user_ts).getTime() : null
     const lastAnswer = r.last_answer_ts ? new Date(r.last_answer_ts).getTime() : null
@@ -161,6 +144,85 @@ export async function listDiegoSessions(
     }
   })
   return { sessions, hasMore }
+}
+
+/** Customer display names: ADK user ids are zero-padded Finansit codes, exactly the
+ *  customer_code format in dashboard.documents. Non-numeric ids (test_user, wa-*) skip this. */
+async function customerNames(userIds: string[]): Promise<Map<string, string>> {
+  const codes = [...new Set(userIds.filter((u) => /^\d+$/.test(u)))]
+  if (!codes.length) return new Map()
+  try {
+    const nr = await query(
+      `SELECT DISTINCT ON (customer_code) customer_code, customer_name
+         FROM dashboard.documents
+        WHERE customer_code = ANY($1) AND customer_name IS NOT NULL
+        ORDER BY customer_code, doc_date DESC`,
+      [codes]
+    )
+    return new Map(nr.rows.map((r: Json) => [r.customer_code, r.customer_name]))
+  } catch (e) {
+    console.warn('[diego-sessions] customer-name lookup failed:', e)
+    return new Map()
+  }
+}
+
+// ── Dora threads ─────────────────────────────────────────────────────────────
+// Dora (credits/returns) is CUSTOMER-level business, not car-level — it only lives
+// inside VIN sessions as an ingest artifact. These aggregate one thread per customer
+// across all their sessions.
+
+export interface DoraThreadSummary {
+  userId: string
+  customerName: string | null
+  replies: number
+  sessions: number
+  lastTs: string
+  lastText: string | null
+}
+
+export async function listDoraThreads(limit = 100): Promise<DoraThreadSummary[]> {
+  const res = await query(
+    `SELECT e.user_id,
+            count(*) FILTER (WHERE e.event_data->>'author'='dora_flow'
+                             AND coalesce(e.event_data#>>'{content,parts,0,text}','') <> '')::int AS replies,
+            count(DISTINCT e.session_id)::int AS sessions,
+            max(e.timestamp) FILTER (WHERE e.event_data->>'author'='dora_flow') AS last_ts,
+            (SELECT e2.event_data #>> '{content,parts,0,text}'
+               FROM diego_v3.events e2
+              WHERE e2.user_id=e.user_id AND e2.event_data->>'author'='dora_flow'
+                AND coalesce(e2.event_data#>>'{content,parts,0,text}','') <> ''
+              ORDER BY e2.timestamp DESC LIMIT 1) AS last_text
+       FROM diego_v3.events e
+      GROUP BY e.user_id
+     HAVING count(*) FILTER (WHERE e.event_data->>'author'='dora_flow') > 0
+      ORDER BY max(e.timestamp) FILTER (WHERE e.event_data->>'author'='dora_flow') DESC
+      LIMIT $1`,
+    [limit]
+  )
+  const names = await customerNames(res.rows.map((r: Json) => r.user_id))
+  return res.rows.map((r: Json) => ({
+    userId: r.user_id,
+    customerName: names.get(r.user_id) ?? null,
+    replies: r.replies ?? 0,
+    sessions: r.sessions ?? 0,
+    lastTs: r.last_ts,
+    lastText: r.last_text ?? null,
+  }))
+}
+
+export interface DoraThreadEvent extends DiegoEvent {
+  sessionId: string
+}
+
+/** The customer's full event stream across ALL sessions, time-ordered — the client
+ *  groups turns and keeps only the Dora ones. sessionId tags each turn's origin. */
+export async function getDoraThread(userId: string): Promise<DoraThreadEvent[]> {
+  const res = await query(
+    `SELECT event_data, timestamp, session_id FROM diego_v3.events
+      WHERE user_id=$1 ORDER BY timestamp ASC LIMIT 2000`,
+    [userId]
+  )
+  return res.rows.map((r: Json) => ({ ...mapEvent(r.event_data, r.timestamp), sessionId: r.session_id }))
 }
 
 /** Hard-delete a session and its events (events→sessions FK is ON DELETE CASCADE,
