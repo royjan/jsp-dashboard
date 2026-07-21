@@ -17,8 +17,8 @@ export default function DiegoPage() {
   return (
     <div dir="ltr" className="chat-admin">
       <AdminPageHeader
-        title="Diego v3 Sessions"
-        subtitle="ADK conversation traces — one session per car (VIN), per-node outputs and answers"
+        title="Diego & Dora"
+        subtitle="Diego — שיחות מלאי לפי רכב · Dora — זיכויים והחזרות: תיקי ספקים ושיחות לקוח"
         icon={<Bot className="w-6 h-6" />}
       />
       <Suspense fallback={<div className="p-8 text-muted-foreground">Loading sessions…</div>}>

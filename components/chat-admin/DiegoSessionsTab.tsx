@@ -13,9 +13,10 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { usePathname, useSearchParams } from 'next/navigation'
 import {
   Bot, Car, CheckCheck, ChevronLeft, ChevronRight, ExternalLink, Link2, ListFilter,
-  Plus, Radar, RefreshCw, Radio, Search, Trash2, User, X,
+  Plus, Radar, ReceiptText, RefreshCw, Radio, Search, Trash2, User, X,
 } from 'lucide-react'
 import { Panel } from '@/components/chat-admin/Panel'
+import DoraCreditsView from '@/components/chat-admin/DoraCreditsView'
 import { CustomerLink } from '@/components/shared/CustomerLink'
 import { ItemLink } from '@/components/shared/ItemLink'
 import { NODE_COLORS, TURN_STATUS_BAR, TURN_STATUS_DOT, type TurnStatus } from '@/components/chat-admin/shared/colors'
@@ -1002,10 +1003,11 @@ export default function DiegoSessionsTab() {
   const [days, setDays] = useState<number | null>(null)
 
   // "Dora" switches the whole list to CUSTOMER-level threads (credits/returns are not
-  // car business — one thread per customer, merged across all their VIN sessions).
+  // car business — one thread per customer, merged across all their VIN sessions) and
+  // the main pane to the supplier credit-case tracker (the old /chat/credits page).
   // "issues" turns the session list into a triage inbox (errors / customers left hanging).
   const [flowFilter, setFlowFilter] = useState<'all' | 'diego' | 'dora' | 'issues'>(
-    () => (searchParams.get('dora') ? 'dora' : 'all')
+    () => (searchParams.get('dora') || searchParams.get('view') === 'dora' ? 'dora' : 'all')
   )
 
   // ?dora=<user> — an open customer-level Dora thread (its own shareable link)
@@ -1427,7 +1429,19 @@ export default function DiegoSessionsTab() {
             {([['all', 'הכל'], ['diego', 'Diego'], ['dora', 'Dora'], ['issues', `⚠ ${issueCount}`]] as const).map(([key, label]) => (
               <button
                 key={key}
-                onClick={() => setFlowFilter(key)}
+                onClick={() => {
+                  setFlowFilter(key)
+                  // keep the view shareable: Dora mode lives in the URL, and leaving it
+                  // drops the thread selection (+ its stale cross-session detail)
+                  const url = new URL(window.location.href)
+                  if (key === 'dora') url.searchParams.set('view', 'dora')
+                  else {
+                    url.searchParams.delete('view')
+                    url.searchParams.delete('dora')
+                    setDetail((d) => (d?.key.startsWith('dora/') ? null : d))
+                  }
+                  window.history.replaceState(null, '', url.pathname + url.search + url.hash)
+                }}
                 className={`rounded-md border px-2 py-1 text-xs transition-colors ${
                   flowFilter === key
                     ? key === 'dora'
@@ -1625,27 +1639,43 @@ export default function DiegoSessionsTab() {
         )}
       </Panel>
 
-      {/* ---- timeline ---- */}
+      {/* ---- timeline / credit cases ---- */}
       <Panel
         title={
-          doraUser
-            ? doraThreads.find((t) => t.userId === doraUser)?.customerName ?? doraUser
-            : selected
-              ? `${selected.id}`
-              : 'Conversation trace'
+          flowFilter === 'dora' && !doraUser
+            ? 'תיקי זיכוי מול ספקים'
+            : doraUser
+              ? doraThreads.find((t) => t.userId === doraUser)?.customerName ?? doraUser
+              : selected
+                ? `${selected.id}`
+                : 'Conversation trace'
         }
         subtitle={
-          doraUser
-            ? 'Dora — זיכויים והחזרות · שיחה ברמת לקוח, מכל הרכבים'
-            : selectedSummary?.vehicle ??
-              (selected ? `user ${selected.user}` : 'Select a session to see the full turn-by-turn trace')
+          flowFilter === 'dora' && !doraUser
+            ? 'בזמן אמת מהמוח של דורה · לחיצה על לקוח משמאל פותחת את ההתכתבות שלו'
+            : doraUser
+              ? 'Dora — זיכויים והחזרות · שיחה ברמת לקוח, מכל הרכבים'
+              : selectedSummary?.vehicle ??
+                (selected ? `user ${selected.user}` : 'Select a session to see the full turn-by-turn trace')
         }
-        icon={<Bot className="h-4 w-4" />}
+        icon={flowFilter === 'dora' && !doraUser ? <ReceiptText className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
         action={
           doraUser ? (
-            customerCode(doraUser) ? (
-              <CustomerLink code={customerCode(doraUser)!} showCode className="font-mono text-xs" />
-            ) : undefined
+            <div className="flex items-center gap-2">
+              {customerCode(doraUser) && (
+                <CustomerLink code={customerCode(doraUser)!} showCode className="font-mono text-xs" />
+              )}
+              <button
+                onClick={() => {
+                  setDetail(null)
+                  window.history.replaceState(null, '', '/chat/diego?view=dora')
+                }}
+                className="flex items-center gap-1 rounded-md border border-[var(--color-border-default)] px-2 py-1 text-xs text-gray-300 hover:text-white"
+                title="חזרה לרשימת תיקי הזיכוי"
+              >
+                <ReceiptText className="h-3 w-3" /> תיקים
+              </button>
+            </div>
           ) : selected ? (
             <div className="flex items-center gap-2">
               {selectedSummary?.customerName && (
@@ -1668,8 +1698,12 @@ export default function DiegoSessionsTab() {
           ) : undefined
         }
       >
-        {loadingDetail && <div className="p-6 text-center text-sm text-gray-500">Loading…</div>}
-        {!loadingDetail && detail && turnData && (
+        {/* Dora view without an open conversation = the supplier credit-case tracker */}
+        {flowFilter === 'dora' && !doraUser && <DoraCreditsView />}
+        {!(flowFilter === 'dora' && !doraUser) && loadingDetail && (
+          <div className="p-6 text-center text-sm text-gray-500">Loading…</div>
+        )}
+        {!(flowFilter === 'dora' && !doraUser) && !loadingDetail && detail && turnData && (
           <>
             {/* a VIN session mixes Diego (stock) and Dora (credits) turns — these chips scope
                 the trace to one flow, and the scope lives in the URL (?flow=) so a "Diego view"
@@ -1852,7 +1886,7 @@ export default function DiegoSessionsTab() {
           </div>
           </>
         )}
-        {!loadingDetail && !detail && !selected && !doraUser && (
+        {flowFilter !== 'dora' && !loadingDetail && !detail && !selected && !doraUser && (
           <div className="p-10 text-center text-sm text-gray-500">← Pick a car session</div>
         )}
       </Panel>
