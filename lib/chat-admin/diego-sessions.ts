@@ -362,26 +362,46 @@ export interface DiegoFeedbackItem {
   timestamp: string
   text: string
   stateDelta: Record<string, unknown> | null
+  /** the bot answer the customer rated (nearest preceding answer in the session) */
+  answerText: string | null
+  /** flow_decisions_v2 id parsed from the rated answer's 🧭 breadcrumb — links the editor */
+  ruleId: string | null
 }
 
-/** Customer 👍/👎 events (record_feedback author), newest first. */
+const RULE_UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i
+
+/** Customer 👍/👎 events (record_feedback author), newest first. Each item carries the
+ *  answer being rated + the flow-decision id behind it, so bad feedback deep-links
+ *  straight into the rule editor. */
 export async function listDiegoFeedback(limit = 100): Promise<DiegoFeedbackItem[]> {
   const res = await query(
-    `SELECT user_id, session_id, timestamp, event_data
-       FROM diego_v3.events
-      WHERE event_data->>'author' IN ('record_feedback','respond_feedback')
-      ORDER BY timestamp DESC LIMIT $1`,
+    `SELECT f.user_id, f.session_id, f.timestamp, f.event_data,
+            a.event_data #>> '{content,parts,0,text}' AS answer_text
+       FROM diego_v3.events f
+       LEFT JOIN LATERAL (
+         SELECT e2.event_data FROM diego_v3.events e2
+          WHERE e2.user_id=f.user_id AND e2.session_id=f.session_id
+            AND e2.timestamp < f.timestamp
+            AND e2.event_data->>'author' IN ('format_v2','dora_flow')
+            AND coalesce(e2.event_data#>>'{content,parts,0,text}','') <> ''
+          ORDER BY e2.timestamp DESC LIMIT 1
+       ) a ON true
+      WHERE f.event_data->>'author' IN ('record_feedback','respond_feedback')
+      ORDER BY f.timestamp DESC LIMIT $1`,
     [limit]
   )
   return res.rows.map((r: Json) => {
     const d = r.event_data ?? {}
     const parts: Json[] = d?.content?.parts ?? []
+    const answerText: string | null = r.answer_text ?? null
     return {
       userId: r.user_id,
       sessionId: r.session_id,
       timestamp: r.timestamp,
       text: parts.map((p: Json) => p?.text ?? '').filter(Boolean).join(''),
       stateDelta: d?.actions?.state_delta ?? null,
+      answerText,
+      ruleId: answerText?.match(RULE_UUID_RE)?.[0]?.toLowerCase() ?? null,
     }
   })
 }

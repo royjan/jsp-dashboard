@@ -7,7 +7,7 @@
  */
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { ExternalLink, RefreshCw, ThumbsUp } from 'lucide-react'
+import { ExternalLink, GitBranch, RefreshCw, ThumbsUp } from 'lucide-react'
 import { Panel } from '@/components/chat-admin/Panel'
 import { AdminPageHeader } from '@/components/chat-admin/shared'
 import { CustomerLink } from '@/components/shared/CustomerLink'
@@ -19,6 +19,8 @@ interface FeedbackItem {
   timestamp: string
   text: string
   stateDelta: Record<string, unknown> | null
+  answerText: string | null
+  ruleId: string | null
 }
 
 function customerCode(uid: string): string | null {
@@ -102,6 +104,16 @@ export default function FeedbackPage() {
                   {cust && <CustomerLink code={cust} showCode className="font-mono text-xs" />}
                   <span className="font-mono">{f.sessionId}</span>
                   <span className="ms-auto" title={fmtDateTime(f.timestamp)}>{relTime(f.timestamp)}</span>
+                  {/* the rule behind the rated answer — one click into the editor to fix it */}
+                  {f.ruleId && (
+                    <Link
+                      href={`/chat/flow-decisions/edit/${f.ruleId}`}
+                      className="inline-flex items-center gap-1 rounded-md border border-indigo-500/30 bg-indigo-500/10 px-2 py-1 font-mono text-[11px] text-indigo-300 hover:bg-indigo-500/20"
+                      title={`ערוך את החלטת הזרימה שמאחורי התשובה (${f.ruleId})`}
+                    >
+                      <GitBranch className="h-3 w-3" /> #{f.ruleId.slice(0, 8)}
+                    </Link>
+                  )}
                   <Link
                     href={`/chat/diego?u=${encodeURIComponent(f.userId)}&s=${encodeURIComponent(f.sessionId)}`}
                     className="inline-flex items-center gap-1 rounded-md border border-[var(--color-border-default)] px-2 py-1 text-[11px] text-gray-300 hover:bg-white/5 hover:text-white"
@@ -111,6 +123,16 @@ export default function FeedbackPage() {
                 </div>
                 {f.text && (
                   <div dir="auto" className="mt-2 text-sm text-gray-200">{f.text}</div>
+                )}
+                {f.answerText && (
+                  <details className="mt-1">
+                    <summary className="cursor-pointer text-[11px] text-gray-500">
+                      התשובה שדורגה{f.ruleId ? ` · חוק #${f.ruleId.slice(0, 8)}` : ''}
+                    </summary>
+                    <div dir="auto" className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap rounded bg-black/30 p-2 text-xs text-gray-300">
+                      {f.answerText}
+                    </div>
+                  </details>
                 )}
                 {f.stateDelta && (
                   <details className="mt-1">
