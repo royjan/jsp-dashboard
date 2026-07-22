@@ -370,9 +370,10 @@ export interface DiegoFeedbackItem {
 
 const RULE_UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i
 
-/** Customer 👍/👎 events (record_feedback author), newest first. Each item carries the
- *  answer being rated + the flow-decision id behind it, so bad feedback deep-links
- *  straight into the rule editor. */
+/** Customer 👍/👎 ratings, newest first. ONE row per rating: only `record_feedback`
+ *  events (the rating itself) — `respond_feedback` is just the acknowledgment message
+ *  and would duplicate every rating. Each item carries the answer being rated + the
+ *  flow-decision id behind it, so bad feedback deep-links straight into the rule editor. */
 export async function listDiegoFeedback(limit = 100): Promise<DiegoFeedbackItem[]> {
   const res = await query(
     `SELECT f.user_id, f.session_id, f.timestamp, f.event_data,
@@ -386,7 +387,7 @@ export async function listDiegoFeedback(limit = 100): Promise<DiegoFeedbackItem[
             AND coalesce(e2.event_data#>>'{content,parts,0,text}','') <> ''
           ORDER BY e2.timestamp DESC LIMIT 1
        ) a ON true
-      WHERE f.event_data->>'author' IN ('record_feedback','respond_feedback')
+      WHERE f.event_data->>'author' = 'record_feedback'
       ORDER BY f.timestamp DESC LIMIT $1`,
     [limit]
   )
@@ -394,12 +395,13 @@ export async function listDiegoFeedback(limit = 100): Promise<DiegoFeedbackItem[
     const d = r.event_data ?? {}
     const parts: Json[] = d?.content?.parts ?? []
     const answerText: string | null = r.answer_text ?? null
+    const delta = d?.actions?.state_delta
     return {
       userId: r.user_id,
       sessionId: r.session_id,
       timestamp: r.timestamp,
       text: parts.map((p: Json) => p?.text ?? '').filter(Boolean).join(''),
-      stateDelta: d?.actions?.state_delta ?? null,
+      stateDelta: delta && Object.keys(delta).length ? delta : null,
       answerText,
       ruleId: answerText?.match(RULE_UUID_RE)?.[0]?.toLowerCase() ?? null,
     }

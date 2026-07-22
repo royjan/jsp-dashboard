@@ -311,8 +311,9 @@ function PartLine({ line }: { line: string }) {
 
 /** Event body: pretty-print pure-JSON content (extract_slots), otherwise line-by-line with
  *  links; bare image-URL lines are dropped (the diagram renders below anyway). The container
- *  carries the message's base direction so all lines share one alignment edge. */
-function EventBody({ text }: { text: string }) {
+ *  carries the message's base direction so all lines share one alignment edge.
+ *  Exported — the feedback inbox reuses it to render rated answers. */
+export function EventBody({ text }: { text: string }) {
   const pretty = tryPrettyJson(text)
   if (pretty) {
     return (

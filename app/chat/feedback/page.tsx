@@ -9,9 +9,12 @@ import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { ExternalLink, GitBranch, RefreshCw, ThumbsUp } from 'lucide-react'
 import { Panel } from '@/components/chat-admin/Panel'
+import { EventBody } from '@/components/chat-admin/DiegoSessionsTab'
 import { AdminPageHeader } from '@/components/chat-admin/shared'
 import { CustomerLink } from '@/components/shared/CustomerLink'
 import { fmtDateTime, relTime } from '@/lib/chat-admin/format'
+
+const IMG_URL_RE = /https?:\/\/\S+\.(?:png|jpe?g|webp)/gi
 
 interface FeedbackItem {
   userId: string
@@ -125,12 +128,24 @@ export default function FeedbackPage() {
                   <div dir="auto" className="mt-2 text-sm text-gray-200">{f.text}</div>
                 )}
                 {f.answerText && (
-                  <details className="mt-1">
+                  <details className="mt-2" open>
                     <summary className="cursor-pointer text-[11px] text-gray-500">
                       התשובה שדורגה{f.ruleId ? ` · חוק #${f.ruleId.slice(0, 8)}` : ''}
                     </summary>
-                    <div dir="auto" className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap rounded bg-black/30 p-2 text-xs text-gray-300">
-                      {f.answerText}
+                    {/* same renderer as the conversation trace: flow breadcrumb chips,
+                        part cards with ItemLinks, real links — not raw text */}
+                    <div className="mt-1 max-h-96 overflow-auto rounded-lg border border-[var(--color-border-default)] bg-black/30 p-3">
+                      <EventBody text={f.answerText} />
+                      {(f.answerText.match(IMG_URL_RE) ?? []).length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {[...new Set(f.answerText.match(IMG_URL_RE) ?? [])].map((u) => (
+                            <a key={u} href={u} target="_blank" rel="noreferrer">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={u} alt="schema" className="h-24 rounded-md border border-gray-700 object-contain" loading="lazy" />
+                            </a>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </details>
                 )}
