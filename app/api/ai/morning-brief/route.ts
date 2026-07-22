@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
-import { generateText } from 'ai'
 import { initializeSecrets } from '@/lib/aws-secrets'
-import { getGeminiFlash, SYSTEM_PROMPT_HE } from '@/lib/gemini'
+import { generateTextWithFallback, SYSTEM_PROMPT_HE } from '@/lib/gemini'
 import { getCached, setCache } from '@/lib/redis-client'
 import { getDashboardData } from '@/lib/services/analytics-service'
 import { client } from '@/lib/finansit-client'
@@ -212,8 +211,7 @@ ${stockAlerts.length > 0
 
     let parsed: { summary: string; bullets: string[] }
     try {
-      const result = await generateText({
-        model: getGeminiFlash(),
+      const result = await generateTextWithFallback({
         system: SYSTEM_PROMPT_HE,
         prompt,
         // Hebrew tokenizes densely; 500 truncated the JSON mid-string, which then

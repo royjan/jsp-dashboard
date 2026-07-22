@@ -6,8 +6,7 @@ import { query as pgQuery } from '@/lib/db'
 import { initializeSecrets, getSecret } from '@/lib/aws-secrets'
 import { getCached, setCache } from '@/lib/redis-client'
 import { getItems } from '@/lib/services/analytics-service'
-import { getGeminiFlash } from '@/lib/gemini'
-import { generateText } from 'ai'
+import { generateTextWithFallback } from '@/lib/gemini'
 
 export interface SeasonalItem {
   item_code: string
@@ -309,8 +308,7 @@ Write a practical analysis in Hebrew (4–6 bullet points) covering:
 Keep it concise and actionable for a store owner. Use • for bullet points.`
 
         try {
-          const { text } = await generateText({
-            model: getGeminiFlash(),
+          const { text } = await generateTextWithFallback({
             prompt,
           })
           aiInsights = text

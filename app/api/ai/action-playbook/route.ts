@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 import { initializeSecrets } from '@/lib/aws-secrets'
-import { getGeminiFlash } from '@/lib/gemini'
+import { generateTextWithFallback } from '@/lib/gemini'
 import { getCached, setCache } from '@/lib/redis-client'
 
 export const runtime = 'nodejs'
@@ -88,9 +88,7 @@ export async function POST(request: NextRequest) {
       if (cached) return Response.json({ playbook: cached, cached: true })
     }
 
-    const { generateText } = await import('ai')
-    const { text } = await generateText({
-      model: getGeminiFlash(),
+    const { text } = await generateTextWithFallback({
       prompt: buildPrompt(action, impact || '', locale),
     })
 
