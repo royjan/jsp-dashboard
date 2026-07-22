@@ -499,12 +499,16 @@ interface EnrichedPart {
   price?: number | null
   stock_ok?: boolean
   lub_qty?: number
+  /** supplier-PO qty already on its way to us (FINAPI incoming_qty) */
+  incoming?: number
 }
 
 function PartCardFromState({ p, idx }: { p: EnrichedPart; idx: number }) {
   let stock: { text: string; cls?: string }
   if (p.stock_ok === false) stock = { text: 'לא ניתן לבדוק כרגע', cls: 'text-amber-400' }
   else if ((p.total || 0) > 0) stock = { text: `${p.total}${p.wh ? ` (מחסן ${p.wh})` : ''}` }
+  else if ((p.incoming || 0) > 0)
+    stock = { text: `אין במלאי כרגע — בהזמנה אצלנו (${p.incoming} יח׳) ובדרך אלינו 🚚`, cls: 'text-sky-400' }
   else if ((p.lub_qty || 0) > 0)
     stock = { text: `אין אצלנו — זמין מהספק לובינסקי (${p.lub_qty}), הזמנה תוך יום עסקים`, cls: 'text-sky-400' }
   else stock = { text: 'אין במלאי', cls: 'text-red-400' }

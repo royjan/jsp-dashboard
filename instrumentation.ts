@@ -25,6 +25,13 @@ export async function register() {
       } catch (e) {
         console.error('[instrumentation] failed to start eBay warm loop:', e)
       }
+      // Daily 07:00 morning brief to the staff Telegram group — same no-cron pattern.
+      try {
+        const { startMorningBriefLoop } = await import('./lib/morning-brief-push')
+        startMorningBriefLoop()
+      } catch (e) {
+        console.error('[instrumentation] failed to start morning-brief loop:', e)
+      }
     }
   }
 }
