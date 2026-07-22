@@ -16,7 +16,9 @@
 import { initializeSecrets, getSecret } from './aws-secrets'
 import { tryAcquireLock, setCache } from './redis-client'
 
-const DEFAULT_STAFF_CHAT = '-5410796517' // the group the bot already delivers to
+// No hardcoded default — the v2-era group id turned out not to contain this bot at all.
+// Set TELEGRAM_STAFF_CHAT_ID (group id once the bot is added to the staff group, or a DM id).
+const DEFAULT_STAFF_CHAT = ''
 const TICK_MIN = 10
 const WINDOW_START_H = 7 // 07:00 Israel
 const WINDOW_MIN = 30 // fire window [07:00, 07:30)
@@ -91,6 +93,10 @@ async function runOnce(force = false): Promise<void> {
   if (!r.ok || !brief.summary) throw new Error(`brief fetch failed: ${brief.error || r.status}`)
 
   const chatId = getSecret('TELEGRAM_STAFF_CHAT_ID', '') || DEFAULT_STAFF_CHAT
+  if (!chatId) {
+    console.log('[morning-brief] TELEGRAM_STAFF_CHAT_ID not configured — loop idle')
+    return
+  }
   const text = [
     `☀️ בוקר טוב! תקציר ${now.dateKey.split('-').reverse().join('.')}`,
     '',
