@@ -217,6 +217,13 @@ ${stockAlerts.length > 0
         // Hebrew tokenizes densely; 500 truncated the JSON mid-string, which then
         // leaked raw `{"summary": ...` into the UI. Give it room to close the JSON.
         maxOutputTokens: 1000,
+        // gemini-3.6-flash is a thinking model that once emitted its REASONING as
+        // syntactically-valid JSON ("JSON wrapper or markdown? Yes...** Final Output
+        // Construction**") which sailed through parsing straight into the group chat.
+        // Force JSON output mode and turn thinking off for this structured call.
+        providerOptions: {
+          google: { responseMimeType: 'application/json', thinkingConfig: { thinkingBudget: 0 } },
+        },
       })
 
       // Parse the response
@@ -230,6 +237,13 @@ ${stockAlerts.length > 0
           summary: typeof raw.summary === 'string' ? raw.summary : 'תקציר בוקר',
           bullets: Array.isArray(raw.bullets) ? raw.bullets.map(String) : [],
         }
+        // Sanity gate: a real brief is Hebrew prose. Meta/reasoning junk (English,
+        // markdown emphasis, code fences, the word JSON) → deterministic fallback.
+        const junk = (s: string) => /```|\*\*|\bJSON\b/i.test(s)
+        if (!/[֐-׿]/.test(parsed.summary) || junk(parsed.summary)) {
+          throw new Error('model returned non-Hebrew/meta summary')
+        }
+        parsed.bullets = parsed.bullets.filter((b) => /[֐-׿]/.test(b) && !junk(b))
       } catch {
         // The model returned truncated or malformed JSON. If it was *trying* to be
         // JSON (starts with '{' or a markdown fence) but won't parse, never echo the
