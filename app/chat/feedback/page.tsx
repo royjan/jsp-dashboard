@@ -7,7 +7,7 @@
  */
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { ExternalLink, GitBranch, RefreshCw, ThumbsUp } from 'lucide-react'
+import { ExternalLink, GitBranch, Plus, Radar, RefreshCw, ThumbsUp } from 'lucide-react'
 import { Panel } from '@/components/chat-admin/Panel'
 import { EventBody } from '@/components/chat-admin/DiegoSessionsTab'
 import { AdminPageHeader } from '@/components/chat-admin/shared'
@@ -24,6 +24,15 @@ interface FeedbackItem {
   stateDelta: Record<string, unknown> | null
   answerText: string | null
   ruleId: string | null
+  ruleInferred: boolean
+  searchTerm: string | null
+}
+
+/** VIN-looking session ids pass as vin, 7-8 digit ones as license_plate (same as the trace). */
+function vehicleParam(sessionId: string): string {
+  return /^\d{7,8}$/.test(sessionId)
+    ? `license_plate=${encodeURIComponent(sessionId)}`
+    : `vin=${encodeURIComponent(sessionId)}`
 }
 
 function customerCode(uid: string): string | null {
@@ -107,16 +116,38 @@ export default function FeedbackPage() {
                   {cust && <CustomerLink code={cust} showCode className="font-mono text-xs" />}
                   <span className="font-mono">{f.sessionId}</span>
                   <span className="ms-auto" title={fmtDateTime(f.timestamp)}>{relTime(f.timestamp)}</span>
-                  {/* the rule behind the rated answer — one click into the editor to fix it */}
-                  {f.ruleId && (
+                  {/* the rule behind the rated answer — one click into the editor to fix it;
+                      when NO rule exists (pure PSA/catalog answer), offer create + trace instead */}
+                  {f.ruleId ? (
                     <Link
                       href={`/chat/flow-decisions/edit/${f.ruleId}`}
                       className="inline-flex items-center gap-1 rounded-md border border-indigo-500/30 bg-indigo-500/10 px-2 py-1 font-mono text-[11px] text-indigo-300 hover:bg-indigo-500/20"
-                      title={`ערוך את החלטת הזרימה שמאחורי התשובה (${f.ruleId})`}
+                      title={
+                        f.ruleInferred
+                          ? `החלטת זרימה שזוהתה לפי המסלול בתשובה (${f.ruleId}) — ערוך`
+                          : `ערוך את החלטת הזרימה שמאחורי התשובה (${f.ruleId})`
+                      }
                     >
-                      <GitBranch className="h-3 w-3" /> #{f.ruleId.slice(0, 8)}
+                      <GitBranch className="h-3 w-3" /> #{f.ruleId.slice(0, 8)}{f.ruleInferred ? ' ≈' : ''}
                     </Link>
-                  )}
+                  ) : f.searchTerm ? (
+                    <>
+                      <Link
+                        href={`/chat/flow-decisions?create=1&seed=${encodeURIComponent(f.searchTerm)}`}
+                        className="inline-flex items-center gap-1 rounded-md border border-indigo-500/30 bg-indigo-500/10 px-2 py-1 text-[11px] text-indigo-300 hover:bg-indigo-500/20"
+                        title={`אין חוק זרימה לתשובה הזו (מקור: קטלוג) — צור חוק חדש עבור "${f.searchTerm}"`}
+                      >
+                        <Plus className="h-3 w-3" /> צור חוק
+                      </Link>
+                      <Link
+                        href={`/chat/flow-decisions/observatory?query=${encodeURIComponent(f.searchTerm)}&${vehicleParam(f.sessionId)}`}
+                        className="inline-flex items-center gap-1 rounded-md border border-sky-500/30 bg-sky-500/10 px-2 py-1 text-[11px] text-sky-300 hover:bg-sky-500/20"
+                        title="עקוב אחרי ההחלטה במצפה — למה נבחר המסלול הזה?"
+                      >
+                        <Radar className="h-3 w-3" /> Trace
+                      </Link>
+                    </>
+                  ) : null}
                   <Link
                     href={`/chat/diego?u=${encodeURIComponent(f.userId)}&s=${encodeURIComponent(f.sessionId)}`}
                     className="inline-flex items-center gap-1 rounded-md border border-[var(--color-border-default)] px-2 py-1 text-[11px] text-gray-300 hover:bg-white/5 hover:text-white"

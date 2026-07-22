@@ -364,11 +364,29 @@ export interface DiegoFeedbackItem {
   stateDelta: Record<string, unknown> | null
   /** the bot answer the customer rated (nearest preceding answer in the session) */
   answerText: string | null
-  /** flow_decisions_v2 id parsed from the rated answer's 🧭 breadcrumb — links the editor */
+  /** flow_decisions_v2 id — explicit from the 🧭 breadcrumb, or resolved from its path */
   ruleId: string | null
+  /** true when ruleId was resolved by category→subcategory→schema lookup, not explicit */
+  ruleInferred: boolean
+  /** the searched part description (🔎 line) — seeds create-rule / observatory links */
+  searchTerm: string | null
 }
 
 const RULE_UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i
+
+/** "🧭 החלטת זרימה: Cat [95] → Sub [95] → SCHEMA [95] (PSA)" → the 3-level path. */
+function parseFlowPath(answer: string): { cat: string; sub: string; schema: string } | null {
+  const line = answer.match(/🧭[^\n]*/)?.[0]
+  if (!line) return null
+  let rest = line.replace(/^🧭\s*החלטת זרימה:\s*/, '').trim()
+  const tag = rest.match(/\(([^()]+)\)\s*$/)
+  if (tag) rest = rest.slice(0, tag.index).trim()
+  const segs = (rest.split(' | ')[0] ?? '')
+    .split('→')
+    .map((s) => s.replace(/\s*\[\d+\]\s*/g, '').replace(RULE_UUID_RE, '').replace(/https?:\/\/\S+|#/g, '').trim())
+    .filter(Boolean)
+  return segs.length === 3 ? { cat: segs[0], sub: segs[1], schema: segs[2] } : null
+}
 
 /** Customer 👍/👎 ratings, newest first. ONE row per rating: only `record_feedback`
  *  events (the rating itself) — `respond_feedback` is just the acknowledgment message
@@ -391,7 +409,7 @@ export async function listDiegoFeedback(limit = 100): Promise<DiegoFeedbackItem[
       ORDER BY f.timestamp DESC LIMIT $1`,
     [limit]
   )
-  return res.rows.map((r: Json) => {
+  const items: DiegoFeedbackItem[] = res.rows.map((r: Json) => {
     const d = r.event_data ?? {}
     const parts: Json[] = d?.content?.parts ?? []
     const answerText: string | null = r.answer_text ?? null
@@ -404,8 +422,33 @@ export async function listDiegoFeedback(limit = 100): Promise<DiegoFeedbackItem[
       stateDelta: delta && Object.keys(delta).length ? delta : null,
       answerText,
       ruleId: answerText?.match(RULE_UUID_RE)?.[0]?.toLowerCase() ?? null,
+      ruleInferred: false,
+      searchTerm: answerText?.match(/🔎\s*([^\n]+?)\s+עבור/)?.[1]?.trim() ?? null,
     }
   })
+  // No explicit id in the breadcrumb (older answers / some sources): resolve the rule the
+  // same way the bot does — approved rule matching the 3-level path, preferring the one
+  // whose part_description matches the searched term.
+  for (const it of items) {
+    if (it.ruleId || !it.answerText) continue
+    const p = parseFlowPath(it.answerText)
+    if (!p) continue
+    try {
+      const row = await query(
+        `SELECT id FROM flow_decisions_v2
+          WHERE status='approved' AND category=$1 AND subcategory=$2 AND schema=$3
+          ORDER BY (part_description=$4)::int DESC, updated_at DESC LIMIT 1`,
+        [p.cat, p.sub, p.schema, it.searchTerm ?? '']
+      )
+      if (row.rows[0]?.id) {
+        it.ruleId = String(row.rows[0].id)
+        it.ruleInferred = true
+      }
+    } catch (e) {
+      console.warn('[diego-feedback] rule path resolution failed:', e)
+    }
+  }
+  return items
 }
 
 function describeVehicle(ctx: Json): string | null {
