@@ -34,12 +34,18 @@ const PAGE = 10000
  *  regardless of window size (no date index), so chunking buys nothing —
  *  a single ~45-90s scan (the endpoint is timeout-exempted server-side) is
  *  the cheapest shape. Cached 3h; the cache warmer absorbs the refresh. */
-export async function getLiveYearLines(format: string, fromDate: string): Promise<LiveDocLine[]> {
+export async function getLiveYearLines(
+  format: string,
+  fromDate: string,
+  opts?: { forceRefresh?: boolean }
+): Promise<LiveDocLine[]> {
   const year = new Date().getFullYear()
   const clampedFrom = fromDate > `${year}-01-01` ? fromDate : `${year}-01-01`
 
   const key = `live-lines:v2:${format}:${year}`
-  let all = await getCached<LiveDocLine[]>(key)
+  // forceRefresh skips the read so a warm pass resets the TTL instead of
+  // riding the old one down (see warm-cache route on why hit-path warming fails).
+  let all = opts?.forceRefresh ? null : await getCached<LiveDocLine[]>(key)
   if (!all) {
     all = []
     for (let offset = 0; ; offset += PAGE) {

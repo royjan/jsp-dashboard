@@ -1281,11 +1281,18 @@ export default function DiegoSessionsTab() {
     } else {
       allTurns = groupTurns(detail.events)
     }
+    // The dedicated `dora` session (bridge routes all credit/return topics there since
+    // 979392b) is Dora business BY DEFINITION — author-based sniffing mislabels turns
+    // that never got a reply (e.g. a turn killed mid-flight) as "diego". Only mixed VIN
+    // sessions need per-turn classification.
+    const isDoraSession = detail.key.startsWith('dora/') || detail.key.endsWith('/dora')
     const annotated = allTurns.map((turn, i) => ({
       turn,
       no: i + 1,
       flow:
-        turn.answer?.author === 'dora_flow' || turn.nodes.some((n) => n.e.author === 'dora_flow')
+        isDoraSession ||
+        turn.answer?.author === 'dora_flow' ||
+        turn.nodes.some((n) => n.e.author === 'dora_flow')
           ? ('dora' as const)
           : ('diego' as const),
     }))
