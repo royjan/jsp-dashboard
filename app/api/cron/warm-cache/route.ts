@@ -324,10 +324,6 @@ async function runWarmCache(mode: string, from?: number, to?: number) {
       ['gapAnalysis', () =>
         fetch(`http://127.0.0.1:${process.env.PORT || '3000'}/api/analytics/gap?refresh=1`)
           .then(r => r.json())],
-      // Active-year invoice lines feed the customer-page purchase drill-down;
-      // without this warm the first click after each expiry eats a ~90s scan.
-      ['liveInvoiceLines', () =>
-        getLiveYearLines(String(DOC_FORMATS.TAX_INVOICE), yearStart, { forceRefresh: true })],
     ]
 
     for (const [label, fn] of warmSteps) {
