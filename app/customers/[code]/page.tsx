@@ -1,8 +1,11 @@
 'use client'
 
-import { use, useMemo, useState, useEffect } from 'react'
+import { use, useMemo, useState, useEffect, Fragment } from 'react'
 import { motion } from 'framer-motion'
-import { useCustomerDetail, useCustomerHistory, useCustomerPurchases } from '@/hooks/use-analytics'
+import {
+  useCustomerDetail, useCustomerHistory, useCustomerPurchases,
+  useCustomerItemInvoices, useDocumentDetail,
+} from '@/hooks/use-analytics'
 import { useLocale } from '@/lib/locale-context'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -14,6 +17,7 @@ import { ItemLink } from '@/components/shared/ItemLink'
 import Link from 'next/link'
 import {
   User, DollarSign, Clock, FileText, Receipt, ArrowLeft, AlertTriangle, ShoppingCart, ExternalLink,
+  ChevronDown,
 } from 'lucide-react'
 import { ILS_FORMAT, NUMBER_FORMAT, formatNumber } from '@/lib/constants'
 
@@ -179,6 +183,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ code:
           <CardContent>
             <TabsContent value="purchases">
               <PurchasesTable
+                customerCode={code}
                 data={purchasesData}
                 isLoading={purchasesLoading}
                 days={purchaseDays}
@@ -192,7 +197,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ code:
               <DocumentTable items={receipts} t={t} isReceipt isLoading={historyLoading} />
             </TabsContent>
             <TabsContent value="documents">
-              <DocumentTable items={documents} t={t} isLoading={historyLoading} />
+              <DocumentTable items={documents} t={t} isLoading={historyLoading} expandable caption={t('customer.documentsWindow')} />
             </TabsContent>
           </CardContent>
         </Tabs>
@@ -214,13 +219,15 @@ interface PurchaseItem {
 }
 
 function PurchasesTable({
-  data, isLoading, days, onDaysChange,
+  customerCode, data, isLoading, days, onDaysChange,
 }: {
-  data: any; isLoading: boolean; days: number; onDaysChange: (d: number) => void
+  customerCode: string; data: any; isLoading: boolean; days: number; onDaysChange: (d: number) => void
 }) {
+  const { t } = useLocale()
   const items: PurchaseItem[] = data?.items ?? []
   const { sorted, sortKey, sortDir, toggleSort } = useSortable<PurchaseItem>(items, { key: 'last_purchased', dir: 'desc' })
   const DAY_OPTIONS = [30, 60, 90, 180, 365]
+  const [openItem, setOpenItem] = useState<string | null>(null)
 
   return (
     <div className="space-y-3">
@@ -246,6 +253,7 @@ function PurchasesTable({
           </span>
         )}
       </div>
+      <p className="text-[11px] text-muted-foreground">{t('customer.purchasesWindow').replace('{days}', String(days))}</p>
 
       {isLoading ? (
         <div className="space-y-2">{[...Array(5)].map((_, i) => <Skeleton key={i} className="h-9 w-full" />)}</div>
@@ -265,25 +273,132 @@ function PurchasesTable({
               </tr>
             </thead>
             <tbody>
-              {sorted.map(item => (
-                <tr key={item.item_code} className="border-b last:border-0 hover:bg-accent/40">
-                  <td className="p-2 font-mono text-xs"><ItemLink code={item.item_code} showCode /></td>
-                  <td className="p-2 max-w-[220px] truncate" title={item.item_name}>
-                    <ItemLink code={item.item_code} name={item.item_name} />
-                  </td>
-                  <td className="p-2 text-end tabular-nums">
-                    {formatNumber(item.total_qty)}
-                    {item.returned_qty > 0 && <span className="text-red-500 text-[10px] ms-1">(-{formatNumber(item.returned_qty)})</span>}
-                  </td>
-                  <td className="p-2 text-end tabular-nums font-medium">{ILS_FORMAT.format(item.total_value)}</td>
-                  <td className="p-2 text-end tabular-nums text-muted-foreground">{formatNumber(item.line_count)}</td>
-                  <td className="p-2 text-end tabular-nums text-muted-foreground">{item.last_purchased?.slice(0, 10) || '—'}</td>
-                </tr>
-              ))}
+              {sorted.map(item => {
+                const open = openItem === item.item_code
+                return (
+                  <Fragment key={item.item_code}>
+                    <tr
+                      className="border-b last:border-0 hover:bg-accent/40 cursor-pointer"
+                      aria-expanded={open}
+                      onClick={() => setOpenItem(open ? null : item.item_code)}
+                    >
+                      <td className="p-2 font-mono text-xs" onClick={(e) => e.stopPropagation()}><ItemLink code={item.item_code} showCode /></td>
+                      <td className="p-2 max-w-[220px] truncate" title={item.item_name} onClick={(e) => e.stopPropagation()}>
+                        <ItemLink code={item.item_code} name={item.item_name} />
+                      </td>
+                      <td className="p-2 text-end tabular-nums">
+                        {formatNumber(item.total_qty)}
+                        {item.returned_qty > 0 && <span className="text-red-500 text-[10px] ms-1">(-{formatNumber(item.returned_qty)})</span>}
+                      </td>
+                      <td className="p-2 text-end tabular-nums font-medium">{ILS_FORMAT.format(item.total_value)}</td>
+                      <td className="p-2 text-end tabular-nums text-muted-foreground">{formatNumber(item.line_count)}</td>
+                      <td className="p-2 text-end tabular-nums text-muted-foreground">
+                        <span className="inline-flex items-center gap-1.5">
+                          {item.last_purchased?.slice(0, 10) || '—'}
+                          <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', open && 'rotate-180')} />
+                        </span>
+                      </td>
+                    </tr>
+                    {open && (
+                      <tr className="border-b last:border-0">
+                        <td colSpan={6} className="bg-muted/30 p-0">
+                          <PurchaseItemInvoices
+                            customerCode={customerCode}
+                            itemCode={item.item_code}
+                            days={days}
+                            expected={item.returned_qty > 0 ? 0 : item.line_count}
+                          />
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                )
+              })}
             </tbody>
           </table>
         </div>
       )}
+    </div>
+  )
+}
+
+// ── Purchase drill-down: this year's invoices containing the item ─────────────
+// Mounted only while its row is expanded, so the fetch is lazy. Cold cache is a
+// long live-lines scan server-side — hence the slow-first-load note.
+
+function PurchaseItemInvoices({ customerCode, itemCode, days, expected }: {
+  customerCode: string; itemCode: string; days: number; expected: number
+}) {
+  const { t } = useLocale()
+  const { data, isLoading, error } = useCustomerItemInvoices(customerCode, itemCode, days, expected)
+  const rows: {
+    doc_format: string; doc_number: string; doc_date: string
+    quantity: number; unit_price: number; discount_percent: number; line_total: number
+  }[] = data?.rows ?? []
+
+  if (isLoading) {
+    return (
+      <div className="p-3 space-y-2">
+        {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-6 w-full" />)}
+        <p className="text-[11px] text-muted-foreground">{t('drilldown.slowFirstLoad')}</p>
+      </div>
+    )
+  }
+  if (error || data?.error) {
+    return <p className="p-3 text-xs text-destructive">{t('drilldown.loadFailed')}</p>
+  }
+  if (rows.length === 0) {
+    return <p className="p-3 text-xs text-muted-foreground">{t('drilldown.noLines')}</p>
+  }
+
+  return (
+    <div className="p-3 space-y-2">
+      <p className="text-[11px] font-medium text-muted-foreground">
+        {t('drilldown.invoicesForItem')}
+        {/* Irrelevant when the early-exit already found every expected match. */}
+        {data?.capped && !(expected > 0 && rows.length >= expected) && (
+          <span className="ms-2 text-amber-500">{t('drilldown.partialScan')}</span>
+        )}
+      </p>
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="text-muted-foreground [&>th]:p-1.5 [&>th]:font-normal border-b">
+            <th className="text-start">{t('docNumber')}</th>
+            <th className="text-start">{t('date')}</th>
+            <th className="text-end">{t('quantity')}</th>
+            <th className="text-end">{t('drilldown.unitPrice')}</th>
+            <th className="text-end">{t('drilldown.discount')}</th>
+            <th className="text-end">{t('drilldown.lineTotal')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={`${r.doc_format}-${r.doc_number}-${i}`} className="border-b last:border-0">
+              <td className="p-1.5 font-mono">
+                <span className="inline-flex items-center gap-1.5">
+                  <Link
+                    href={`/documents/${encodeURIComponent(r.doc_format)}/${encodeURIComponent(r.doc_number)}${r.doc_date ? `?year=${r.doc_date.slice(0, 4)}` : ''}`}
+                    className="text-primary hover:underline inline-flex items-center gap-1"
+                  >
+                    {r.doc_number}
+                    <ExternalLink className="h-3 w-3" />
+                  </Link>
+                  {r.doc_format !== '11' && (
+                    <Badge variant="secondary" className="text-[10px] px-1 py-0">
+                      {DOC_TYPE_NAMES[Number(r.doc_format)] || r.doc_format}
+                    </Badge>
+                  )}
+                </span>
+              </td>
+              <td className="p-1.5 text-muted-foreground">{(r.doc_date || '—').slice(0, 10)}</td>
+              <td className="p-1.5 text-end tabular-nums">{formatNumber(r.quantity)}</td>
+              <td className="p-1.5 text-end tabular-nums">{ILS_FORMAT.format(r.unit_price)}</td>
+              <td className="p-1.5 text-end tabular-nums text-muted-foreground">{r.discount_percent ? `${r.discount_percent}%` : '—'}</td>
+              <td className="p-1.5 text-end tabular-nums font-medium">{ILS_FORMAT.format(r.line_total)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }
@@ -303,8 +418,12 @@ interface DocRow {
 
 const PAGE_SIZE = 30
 
-function DocumentTable({ items, t, isReceipt, isLoading }: { items: any[]; t: (k: any) => string; isReceipt?: boolean; isLoading?: boolean }) {
+function DocumentTable({ items, t, isReceipt, isLoading, expandable, caption }: {
+  items: any[]; t: (k: any) => string; isReceipt?: boolean; isLoading?: boolean
+  expandable?: boolean; caption?: string
+}) {
   const [page, setPage] = useState(0)
+  const [openKey, setOpenKey] = useState<string | null>(null)
   const rows: DocRow[] = useMemo(
     () =>
       (items || []).map((doc: any) => {
@@ -341,6 +460,7 @@ function DocumentTable({ items, t, isReceipt, isLoading }: { items: any[]; t: (k
 
   return (
     <div className="space-y-2">
+      {caption && <p className="text-[11px] text-muted-foreground">{caption}</p>}
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
@@ -355,32 +475,52 @@ function DocumentTable({ items, t, isReceipt, isLoading }: { items: any[]; t: (k
           <tbody>
             {pageRows.map((row: DocRow, i: number) => {
               const doc = row.doc
+              const rowKey = `${row.format}-${row.docNumber}`
+              const canExpand = !!(expandable && row.docNumber && row.format)
+              const open = canExpand && openKey === rowKey
               return (
-                <tr
-                  key={`${doc.format || doc.type}-${doc.number || doc.doc_number}-${start + i}`}
-                  className="border-b hover:bg-muted/50 transition-colors"
-                >
-                  <td className="p-2 font-mono">
-                    {row.docNumber && row.format ? (
-                      <Link
-                        href={`/documents/${encodeURIComponent(row.format)}/${encodeURIComponent(row.docNumber)}${row.year ? `?year=${row.year}` : ''}`}
-                        className="text-primary hover:underline inline-flex items-center gap-1"
-                        title="צפייה במסמך"
-                      >
-                        {row.docNumber}
-                        <ExternalLink className="h-3 w-3" />
-                      </Link>
-                    ) : (
-                      row.docNumber || '-'
+                <Fragment key={`${doc.format || doc.type}-${doc.number || doc.doc_number}-${start + i}`}>
+                  <tr
+                    className={cn('border-b hover:bg-muted/50 transition-colors', canExpand && 'cursor-pointer')}
+                    aria-expanded={canExpand ? open : undefined}
+                    onClick={canExpand ? () => setOpenKey(open ? null : rowKey) : undefined}
+                  >
+                    <td className="p-2 font-mono" onClick={(e) => e.stopPropagation()}>
+                      {row.docNumber && row.format ? (
+                        <Link
+                          href={`/documents/${encodeURIComponent(row.format)}/${encodeURIComponent(row.docNumber)}${row.year ? `?year=${row.year}` : ''}`}
+                          className="text-primary hover:underline inline-flex items-center gap-1"
+                          title="צפייה במסמך"
+                        >
+                          {row.docNumber}
+                          <ExternalLink className="h-3 w-3" />
+                        </Link>
+                      ) : (
+                        row.docNumber || '-'
+                      )}
+                    </td>
+                    <td className="p-2">
+                      <Badge variant="secondary">{row.docType || '-'}</Badge>
+                    </td>
+                    <td className="p-2 text-muted-foreground">{(row.date || '-').slice(0, 10)}</td>
+                    <td className="p-2 text-end font-medium">{ILS_FORMAT.format(row.amount)}</td>
+                    {!isReceipt && (
+                      <td className="p-2 text-end">
+                        <span className="inline-flex items-center gap-1.5">
+                          {row.itemCount ? formatNumber(row.itemCount) : '-'}
+                          {canExpand && <ChevronDown className={cn('h-3.5 w-3.5 text-muted-foreground transition-transform', open && 'rotate-180')} />}
+                        </span>
+                      </td>
                     )}
-                  </td>
-                  <td className="p-2">
-                    <Badge variant="secondary">{row.docType || '-'}</Badge>
-                  </td>
-                  <td className="p-2 text-muted-foreground">{(row.date || '-').slice(0, 10)}</td>
-                  <td className="p-2 text-end font-medium">{ILS_FORMAT.format(row.amount)}</td>
-                  {!isReceipt && <td className="p-2 text-end">{row.itemCount ? formatNumber(row.itemCount) : '-'}</td>}
-                </tr>
+                  </tr>
+                  {open && (
+                    <tr className="border-b">
+                      <td colSpan={isReceipt ? 4 : 5} className="bg-muted/30 p-0">
+                        <DocumentLinesPanel format={row.format} number={row.docNumber} year={row.year} t={t} />
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               )
             })}
           </tbody>
@@ -393,7 +533,7 @@ function DocumentTable({ items, t, isReceipt, isLoading }: { items: any[]; t: (k
         <span>{start + 1}–{Math.min(start + PAGE_SIZE, total)} מתוך {formatNumber(total)}{total >= 250 ? '+' : ''}</span>
         <div className="flex items-center gap-1">
           <button
-            onClick={() => setPage(Math.max(0, current - 1))}
+            onClick={() => { setOpenKey(null); setPage(Math.max(0, current - 1)) }}
             disabled={current === 0}
             className="px-2 py-1 rounded border disabled:opacity-40 hover:bg-accent"
           >
@@ -401,7 +541,7 @@ function DocumentTable({ items, t, isReceipt, isLoading }: { items: any[]; t: (k
           </button>
           <span className="px-1">{current + 1}/{pageCount}</span>
           <button
-            onClick={() => setPage(Math.min(pageCount - 1, current + 1))}
+            onClick={() => { setOpenKey(null); setPage(Math.min(pageCount - 1, current + 1)) }}
             disabled={current >= pageCount - 1}
             className="px-2 py-1 rounded border disabled:opacity-40 hover:bg-accent"
           >
@@ -409,6 +549,72 @@ function DocumentTable({ items, t, isReceipt, isLoading }: { items: any[]; t: (k
           </button>
         </div>
       </div>
+    </div>
+  )
+}
+
+// ── Invoice drill-down: the document's line items ─────────────────────────────
+// Mounted only while its row is expanded (lazy fetch). Mirrors the columns of
+// the standalone document page at app/documents/[format]/[number].
+
+interface DocLine {
+  line_number: number
+  item_code: string
+  item_name: string
+  quantity: number
+  unit_price: number
+  discount_percent: number
+  line_total: number
+}
+
+function DocumentLinesPanel({ format, number, year, t }: {
+  format: string; number: string; year: string; t: (k: string) => string
+}) {
+  const { data, isLoading, error } = useDocumentDetail(format, number, year || undefined)
+  const lines: DocLine[] = data?.lines ?? []
+
+  if (isLoading) {
+    return (
+      <div className="p-3 space-y-2">
+        {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-6 w-full" />)}
+      </div>
+    )
+  }
+  if (error || data?.error) {
+    return <p className="p-3 text-xs text-destructive">{t('drilldown.loadFailed')}</p>
+  }
+  if (lines.length === 0) {
+    return <p className="p-3 text-xs text-muted-foreground text-center">—</p>
+  }
+
+  return (
+    <div className="p-3">
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="text-muted-foreground [&>th]:p-1.5 [&>th]:font-normal border-b">
+            <th className="text-start">{t('code')}</th>
+            <th className="text-start">{t('item')}</th>
+            <th className="text-end">{t('quantity')}</th>
+            <th className="text-end">{t('drilldown.unitPrice')}</th>
+            <th className="text-end">{t('drilldown.discount')}</th>
+            <th className="text-end">{t('drilldown.lineTotal')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {lines.map((l, i) => (
+            <tr key={`${l.line_number}-${i}`} className="border-b last:border-0">
+              <td className="p-1.5 font-mono"><ItemLink code={l.item_code} showCode /></td>
+              <td className="p-1.5 max-w-[240px] truncate" title={l.item_name}>
+                <ItemLink code={l.item_code} name={l.item_name} />
+              </td>
+              <td className="p-1.5 text-end tabular-nums">{formatNumber(l.quantity)}</td>
+              <td className="p-1.5 text-end tabular-nums">{ILS_FORMAT.format(l.unit_price)}</td>
+              <td className="p-1.5 text-end tabular-nums text-muted-foreground">{l.discount_percent ? `${l.discount_percent}%` : '—'}</td>
+              <td className="p-1.5 text-end tabular-nums font-medium">{ILS_FORMAT.format(l.line_total)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }

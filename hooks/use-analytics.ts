@@ -488,6 +488,49 @@ export function useItemStockForecast(itemCode: string | null) {
   })
 }
 
+// Purchase-row drill-down: which invoices of this customer contain the item in
+// the days window. First uncached customer fans out doc-detail fetches server-
+// side (can take tens of seconds) — one retry, no focus refetch.
+export function useCustomerItemInvoices(
+  customerCode: string | null,
+  itemCode: string | null,
+  days = 90,
+  // Expected match count (the row's line_count) lets the server stop scanning
+  // early. Pass 0 to force a full-window scan (e.g. when returns exist).
+  expected = 0
+) {
+  return useQuery({
+    queryKey: ['customer-item-invoices', customerCode, itemCode, days],
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/customers/${encodeURIComponent(customerCode!)}/purchases/${encodeURIComponent(itemCode!)}?days=${days}&expected=${expected}`
+      )
+      if (!res.ok) throw new Error('Failed')
+      return res.json()
+    },
+    enabled: !!customerCode && !!itemCode,
+    staleTime: 10 * 60 * 1000,
+    retry: 1,
+    refetchOnWindowFocus: false,
+  })
+}
+
+export function useDocumentDetail(format: string | null, number: string | null, year?: string) {
+  return useQuery({
+    queryKey: ['document-detail', format, number, year ?? ''],
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/documents/${encodeURIComponent(format!)}/${encodeURIComponent(number!)}${year ? `?year=${year}` : ''}`
+      )
+      if (!res.ok) throw new Error('Failed')
+      return res.json()
+    },
+    enabled: !!format && !!number,
+    staleTime: 30 * 60 * 1000,
+    retry: 1,
+  })
+}
+
 export function useCustomerPurchases(code: string | null, days = 90) {
   return useQuery({
     queryKey: ['customer-purchases', code, days],

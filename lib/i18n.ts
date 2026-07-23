@@ -322,6 +322,18 @@ export const translations = {
     balance: 'יתרה',
     agent: 'סוכן',
 
+    // Customer drill-down
+    'customer.purchasesWindow': 'מציג את {days} הימים האחרונים · שנה פעילה בלבד',
+    'customer.documentsWindow': 'מציג עד 250 המסמכים האחרונים',
+    'drilldown.invoicesForItem': 'חשבוניות לפריט זה בתקופה שנבחרה',
+    'drilldown.slowFirstLoad': 'טעינה ראשונה עשויה להימשך עד דקה',
+    'drilldown.noLines': 'לא נמצאו שורות חשבונית בתקופה',
+    'drilldown.partialScan': 'כיסוי חלקי — נסרקו רק המסמכים האחרונים',
+    'drilldown.loadFailed': 'הטעינה נכשלה',
+    'drilldown.unitPrice': 'מחיר יחידה',
+    'drilldown.lineTotal': 'סה״כ שורה',
+    'drilldown.discount': 'הנחה',
+
     // Gap Analysis
     gapAnalysis: 'ניתוח פערים',
     'page.gap': 'פריטים שהוצעו ואינם במלאי',
@@ -894,6 +906,18 @@ export const translations = {
     overdueCustomers: 'Overdue Customers',
     balance: 'Balance',
     agent: 'Agent',
+
+    // Customer drill-down
+    'customer.purchasesWindow': 'Last {days} days · active year only',
+    'customer.documentsWindow': 'Latest 250 documents',
+    'drilldown.invoicesForItem': 'Invoices for this item in the selected period',
+    'drilldown.slowFirstLoad': 'First load can take up to a minute',
+    'drilldown.noLines': 'No invoice lines found in this period',
+    'drilldown.partialScan': 'Partial coverage — only the latest documents were scanned',
+    'drilldown.loadFailed': 'Failed to load',
+    'drilldown.unitPrice': 'Unit Price',
+    'drilldown.lineTotal': 'Line Total',
+    'drilldown.discount': 'Discount',
 
     // Gap Analysis
     gapAnalysis: 'Gap Analysis',
