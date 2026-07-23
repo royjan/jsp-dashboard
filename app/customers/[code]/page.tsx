@@ -15,9 +15,6 @@ import Link from 'next/link'
 import {
   User, DollarSign, Clock, FileText, Receipt, ArrowLeft, AlertTriangle, ShoppingCart, ExternalLink,
 } from 'lucide-react'
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
-} from 'recharts'
 import { ILS_FORMAT, NUMBER_FORMAT, formatNumber } from '@/lib/constants'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -29,7 +26,9 @@ const cardVariants: any = {
   }),
 }
 
-const AGING_COLORS = ['#22c55e', '#eab308', '#f97316', '#ef4444', '#dc2626']
+// Severity ramp, CVD-validated on the dark surface (90 vs 90+ were previously
+// two near-identical reds).
+const AGING_COLORS = ['#34d399', '#fde047', '#fb923c', '#f43f5e', '#9f1239']
 
 const DOC_TYPE_NAMES: Record<number, string> = {
   11: 'Tax Invoice',
@@ -48,7 +47,7 @@ function LoadingSkeleton() {
           <Card key={i}><CardContent className="p-4"><Skeleton className="h-4 w-20 mb-3" /><Skeleton className="h-8 w-24" /></CardContent></Card>
         ))}
       </div>
-      <Card><CardContent className="p-6"><Skeleton className="w-full h-[200px]" /></CardContent></Card>
+      <Card><CardContent className="p-6"><Skeleton className="w-full h-12" /></CardContent></Card>
     </div>
   )
 }
@@ -93,6 +92,8 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ code:
     { name: t('overdue90'), value: aging.days_90, color: AGING_COLORS[3] },
     { name: t('overdue90Plus'), value: aging.over_90, color: AGING_COLORS[4] },
   ].filter(d => d.value !== 0)
+  // abs so a negative bucket (credit) still gets a visible share
+  const agingTotal = agingData.reduce((sum, d) => sum + Math.abs(d.value), 0)
 
   const hasOverdue = aging.days_30 > 0 || aging.days_60 > 0 || aging.days_90 > 0 || aging.over_90 > 0
 
@@ -137,22 +138,29 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ code:
       {agingData.length > 0 && (
         <Card>
           <CardHeader><CardTitle className="text-base">{t('agingBreakdown')}</CardTitle></CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={agingData} margin={{ left: 0, right: 10, top: 5, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-                <YAxis tickFormatter={(v) => ILS_FORMAT.format(v)} tick={{ fontSize: 10 }} />
-                <Tooltip
-                  contentStyle={{ backgroundColor: 'var(--popover)', borderColor: 'var(--border)', borderRadius: '8px', color: 'var(--popover-foreground)' }}
-                  itemStyle={{ color: 'var(--popover-foreground)' }}
-                  formatter={(v) => [ILS_FORMAT.format(v as number), t('amount')]}
+          <CardContent className="space-y-3">
+            <div className="flex h-4 w-full gap-0.5" role="img" aria-label={t('agingBreakdown')}>
+              {agingData.map((b) => (
+                <div
+                  key={b.name}
+                  className="min-w-1.5 rounded-[3px] first:rounded-s-full last:rounded-e-full"
+                  style={{ flexGrow: Math.abs(b.value), backgroundColor: b.color }}
+                  title={`${b.name}: ${ILS_FORMAT.format(b.value)}`}
                 />
-                <Bar dataKey="value" radius={[4, 4, 0, 0]}>
-                  {agingData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+              {agingData.map((b) => (
+                <span key={b.name} className="flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 shrink-0 rounded-[3px]" style={{ backgroundColor: b.color }} />
+                  <span className="text-muted-foreground">{b.name}</span>
+                  <span className="font-medium">{ILS_FORMAT.format(b.value)}</span>
+                  <span className="text-muted-foreground">
+                    ({agingTotal > 0 ? Math.max(1, Math.round((Math.abs(b.value) / agingTotal) * 100)) : 0}%)
+                  </span>
+                </span>
+              ))}
+            </div>
           </CardContent>
         </Card>
       )}
