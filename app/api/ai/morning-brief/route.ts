@@ -24,6 +24,8 @@ const CACHE_TTL = 4 * 60 * 60 // 4 hours
 async function getSalesKpis() {
   const now = new Date()
   const today = now.toISOString().split('T')[0]
+  const yesterday = new Date(now.getTime() - 86400000).toISOString().split('T')[0]
+  const lastWeekSameDay = new Date(now.getTime() - 8 * 86400000).toISOString().split('T')[0]
   const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
   const weekAgo = new Date(now.getTime() - 7 * 86400000).toISOString().split('T')[0]
   const yearAgo = new Date(now.getTime() - 365 * 86400000)
@@ -83,6 +85,21 @@ async function getSalesKpis() {
     ? Math.round(((monthSales.total - yearAgoMonthSales.total) / yearAgoMonthSales.total) * 100)
     : null
 
+  // A DAILY report leads with the day that just closed — yesterday's revenue plus
+  // the same weekday last week as its natural yardstick (weekday-sensitive trade).
+  let yesterdaySales = { total: 0, count: 0 }
+  let lastWeekSameDaySales = { total: 0, count: 0 }
+  try {
+    const [yd, lw] = await Promise.all([
+      dbQuery(`SELECT COALESCE(SUM(revenue::numeric), 0) as total, COALESCE(SUM(invoice_count), 0) as count FROM dashboard.daily_sales WHERE date = $1`, [yesterday]),
+      dbQuery(`SELECT COALESCE(SUM(revenue::numeric), 0) as total, COALESCE(SUM(invoice_count), 0) as count FROM dashboard.daily_sales WHERE date = $1`, [lastWeekSameDay]),
+    ])
+    yesterdaySales = { total: parseFloat(yd.rows[0]?.total || 0), count: parseInt(yd.rows[0]?.count) || 0 }
+    lastWeekSameDaySales = { total: parseFloat(lw.rows[0]?.total || 0), count: parseInt(lw.rows[0]?.count) || 0 }
+  } catch (e) {
+    console.warn('[morning-brief] yesterday queries failed:', e)
+  }
+
   // TRUE annual comparison (YTD vs same window last year) + data freshness. The old
   // prompt labeled the month-vs-last-July delta "שינוי שנתי" — the 24.07 brief then
   // reported a "34% annual collapse" while annual sales were actually flat (+0.3%).
@@ -109,7 +126,7 @@ async function getSalesKpis() {
     console.warn('[morning-brief] YTD queries failed:', e)
   }
 
-  return { todaySales, weekSales, monthSales, yearAgoMonthSales, yoyChange, ytdYoy, ytdTotal, ytdPrevTotal, dataThrough }
+  return { todaySales, yesterdaySales, lastWeekSameDaySales, weekSales, monthSales, yearAgoMonthSales, yoyChange, ytdYoy, ytdTotal, ytdPrevTotal, dataThrough }
 }
 
 async function getTopOverdueCustomers() {
@@ -211,8 +228,9 @@ export async function GET() {
 הנה הנתונים העדכניים${salesKpis.dataThrough ? ` (נתוני מכירות מעודכנים עד ${salesKpis.dataThrough})` : ''}:
 
 **מכירות:**
-- היום: ₪${Math.round(salesKpis.todaySales.total).toLocaleString()} (${salesKpis.todaySales.count} עסקאות)
-- השבוע: ₪${Math.round(salesKpis.weekSales.total).toLocaleString()} (${salesKpis.weekSales.count} עסקאות)
+- אתמול: ₪${Math.round(salesKpis.yesterdaySales.total).toLocaleString()} (${salesKpis.yesterdaySales.count} עסקאות)
+- אותו יום בשבוע שעבר: ₪${Math.round(salesKpis.lastWeekSameDaySales.total).toLocaleString()} (${salesKpis.lastWeekSameDaySales.count} עסקאות)
+- 7 הימים האחרונים: ₪${Math.round(salesKpis.weekSales.total).toLocaleString()} (${salesKpis.weekSales.count} עסקאות)
 - ${monthName} עד כה: ₪${Math.round(salesKpis.monthSales.total).toLocaleString()} (${salesKpis.monthSales.count} עסקאות)
 ${salesKpis.yoyChange !== null ? `- ${monthName} לעומת ${monthName} אשתקד (חודש בודד בלבד!): ${salesKpis.yoyChange > 0 ? '+' : ''}${salesKpis.yoyChange}% (₪${Math.round(salesKpis.monthSales.total).toLocaleString()} לעומת ₪${Math.round(salesKpis.yearAgoMonthSales.total).toLocaleString()})` : ''}
 ${salesKpis.ytdYoy !== null ? `- מתחילת השנה עד היום לעומת אותה תקופה אשתקד (ההשוואה השנתית האמיתית): ${salesKpis.ytdYoy > 0 ? '+' : ''}${salesKpis.ytdYoy}% (₪${Math.round(salesKpis.ytdTotal ?? 0).toLocaleString()} לעומת ₪${Math.round(salesKpis.ytdPrevTotal ?? 0).toLocaleString()})` : ''}
@@ -239,19 +257,24 @@ ${stockAlerts.length > 0
   ? stockAlerts.map(a => `- ${a.name} (${a.code}): ${a.stock} יחידות במלאי, נמכרו ${a.soldThisYear} השנה`).join('\n')
   : '- אין התראות קריטיות'}
 
-כתוב תקציר בוקר קצר ומעשי בעברית — 3-5 נקודות (bullets).
+כתוב דו"ח בוקר יומי בעברית — זה דו"ח על יום העסקים שהסתיים אתמול, בפורמט קבוע.
+
+מבנה קבוע (4-6 נקודות, כל אחת מתחילה באימוג'י שלה, בסדר הזה):
+- 📊 אתמול: המכירות של אתמול מול אותו יום בשבוע שעבר. זו הנקודה הראשונה תמיד.
+- 📈 תמונה גדולה: ${monthName} עד כה מול ${monthName} אשתקד, ומתחילת השנה מול אשתקד — משפט אחד לכל היותר על כל אחד.
+- 🚚 תפעול: תעודות משלוח / דברים שדורשים טיפול היום (רק אם יש).
+- ⚠️ לתשומת לב: פערי מלאי, חובות, התראות — או ציון שהנתון לא זמין הבוקר.
 
 סגנון — עברית פשוטה, כמו שמנהל מדבר עם מנהל:
 - משפטים קצרים. בלי סוגריים מקוננים, בלי מונחים כמו "מצטבר", "התקופה המקבילה", "נקודתית".
 - תן סכומים בש"ח ליד כל טענה, לא רק אחוזים.
-- דוגמה לניסוח טוב: "מתחילת השנה מכרנו ₪7.9M — כמעט זהה לאשתקד. אבל יולי חלש: ₪763 אלף לעומת ₪1.09M ביולי שעבר, ירידה של שליש."
+- דוגמה לניסוח טוב: "📊 אתמול מכרנו ₪41 אלף ב-58 עסקאות — פחות מ-₪52 אלף באותו יום בשבוע שעבר."
 - דוגמה לניסוח רע (אל תכתוב כך): "מגמת המכירות השנתית (מצטבר מתחילת השנה לעומת התקופה המקבילה אשתקד) יציבה עם ירידה קלה".
 
 כללי ברזל: ליד כל אחוז או השוואה ציין במפורש את התקופה שהיא מכסה (חודש בודד ≠ שנתי);
 אל תמציא מסקנות שאינן נתמכות בנתונים שלמעלה; אם נתון מסומן כלא-זמין — אמור שהוא לא זמין.
-התמקד בדברים חשובים ומעשיים: מגמות, בעיות שדורשות טיפול, הזדמנויות.
 החזר את התשובה כ-JSON בפורמט הבא בלבד (ללא markdown):
-{"summary": "משפט סיכום כללי קצר", "bullets": ["נקודה 1", "נקודה 2", "נקודה 3"]}`
+{"summary": "משפט סיכום כללי קצר", "bullets": ["📊 ...", "📈 ...", "🚚 ...", "⚠️ ..."]}`
 
     let parsed: { summary: string; bullets: string[] }
     try {

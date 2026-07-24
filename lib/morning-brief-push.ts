@@ -97,17 +97,23 @@ async function runOnce(force = false): Promise<void> {
     console.log('[morning-brief] TELEGRAM_STAFF_CHAT_ID not configured — loop idle')
     return
   }
+  // Telegram HTML mode: bold dated header + italic one-liner + spaced bullets —
+  // reads like a daily report, not a text dump. Bullets already carry their own
+  // section emoji (📊/📈/🚚/⚠️) from the route's fixed template.
+  const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  const weekday = new Intl.DateTimeFormat('he-IL', { timeZone: 'Asia/Jerusalem', weekday: 'long' }).format(new Date())
   const text = [
-    `☀️ בוקר טוב! תקציר ${now.dateKey.split('-').reverse().join('.')}`,
+    `☀️ <b>דו"ח בוקר · יום ${weekday} · ${now.dateKey.split('-').reverse().join('.')}</b>`,
     '',
-    brief.summary,
-    ...(brief.bullets?.length ? ['', ...brief.bullets.map((b) => `• ${b}`)] : []),
+    `<i>${esc(brief.summary)}</i>`,
+    '',
+    ...(brief.bullets ?? []).map((b) => esc(b)),
   ].join('\n')
 
   const tg = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: chatId, text: text.slice(0, 4000) }),
+    body: JSON.stringify({ chat_id: chatId, text: text.slice(0, 4000), parse_mode: 'HTML' }),
     signal: AbortSignal.timeout(30_000),
   })
   const tgBody = (await tg.json().catch(() => ({}))) as { ok?: boolean; description?: string }
