@@ -83,7 +83,29 @@ async function getSalesKpis() {
     ? Math.round(((monthSales.total - yearAgoMonthSales.total) / yearAgoMonthSales.total) * 100)
     : null
 
-  return { todaySales, weekSales, monthSales, yearAgoMonthSales, yoyChange }
+  // TRUE annual comparison (YTD vs same window last year) + data freshness. The old
+  // prompt labeled the month-vs-last-July delta "שינוי שנתי" — the 24.07 brief then
+  // reported a "34% annual collapse" while annual sales were actually flat (+0.3%).
+  let ytdYoy: number | null = null
+  let dataThrough: string | null = null
+  try {
+    const ytdStart = `${now.getFullYear()}-01-01`
+    const ytdAgoStart = `${yearAgo.getFullYear()}-01-01`
+    const [cur, prev, fresh] = await Promise.all([
+      dbQuery(`SELECT COALESCE(SUM(revenue::numeric), 0) as total FROM dashboard.daily_sales WHERE date >= $1 AND date <= $2`, [ytdStart, today]),
+      dbQuery(`SELECT COALESCE(SUM(revenue::numeric), 0) as total FROM dashboard.daily_sales WHERE date >= $1 AND date <= $2`, [ytdAgoStart, yearAgoToday]),
+      dbQuery(`SELECT MAX(date) as d FROM dashboard.daily_sales`),
+    ])
+    const c = parseFloat(cur.rows[0]?.total || 0)
+    const p = parseFloat(prev.rows[0]?.total || 0)
+    if (p > 0) ytdYoy = Math.round(((c - p) / p) * 100)
+    const d = fresh.rows[0]?.d
+    if (d) dataThrough = new Date(d).toISOString().split('T')[0]
+  } catch (e) {
+    console.warn('[morning-brief] YTD queries failed:', e)
+  }
+
+  return { todaySales, weekSales, monthSales, yearAgoMonthSales, yoyChange, ytdYoy, dataThrough }
 }
 
 async function getTopOverdueCustomers() {
@@ -125,10 +147,12 @@ async function getGapHighlights() {
       qty_quoted: item.total_qty_quoted ?? 0,
     }))
 
-    return { count: data?.gap_count ?? 0, items }
+    return { count: data?.gap_count ?? 0, items, failed: false }
   } catch (e) {
     console.warn('[morning-brief] gap analysis failed:', e)
-    return { count: 0, items: [] }
+    // failed ≠ zero gaps — the 24.07 brief claimed "מלאי אופטימלי" off exactly
+    // this ambiguity while the gap analysis actually had 22 items.
+    return { count: null as number | null, items: [] as any[], failed: true }
   }
 }
 
@@ -172,18 +196,25 @@ export async function GET() {
       getStockAlerts(),
     ])
 
-    // Build prompt
+    // Build prompt. Every comparison is labeled with its exact period, the
+    // open-quotes KPI carries its "accumulated, never cleaned" caveat, and a
+    // failed gap fetch is stated as unavailable — three lessons from the 24.07
+    // brief that reported a "34% annual collapse" (July-only dip; annual was
+    // flat), a 68K-quote "task force" (all-time pile), and "מלאי אופטימלי"
+    // (gap fetch had failed; there were 22 real gaps).
+    const monthName = new Date().toLocaleDateString('he-IL', { month: 'long' })
     const prompt = `אתה מכין תקציר בוקר יומי עבור מנהל של מפיץ חלפי רכב (Jan Parts).
-הנה הנתונים העדכניים:
+הנה הנתונים העדכניים${salesKpis.dataThrough ? ` (נתוני מכירות מעודכנים עד ${salesKpis.dataThrough})` : ''}:
 
 **מכירות:**
 - היום: ₪${Math.round(salesKpis.todaySales.total).toLocaleString()} (${salesKpis.todaySales.count} עסקאות)
 - השבוע: ₪${Math.round(salesKpis.weekSales.total).toLocaleString()} (${salesKpis.weekSales.count} עסקאות)
-- החודש: ₪${Math.round(salesKpis.monthSales.total).toLocaleString()} (${salesKpis.monthSales.count} עסקאות)
-${salesKpis.yoyChange !== null ? `- שינוי שנתי (YoY): ${salesKpis.yoyChange > 0 ? '+' : ''}${salesKpis.yoyChange}%` : ''}
+- ${monthName} עד כה: ₪${Math.round(salesKpis.monthSales.total).toLocaleString()} (${salesKpis.monthSales.count} עסקאות)
+${salesKpis.yoyChange !== null ? `- ${monthName} לעומת ${monthName} אשתקד (חודש בודד בלבד!): ${salesKpis.yoyChange > 0 ? '+' : ''}${salesKpis.yoyChange}%` : ''}
+${salesKpis.ytdYoy !== null ? `- מצטבר מתחילת השנה לעומת התקופה המקבילה אשתקד (ההשוואה השנתית האמיתית): ${salesKpis.ytdYoy > 0 ? '+' : ''}${salesKpis.ytdYoy}%` : ''}
 
 **סטטוס תפעולי:**
-- הצעות מחיר פתוחות: ${dashboardData?.open_quotes?.count ?? 'לא זמין'}${dashboardData?.open_quotes?.total ? ` (₪${Math.round(dashboardData.open_quotes.total).toLocaleString()})` : ''}
+- הצעות מחיר פתוחות: ${dashboardData?.open_quotes?.count ?? 'לא זמין'}${dashboardData?.open_quotes?.total ? ` (₪${Math.round(dashboardData.open_quotes.total).toLocaleString()})` : ''} — שים לב: מספר מצטבר רב-שנתי (הצעות לא נסגרות במערכת), לא צבר עסקאות אמיתי. אל תציג אותו כהזדמנות מכירה.
 - תעודות משלוח פתוחות: ${dashboardData?.open_delivery_notes?.count ?? 'לא זמין'}
 
 **לקוחות עם יתרת חוב גבוהה:**
@@ -192,10 +223,12 @@ ${overdueCustomers.length > 0
   : '- אין נתונים זמינים'}
 
 **פערי מלאי (פריטים שצוטטו אך לא במלאי):**
-- סה"כ פריטים חסרים: ${gapData.count}
+${gapData.failed
+  ? '- נתוני הפערים לא זמינים הבוקר — אל תסיק שאין פערים!'
+  : `- סה"כ פריטים חסרים: ${gapData.count}
 ${gapData.items.length > 0
   ? gapData.items.map(i => `- ${i.name} (${i.code}): צוטט ${i.times_quoted} פעמים, כמות ${i.qty_quoted}`).join('\n')
-  : '- אין פערים קריטיים'}
+  : '- אין פערים קריטיים'}`}
 
 **התראות מלאי (פריטים עם מלאי קריטי ומכירות פעילות):**
 ${stockAlerts.length > 0
@@ -204,6 +237,8 @@ ${stockAlerts.length > 0
 
 כתוב תקציר בוקר קצר ומעשי בעברית — 3-5 נקודות (bullets).
 כל נקודה צריכה להיות משפט אחד תמציתי.
+כללי ברזל: ליד כל אחוז או השוואה ציין במפורש את התקופה שהיא מכסה (חודש בודד ≠ שנתי);
+אל תמציא מסקנות שאינן נתמכות בנתונים שלמעלה; אם נתון מסומן כלא-זמין — אמור שהוא לא זמין.
 התמקד בדברים חשובים ומעשיים: מגמות, בעיות שדורשות טיפול, הזדמנויות.
 אל תחזור על כל המספרים — רק הדגש את מה שחשוב באמת.
 החזר את התשובה כ-JSON בפורמט הבא בלבד (ללא markdown):
