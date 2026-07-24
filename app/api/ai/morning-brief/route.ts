@@ -87,6 +87,8 @@ async function getSalesKpis() {
   // prompt labeled the month-vs-last-July delta "שינוי שנתי" — the 24.07 brief then
   // reported a "34% annual collapse" while annual sales were actually flat (+0.3%).
   let ytdYoy: number | null = null
+  let ytdTotal: number | null = null
+  let ytdPrevTotal: number | null = null
   let dataThrough: string | null = null
   try {
     const ytdStart = `${now.getFullYear()}-01-01`
@@ -99,13 +101,15 @@ async function getSalesKpis() {
     const c = parseFloat(cur.rows[0]?.total || 0)
     const p = parseFloat(prev.rows[0]?.total || 0)
     if (p > 0) ytdYoy = Math.round(((c - p) / p) * 100)
+    ytdTotal = c
+    ytdPrevTotal = p
     const d = fresh.rows[0]?.d
     if (d) dataThrough = new Date(d).toISOString().split('T')[0]
   } catch (e) {
     console.warn('[morning-brief] YTD queries failed:', e)
   }
 
-  return { todaySales, weekSales, monthSales, yearAgoMonthSales, yoyChange, ytdYoy, dataThrough }
+  return { todaySales, weekSales, monthSales, yearAgoMonthSales, yoyChange, ytdYoy, ytdTotal, ytdPrevTotal, dataThrough }
 }
 
 async function getTopOverdueCustomers() {
@@ -210,8 +214,8 @@ export async function GET() {
 - היום: ₪${Math.round(salesKpis.todaySales.total).toLocaleString()} (${salesKpis.todaySales.count} עסקאות)
 - השבוע: ₪${Math.round(salesKpis.weekSales.total).toLocaleString()} (${salesKpis.weekSales.count} עסקאות)
 - ${monthName} עד כה: ₪${Math.round(salesKpis.monthSales.total).toLocaleString()} (${salesKpis.monthSales.count} עסקאות)
-${salesKpis.yoyChange !== null ? `- ${monthName} לעומת ${monthName} אשתקד (חודש בודד בלבד!): ${salesKpis.yoyChange > 0 ? '+' : ''}${salesKpis.yoyChange}%` : ''}
-${salesKpis.ytdYoy !== null ? `- מצטבר מתחילת השנה לעומת התקופה המקבילה אשתקד (ההשוואה השנתית האמיתית): ${salesKpis.ytdYoy > 0 ? '+' : ''}${salesKpis.ytdYoy}%` : ''}
+${salesKpis.yoyChange !== null ? `- ${monthName} לעומת ${monthName} אשתקד (חודש בודד בלבד!): ${salesKpis.yoyChange > 0 ? '+' : ''}${salesKpis.yoyChange}% (₪${Math.round(salesKpis.monthSales.total).toLocaleString()} לעומת ₪${Math.round(salesKpis.yearAgoMonthSales.total).toLocaleString()})` : ''}
+${salesKpis.ytdYoy !== null ? `- מתחילת השנה עד היום לעומת אותה תקופה אשתקד (ההשוואה השנתית האמיתית): ${salesKpis.ytdYoy > 0 ? '+' : ''}${salesKpis.ytdYoy}% (₪${Math.round(salesKpis.ytdTotal ?? 0).toLocaleString()} לעומת ₪${Math.round(salesKpis.ytdPrevTotal ?? 0).toLocaleString()})` : ''}
 
 **סטטוס תפעולי:**
 - הצעות מחיר פתוחות: ${dashboardData?.open_quotes?.count ?? 'לא זמין'}${dashboardData?.open_quotes?.total ? ` (₪${Math.round(dashboardData.open_quotes.total).toLocaleString()})` : ''} — שים לב: מספר מצטבר רב-שנתי (הצעות לא נסגרות במערכת), לא צבר עסקאות אמיתי. אל תציג אותו כהזדמנות מכירה.
@@ -236,11 +240,16 @@ ${stockAlerts.length > 0
   : '- אין התראות קריטיות'}
 
 כתוב תקציר בוקר קצר ומעשי בעברית — 3-5 נקודות (bullets).
-כל נקודה צריכה להיות משפט אחד תמציתי.
+
+סגנון — עברית פשוטה, כמו שמנהל מדבר עם מנהל:
+- משפטים קצרים. בלי סוגריים מקוננים, בלי מונחים כמו "מצטבר", "התקופה המקבילה", "נקודתית".
+- תן סכומים בש"ח ליד כל טענה, לא רק אחוזים.
+- דוגמה לניסוח טוב: "מתחילת השנה מכרנו ₪7.9M — כמעט זהה לאשתקד. אבל יולי חלש: ₪763 אלף לעומת ₪1.09M ביולי שעבר, ירידה של שליש."
+- דוגמה לניסוח רע (אל תכתוב כך): "מגמת המכירות השנתית (מצטבר מתחילת השנה לעומת התקופה המקבילה אשתקד) יציבה עם ירידה קלה".
+
 כללי ברזל: ליד כל אחוז או השוואה ציין במפורש את התקופה שהיא מכסה (חודש בודד ≠ שנתי);
 אל תמציא מסקנות שאינן נתמכות בנתונים שלמעלה; אם נתון מסומן כלא-זמין — אמור שהוא לא זמין.
 התמקד בדברים חשובים ומעשיים: מגמות, בעיות שדורשות טיפול, הזדמנויות.
-אל תחזור על כל המספרים — רק הדגש את מה שחשוב באמת.
 החזר את התשובה כ-JSON בפורמט הבא בלבד (ללא markdown):
 {"summary": "משפט סיכום כללי קצר", "bullets": ["נקודה 1", "נקודה 2", "נקודה 3"]}`
 
