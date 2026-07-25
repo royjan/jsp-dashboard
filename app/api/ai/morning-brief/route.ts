@@ -339,16 +339,27 @@ ${stockAlerts.length > 0
       parsed = { summary: 'תקציר בוקר (ללא AI — מבוסס נתונים בלבד)', bullets }
     }
 
+    // Degraded = the whole sales layer came back empty (transient Neon failures on a
+    // fresh container did exactly this on 24.07 and the brief reported ₪0 everywhere).
+    // A genuinely-zero sales month is impossible for this business, so all-zero+null
+    // means "data unavailable": don't cache it (no 4h poisoning) and tell the pusher
+    // not to post it — the loop retries on its next tick.
+    const degraded = salesKpis.monthSales.total === 0 && salesKpis.ytdTotal === null
+
     const briefData: MorningBriefCache = {
       summary: parsed.summary,
       bullets: parsed.bullets,
       generatedAt: new Date().toISOString(),
     }
 
-    // Cache for 4 hours
-    await setCache(CACHE_KEY, briefData, CACHE_TTL)
+    if (!degraded) {
+      // Cache for 4 hours
+      await setCache(CACHE_KEY, briefData, CACHE_TTL)
+    } else {
+      console.warn('[morning-brief] sales data layer empty — serving degraded, not caching')
+    }
 
-    return NextResponse.json({ ...briefData, cached: false })
+    return NextResponse.json({ ...briefData, cached: false, degraded })
   } catch (error) {
     console.error('[morning-brief] Error:', error)
     return NextResponse.json(

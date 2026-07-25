@@ -80,17 +80,26 @@ async function runOnce(force = false): Promise<void> {
     return
   }
 
-  // once per day, across ticks and instances (skipped when forced for testing)
-  if (!force && !(await tryAcquireLock(`morning-brief:posted:${now.dateKey}`, 20 * 3600))) return
-
   // Self-fetch the existing route — it aggregates KPIs + AI summary with its own
   // cache and a deterministic Hebrew fallback, so this never needs its own logic.
+  // Fetch + validate BEFORE taking the daily lock: a degraded brief must leave the
+  // day unclaimed so the next 10-min tick inside the window can retry.
   const port = process.env.PORT || 3000
   const r = await fetch(`http://127.0.0.1:${port}/api/ai/morning-brief`, {
     signal: AbortSignal.timeout(90_000),
   })
-  const brief = (await r.json()) as { summary?: string; bullets?: string[]; error?: string }
+  const brief = (await r.json()) as { summary?: string; bullets?: string[]; error?: string; degraded?: boolean }
   if (!r.ok || !brief.summary) throw new Error(`brief fetch failed: ${brief.error || r.status}`)
+  if (brief.degraded) {
+    // Sales data layer was empty (e.g. transient Neon failure after a container
+    // boot — 24.07 this posted a "₪0 everywhere" brief). Never send that.
+    console.warn('[morning-brief] brief degraded (sales data unavailable) — not posting, will retry')
+    heartbeat({ phase: 'skipped-degraded' })
+    return
+  }
+
+  // once per day, across ticks and instances (skipped when forced for testing)
+  if (!force && !(await tryAcquireLock(`morning-brief:posted:${now.dateKey}`, 20 * 3600))) return
 
   const chatId = getSecret('TELEGRAM_STAFF_CHAT_ID', '') || DEFAULT_STAFF_CHAT
   if (!chatId) {
