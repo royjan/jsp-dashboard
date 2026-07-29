@@ -2,10 +2,11 @@ export const maxDuration = 60
 
 import { NextResponse } from 'next/server'
 import { query as dbQuery } from '@/lib/db'
-import { getItems, getChainMap } from '@/lib/services/analytics-service'
+import { getItems, getChainMap, looksLikeCodeNotName } from '@/lib/services/analytics-service'
 import { getCached, setCache } from '@/lib/redis-client'
 import { CACHE_TTL } from '@/lib/constants'
 import { fixRtlItemName } from '@/lib/rtl-fix'
+import { client } from '@/lib/finansit-client'
 
 type UrgencyLevel = 'critical' | 'warning' | 'watch' | 'ok'
 
@@ -165,6 +166,30 @@ export async function GET(request: Request) {
         return (a.days_with_pipeline ?? 9999) - (b.days_with_pipeline ?? 9999)
       })
       .slice(0, limit)
+
+    // Last-mile name repair. The shared items cache resolves code-looking names
+    // too, but only for the first N candidates catalogue-wide, so rows further
+    // down still surface a barcode instead of a description (e.g. 1623180680 →
+    // "0857428661"). Here the set is just this page, so the few stragglers can
+    // be resolved directly — typically a handful of calls, and the whole
+    // response is cached for CACHE_TTL.ANALYTICS afterwards.
+    const needsName = items.filter(i => looksLikeCodeNotName(i.item_name, i.item_code))
+    if (needsName.length > 0) {
+      const queue = [...needsName]
+      const worker = async () => {
+        for (let row = queue.shift(); row; row = queue.shift()) {
+          try {
+            const full = await client.items.get(row.item_code.toUpperCase())
+            if (full?.name && !looksLikeCodeNotName(full.name, row.item_code)) {
+              row.item_name = fixRtlItemName(full.name)
+            }
+          } catch {
+            // Leave the code showing rather than fail the page.
+          }
+        }
+      }
+      await Promise.allSettled(Array.from({ length: 6 }, worker))
+    }
 
     const result = { items }
     await setCache(cacheKey, result, CACHE_TTL.ANALYTICS)
