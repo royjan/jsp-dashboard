@@ -1063,7 +1063,11 @@ export async function getSeasonalData(dateFrom?: string, dateTo?: string, forceR
       }
 
       const averagedRows = dbResult.rows.map((r: any) => ({
-        month: r.month,
+        // Number(), not the raw value: months backfilled from daily_sales above
+        // are pushed as strings, and /seasonal matches with `d.month === i + 1`.
+        // A string never equals a number there, so those months plotted as 0 —
+        // while the month NAME still looked right, because `"3" - 1` coerces.
+        month: Number(r.month),
         avg_revenue: parseFloat(r.total_revenue) / Math.max(Number(r.year_count), 1),
       }))
       const maxSales = Math.max(...averagedRows.map((r: any) => r.avg_revenue), 1)
@@ -1522,7 +1526,8 @@ export async function getTopSellingItems(period: string = '30d', forceRefresh = 
           name: r.item_name || r.item_code,
           total_qty_sold: Math.round(parseFloat(r.total_qty) || 0),
           total_revenue: Math.round(parseFloat(r.total_revenue) || 0),
-          invoice_count: r.total_count || 0,
+          // SUM() over a bigint comes back as a string; the field is typed number.
+          invoice_count: Number(r.total_count) || 0,
           avg_price: parseFloat(r.total_qty) > 0 ? Math.round(parseFloat(r.total_revenue) / parseFloat(r.total_qty)) : 0,
           stock_qty: item?.stock_qty || 0,
           sale_date: item?.sale_date,
