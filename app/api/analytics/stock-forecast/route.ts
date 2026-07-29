@@ -53,8 +53,9 @@ export async function GET(request: Request) {
     const sortKey = searchParams.get('sort') || ''
     const sortDir = searchParams.get('dir') === 'desc' ? 'desc' : 'asc'
 
-    // v4: zero-price rows were cached before the price backfill was widened.
-    const cacheKey = `stock-forecast:list:v4:${limit}:${urgencyFilter}:${search}:${sortKey}:${sortDir}`
+    // v5: rows cached before the price backfill widened / the inherited-price
+    // fallback landed still carry price 0.
+    const cacheKey = `stock-forecast:list:v5:${limit}:${urgencyFilter}:${search}:${sortKey}:${sortDir}`
     const cached = await getCached<any>(cacheKey)
     if (cached) return NextResponse.json(cached)
 
@@ -238,9 +239,18 @@ export async function GET(request: Request) {
     // "0857428661"). Here the set is just this page, so the few stragglers can
     // be resolved directly — typically a handful of calls, and the whole
     // response is cached for CACHE_TTL.ANALYTICS afterwards.
-    const needsName = items.filter(i => looksLikeCodeNotName(i.item_name, i.item_code))
-    if (needsName.length > 0) {
-      const queue = [...needsName]
+    //
+    // The same pass fills a missing price. The bulk price feed carries an
+    // item's OWN price; when it has none, the per-item endpoint resolves the
+    // ERP's `price_source_code` chain and returns the price it inherits from
+    // the source part (e.g. 1683121580 inherits 699.94 from 1611608580). So:
+    // own price wins, inherited price is the fallback, 0 only if neither
+    // exists. One fetch per row serves both repairs.
+    const needsRepair = items.filter(
+      i => looksLikeCodeNotName(i.item_name, i.item_code) || !i.price,
+    )
+    if (needsRepair.length > 0) {
+      const queue = [...needsRepair]
       const worker = async () => {
         for (let row = queue.shift(); row; row = queue.shift()) {
           try {
@@ -248,8 +258,12 @@ export async function GET(request: Request) {
             if (full?.name && !looksLikeCodeNotName(full.name, row.item_code)) {
               row.item_name = fixRtlItemName(full.name)
             }
+            if (!row.price) {
+              const inherited = Number(full?.price ?? full?.price_list_price) || 0
+              if (inherited > 0) row.price = inherited
+            }
           } catch {
-            // Leave the code showing rather than fail the page.
+            // Leave the code/zero showing rather than fail the page.
           }
         }
       }
