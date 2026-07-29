@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
+import * as XLSX from 'xlsx'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useStockForecast, useItemStockForecast } from '@/hooks/use-analytics'
 import { useLocale } from '@/lib/locale-context'
@@ -10,7 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { AnimatedCounter } from '@/components/shared/AnimatedCounter'
 import { cn } from '@/lib/utils'
-import { AlertTriangle, Clock, ShieldAlert, Eye, TrendingDown, ArrowLeft, Search, Filter, Truck, X } from 'lucide-react'
+import { AlertTriangle, Clock, ShieldAlert, Eye, TrendingDown, ArrowLeft, Search, Filter, Truck, X, Download } from 'lucide-react'
 import { EbayRecommendButton } from '@/components/shared/EbayRecommendButton'
 import { ItemLink } from '@/components/shared/ItemLink'
 import { useSortable, SortableTh } from '@/components/shared/sortable-table'
@@ -86,7 +87,7 @@ function ForecastChart({ itemCode }: { itemCode: string }) {
           <div className="text-lg font-bold">{formatDate(data.stock_out_date, locale)}</div>
         </div>
         <div className="text-center">
-          <div className="text-xs text-muted-foreground">{locale === 'he' ? 'רמת ביטחון' : 'Confidence'}</div>
+          <div className="text-xs text-muted-foreground">{locale === 'he' ? 'אמינות תחזית' : 'Reliability'}</div>
           <div className="text-lg font-bold">{Math.round((data.confidence || 0) * 100)}%</div>
         </div>
       </div>
@@ -165,6 +166,66 @@ export default function StockForecastPage() {
 
   const he = locale === 'he'
 
+  // Exports exactly what's on screen (current urgency filter, search and sort),
+  // plus the fields the table only shows in tooltips. Raw numbers, not
+  // formatNumber() strings, so the columns stay summable in Excel.
+  const exportToExcel = useCallback(() => {
+    if (!sortedItems.length) return
+    const rows = sortedItems.map((item: any, i: number) => ({
+      '#': i + 1,
+      [he ? 'קוד' : 'Code']: item.item_code,
+      [he ? 'שם' : 'Name']: item.item_name,
+      [he ? 'מלאי במחסן' : 'On Hand']: item.current_stock ?? 0,
+      [he ? 'הוזמן' : 'Ordered']: item.ordered_qty ?? 0,
+      [he ? 'בדרך' : 'In Transit']: item.incoming_qty ?? 0,
+      [he ? 'סה״כ בדרך' : 'Pipeline']: item.pipeline_qty ?? 0,
+      [he ? 'ביקוש חודשי' : 'Monthly Demand']: item.predicted_monthly_demand ?? 0,
+      [he ? 'תאריך אזילה' : 'Stock-out Date']: formatDate(item.stock_out_date, locale),
+      [he ? 'ימים עד אזילה' : 'Days Left']: item.days_until_stockout ?? '',
+      [he ? 'ימים כולל בדרך' : 'Days Incl. Pipeline']: item.days_with_pipeline ?? '',
+      [he ? 'אמינות תחזית %' : 'Reliability %']: Math.round((item.confidence || 0) * 100),
+      [he ? 'דחיפות' : 'Urgency']:
+        (URGENCY_CONFIG[item.urgency as UrgencyLevel] || URGENCY_CONFIG.ok).label[locale],
+      [he ? 'מחיר' : 'Price']: Math.round(item.price || 0),
+      [he ? 'ערך מלאי' : 'Stock Value']: Math.round((item.current_stock || 0) * (item.price || 0)),
+    }))
+    const ws = XLSX.utils.json_to_sheet(rows)
+    ws['!cols'] = [
+      { wch: 5 }, { wch: 14 }, { wch: 40 }, { wch: 12 }, { wch: 9 }, { wch: 9 },
+      { wch: 11 }, { wch: 13 }, { wch: 14 }, { wch: 13 }, { wch: 15 },
+      { wch: 14 }, { wch: 10 }, { wch: 10 }, { wch: 12 },
+    ]
+    if (he) ws['!dir'] = 'rtl'
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, he ? 'תחזית אזילה' : 'Stock Forecast')
+    XLSX.writeFile(wb, `stock-forecast-${new Date().toISOString().split('T')[0]}.xlsx`)
+  }, [sortedItems, he, locale])
+
+  // Plain-language column explanations (shown on header hover).
+  const hints = he
+    ? {
+        code: 'מספר הפריט בקטלוג',
+        name: 'שם הפריט',
+        stock: 'כמות שנמצאת פיזית במחסן כרגע',
+        pipeline: 'הוזמן מהספק או בדרך אלינו — עדיין לא במחסן',
+        demand: 'כמה יחידות נמכרות בחודש בממוצע, לפי היסטוריית המכירות',
+        date: 'התאריך שבו המלאי צפוי להיגמר בקצב המכירה הנוכחי',
+        days: 'כמה ימים נשארו עד האזילה. החץ ← מציג את המספר אחרי שמחשיבים סחורה בדרך',
+        confidence: 'עד כמה אפשר לסמוך על התחזית, לפי כמות היסטוריית המכירות: 95% = 3+ חודשי נתונים, 40% = רק שנה שעברה, 10% = כמעט אין נתונים. אחוז נמוך אומר שהתאריך ניחוש — לא שצריך להזמין יותר',
+        urgency: 'דירוג לפי הימים שנשארו: קריטי מתחת ל-30, אזהרה 30-60, מעקב 60-90, אחרת תקין',
+      }
+    : {
+        code: 'Catalog item number',
+        name: 'Item name',
+        stock: 'Units physically on the shelf right now',
+        pipeline: 'Ordered from the supplier or in transit — not yet on the shelf',
+        demand: 'Average units sold per month, estimated from sales history',
+        date: 'Projected date stock reaches zero at the current sales rate',
+        days: 'Days until that date. The → arrow shows the number once incoming units are counted',
+        confidence: 'How much sales history backs the forecast: 95% = 3+ months of data, 40% = last year only, 10% = almost none. A low value means the date is a guess — not that you should order more',
+        urgency: 'Bucket by days left: Critical under 30, Warning 30-60, Watch 60-90, otherwise OK',
+      }
+
   return (
     <div className="space-y-6" dir={dir}>
       {/* Header */}
@@ -176,6 +237,13 @@ export default function StockForecastPage() {
           {he
             ? 'תחזית אזילת מלאי מבוססת החלקה מעריכית (שיטת הולט) על נתוני מכירות היסטוריים'
             : 'Predictive stock-out alerts based on Holt\'s exponential smoothing of historical sales data'}
+        </p>
+        {/* The two things people misread: "אמינות תחזית" is about data quality,
+            not stock level; and the blue arrow/truck mean incoming units count. */}
+        <p className="text-muted-foreground text-xs mt-2 leading-relaxed">
+          {he
+            ? 'טיפ: עבירו עם העכבר על כותרת עמודה להסבר. «אמינות תחזית» מודדת כמה היסטוריית מכירות עומדת מאחורי התחזית — אחוז נמוך אומר שתאריך האזילה הוא ניחוש, לא שצריך להזמין יותר. סימון כחול (← או משאית) אומר שהחישוב כולל סחורה שהוזמנה או בדרך.'
+            : 'Tip: hover a column title for an explanation. "Reliability" measures how much sales history backs the forecast — a low value means the stock-out date is a guess, not that you should order more. Blue markers (→ or a truck) mean on-order/in-transit units are included.'}
         </p>
       </div>
 
@@ -280,6 +348,17 @@ export default function StockForecastPage() {
                 )}
               </div>
             </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-xs h-8 gap-1.5"
+              onClick={exportToExcel}
+              disabled={isLoading || sortedItems.length === 0}
+              title={he ? 'ייצוא הפריטים המוצגים לאקסל' : 'Export the displayed items to Excel'}
+            >
+              <Download className="h-3.5 w-3.5" />
+              {he ? 'ייצוא לאקסל' : 'Export Excel'}
+            </Button>
           </div>
         </CardContent>
       </Card>
@@ -317,15 +396,15 @@ export default function StockForecastPage() {
               <table className="w-full text-xs sm:text-sm min-w-[780px]">
                 <thead>
                   <tr className="border-b text-muted-foreground [&>th]:py-2">
-                    <SortableTh<any> label={he ? 'קוד' : 'Code'} sortKey="item_code" align="end" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                    <SortableTh<any> label={he ? 'שם' : 'Name'} sortKey="item_name" align="end" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                    <SortableTh<any> label={he ? 'מלאי' : 'Stock'} sortKey="current_stock" align="center" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                    <SortableTh<any> label={he ? 'הוזמן/בדרך' : 'On Order'} sortKey="pipeline_qty" align="center" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                    <SortableTh<any> label={he ? 'ביקוש/חודש' : 'Demand/Mo'} sortKey="predicted_monthly_demand" align="center" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                    <SortableTh<any> label={he ? 'תאריך אזילה' : 'Stock-out Date'} sortKey="stock_out_date" align="center" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                    <SortableTh<any> label={he ? 'ימים' : 'Days'} sortKey="days_until_stockout" align="center" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                    <SortableTh<any> label={he ? 'ביטחון' : 'Conf.'} sortKey="confidence" align="center" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                    <SortableTh<any> label={he ? 'דחיפות' : 'Urgency'} sortKey="urgency" align="center" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                    <SortableTh<any> label={he ? 'קוד' : 'Code'} hint={hints.code} sortKey="item_code" align="end" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                    <SortableTh<any> label={he ? 'שם' : 'Name'} hint={hints.name} sortKey="item_name" align="end" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                    <SortableTh<any> label={he ? 'מלאי במחסן' : 'On Hand'} hint={hints.stock} sortKey="current_stock" align="center" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                    <SortableTh<any> label={he ? 'הוזמן/בדרך' : 'On Order'} hint={hints.pipeline} sortKey="pipeline_qty" align="center" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                    <SortableTh<any> label={he ? 'ביקוש חודשי' : 'Monthly Demand'} hint={hints.demand} sortKey="predicted_monthly_demand" align="center" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                    <SortableTh<any> label={he ? 'תאריך אזילה' : 'Stock-out Date'} hint={hints.date} sortKey="stock_out_date" align="center" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                    <SortableTh<any> label={he ? 'ימים עד אזילה' : 'Days Left'} hint={hints.days} sortKey="days_until_stockout" align="center" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                    <SortableTh<any> label={he ? 'אמינות תחזית' : 'Reliability'} hint={hints.confidence} sortKey="confidence" align="center" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                    <SortableTh<any> label={he ? 'דחיפות' : 'Urgency'} hint={hints.urgency} sortKey="urgency" align="center" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                   </tr>
                 </thead>
                 <tbody>

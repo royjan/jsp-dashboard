@@ -89,6 +89,8 @@ interface SortableThProps<T> {
   onSort: (key: keyof T) => void
   align?: 'start' | 'end' | 'center'
   className?: string
+  /** Plain-language explanation of the column, shown on hover. */
+  hint?: string
 }
 
 export function SortableTh<T>({
@@ -99,6 +101,7 @@ export function SortableTh<T>({
   onSort,
   align = 'start',
   className,
+  hint,
 }: SortableThProps<T>) {
   const isActive = activeKey === sortKey
   const Icon = isActive && sortDir === 'desc' ? ChevronDown : ChevronUp
@@ -108,7 +111,7 @@ export function SortableTh<T>({
   const textAlign = align === 'end' ? 'text-end' : align === 'center' ? 'text-center' : 'text-start'
 
   return (
-    <th className={cn('font-medium', textAlign, className)}>
+    <th className={cn('font-medium', textAlign, className)} title={hint}>
       <button
         type="button"
         onClick={() => onSort(sortKey)}
@@ -118,7 +121,7 @@ export function SortableTh<T>({
           isActive && 'text-foreground'
         )}
       >
-        <span>{label}</span>
+        <span className={cn(hint && 'decoration-dotted underline-offset-4 hover:underline')}>{label}</span>
         <Icon
           className={cn(
             'h-3.5 w-3.5 shrink-0 transition-opacity',
