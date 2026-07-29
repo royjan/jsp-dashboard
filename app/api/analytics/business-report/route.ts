@@ -283,11 +283,15 @@ export async function GET() {
       ORDER BY SUM(revenue) DESC
     `)
 
-    const totalABCRevenue = abcData.reduce((s: number, r: any) => s + r.total_revenue, 0)
+    // node-postgres returns NUMERIC as a string, so these must be coerced —
+    // otherwise `+` concatenates, every cumulative share stays <= 0.8 and the
+    // whole catalogue is classified as A with a nonsense revenue figure.
+    const abcRows = abcData.map((r: any) => ({ ...r, total_revenue: Number(r.total_revenue) || 0 }))
+    const totalABCRevenue = abcRows.reduce((s: number, r: any) => s + r.total_revenue, 0)
     let cumulative = 0
     let classACount = 0, classBCount = 0, classCCount = 0
     let classARevenue = 0, classBRevenue = 0, classCRevenue = 0
-    for (const item of abcData) {
+    for (const item of abcRows) {
       cumulative += item.total_revenue
       const pct = totalABCRevenue > 0 ? cumulative / totalABCRevenue : 0
       if (pct <= 0.8) { classACount++; classARevenue += item.total_revenue }
