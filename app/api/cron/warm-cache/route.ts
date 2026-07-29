@@ -324,6 +324,12 @@ async function runWarmCache(mode: string, from?: number, to?: number) {
       ['gapAnalysis', () =>
         fetch(`http://127.0.0.1:${process.env.PORT || '3000'}/api/analytics/gap?refresh=1`)
           .then(r => r.json())],
+      // Receivables pulls a live balance per customer (~3.5 min cold) and its
+      // 1h TTL expires between warm runs, so users were hitting the cold path.
+      // Warm it here; the route also serves stale-while-revalidate as a net.
+      ['receivables', () =>
+        fetch(`http://127.0.0.1:${process.env.PORT || '3000'}/api/analytics/receivables?refresh=1`)
+          .then(r => r.json())],
     ]
 
     for (const [label, fn] of warmSteps) {

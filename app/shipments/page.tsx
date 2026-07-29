@@ -104,9 +104,11 @@ export default function ShipmentsPage() {
             <div className="py-10 text-center text-sm text-muted-foreground">{t('אין משלוחים', 'No shipments')}</div>
           ) : (
             <>
-              <div className="overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0">
+              {/* Bounded height so this is the scroll container the sticky
+                  header can latch onto (see stock-forecast for the rationale). */}
+              <div className="overflow-auto max-h-[calc(100vh-20rem)] -mx-3 sm:mx-0 px-3 sm:px-0">
                 <table className="w-full text-xs sm:text-sm min-w-[680px]">
-                  <thead>
+                  <thead className="sticky top-0 z-20 bg-card">
                     <tr className="border-b text-muted-foreground">
                       <SortableTh<Shipment> label={t('תאריך', 'Date')} sortKey="shipmentDate" align="start" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                       <SortableTh<Shipment> label={t('ספק', 'Supplier')} sortKey="supplier" align="start" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />

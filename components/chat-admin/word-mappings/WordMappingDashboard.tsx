@@ -626,9 +626,13 @@ export default function WordMappingDashboard() {
         </div>
 
         {/* Mappings Table */}
-        <div dir="ltr" className="bg-card rounded-2xl border border-border overflow-hidden">
+        {/* overflow-hidden made this a scroll container that never scrolls, so
+            the sticky header below had nothing to latch onto. A bounded height
+            with overflow-auto scrolls the rows under a pinned header. */}
+        <div dir="ltr" className="bg-card rounded-2xl border border-border overflow-auto max-h-[calc(100vh-24rem)]">
           <Table className="divide-y divide-white/10">
-            <TableHeader className="sticky top-0 z-10 border-white/10 bg-white/[0.04]">
+            {/* Opaque background — a translucent header lets rows show through as they scroll under it. */}
+            <TableHeader className="sticky top-0 z-20 border-white/10 bg-card">
               <TableRow className="border-white/10 bg-transparent hover:bg-transparent hover:translate-y-0 hover:shadow-none">
                 <TableHead
                   className="text-xs font-semibold uppercase tracking-wide text-start cursor-pointer hover:bg-white/[0.04] select-none transition-colors"

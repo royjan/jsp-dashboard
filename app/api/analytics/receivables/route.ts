@@ -3,7 +3,7 @@ export const maxDuration = 60
 import { NextResponse } from 'next/server'
 import { initializeSecrets } from '@/lib/aws-secrets'
 import { query } from '@/lib/db'
-import { getCached, setCache } from '@/lib/redis-client'
+import { getCached, setCache, tryAcquireLock } from '@/lib/redis-client'
 import { fetchAllCustomers, fetchCustomerBalanceFallback, fetchCustomerAgingFallback } from '@/lib/finansit-client'
 
 /**
@@ -131,28 +131,52 @@ async function fromCustomerStats(limit: number) {
   return { customers, totals: sumTotals(customers), aging_basis: 'last_invoice_approx' as const }
 }
 
+async function computeAndCache(limit: number, cacheKey: string, staleKey: string) {
+  // Prefer live SDK; fall back to the synced table if it's empty/unavailable.
+  let payload: { customers: ReceivableCustomer[]; totals: any; aging_basis: string } | null = null
+  try {
+    payload = await fromLiveSdk(limit)
+  } catch (e) {
+    console.warn('[receivables] live SDK failed, falling back to customer_stats:', e instanceof Error ? e.message : e)
+  }
+  if (!payload || payload.customers.length === 0) {
+    payload = await fromCustomerStats(limit)
+  }
+  await setCache(cacheKey, payload, 60 * 60) // 1h — balances change as receipts post
+  await setCache(staleKey, payload, 7 * 24 * 60 * 60) // week-long safety net for the SWR path
+  return payload
+}
+
 export async function GET(request: Request) {
   try {
     await initializeSecrets()
     const { searchParams } = new URL(request.url)
     const limit = Math.min(Number(searchParams.get('limit')) || 50, 500)
+    const refresh = searchParams.get('refresh') === '1'
 
     const cacheKey = `analytics:receivables:v3:${limit}`
-    const cached = await getCached<any>(cacheKey)
-    if (cached) return NextResponse.json(cached)
+    const staleKey = `${cacheKey}:stale`
 
-    // Prefer live SDK; fall back to the synced table if it's empty/unavailable.
-    let payload: { customers: ReceivableCustomer[]; totals: any; aging_basis: string } | null = null
-    try {
-      payload = await fromLiveSdk(limit)
-    } catch (e) {
-      console.warn('[receivables] live SDK failed, falling back to customer_stats:', e instanceof Error ? e.message : e)
-    }
-    if (!payload || payload.customers.length === 0) {
-      payload = await fromCustomerStats(limit)
+    if (!refresh) {
+      const cached = await getCached<any>(cacheKey)
+      if (cached) return NextResponse.json(cached)
+
+      // Cold path costs ~3.5 minutes: it pulls a live balance for every
+      // customer. Never make a user wait for that — serve the last known
+      // payload immediately and recompute in the background. The lock stops
+      // concurrent viewers from each kicking off their own recompute.
+      const stale = await getCached<any>(staleKey)
+      if (stale) {
+        if (await tryAcquireLock(`${cacheKey}:lock`, 10 * 60)) {
+          void computeAndCache(limit, cacheKey, staleKey).catch((e) =>
+            console.error('[receivables] background refresh failed:', e),
+          )
+        }
+        return NextResponse.json({ ...stale, stale: true })
+      }
     }
 
-    await setCache(cacheKey, payload, 60 * 60) // 1h — balances change as receipts post
+    const payload = await computeAndCache(limit, cacheKey, staleKey)
     return NextResponse.json(payload)
   } catch (error) {
     console.error('[receivables] Error:', error)

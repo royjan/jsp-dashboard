@@ -76,7 +76,9 @@ export default function SearchAnalyticsTab() {
   return (
     <div className="space-y-6">
       {/* S0. Control strip */}
-      <div className="sticky top-0 z-10 -mx-6 flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-border-default)] bg-[var(--color-bg-elevated,#1b1b1f)]/70 px-6 py-3 backdrop-blur lg:-mx-8 lg:px-8">
+      {/* top-14 clears the app's sticky TopBar (h-14, z-30) — at top-0 this
+          strip pinned correctly but sat underneath it and looked broken. */}
+      <div className="sticky top-14 z-20 -mx-6 flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-border-default)] bg-[var(--color-bg-elevated,#1b1b1f)]/70 px-6 py-3 backdrop-blur lg:-mx-8 lg:px-8">
         <div className="flex items-center gap-2">
           <span className="text-sm text-[var(--color-text-tertiary,#8a8a90)]">Period:</span>
           {DAY_OPTIONS.map(d => (

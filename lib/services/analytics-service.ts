@@ -37,6 +37,21 @@ export async function getDashboardSummary(): Promise<DashboardSummary | null> {
 
 // ── Helper: map raw API item to FinansitItem ──
 
+/**
+ * True when a "name" is really a code/barcode rather than a description.
+ *
+ * A plain /^\d+$/ test is too strict: the ERP also returns things like
+ * "0829193289    #####" (item 1574JK) and "424983" — anything without a run of
+ * two or more Hebrew/Latin letters carries no meaning for a human reader, and
+ * is worth re-resolving from the per-item endpoint.
+ */
+export function looksLikeCodeNotName(name: string | null | undefined, code?: string): boolean {
+  const n = (name || '').trim()
+  if (!n) return true
+  if (code && n === code) return true
+  return !/[A-Za-z֐-׿]{2}/.test(n)
+}
+
 function mapRawItem(raw: any): FinansitItem | null {
   if (!raw || !raw.code) return null
   return {
@@ -169,9 +184,9 @@ function buildChainMap(items: FinansitItem[]): { items: FinansitItem[]; codeToCa
     }
 
     // If canonical has a numeric/code name, try to find a better name from any chain member
-    if (/^\d+$/.test(merged.name) || merged.name === merged.code) {
+    if (looksLikeCodeNotName(merged.name, merged.code)) {
       const betterName = chain.find(
-        i => i.code !== canonical.code && !/^\d+$/.test(i.name) && i.name !== i.code && i.name.length > 2
+        i => i.code !== canonical.code && !looksLikeCodeNotName(i.name, i.code) && i.name.length > 2
       )
       if (betterName) merged.name = betterName.name
     }
@@ -419,34 +434,50 @@ async function _getItemsImpl(cacheKey: string, staleCacheKey?: string): Promise<
     // cap keeps this to a bounded background cost.
     const MAX_NAME_RESOLVE = 500
     const numericNameItems = items
-      .filter(i => (/^\d+$/.test(i.name) && i.name !== i.code) || i.name === i.code)
+      .filter(i => looksLikeCodeNotName(i.name, i.code))
       .slice(0, MAX_NAME_RESOLVE)
     if (numericNameItems.length > 0) {
       console.log(`[Analytics] Resolving ${numericNameItems.length} items with numeric/alias names via item endpoint`)
       let resolved = 0
-      await Promise.allSettled(
-        numericNameItems.map(async (item) => {
-          // Primary: authoritative short name from the per-item endpoint.
+      // Firing all 500 at once resolved only ~6% of them: the burst swamps the
+      // REST transport and every failure is swallowed by the catch blocks
+      // below. A bounded pool with one retry lands the same lookups reliably
+      // (measured: they succeed when paced) and still finishes in seconds.
+      const NAME_RESOLVE_CONCURRENCY = 8
+      const queue = [...numericNameItems]
+      const resolveOne = async (item: typeof items[number]) => {
+        const upper = item.code.toUpperCase()
+        // Primary: authoritative short name from the per-item endpoint.
+        for (let attempt = 0; attempt < 2; attempt++) {
           try {
-            const full = await client.items.get(item.code)
+            const full = await client.items.get(upper)
             const name = full?.name
-            if (name && !/^\d+$/.test(name) && name !== item.code) {
+            if (name && !looksLikeCodeNotName(name, item.code)) {
               item.name = fixRtlItemName(name)
               resolved++
               return
             }
-          } catch {}
-          // Secondary: chain canonical_name (covers superseded/aliased codes).
-          try {
-            const history = await client.items.getHistory(item.code)
-            const canonical = history?.canonical_name
-            if (canonical && !/^\d+$/.test(canonical) && canonical !== item.code) {
-              item.name = fixRtlItemName(canonical)
-              resolved++
-            }
-          } catch {}
-        })
-      )
+            break // answered, just without a usable name — don't retry
+          } catch {
+            if (attempt === 0) await new Promise(r => setTimeout(r, 250))
+          }
+        }
+        // Secondary: chain canonical_name (covers superseded/aliased codes).
+        try {
+          const history = await client.items.getHistory(upper)
+          const canonical = history?.canonical_name
+          if (canonical && !looksLikeCodeNotName(canonical, item.code)) {
+            item.name = fixRtlItemName(canonical)
+            resolved++
+          }
+        } catch {}
+      }
+      const workers = Array.from({ length: NAME_RESOLVE_CONCURRENCY }, async () => {
+        for (let next = queue.shift(); next; next = queue.shift()) {
+          await resolveOne(next)
+        }
+      })
+      await Promise.allSettled(workers)
       console.log(`[Analytics] Name resolution: ${resolved}/${numericNameItems.length} items got a real name`)
     }
 

@@ -392,9 +392,12 @@ export default function StockForecastPage() {
               {he ? 'לא נמצאו פריטים' : 'No items found'}
             </div>
           ) : (
-            <div className="overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0">
+            <div className="overflow-auto max-h-[calc(100vh-22rem)] -mx-3 sm:mx-0 px-3 sm:px-0">
+              {/* Bounded height makes this the scroll container that `sticky` latches
+                  onto: a plain overflow-x-auto wrapper computes overflow-y:auto but
+                  never scrolls, so a sticky header inside it scrolls away with the page. */}
               <table className="w-full text-xs sm:text-sm min-w-[780px]">
-                <thead>
+                <thead className="sticky top-0 z-20 bg-card">
                   <tr className="border-b text-muted-foreground [&>th]:py-2">
                     <SortableTh<any> label={he ? 'קוד' : 'Code'} hint={hints.code} sortKey="item_code" align="end" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                     <SortableTh<any> label={he ? 'שם' : 'Name'} hint={hints.name} sortKey="item_name" align="end" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
