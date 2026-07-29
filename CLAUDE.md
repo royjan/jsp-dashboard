@@ -46,7 +46,7 @@ lib/
   db.ts                       # PostgreSQL (Neon) connection + Drizzle ORM instance
   db/
     schema.ts                 # Drizzle schema (4 tables in `dashboard` schema)
-  sqlite.ts                   # SQLite read-only historical queries
+  neon-read.ts                # Read helper for Neon + toPg() shim for legacy SQLite-style SQL
   services/
     analytics-service.ts      # Data aggregation & calculations
   i18n.ts                     # Hebrew/English translations
@@ -60,7 +60,7 @@ hooks/
   use-url-params.ts           # URL parameter management
 
 data/
-  dashboard-history.db        # SQLite local cache (~140MB, read-only)
+  dashboard-history.db        # LEGACY, unused — leftover SQLite mirror, gitignored, not in the image
 ```
 
 ## Tech Stack
@@ -72,7 +72,7 @@ data/
 | Charts | Recharts |
 | Data Fetching | TanStack React Query |
 | ERP API | @jan/finansit-sdk (centralized SDK) |
-| Database | PostgreSQL (Neon) via Drizzle ORM + SQLite (local historical cache) |
+| Database | PostgreSQL (Neon) via Drizzle ORM |
 | Cache | Upstash Redis (3h TTL, 48h for seasonal) |
 | AI | Google Gemini (reorder recommendations, insights) |
 | Deploy | Dokploy (builds from `main` via Dockerfile) |
@@ -105,14 +105,14 @@ Credentials from AWS Secrets Manager (`FINANSIT_API_CREDENTIALS`).
 - **Redis (3h TTL)**: Dashboard KPIs, item lists, document headers, analytics
 - **Redis (48h TTL)**: Seasonal data (changes infrequently)
 - **Redis (2h TTL)**: AI insights
-- **Cron** (`/api/cron/warm-cache`): Runs every 2h during business hours
-- **SQLite** (`data/dashboard-history.db`): Historical snapshots, read-only, 32MB memory cache
+- **Cron** (`/api/cron/warm-cache`): Runs every 2h during business hours. Keep a route's TTL >= the warm interval, or users hit the cold path between runs (that's what made `/receivables` look stuck at ~216s).
 
 ## Database
 
 - **PostgreSQL (Neon)**: Synced data via `/api/sync` — `dashboard.monthly_sales`, `dashboard.daily_sales`, `dashboard.item_snapshots`, `dashboard.documents`
 - **ORM**: Drizzle ORM (`drizzle-orm/node-postgres`). Schema at `lib/db/schema.ts`, config at `drizzle.config.ts`. Upserts use Drizzle query builder; complex analytics/cross-table queries use raw SQL via `query()`.
-- **SQLite**: Read-only local cache for cross-year historical comparisons. Auto-converts PostgreSQL syntax.
+- **SQLite is gone.** Reads go straight to Neon via `readQueryAsync` (`lib/neon-read.ts`), which runs a `toPg()` shim over legacy SQLite-flavoured SQL. **The shim is partial** — it rewrites `strftime('%Y'|'%m')`, `?` params and a fixed list of bare table names, and nothing else. Anything it misses (`strftime('%w')`, two-argument `MIN()`/`MAX()`, SQLite's lax `GROUP BY`, an unlisted table) throws at runtime, and routes that wrap queries in a `safeQuery`-style catch turn that into **zeros on screen instead of an error**. Prefer plain Postgres or Drizzle in new code; when touching an old query, convert it rather than extending the shim.
+- **Two snapshot tables exist**: `dashboard.item_snapshots` (2.6k rows, the synced one) and `dashboard.item_snapshot` (singular, **0 rows** — an empty SQLite-era leftover whose columns `qty`/`retail_price`/`ordered_qty` several old queries still reference). Neither is complete; `getItems()` (live FINAPI + Redis) is the authoritative item source.
 
 ```bash
 npm run db:push        # Push schema changes to DB

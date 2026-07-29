@@ -5,11 +5,20 @@ import { getItems } from '@/lib/services/analytics-service'
 
 export const dynamic = 'force-dynamic'
 
+// Failures here render as zeros rather than errors, so a broken query looks
+// exactly like "no data". Collect them and surface them in the response —
+// three queries were failing before anyone noticed the empty cards.
+// Reset per request below; this route is cached and effectively serial, so the
+// worst case for overlapping requests is a duplicated diagnostic string.
+let queryFailures: string[] = []
+
 async function safeQuery(sql: string, params?: any[]): Promise<any[]> {
   try {
     return (await readQueryAsync(sql, params)).rows
   } catch (e: any) {
-    console.warn('[business-report] Query failed:', e?.message?.substring(0, 100))
+    const msg = e?.message?.substring(0, 160) || 'unknown error'
+    console.error('[business-report] Query failed:', msg, '\n  SQL:', sql.trim().split('\n')[0])
+    queryFailures.push(msg)
     return []
   }
 }
@@ -21,6 +30,7 @@ async function safeQueryOne(sql: string, params?: any[]): Promise<any> {
 
 export async function GET() {
   try {
+    queryFailures = []
     await initializeSecrets() // FINAPI creds for getItems() (dead-stock source)
 
     // 1. Revenue by year
@@ -344,6 +354,8 @@ export async function GET() {
     const turnoverRatio = Math.round(latestYearRevenue / inventoryValue * 100) / 100
 
     return NextResponse.json({
+      // Non-empty when a query failed and its section is showing zeros.
+      query_failures: queryFailures.length ? queryFailures : undefined,
       revenue_by_year: revenueByYear,
       monthly_revenue: monthlyRevenue,
       credits_by_year: creditsByYear,

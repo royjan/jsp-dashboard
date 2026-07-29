@@ -1,8 +1,8 @@
 export const maxDuration = 60
 
 import { NextResponse } from 'next/server'
-import { readQueryAsync } from '@/lib/neon-read'
 import { client } from '@/lib/finansit-client'
+import { getItems } from '@/lib/services/analytics-service'
 
 /**
  * POST /api/analytics/dead-stock/export-to-ebay
@@ -33,25 +33,33 @@ async function resolveItemChain(code: string) {
   }
 }
 
-/** Query SQLite for all codes in a chain and aggregate sales/stock */
+/**
+ * Aggregate stock/sales across every code in a supersession chain.
+ *
+ * Reads the live enriched item cache. The old query hit a bare
+ * `item_snapshot` table: the shim only qualifies `item_snapshots` (plural),
+ * so it resolved to a non-existent public.item_snapshot and threw. Qualifying
+ * it wouldn't have helped either — dashboard.item_snapshot is an empty
+ * leftover from the SQLite mirror (0 rows), and the plural table is only a
+ * partial sync, so getItems() is the only complete source.
+ */
 async function aggregateChainData(chainCodes: string[]) {
-  const placeholders = chainCodes.map(() => '?').join(',')
-  const result = await readQueryAsync(`
-    SELECT
-      item_code,
-      item_name,
-      CAST(qty AS INT) as qty,
-      retail_price as price,
-      ROUND(qty * retail_price) as capital_tied,
-      CAST(sold_this_year AS INT) as sold_this_year,
-      CAST(sold_last_year AS INT) as sold_last_year,
-      CAST(sold_2y_ago AS INT) as sold_2y_ago,
-      CAST(sold_3y_ago AS INT) as sold_3y_ago
-    FROM item_snapshot
-    WHERE item_code IN (${placeholders})
-  `, chainCodes)
+  const wanted = new Set(chainCodes.map((c) => c.toUpperCase()))
+  const allItems = await getItems()
+  const rows = allItems
+    .filter((it: any) => wanted.has(String(it.code || '').toUpperCase()))
+    .map((it: any) => ({
+      item_code: it.code,
+      item_name: it.name,
+      qty: Math.round(Number(it.stock_qty) || 0),
+      price: Number(it.price) || 0,
+      capital_tied: Math.round((Number(it.stock_qty) || 0) * (Number(it.price) || 0)),
+      sold_this_year: Math.round(Number(it.sold_this_year) || 0),
+      sold_last_year: Math.round(Number(it.sold_last_year) || 0),
+      sold_2y_ago: Math.round(Number(it.sold_2y_ago) || 0),
+      sold_3y_ago: Math.round(Number(it.sold_3y_ago) || 0),
+    }))
 
-  const rows = result.rows as any[]
   if (rows.length === 0) return null
 
   // Aggregate across all chain codes
@@ -83,47 +91,58 @@ export async function POST(request: Request) {
     // Step 1: Get raw items from SQLite (same as before for initial filtering)
     let rawItems: any[]
 
-    if (item_codes && item_codes.length > 0) {
-      const placeholders = item_codes.map(() => '?').join(',')
-      const result = await readQueryAsync(`
-        SELECT item_code, item_name, CAST(qty AS INT) as qty, retail_price as price,
-          ROUND(qty * retail_price) as capital_tied,
-          CAST(sold_this_year AS INT) as sold_this_year,
-          CAST(sold_last_year AS INT) as sold_last_year,
-          CAST(sold_2y_ago AS INT) as sold_2y_ago,
-          CAST(sold_3y_ago AS INT) as sold_3y_ago
-        FROM item_snapshot
-        WHERE qty > 0 AND item_code IN (${placeholders})
-      `, item_codes)
-      rawItems = result.rows
-    } else {
-      const terms = query!.split(',').map((s: string) => s.trim()).filter(Boolean)
-      const whereClause = terms.map(() => `item_name LIKE ?`).join(' OR ')
-      const params = terms.map((t: string) => `%${t}%`)
+    // Same story as aggregateChainData: these read the live item cache rather
+    // than the empty `item_snapshot` table. The scrap score is computed here
+    // instead of in SQL — it used SQLite's two-argument MIN()/MAX(), which in
+    // Postgres are aggregates and would fail even with the table in place.
+    const allItems = await getItems()
+    const stocked = allItems.filter((it: any) => (Number(it.stock_qty) || 0) > 0)
+    const toRow = (it: any) => {
+      const qty = Math.round(Number(it.stock_qty) || 0)
+      const price = Number(it.price) || 0
+      const s1 = Math.round(Number(it.sold_this_year) || 0)
+      const s2 = Math.round(Number(it.sold_last_year) || 0)
+      const s3 = Math.round(Number(it.sold_2y_ago) || 0)
+      const s4 = Math.round(Number(it.sold_3y_ago) || 0)
+      const capital = qty * price
+      const staleBonus =
+        s1 === 0 && s2 === 0 && s3 === 0 && s4 === 0 ? 30 :
+        s1 === 0 && s2 === 0 && s3 === 0 ? 20 :
+        s1 === 0 && s2 === 0 ? 10 : 0
+      const score =
+        Math.min(Math.log10(Math.max(capital, 1)) * 11.5, 50)
+        + staleBonus
+        + Math.min(qty / 3, 10)
+        - Math.min((s1 + s2 + s3 + s4) * 3, 20)
+      return {
+        item_code: it.code,
+        item_name: it.name,
+        qty,
+        price,
+        capital_tied: Math.round(capital),
+        sold_this_year: s1,
+        sold_last_year: s2,
+        sold_2y_ago: s3,
+        sold_3y_ago: s4,
+        scrap_score: Math.round(score * 10) / 10,
+      }
+    }
 
-      const result = await readQueryAsync(`
-        SELECT item_code, item_name, CAST(qty AS INT) as qty, retail_price as price,
-          ROUND(qty * retail_price) as capital_tied,
-          CAST(sold_this_year AS INT) as sold_this_year,
-          CAST(sold_last_year AS INT) as sold_last_year,
-          CAST(sold_2y_ago AS INT) as sold_2y_ago,
-          CAST(sold_3y_ago AS INT) as sold_3y_ago,
-          ROUND(
-            MIN(LOG10(MAX(qty * retail_price, 1)) * 11.5, 50)
-            + CASE
-                WHEN sold_this_year = 0 AND sold_last_year = 0 AND sold_2y_ago = 0 AND sold_3y_ago = 0 THEN 30
-                WHEN sold_this_year = 0 AND sold_last_year = 0 AND sold_2y_ago = 0 THEN 20
-                WHEN sold_this_year = 0 AND sold_last_year = 0 THEN 10
-                ELSE 0
-              END
-            + MIN(qty / 3.0, 10)
-            - MIN((sold_this_year + sold_last_year + sold_2y_ago + sold_3y_ago) * 3, 20)
-          , 1) as scrap_score
-        FROM item_snapshot
-        WHERE qty > 0 AND (${whereClause})
-        ORDER BY scrap_score DESC
-      `, params)
-      rawItems = result.rows.filter((i: any) => (i.scrap_score || 0) >= min_score)
+    if (item_codes && item_codes.length > 0) {
+      const wanted = new Set(item_codes.map((c: string) => String(c).toUpperCase()))
+      rawItems = stocked
+        .filter((it: any) => wanted.has(String(it.code || '').toUpperCase()))
+        .map(toRow)
+    } else {
+      const terms = query!.split(',').map((s: string) => s.trim()).filter(Boolean).map((t: string) => t.toLowerCase())
+      rawItems = stocked
+        .filter((it: any) => {
+          const name = String(it.name || '').toLowerCase()
+          return terms.some((t: string) => name.includes(t))
+        })
+        .map(toRow)
+        .filter((i) => i.scrap_score >= min_score)
+        .sort((a, b) => b.scrap_score - a.scrap_score)
     }
 
     // Step 2: Resolve chains and aggregate sales across ALL codes in each chain
