@@ -73,8 +73,11 @@ export async function GET(request: Request) {
           const chainResult = (await readQueryAsync(`
             SELECT
               CAST(stock_qty AS INT) as qty,
-              price as price,
-              ROUND(stock_qty * price) as capital_tied,
+              -- ::float on both: NUMERIC comes back from node-postgres as a
+              -- string, and capital_tied feeds four `+` reduces below that
+              -- would concatenate rather than add.
+              price::float as price,
+              ROUND(stock_qty * price)::float as capital_tied,
               CAST(sold_this_year AS INT) as sold_this_year,
               CAST(sold_last_year AS INT) as sold_last_year,
               CAST(COALESCE(sold_2y_ago, 0) AS INT) as sold_2y_ago,

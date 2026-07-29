@@ -198,8 +198,13 @@ export async function GET() {
       if (!concentrationByYear[row.year]) {
         concentrationByYear[row.year] = { customers: [], totalRevenue: 0 }
       }
-      concentrationByYear[row.year].customers.push(row)
-      concentrationByYear[row.year].totalRevenue += row.total_revenue
+      // total_revenue is NUMERIC, which node-postgres hands back as a string.
+      // Coerce here, at the one place rows enter, or every `+` below concatenates
+      // instead of adding: totalRevenue became a 3000-char string and the top-N
+      // percentages divided by it to 0.
+      const revenue = Number(row.total_revenue) || 0
+      concentrationByYear[row.year].customers.push({ ...row, total_revenue: revenue })
+      concentrationByYear[row.year].totalRevenue += revenue
     }
 
     const concentration = Object.entries(concentrationByYear).map(([year, data]: [string, any]) => {
@@ -234,10 +239,13 @@ export async function GET() {
       const returning = yearCustomers.length - newCustomers
       return {
         year: yr.year,
-        total_customers: yr.total_customers,
+        // COUNT() is bigint and SUM() over NUMERIC is numeric — both arrive as
+        // strings. The report page sorts on these columns, and a string sort
+        // orders "1000" before "425".
+        total_customers: Number(yr.total_customers) || 0,
         new_customers: newCustomers,
         returning_customers: returning,
-        total_revenue: yr.total_revenue,
+        total_revenue: Number(yr.total_revenue) || 0,
         retention_pct: yr.year === customerRetention[0]?.year ? null :
           Math.round(returning / (customerRetention.find(r => r.year === yr.year - 1)?.total_customers || 1) * 1000) / 10,
       }
