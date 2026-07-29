@@ -481,11 +481,25 @@ async function _getItemsImpl(cacheKey: string, staleCacheKey?: string): Promise<
       console.log(`[Analytics] Name resolution: ${resolved}/${numericNameItems.length} items got a real name`)
     }
 
-    // Batch-fetch prices for items still at price=0 (catalog list doesn't include prices)
-    const zeroPriceCodes = items.filter(i => i.price === 0 && i.stock_qty > 0).map(i => i.code)
+    // Batch-fetch prices for items still at price=0 (catalog list doesn't include prices).
+    //
+    // `stock_qty > 0` used to gate this, which left every item with zero or
+    // NEGATIVE stock showing price 0 even though the ERP has a real price
+    // (e.g. 1683121580: stock -1, price 699.94). Those items still appear in
+    // analytics — the stock-out forecast includes anything with stock or sales
+    // this year — so match that population instead: any non-zero stock (over-
+    // sold items included) or recent sales.
+    const zeroPriceCodes = items
+      .filter(i =>
+        i.price === 0 &&
+        ((i.stock_qty || 0) !== 0 || (i.sold_this_year || 0) > 0 || (i.sold_last_year || 0) > 0),
+      )
+      .map(i => i.code)
     if (zeroPriceCodes.length > 0) {
       try {
-        const priceCacheKey = 'items:prices:v4'
+        // v5: the code set above widened, and the cached map is used wholesale —
+        // a stale v4 entry would keep the newly-eligible items at 0.
+        const priceCacheKey = 'items:prices:v5'
         let priceMap = await getCached<Record<string, number>>(priceCacheKey)
         if (!priceMap) {
           console.log(`[Analytics] Batch-fetching prices for ${zeroPriceCodes.length} items...`)
