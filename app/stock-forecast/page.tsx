@@ -139,6 +139,7 @@ export default function StockForecastPage() {
   const [expandedItem, setExpandedItem] = useState<string | null>(null)
 
   const [rowLimit, setRowLimit] = useState(200)
+  const [isExporting, setIsExporting] = useState(false)
   // Sort and search run on the server over the full result set — sorting only
   // the loaded rows would rank a slice, so e.g. the truly least-reliable items
   // would never surface. Debounce the search so typing doesn't spam the API.
@@ -189,9 +190,29 @@ export default function StockForecastPage() {
   // Exports exactly what's on screen (current urgency filter, search and sort),
   // plus the fields the table only shows in tooltips. Raw numbers, not
   // formatNumber() strings, so the columns stay summable in Excel.
-  const exportToExcel = useCallback(() => {
+  const exportToExcel = useCallback(async () => {
     if (!sortedItems.length) return
-    const rows = sortedItems.map((item: any, i: number) => ({
+    setIsExporting(true)
+    // Export the whole result set, not the page. The table is capped by the
+    // Rows selector, so exporting what's rendered would silently truncate the
+    // file; re-fetch with the same filter/search/sort and no meaningful cap.
+    let exportItems: any[] = sortedItems
+    try {
+      const params = new URLSearchParams({ limit: String(Math.max(summary?.total ?? 0, rowLimit)) })
+      if (urgencyFilter) params.set('urgency', urgencyFilter)
+      if (debouncedSearch) params.set('q', debouncedSearch)
+      if (sortKey) { params.set('sort', sortKey); params.set('dir', sortDir) }
+      const res = await fetch(`/api/analytics/stock-forecast?${params}`)
+      if (res.ok) {
+        const full = await res.json()
+        if (Array.isArray(full?.items) && full.items.length) exportItems = full.items
+      }
+    } catch {
+      // Fall back to the rows already on screen rather than failing the export.
+    }
+
+    try {
+    const rows = exportItems.map((item: any, i: number) => ({
       '#': i + 1,
       [he ? 'קוד' : 'Code']: item.item_code,
       [he ? 'שם' : 'Name']: item.item_name,
@@ -219,7 +240,10 @@ export default function StockForecastPage() {
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, he ? 'תחזית אזילה' : 'Stock Forecast')
     XLSX.writeFile(wb, `stock-forecast-${new Date().toISOString().split('T')[0]}.xlsx`)
-  }, [sortedItems, he, locale])
+    } finally {
+      setIsExporting(false)
+    }
+  }, [sortedItems, he, locale, summary, rowLimit, urgencyFilter, debouncedSearch, sortKey, sortDir])
 
   // Plain-language column explanations (shown on header hover).
   const hints = he
@@ -388,11 +412,16 @@ export default function StockForecastPage() {
               size="sm"
               className="text-xs h-8 gap-1.5"
               onClick={exportToExcel}
-              disabled={isLoading || sortedItems.length === 0}
-              title={he ? 'ייצוא הפריטים המוצגים לאקסל' : 'Export the displayed items to Excel'}
+              disabled={isLoading || isExporting || sortedItems.length === 0}
+              title={he
+                ? 'ייצוא כל הפריטים התואמים לסינון ולחיפוש — לא רק השורות המוצגות'
+                : 'Exports every item matching the filter and search — not just the rows on screen'}
             >
-              <Download className="h-3.5 w-3.5" />
+              {isExporting
+                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                : <Download className="h-3.5 w-3.5" />}
               {he ? 'ייצוא לאקסל' : 'Export Excel'}
+              {summary?.total ? <span className="text-muted-foreground">({summary.total})</span> : null}
             </Button>
           </div>
         </CardContent>
