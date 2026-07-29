@@ -38,15 +38,17 @@ export async function GET() {
     `)
 
     // 2. Monthly revenue
+    // EXTRACT/TO_CHAR rather than SQLite's strftime — these run against
+    // Postgres, where strftime doesn't exist and the query failed silently.
     const monthlyRevenue = await safeQuery(`
       SELECT
         year,
-        CAST(strftime('%m', doc_date) AS INTEGER) as month,
+        EXTRACT(MONTH FROM doc_date)::int as month,
         SUM(CASE WHEN format = '11' THEN total ELSE 0 END) as revenue,
         SUM(CASE WHEN format = '11' THEN 1 ELSE 0 END) as invoice_count
       FROM documents
       WHERE format = '11' AND year >= 2020
-      GROUP BY year, CAST(strftime('%m', doc_date) AS INTEGER)
+      GROUP BY year, EXTRACT(MONTH FROM doc_date)::int
       ORDER BY year, month
     `)
 
@@ -65,23 +67,24 @@ export async function GET() {
     `)
 
     // 4. Day of week analysis (Sun-Fri Israeli work week)
+    // EXTRACT(DOW) matches strftime('%w'): 0 = Sunday … 6 = Saturday.
     const sunToWed = await safeQuery(`
       SELECT
-        CASE CAST(strftime('%w', date) AS INTEGER)
+        CASE EXTRACT(DOW FROM date)::int
           WHEN 0 THEN 'Sunday'
           WHEN 1 THEN 'Monday'
           WHEN 2 THEN 'Tuesday'
           WHEN 3 THEN 'Wednesday'
         END as day_name,
-        CAST(strftime('%w', date) AS INTEGER) as day_num,
+        EXTRACT(DOW FROM date)::int as day_num,
         AVG(revenue) as avg_revenue,
         AVG(invoice_count) as avg_invoices,
         COUNT(*) as total_days
       FROM daily_sales
       WHERE revenue > 0
-        AND CAST(strftime('%w', date) AS INTEGER) BETWEEN 0 AND 3
-      GROUP BY CAST(strftime('%w', date) AS INTEGER)
-      ORDER BY CAST(strftime('%w', date) AS INTEGER)
+        AND EXTRACT(DOW FROM date)::int BETWEEN 0 AND 3
+      GROUP BY EXTRACT(DOW FROM date)::int
+      ORDER BY EXTRACT(DOW FROM date)::int
     `)
 
     const endOfWeek = await safeQueryOne(`
@@ -91,14 +94,14 @@ export async function GET() {
         COUNT(*) as num_weeks
       FROM (
         SELECT
-          strftime('%Y-%W', date) as yw,
+          TO_CHAR(date, 'IYYY-IW') as yw,
           SUM(revenue) as week_total,
           SUM(invoice_count) as week_invoices
         FROM daily_sales
-        WHERE CAST(strftime('%w', date) AS INTEGER) IN (4, 5, 6)
+        WHERE EXTRACT(DOW FROM date)::int IN (4, 5, 6)
           AND revenue > 0
-        GROUP BY strftime('%Y-%W', date)
-      )
+        GROUP BY TO_CHAR(date, 'IYYY-IW')
+      ) w
     `)
 
     const thuFriAvgPerDay = (endOfWeek?.avg_week_end_total || 0) / 2
@@ -230,32 +233,48 @@ export async function GET() {
       }
     })
 
-    // 10. Overstock analysis
-    const overstockItems = await safeQueryOne(`
-      SELECT
-        COUNT(*) as overstock_count,
-        SUM(qty * retail_price) as overstock_value
-      FROM item_snapshot
-      WHERE qty > 0
-        AND (sold_this_year + sold_last_year + sold_2y_ago) > 0
-        AND qty > (sold_this_year + sold_last_year + sold_2y_ago) * 3
-    `)
-
-    // 11. Items with open orders
-    const openOrders = await safeQueryOne(`
-      SELECT
-        COUNT(CASE WHEN ordered_qty > 0 THEN 1 END) as items_ordered,
-        SUM(CASE WHEN ordered_qty > 0 THEN ordered_qty ELSE 0 END) as total_ordered,
-        COUNT(CASE WHEN incoming_qty > 0 THEN 1 END) as items_incoming,
-        SUM(CASE WHEN incoming_qty > 0 THEN incoming_qty ELSE 0 END) as total_incoming
-      FROM item_snapshot
-    `)
+    // 10-11. Overstock and open orders.
+    //
+    // These used to query an `item_snapshot` table that doesn't exist here —
+    // the synced table is `dashboard.item_snapshots` and it carries neither
+    // ordered_qty/incoming_qty nor sold_2y_ago, so both cards reported zeros.
+    // The live enriched item cache (already loaded above for the dead-stock
+    // summary) has every field, so derive them from it.
+    let overstockItems = { overstock_count: 0, overstock_value: 0 }
+    let openOrders = { items_ordered: 0, total_ordered: 0, items_incoming: 0, total_incoming: 0 }
+    try {
+      const allItems = await getItems()
+      const sold3y = (it: any) =>
+        (it.sold_this_year || 0) + (it.sold_last_year || 0) + (it.sold_2y_ago || 0)
+      const overstocked = allItems.filter(
+        (it: any) => (it.stock_qty || 0) > 0 && sold3y(it) > 0 && (it.stock_qty || 0) > sold3y(it) * 3,
+      )
+      overstockItems = {
+        overstock_count: overstocked.length,
+        overstock_value: overstocked.reduce((s: number, it: any) => s + (it.stock_qty || 0) * (it.price || 0), 0),
+      }
+      openOrders = allItems.reduce(
+        (acc: any, it: any) => {
+          const ordered = Number(it.ordered_qty) || 0
+          const incoming = Number(it.incoming_qty) || 0
+          if (ordered > 0) { acc.items_ordered++; acc.total_ordered += ordered }
+          if (incoming > 0) { acc.items_incoming++; acc.total_incoming += incoming }
+          return acc
+        },
+        { items_ordered: 0, total_ordered: 0, items_incoming: 0, total_incoming: 0 },
+      )
+    } catch (e: any) {
+      console.warn('[business-report] overstock/open-orders from items cache failed:', e?.message)
+    }
 
     // 12. ABC summary from monthly sales
+    // MAX(item_name) rather than selecting it bare: Postgres rejects a column
+    // that is neither grouped nor aggregated (SQLite allowed it), which made
+    // this query fail silently and report zero items in every ABC class.
     const abcData = await safeQuery(`
       SELECT
         item_code,
-        item_name,
+        MAX(item_name) as item_name,
         SUM(revenue) as total_revenue
       FROM monthly_sales
       WHERE year >= 2024
@@ -284,14 +303,14 @@ export async function GET() {
         AVG(invoice_count) as avg_invoices
       FROM (
         SELECT
-          CAST(strftime('%m', date) AS INTEGER) as month,
-          strftime('%Y', date) as year,
+          EXTRACT(MONTH FROM date)::int as month,
+          EXTRACT(YEAR FROM date)::int as year,
           SUM(revenue) as revenue,
           SUM(invoice_count) as invoice_count
         FROM daily_sales
         WHERE date >= '2020-01-01' AND date < '2026-01-01'
-        GROUP BY strftime('%Y', date), CAST(strftime('%m', date) AS INTEGER)
-      )
+        GROUP BY EXTRACT(YEAR FROM date)::int, EXTRACT(MONTH FROM date)::int
+      ) m
       GROUP BY month
       ORDER BY month
     `)
@@ -309,9 +328,10 @@ export async function GET() {
       WHERE year >= 2024 AND revenue > 0
     `)
 
-    const totalItemsWithStock = await safeQueryOne(`
-      SELECT COUNT(*) as count FROM item_snapshot WHERE qty > 0
-    `)
+    // Same missing `item_snapshot` table as above — the dead-stock summary
+    // already counted stocked items from the live cache, so reuse that rather
+    // than reporting 0 next to a 45M inventory value.
+    const totalItemsWithStock = { count: deadStockSummary?.total_items_with_stock || 0 }
 
     const latestYearRevenue = revenueByYear.length > 0
       ? revenueByYear.reduce((a: any, b: any) => (b.year > a.year ? b : a)).revenue
