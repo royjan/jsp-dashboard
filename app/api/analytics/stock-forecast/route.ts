@@ -53,7 +53,8 @@ export async function GET(request: Request) {
     const sortKey = searchParams.get('sort') || ''
     const sortDir = searchParams.get('dir') === 'desc' ? 'desc' : 'asc'
 
-    const cacheKey = `stock-forecast:list:v3:${limit}:${urgencyFilter}:${search}:${sortKey}:${sortDir}`
+    // v4: zero-price rows were cached before the price backfill was widened.
+    const cacheKey = `stock-forecast:list:v4:${limit}:${urgencyFilter}:${search}:${sortKey}:${sortDir}`
     const cached = await getCached<any>(cacheKey)
     if (cached) return NextResponse.json(cached)
 
