@@ -10,6 +10,28 @@ import { client } from '@/lib/finansit-client'
 
 type UrgencyLevel = 'critical' | 'warning' | 'watch' | 'ok'
 
+/**
+ * Column comparator for server-side sorting: nulls/blanks last, numbers
+ * numerically, text with Hebrew-aware collation. Deliberately mirrors
+ * `compareValues` in components/shared/sortable-table.tsx (including the way
+ * the caller's direction flip also flips the null placement) so moving the
+ * sort to the server doesn't change the order users are used to.
+ */
+function compareValues(a: unknown, b: unknown): number {
+  const aNil = a === null || a === undefined || a === ''
+  const bNil = b === null || b === undefined || b === ''
+  if (aNil && bNil) return 0
+  if (aNil) return 1
+  if (bNil) return -1
+  if (typeof a === 'number' && typeof b === 'number') return a - b
+  const sa = String(a)
+  const sb = String(b)
+  const na = Number(sa)
+  const nb = Number(sb)
+  if (sa.trim() !== '' && sb.trim() !== '' && !Number.isNaN(na) && !Number.isNaN(nb)) return na - nb
+  return sa.localeCompare(sb, 'he')
+}
+
 function getUrgency(days: number | null): UrgencyLevel {
   if (days === null) return 'ok' // infinite stock (no demand)
   if (days < 30) return 'critical'
@@ -23,8 +45,15 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const limit = parseInt(searchParams.get('limit') || '50', 10)
     const urgencyFilter = searchParams.get('urgency') || ''
+    // Search and sort are applied here, over the whole result set, rather than
+    // in the browser over the rows that happen to be loaded — otherwise
+    // "sort by reliability" only ranks the current page and the genuinely
+    // worst items never appear.
+    const search = (searchParams.get('q') || '').trim().toLowerCase()
+    const sortKey = searchParams.get('sort') || ''
+    const sortDir = searchParams.get('dir') === 'desc' ? 'desc' : 'asc'
 
-    const cacheKey = `stock-forecast:list:v2:${limit}:${urgencyFilter}`
+    const cacheKey = `stock-forecast:list:v3:${limit}:${urgencyFilter}:${search}:${sortKey}:${sortDir}`
     const cached = await getCached<any>(cacheKey)
     if (cached) return NextResponse.json(cached)
 
@@ -158,9 +187,28 @@ export async function GET(request: Request) {
         const filters = urgencyFilter.split(',')
         return filters.includes(item.urgency)
       })
-      // Sort: critical first, then by days_until_stockout ascending
-      .sort((a, b) => {
+      // Free-text search on code/name, before sorting and paging.
+      .filter(item => {
+        if (!search) return true
+        return (
+          (item.item_code || '').toLowerCase().includes(search) ||
+          (item.item_name || '').toLowerCase().includes(search)
+        )
+      })
+      .sort((a: any, b: any) => {
         const urgencyOrder: Record<string, number> = { critical: 0, warning: 1, watch: 2, ok: 3 }
+        // Explicit column sort when the user picked one …
+        if (sortKey) {
+          const va = a[sortKey]
+          const vb = b[sortKey]
+          // Urgency sorts by severity, not alphabetically.
+          const cmp =
+            sortKey === 'urgency'
+              ? (urgencyOrder[va] ?? 3) - (urgencyOrder[vb] ?? 3)
+              : compareValues(va, vb)
+          if (cmp !== 0) return sortDir === 'asc' ? cmp : -cmp
+        }
+        // … otherwise (and as the tie-break) the default triage order.
         const diff = (urgencyOrder[a.urgency] || 3) - (urgencyOrder[b.urgency] || 3)
         if (diff !== 0) return diff
         return (a.days_with_pipeline ?? 9999) - (b.days_with_pipeline ?? 9999)

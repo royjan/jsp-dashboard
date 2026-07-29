@@ -457,16 +457,30 @@ export function useItemDetail(code: string | null) {
   })
 }
 
-export function useStockForecast(urgency?: string, limit = 50) {
+/**
+ * Search and sort are sent to the server so they apply to the whole result
+ * set, not just the `limit` rows already in the browser. `placeholderData`
+ * keeps the previous page visible while a re-sort is in flight instead of
+ * flashing the loading skeleton.
+ */
+export function useStockForecast(
+  urgency?: string,
+  limit = 50,
+  opts?: { q?: string; sort?: string; dir?: 'asc' | 'desc' },
+) {
+  const { q = '', sort = '', dir = 'asc' } = opts || {}
   return useQuery({
-    queryKey: ['stock-forecast', urgency, limit],
+    queryKey: ['stock-forecast', urgency, limit, q, sort, dir],
     queryFn: async () => {
       const params = new URLSearchParams({ limit: String(limit) })
       if (urgency) params.set('urgency', urgency)
+      if (q) params.set('q', q)
+      if (sort) { params.set('sort', sort); params.set('dir', dir) }
       const res = await fetch(`/api/analytics/stock-forecast?${params}`)
       if (!res.ok) throw new Error('Failed')
       return res.json()
     },
+    placeholderData: (prev) => prev,
     staleTime: 30 * 60 * 1000,
     gcTime: 60 * 60 * 1000,
     retry: 2,

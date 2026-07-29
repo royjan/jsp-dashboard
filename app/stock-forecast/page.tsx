@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import * as XLSX from 'xlsx'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useStockForecast, useItemStockForecast } from '@/hooks/use-analytics'
@@ -11,10 +11,10 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { AnimatedCounter } from '@/components/shared/AnimatedCounter'
 import { cn } from '@/lib/utils'
-import { AlertTriangle, Clock, ShieldAlert, Eye, TrendingDown, ArrowLeft, Search, Filter, Truck, X, Download } from 'lucide-react'
+import { AlertTriangle, Clock, ShieldAlert, Eye, TrendingDown, ArrowLeft, Search, Filter, Truck, X, Download, Loader2 } from 'lucide-react'
 import { EbayRecommendButton } from '@/components/shared/EbayRecommendButton'
 import { ItemLink } from '@/components/shared/ItemLink'
-import { useSortable, SortableTh } from '@/components/shared/sortable-table'
+import { SortableTh } from '@/components/shared/sortable-table'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Area, AreaChart } from 'recharts'
 import { ILS_FORMAT, formatNumber } from '@/lib/constants'
 
@@ -139,7 +139,29 @@ export default function StockForecastPage() {
   const [expandedItem, setExpandedItem] = useState<string | null>(null)
 
   const [rowLimit, setRowLimit] = useState(200)
-  const { data, isLoading, error } = useStockForecast(urgencyFilter, rowLimit)
+  // Sort and search run on the server over the full result set — sorting only
+  // the loaded rows would rank a slice, so e.g. the truly least-reliable items
+  // would never surface. Debounce the search so typing doesn't spam the API.
+  const [sortKey, setSortKey] = useState<string>('')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedSearch(searchQuery.trim()), 300)
+    return () => clearTimeout(id)
+  }, [searchQuery])
+
+  // SortableTh is generic over the row type, so its key is string|number|symbol.
+  const toggleSort = (key: string | number | symbol) => {
+    const k = String(key)
+    if (k === sortKey) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+    else { setSortKey(k); setSortDir('asc') }
+  }
+
+  const { data, isLoading, error, isFetching } = useStockForecast(urgencyFilter, rowLimit, {
+    q: debouncedSearch,
+    sort: sortKey,
+    dir: sortDir,
+  })
 
   const items: any[] = data?.items || []
   // Counts come from the API over the full result set; the rows below are
@@ -148,19 +170,10 @@ export default function StockForecastPage() {
     | { critical: number; warning: number; watch: number; total: number; value_at_risk: number }
     | undefined
 
-  // Filter by search
-  const filteredItems = useMemo(() => {
-    if (!searchQuery) return items
-    const q = searchQuery.toLowerCase()
-    return items.filter(
-      (i: any) =>
-        (i.item_code || '').toLowerCase().includes(q) ||
-        (i.item_name || '').toLowerCase().includes(q)
-    )
-  }, [items, searchQuery])
-
-  // Click-to-sort over the filtered rows
-  const { sorted: sortedItems, sortKey, sortDir, toggleSort } = useSortable<any>(filteredItems)
+  // The server already filtered, sorted and paged these — render as received.
+  // (Re-sorting here would silently re-rank just the loaded slice.)
+  const filteredItems = items
+  const sortedItems = items
 
   // KPI calculations — prefer the API's whole-set totals, fall back to the
   // loaded rows for older cached payloads that predate `summary`.
@@ -407,6 +420,11 @@ export default function StockForecastPage() {
                 {summary && summary.total > items.length && (
                   <> {he ? `מתוך ${summary.total} — הגדל "שורות" כדי לראות עוד` : `of ${summary.total} — raise "Rows" to see more`}</>
                 )})
+                {/* Sorting/searching round-trips to the server now, so show
+                    that something is happening while the old rows are still up. */}
+                {isFetching && (
+                  <Loader2 className="inline h-3 w-3 animate-spin ms-2 align-middle" />
+                )}
               </span>
             )}
           </CardTitle>
