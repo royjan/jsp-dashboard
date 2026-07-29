@@ -62,7 +62,7 @@ export async function GET(request: Request) {
     const now = new Date()
     const currentMonth = now.getMonth() + 1 // 1-12
 
-    const items = allItems
+    const forecastRows = allItems
       .filter(item => (item.stock_qty || 0) > 0 || (item.sold_this_year || 0) > 0)
       .map(item => {
         const stock = item.stock_qty || 0
@@ -165,7 +165,23 @@ export async function GET(request: Request) {
         if (diff !== 0) return diff
         return (a.days_with_pipeline ?? 9999) - (b.days_with_pipeline ?? 9999)
       })
-      .slice(0, limit)
+
+    // Totals over the WHOLE filtered set, before the row cap. The page's KPI
+    // cards used to count the returned rows, so a 200-row page reported at most
+    // 200 critical items no matter how many actually exist.
+    const summary = forecastRows.reduce(
+      (acc, i) => {
+        acc[i.urgency] = (acc[i.urgency] || 0) + 1
+        acc.total++
+        if (i.urgency === 'critical' || i.urgency === 'warning') {
+          acc.value_at_risk += (i.current_stock || 0) * (i.price || 0)
+        }
+        return acc
+      },
+      { critical: 0, warning: 0, watch: 0, ok: 0, total: 0, value_at_risk: 0 } as Record<string, number>,
+    )
+
+    const items = forecastRows.slice(0, limit)
 
     // Last-mile name repair. The shared items cache resolves code-looking names
     // too, but only for the first N candidates catalogue-wide, so rows further
@@ -191,7 +207,7 @@ export async function GET(request: Request) {
       await Promise.allSettled(Array.from({ length: 6 }, worker))
     }
 
-    const result = { items }
+    const result = { items, summary }
     await setCache(cacheKey, result, CACHE_TTL.ANALYTICS)
     return NextResponse.json(result)
   } catch (error) {

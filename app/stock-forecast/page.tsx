@@ -138,9 +138,15 @@ export default function StockForecastPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [expandedItem, setExpandedItem] = useState<string | null>(null)
 
-  const { data, isLoading, error } = useStockForecast(urgencyFilter, 200)
+  const [rowLimit, setRowLimit] = useState(200)
+  const { data, isLoading, error } = useStockForecast(urgencyFilter, rowLimit)
 
   const items: any[] = data?.items || []
+  // Counts come from the API over the full result set; the rows below are
+  // capped at rowLimit, so counting them here would under-report.
+  const summary = data?.summary as
+    | { critical: number; warning: number; watch: number; total: number; value_at_risk: number }
+    | undefined
 
   // Filter by search
   const filteredItems = useMemo(() => {
@@ -156,11 +162,12 @@ export default function StockForecastPage() {
   // Click-to-sort over the filtered rows
   const { sorted: sortedItems, sortKey, sortDir, toggleSort } = useSortable<any>(filteredItems)
 
-  // KPI calculations
-  const criticalCount = items.filter((i: any) => i.urgency === 'critical').length
-  const warningCount = items.filter((i: any) => i.urgency === 'warning').length
-  const watchCount = items.filter((i: any) => i.urgency === 'watch').length
-  const totalValueAtRisk = items
+  // KPI calculations — prefer the API's whole-set totals, fall back to the
+  // loaded rows for older cached payloads that predate `summary`.
+  const criticalCount = summary?.critical ?? items.filter((i: any) => i.urgency === 'critical').length
+  const warningCount = summary?.warning ?? items.filter((i: any) => i.urgency === 'warning').length
+  const watchCount = summary?.watch ?? items.filter((i: any) => i.urgency === 'watch').length
+  const totalValueAtRisk = summary?.value_at_risk ?? items
     .filter((i: any) => i.urgency === 'critical' || i.urgency === 'warning')
     .reduce((sum: number, i: any) => sum + (i.current_stock || 0) * (i.price || 0), 0)
 
@@ -348,6 +355,21 @@ export default function StockForecastPage() {
                 )}
               </div>
             </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-muted-foreground">{he ? 'שורות:' : 'Rows:'}</span>
+              <select
+                value={rowLimit}
+                onChange={(e) => setRowLimit(Number(e.target.value))}
+                className="h-8 rounded-md border border-input bg-background text-xs px-2 focus:outline-none focus:ring-1 focus:ring-ring"
+                title={he
+                  ? 'כמה פריטים לטעון. הכרטיסים למעלה תמיד סופרים את כל הפריטים'
+                  : 'How many items to load. The cards above always count everything'}
+              >
+                {[200, 500, 1000, 2000].map((n) => (
+                  <option key={n} value={n}>{n}</option>
+                ))}
+              </select>
+            </div>
             <Button
               variant="outline"
               size="sm"
@@ -377,7 +399,16 @@ export default function StockForecastPage() {
         <CardHeader className="pb-3">
           <CardTitle className="text-base">
             {he ? 'פריטים לפי סיכון אזילה' : 'Items by Stock-out Risk'}
-            {!isLoading && <span className="text-sm font-normal text-muted-foreground ms-2">({filteredItems.length} {he ? 'פריטים' : 'items'})</span>}
+            {!isLoading && (
+              <span className="text-sm font-normal text-muted-foreground ms-2">
+                ({filteredItems.length} {he ? 'פריטים' : 'items'}
+                {/* Say so when the row cap is hiding results, rather than
+                    letting the list look complete. */}
+                {summary && summary.total > items.length && (
+                  <> {he ? `מתוך ${summary.total} — הגדל "שורות" כדי לראות עוד` : `of ${summary.total} — raise "Rows" to see more`}</>
+                )})
+              </span>
+            )}
           </CardTitle>
         </CardHeader>
         <CardContent>
