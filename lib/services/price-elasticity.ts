@@ -9,9 +9,16 @@
  * Items where demand is stable across tiers = candidates for price increases.
  * Items where demand drops sharply in higher tiers = price-sensitive, handle with care.
  *
- * Read-only — queries dashboard.monthly_sales only. No Finansit calls.
+ * The tier signal alone is backwards-looking, so each recommendation is
+ * re-anchored to the price customers paid in the most recent months: a "raise"
+ * whose recent net price already sits at the proven ceiling (or a "lower"
+ * already back at the low tier) becomes 'done'. Rows for the top N are also
+ * enriched with the current retail list price and cost from FINAPI — list
+ * prices run ~1.8x the net invoiced price on these items, so the two must be
+ * shown side by side or a repriced list looks like an ignored recommendation.
  */
 import { query } from '@/lib/db'
+import { fetchBatchPrices, fetchBatchCost } from '@/lib/finansit-client'
 
 export interface PricePoint {
   year: number
@@ -41,7 +48,22 @@ export interface ElasticityRow {
   tiers: ElasticityTier[]
   /** -1 to 1: +1 demand rises with price (inelastic), -1 demand drops (elastic), 0 flat */
   elasticity_signal: number
-  recommendation: 'raise' | 'hold' | 'lower' | 'investigate'
+  /** 'done' = the tier signal said raise/lower but recent invoices already sit at the proven price */
+  recommendation: 'raise' | 'hold' | 'lower' | 'investigate' | 'done'
+  /** Current retail list price (FINAPI price code 01); null when the lookup fails */
+  list_price: number | null
+  /** Current per-unit cost (FINAPI price code 06); null when the lookup fails */
+  cost_price: number | null
+  /** Unit price on the most recent month with sales */
+  last_sold_price: number
+  last_sold_year: number
+  last_sold_month: number
+  /** Qty-weighted unit price over the last 3 months with sales — the "what customers pay now" anchor */
+  recent_net_price: number
+  /** Gross margin % of recent_net_price over cost; null without a cost price */
+  margin_pct: number | null
+  /** For 'raise': % gap between recent_net_price and the proven high-tier price */
+  headroom_pct: number
 }
 
 export interface ElasticityReport {
@@ -185,6 +207,28 @@ export async function getPriceElasticity(
     ]
     const { s, rec } = signal(tiers)
 
+    // Anchor to what customers actually pay now (points arrive ordered by year, month)
+    const last = points[points.length - 1]
+    const recentPts = points.slice(-3)
+    const recentQty = recentPts.reduce((sum, p) => sum + p.qty, 0)
+    const recent_net_price =
+      recentQty > 0
+        ? recentPts.reduce((sum, p) => sum + p.revenue, 0) / recentQty
+        : last.unit_price
+
+    const hiMin = highRange[0]
+    const hiMax = highRange[1]
+    const loMax = lowRange[1]
+    let anchored: ElasticityRow['recommendation'] = rec
+    let headroom_pct = 0
+    if (rec === 'raise') {
+      if (recent_net_price >= hiMax * 0.97) anchored = 'done'
+      else headroom_pct = (hiMax / recent_net_price - 1) * 100
+    } else if (rec === 'lower') {
+      // Back below the midpoint between the low and high tiers = already corrected
+      if (recent_net_price < loMax + (hiMin - loMax) / 2) anchored = 'done'
+    }
+
     rows.push({
       item_code: code,
       item_name: name,
@@ -197,13 +241,36 @@ export async function getPriceElasticity(
       price_variance_pct,
       tiers,
       elasticity_signal: s,
-      recommendation: rec,
+      recommendation: anchored,
+      list_price: null,
+      cost_price: null,
+      last_sold_price: last.unit_price,
+      last_sold_year: last.year,
+      last_sold_month: last.month,
+      recent_net_price,
+      margin_pct: null,
+      headroom_pct,
     })
   }
 
   // Sort by total revenue desc, take top N
   rows.sort((a, b) => b.total_revenue - a.total_revenue)
   const top = rows.slice(0, topN)
+
+  // Enrich the visible rows with current list price + cost (2 batch calls)
+  const codes = top.map(r => r.item_code)
+  const [listPrices, costPrices] = await Promise.all([
+    fetchBatchPrices(codes),
+    fetchBatchCost(codes),
+  ])
+  for (const r of top) {
+    const key = r.item_code.toUpperCase()
+    r.list_price = listPrices[key] ?? null
+    r.cost_price = costPrices[key] ?? null
+    if (r.cost_price && r.recent_net_price > 0) {
+      r.margin_pct = (1 - r.cost_price / r.recent_net_price) * 100
+    }
+  }
 
   // Year range from points
   let fromYear = Infinity

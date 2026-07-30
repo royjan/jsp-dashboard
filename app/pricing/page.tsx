@@ -37,7 +37,15 @@ interface ElasticityRow {
   price_variance_pct: number
   tiers: ElasticityTier[]
   elasticity_signal: number
-  recommendation: 'raise' | 'hold' | 'lower' | 'investigate'
+  recommendation: 'raise' | 'hold' | 'lower' | 'investigate' | 'done'
+  list_price: number | null
+  cost_price: number | null
+  last_sold_price: number
+  last_sold_year: number
+  last_sold_month: number
+  recent_net_price: number
+  margin_pct: number | null
+  headroom_pct: number
 }
 
 interface ElasticityReport {
@@ -92,6 +100,7 @@ export default function PricingPage() {
     hold: { label: t('hold'), className: 'bg-muted text-muted-foreground border-border' },
     lower: { label: t('lowerPrice'), className: 'bg-red-500/15 text-red-500 border-red-500/30' },
     investigate: { label: t('investigate'), className: 'bg-amber-500/15 text-amber-500 border-amber-500/30' },
+    done: { label: t('alreadyPriced'), className: 'bg-sky-500/15 text-sky-500 border-sky-500/30' },
   }
 
   useEffect(() => {
@@ -271,7 +280,7 @@ export default function PricingPage() {
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto max-h-[700px] overflow-y-auto">
-            <table className="w-full text-sm min-w-[900px]">
+            <table className="w-full text-sm min-w-[1200px]">
               <thead className="sticky top-0 bg-background z-10">
                 <tr className="border-b">
                   <Header field="name" className="text-start">
@@ -280,6 +289,10 @@ export default function PricingPage() {
                   <Header field="revenue" className="text-end">
                     {t('revenue')}
                   </Header>
+                  <th className="text-end pb-2 font-medium whitespace-nowrap">{t('listPriceCol')}</th>
+                  <th className="text-end pb-2 font-medium whitespace-nowrap">{t('costCol')}</th>
+                  <th className="text-end pb-2 font-medium whitespace-nowrap">{t('lastSoldCol')}</th>
+                  <th className="text-end pb-2 font-medium whitespace-nowrap">{t('marginCol')}</th>
                   <Header field="variance" className="text-end">
                     {t('priceRange')}
                   </Header>
@@ -309,6 +322,23 @@ export default function PricingPage() {
                       <td className="py-2 text-end font-mono tabular-nums">
                         {ILS_FORMAT.format(row.total_revenue)}
                       </td>
+                      <td className="py-2 text-end font-mono tabular-nums">
+                        {row.list_price != null ? ILS_FORMAT.format(row.list_price) : '—'}
+                      </td>
+                      <td className="py-2 text-end font-mono tabular-nums text-muted-foreground">
+                        {row.cost_price != null ? ILS_FORMAT.format(row.cost_price) : '—'}
+                      </td>
+                      <td className="py-2 text-end">
+                        <div className="font-mono tabular-nums">
+                          {ILS_FORMAT.format(row.last_sold_price)}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground" dir="ltr">
+                          {String(row.last_sold_month).padStart(2, '0')}/{String(row.last_sold_year).slice(2)}
+                        </div>
+                      </td>
+                      <td className="py-2 text-end font-mono tabular-nums text-xs">
+                        {row.margin_pct != null ? `${row.margin_pct.toFixed(0)}%` : '—'}
+                      </td>
                       <td className="py-2 text-end text-xs text-muted-foreground">
                         ±{row.price_variance_pct.toFixed(0)}%
                       </td>
@@ -329,6 +359,12 @@ export default function PricingPage() {
                         >
                           {rec.label}
                         </Badge>
+                        {row.recommendation === 'raise' && row.headroom_pct >= 1 && (
+                          <div className="text-[10px] text-emerald-500 mt-0.5" dir="ltr">
+                            +{row.headroom_pct.toFixed(0)}% {t('headroomTo')} ₪
+                            {formatNumber(row.tiers.find(x => x.label === 'high')?.price_range[1] ?? 0)}
+                          </div>
+                        )}
                       </td>
                     </tr>
                   )
