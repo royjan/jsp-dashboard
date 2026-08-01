@@ -40,6 +40,173 @@ function getUrgency(days: number | null): UrgencyLevel {
   return 'ok'
 }
 
+// The FULL computed forecast (every candidate item, unfiltered and unsorted)
+// is cached under ONE key; limit/urgency/search/sort are applied per request
+// in memory (~10k rows, milliseconds). Caching per param-combo — the previous
+// design — meant each combo paid the full recompute and only the single
+// warmed combo was ever fast.
+const FULL_CACHE_KEY = 'stock-forecast:full:v1'
+
+type ForecastRow = {
+  item_code: string
+  alias_codes: string[]
+  item_name: string
+  current_stock: number
+  incoming_qty: number
+  ordered_qty: number
+  pipeline_qty: number
+  price: number
+  predicted_monthly_demand: number
+  stock_out_date: string | null
+  days_until_stockout: number | null
+  days_with_pipeline: number | null
+  confidence: number
+  urgency: UrgencyLevel
+  stock_urgency: UrgencyLevel
+}
+
+async function computeForecastRows(): Promise<ForecastRow[]> {
+  // Get live item data (stock, price, sold_this_year, sold_last_year, etc.)
+  // getItems() already returns chain-merged items (old codes aggregated into canonical)
+  const [allItems, chainMap] = await Promise.all([getItems(), getChainMap()])
+
+  // Get monthly sales history from PG (if available)
+  // Map old item codes → canonical code so chain data aggregates properly
+  const monthlyDemand = new Map<string, { totalQty: number; months: number }>()
+  try {
+    const pgResult = await dbQuery(
+      `SELECT item_code, SUM(quantity) as total_qty, COUNT(DISTINCT (year * 100 + month)) as month_count
+       FROM dashboard.monthly_sales
+       WHERE quantity > 0
+       GROUP BY item_code`
+    )
+    for (const row of pgResult.rows) {
+      const canonical = chainMap.get(row.item_code) || row.item_code
+      const existing = monthlyDemand.get(canonical)
+      if (existing) {
+        existing.totalQty += parseFloat(row.total_qty) || 0
+        existing.months = Math.max(existing.months, parseInt(row.month_count, 10) || 1)
+      } else {
+        monthlyDemand.set(canonical, {
+          totalQty: parseFloat(row.total_qty) || 0,
+          months: parseInt(row.month_count, 10) || 1,
+        })
+      }
+    }
+  } catch (e) {
+    // monthly_sales may be empty — fall back to sold_this_year/sold_last_year below
+  }
+
+  const now = new Date()
+  const currentMonth = now.getMonth() + 1 // 1-12
+
+  return allItems
+    .filter(item => (item.stock_qty || 0) > 0 || (item.sold_this_year || 0) > 0)
+    .map(item => {
+      const stock = item.stock_qty || 0
+      const price = item.price || 0
+      // Inbound supply that's already committed: on order from supplier + in transit.
+      const incomingQty = item.incoming_qty || 0
+      const orderedQty = item.ordered_qty || 0
+      const pipelineQty = incomingQty + orderedQty
+
+      // Calculate avg monthly demand from monthly_sales if available,
+      // otherwise estimate from sold_this_year / sold_last_year
+      let avgMonthlyDemand: number
+      let confidence: number
+
+      const pgData = monthlyDemand.get(item.code)
+      if (pgData && pgData.months >= 3) {
+        avgMonthlyDemand = pgData.totalQty / pgData.months
+        confidence = Math.min(0.95, 0.5 + pgData.months * 0.04) // more months = higher confidence
+      } else {
+        // Fallback: use annualized sold data
+        const soldThisYear = item.sold_this_year || 0
+        const soldLastYear = item.sold_last_year || 0
+
+        if (soldThisYear > 0 && currentMonth >= 2) {
+          // Annualize current year sales
+          avgMonthlyDemand = soldThisYear / currentMonth
+          confidence = Math.min(0.7, 0.3 + currentMonth * 0.03)
+        } else if (soldLastYear > 0) {
+          avgMonthlyDemand = soldLastYear / 12
+          confidence = 0.4
+        } else {
+          avgMonthlyDemand = 0
+          confidence = 0.1
+        }
+
+        // Blend with PG data if partial
+        if (pgData && pgData.months >= 1) {
+          const pgAvg = pgData.totalQty / pgData.months
+          avgMonthlyDemand = (avgMonthlyDemand + pgAvg) / 2
+          confidence = Math.min(confidence + 0.1, 0.85)
+        }
+      }
+
+      // Calculate days until stockout
+      let daysUntilStockout: number | null = null
+      let stockOutDate: string | null = null
+
+      if (avgMonthlyDemand > 0 && stock > 0) {
+        const monthsRemaining = stock / avgMonthlyDemand
+        daysUntilStockout = Math.round(monthsRemaining * 30.44) // avg days per month
+        const outDate = new Date(now.getTime() + daysUntilStockout * 86400000)
+        stockOutDate = outDate.toISOString().split('T')[0]
+      } else if (avgMonthlyDemand <= 0) {
+        daysUntilStockout = null // no demand = no stockout
+        stockOutDate = null
+      } else {
+        daysUntilStockout = 0 // already out of stock
+        stockOutDate = now.toISOString().split('T')[0]
+      }
+
+      // Coverage including inbound pipeline — an item with plenty already ordered /
+      // on the way shouldn't scream critical. No ETA data exists, so this assumes
+      // the pipeline lands before the shelves empty; both day-counts are returned
+      // so the operator can judge.
+      let daysWithPipeline: number | null = daysUntilStockout
+      if (avgMonthlyDemand > 0 && pipelineQty > 0) {
+        daysWithPipeline = Math.round(((stock + pipelineQty) / avgMonthlyDemand) * 30.44)
+      }
+
+      const stockUrgency = getUrgency(daysUntilStockout)
+      const urgency = getUrgency(daysWithPipeline)
+
+      return {
+        item_code: item.code,
+        // Superseded codes merged into this row — searching an old code must
+        // still find the canonical row now that chains actually merge.
+        alias_codes: item.alias_codes || [],
+        item_name: fixRtlItemName(item.name),
+        current_stock: stock,
+        incoming_qty: incomingQty,
+        ordered_qty: orderedQty,
+        pipeline_qty: pipelineQty,
+        price,
+        predicted_monthly_demand: Math.round(avgMonthlyDemand * 10) / 10,
+        stock_out_date: stockOutDate,
+        days_until_stockout: daysUntilStockout,
+        days_with_pipeline: daysWithPipeline,
+        confidence: Math.round(confidence * 100) / 100,
+        urgency,
+        stock_urgency: stockUrgency,
+      }
+    })
+}
+
+/** Full forecast from cache, recomputing on miss or refresh=1 (warm-cache cron
+ *  recomputes and re-SETs so the Redis TTL restarts on each warm run). */
+async function getForecastRows(forceRefresh: boolean): Promise<ForecastRow[]> {
+  if (!forceRefresh) {
+    const cached = await getCached<ForecastRow[]>(FULL_CACHE_KEY)
+    if (cached && cached.length > 0) return cached
+  }
+  const rows = await computeForecastRows()
+  await setCache(FULL_CACHE_KEY, rows, CACHE_TTL.ANALYTICS)
+  return rows
+}
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
@@ -52,152 +219,18 @@ export async function GET(request: Request) {
     const search = (searchParams.get('q') || '').trim().toLowerCase()
     const sortKey = searchParams.get('sort') || ''
     const sortDir = searchParams.get('dir') === 'desc' ? 'desc' : 'asc'
-
-    // v6: rows cached before the full-catalog chain links landed have
-    // superseded codes unmerged (old code at stock 0 flagged critical while
-    // its successor holds the stock).
-    const cacheKey = `stock-forecast:list:v6:${limit}:${urgencyFilter}:${search}:${sortKey}:${sortDir}`
-    // refresh=1 (warm-cache cron) recomputes and re-SETs so the TTL restarts —
-    // warming through the cache-hit path would leave the old TTL counting down
-    // and let expiry land between warm runs.
     const forceRefresh = searchParams.get('refresh') === '1'
-    const cached = forceRefresh ? null : await getCached<any>(cacheKey)
-    if (cached) return NextResponse.json(cached)
 
-    // Get live item data (stock, price, sold_this_year, sold_last_year, etc.)
-    // getItems() already returns chain-merged items (old codes aggregated into canonical)
-    const [allItems, chainMap] = await Promise.all([getItems(), getChainMap()])
+    const allRows = await getForecastRows(forceRefresh)
 
-    // Get monthly sales history from PG (if available)
-    // Map old item codes → canonical code so chain data aggregates properly
-    const monthlyDemand = new Map<string, { totalQty: number; months: number }>()
-    try {
-      const pgResult = await dbQuery(
-        `SELECT item_code, SUM(quantity) as total_qty, COUNT(DISTINCT (year * 100 + month)) as month_count
-         FROM dashboard.monthly_sales
-         WHERE quantity > 0
-         GROUP BY item_code`
-      )
-      for (const row of pgResult.rows) {
-        const canonical = chainMap.get(row.item_code) || row.item_code
-        const existing = monthlyDemand.get(canonical)
-        if (existing) {
-          existing.totalQty += parseFloat(row.total_qty) || 0
-          existing.months = Math.max(existing.months, parseInt(row.month_count, 10) || 1)
-        } else {
-          monthlyDemand.set(canonical, {
-            totalQty: parseFloat(row.total_qty) || 0,
-            months: parseInt(row.month_count, 10) || 1,
-          })
-        }
-      }
-    } catch (e) {
-      // monthly_sales may be empty — fall back to sold_this_year/sold_last_year below
-    }
-
-    const now = new Date()
-    const currentMonth = now.getMonth() + 1 // 1-12
-
-    const forecastRows = allItems
-      .filter(item => (item.stock_qty || 0) > 0 || (item.sold_this_year || 0) > 0)
-      .map(item => {
-        const stock = item.stock_qty || 0
-        const price = item.price || 0
-        // Inbound supply that's already committed: on order from supplier + in transit.
-        const incomingQty = item.incoming_qty || 0
-        const orderedQty = item.ordered_qty || 0
-        const pipelineQty = incomingQty + orderedQty
-
-        // Calculate avg monthly demand from monthly_sales if available,
-        // otherwise estimate from sold_this_year / sold_last_year
-        let avgMonthlyDemand: number
-        let confidence: number
-
-        const pgData = monthlyDemand.get(item.code)
-        if (pgData && pgData.months >= 3) {
-          avgMonthlyDemand = pgData.totalQty / pgData.months
-          confidence = Math.min(0.95, 0.5 + pgData.months * 0.04) // more months = higher confidence
-        } else {
-          // Fallback: use annualized sold data
-          const soldThisYear = item.sold_this_year || 0
-          const soldLastYear = item.sold_last_year || 0
-
-          if (soldThisYear > 0 && currentMonth >= 2) {
-            // Annualize current year sales
-            avgMonthlyDemand = soldThisYear / currentMonth
-            confidence = Math.min(0.7, 0.3 + currentMonth * 0.03)
-          } else if (soldLastYear > 0) {
-            avgMonthlyDemand = soldLastYear / 12
-            confidence = 0.4
-          } else {
-            avgMonthlyDemand = 0
-            confidence = 0.1
-          }
-
-          // Blend with PG data if partial
-          if (pgData && pgData.months >= 1) {
-            const pgAvg = pgData.totalQty / pgData.months
-            avgMonthlyDemand = (avgMonthlyDemand + pgAvg) / 2
-            confidence = Math.min(confidence + 0.1, 0.85)
-          }
-        }
-
-        // Calculate days until stockout
-        let daysUntilStockout: number | null = null
-        let stockOutDate: string | null = null
-
-        if (avgMonthlyDemand > 0 && stock > 0) {
-          const monthsRemaining = stock / avgMonthlyDemand
-          daysUntilStockout = Math.round(monthsRemaining * 30.44) // avg days per month
-          const outDate = new Date(now.getTime() + daysUntilStockout * 86400000)
-          stockOutDate = outDate.toISOString().split('T')[0]
-        } else if (avgMonthlyDemand <= 0) {
-          daysUntilStockout = null // no demand = no stockout
-          stockOutDate = null
-        } else {
-          daysUntilStockout = 0 // already out of stock
-          stockOutDate = now.toISOString().split('T')[0]
-        }
-
-        // Coverage including inbound pipeline — an item with plenty already ordered /
-        // on the way shouldn't scream critical. No ETA data exists, so this assumes
-        // the pipeline lands before the shelves empty; both day-counts are returned
-        // so the operator can judge.
-        let daysWithPipeline: number | null = daysUntilStockout
-        if (avgMonthlyDemand > 0 && pipelineQty > 0) {
-          daysWithPipeline = Math.round(((stock + pipelineQty) / avgMonthlyDemand) * 30.44)
-        }
-
-        const stockUrgency = getUrgency(daysUntilStockout)
-        const urgency = getUrgency(daysWithPipeline)
-
-        return {
-          item_code: item.code,
-          // Superseded codes merged into this row — searching an old code must
-          // still find the canonical row now that chains actually merge.
-          alias_codes: item.alias_codes || [],
-          item_name: fixRtlItemName(item.name),
-          current_stock: stock,
-          incoming_qty: incomingQty,
-          ordered_qty: orderedQty,
-          pipeline_qty: pipelineQty,
-          price,
-          predicted_monthly_demand: Math.round(avgMonthlyDemand * 10) / 10,
-          stock_out_date: stockOutDate,
-          days_until_stockout: daysUntilStockout,
-          days_with_pipeline: daysWithPipeline,
-          confidence: Math.round(confidence * 100) / 100,
-          urgency,
-          stock_urgency: stockUrgency,
-        }
-      })
+    const forecastRows = allRows
       // Filter by urgency if requested
       .filter(item => {
         if (!urgencyFilter) return item.urgency !== 'ok' || item.predicted_monthly_demand > 0
         const filters = urgencyFilter.split(',')
         return filters.includes(item.urgency)
       })
-      // Free-text search on code/name, before sorting and paging.
+      // Free-text search on code/name/superseded codes, before sorting and paging.
       .filter(item => {
         if (!search) return true
         return (
@@ -246,8 +279,7 @@ export async function GET(request: Request) {
     // too, but only for the first N candidates catalogue-wide, so rows further
     // down still surface a barcode instead of a description (e.g. 1623180680 →
     // "0857428661"). Here the set is just this page, so the few stragglers can
-    // be resolved directly — typically a handful of calls, and the whole
-    // response is cached for CACHE_TTL.ANALYTICS afterwards.
+    // be resolved directly — typically a handful of calls.
     //
     // The same pass fills a missing price. The bulk price feed carries an
     // item's OWN price; when it has none, the per-item endpoint resolves the
@@ -258,6 +290,7 @@ export async function GET(request: Request) {
     const needsRepair = items.filter(
       i => looksLikeCodeNotName(i.item_name, i.item_code) || !i.price,
     )
+    let repaired = 0
     if (needsRepair.length > 0) {
       const queue = [...needsRepair]
       const worker = async () => {
@@ -266,10 +299,11 @@ export async function GET(request: Request) {
             const full = await client.items.get(row.item_code.toUpperCase())
             if (full?.name && !looksLikeCodeNotName(full.name, row.item_code)) {
               row.item_name = fixRtlItemName(full.name)
+              repaired++
             }
             if (!row.price) {
               const inherited = Number(full?.price ?? full?.price_list_price) || 0
-              if (inherited > 0) row.price = inherited
+              if (inherited > 0) { row.price = inherited; repaired++ }
             }
           } catch {
             // Leave the code/zero showing rather than fail the page.
@@ -277,11 +311,13 @@ export async function GET(request: Request) {
         }
       }
       await Promise.allSettled(Array.from({ length: 6 }, worker))
+      // The sliced rows share object identity with the full cached set, so the
+      // repairs above already live in `allRows` — persist them so no later
+      // request (any param combo) re-pays these FINAPI lookups.
+      if (repaired > 0) await setCache(FULL_CACHE_KEY, allRows, CACHE_TTL.ANALYTICS)
     }
 
-    const result = { items, summary }
-    await setCache(cacheKey, result, CACHE_TTL.ANALYTICS)
-    return NextResponse.json(result)
+    return NextResponse.json({ items, summary })
   } catch (error) {
     console.error('[stock-forecast] Error:', error)
     return NextResponse.json(
