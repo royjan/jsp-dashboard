@@ -9,6 +9,18 @@ import * as schema from './db/schema'
 // full ISO timestamps, breaking `new Date(dateStr + 'T00:00:00')` → Invalid Date.
 types.setTypeParser(1082, (v) => v)
 
+// Return NUMERIC (1700) and INT8 (20) as JS numbers instead of strings.
+// node-postgres defaults these to strings for arbitrary precision, but that
+// made `+` concatenate instead of add — the single most recurrent bug in this
+// repo (5 confirmed instances, e.g. every item landing in ABC class A).
+// Safe here: no stored bigint columns, largest NUMERIC value ~1.29M (vs
+// Number.MAX_SAFE_INTEGER ~9.0e15), and nothing calls string methods on these
+// columns. INT8 also covers COUNT(*)/SUM(int) results. Known trade-off:
+// drizzle still types `numeric` columns as string, so those typings now lie
+// in the harmless direction.
+types.setTypeParser(1700, parseFloat)
+types.setTypeParser(20, Number)
+
 let pool: Pool | null = null
 let _db: NodePgDatabase<typeof schema> | null = null
 
