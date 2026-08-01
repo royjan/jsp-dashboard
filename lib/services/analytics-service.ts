@@ -146,6 +146,20 @@ async function getChainLinks(): Promise<ChainLink[]> {
 
 // ── Chain Resolution (Union-Find) ──
 
+// Finansit has placeholder "items" for freight/service invoice lines ('0', '000',
+// '+', '7777' — "משלוח / מונית" etc.) that carry supersession links into real
+// parts (000.new_item_id → 1612434080) and serve as the old_item_id root of the
+// whole placeholder family. Unioning through them fused unrelated parts into one
+// chain, inflating merged stock and demand on /stock-forecast. A supersession
+// link where either endpoint looks like a placeholder is never a real chain.
+export function isPlaceholderCode(code: string): boolean {
+  const c = (code || '').trim()
+  if (c.length < 4) return true            // '0', '000', '+'
+  if (/^(.)\1+$/.test(c)) return true      // '7777', '0000'
+  if (!/[a-zA-Z0-9]/.test(c)) return true  // pure punctuation
+  return false
+}
+
 function buildChainMap(items: FinansitItem[], extraLinks: ChainLink[] = []): { items: FinansitItem[]; codeToCanonical: Map<string, string> } {
   // Backfill link fields the truncated catalog window didn't supply — both the
   // unions below and the canonical pick ("prefer the new_item_id target")
@@ -178,6 +192,7 @@ function buildChainMap(items: FinansitItem[], extraLinks: ChainLink[] = []): { i
   }
 
   function union(a: string, b: string) {
+    if (isPlaceholderCode(a) || isPlaceholderCode(b)) return
     const ra = find(a)
     const rb = find(b)
     if (ra !== rb) parent.set(ra, rb)

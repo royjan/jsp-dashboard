@@ -2,7 +2,7 @@ export const maxDuration = 60
 
 import { NextResponse } from 'next/server'
 import { query as dbQuery } from '@/lib/db'
-import { getItems, getChainMap, looksLikeCodeNotName } from '@/lib/services/analytics-service'
+import { getItems, getChainMap, looksLikeCodeNotName, isPlaceholderCode } from '@/lib/services/analytics-service'
 import { getCached, setCache } from '@/lib/redis-client'
 import { CACHE_TTL } from '@/lib/constants'
 import { fixRtlItemName } from '@/lib/rtl-fix'
@@ -101,6 +101,10 @@ async function computeForecastRows(): Promise<ForecastRow[]> {
   const currentMonth = now.getMonth() + 1 // 1-12
 
   return allItems
+    // Placeholder freight/service codes ('000', '7777', …) hold nominal "stock"
+    // but aren't forecastable inventory — without this they'd show as junk rows
+    // now that chain merging no longer folds them into real parts.
+    .filter(item => !isPlaceholderCode(item.code))
     .filter(item => (item.stock_qty || 0) > 0 || (item.sold_this_year || 0) > 0)
     .map(item => {
       const stock = item.stock_qty || 0
