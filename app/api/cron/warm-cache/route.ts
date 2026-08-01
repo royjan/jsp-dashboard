@@ -330,6 +330,11 @@ async function runWarmCache(mode: string, from?: number, to?: number) {
       ['receivables', () =>
         fetch(`http://127.0.0.1:${process.env.PORT || '3000'}/api/analytics/receivables?refresh=1`)
           .then(r => r.json())],
+      // Stock-forecast's default view (200 rows, no filters) — the page's
+      // landing request. Other param combos stay demand-computed (seconds).
+      ['stockForecast', () =>
+        fetch(`http://127.0.0.1:${process.env.PORT || '3000'}/api/analytics/stock-forecast?limit=200&refresh=1`)
+          .then(r => r.json())],
     ]
 
     for (const [label, fn] of warmSteps) {

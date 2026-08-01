@@ -57,7 +57,11 @@ export async function GET(request: Request) {
     // superseded codes unmerged (old code at stock 0 flagged critical while
     // its successor holds the stock).
     const cacheKey = `stock-forecast:list:v6:${limit}:${urgencyFilter}:${search}:${sortKey}:${sortDir}`
-    const cached = await getCached<any>(cacheKey)
+    // refresh=1 (warm-cache cron) recomputes and re-SETs so the TTL restarts —
+    // warming through the cache-hit path would leave the old TTL counting down
+    // and let expiry land between warm runs.
+    const forceRefresh = searchParams.get('refresh') === '1'
+    const cached = forceRefresh ? null : await getCached<any>(cacheKey)
     if (cached) return NextResponse.json(cached)
 
     // Get live item data (stock, price, sold_this_year, sold_last_year, etc.)
