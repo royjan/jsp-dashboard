@@ -169,6 +169,9 @@ export async function GET(request: Request) {
 
         return {
           item_code: item.code,
+          // Superseded codes merged into this row — searching an old code must
+          // still find the canonical row now that chains actually merge.
+          alias_codes: item.alias_codes || [],
           item_name: fixRtlItemName(item.name),
           current_stock: stock,
           incoming_qty: incomingQty,
@@ -195,7 +198,8 @@ export async function GET(request: Request) {
         if (!search) return true
         return (
           (item.item_code || '').toLowerCase().includes(search) ||
-          (item.item_name || '').toLowerCase().includes(search)
+          (item.item_name || '').toLowerCase().includes(search) ||
+          item.alias_codes.some(c => (c || '').toLowerCase().includes(search))
         )
       })
       .sort((a: any, b: any) => {
