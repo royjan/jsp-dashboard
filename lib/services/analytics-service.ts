@@ -1,4 +1,4 @@
-import { client, fetchItems, fetchDocuments, fetchDocumentDetail, fetchBatchStock, searchDocuments, fetchAllStockItems, fetchBatchPrices, fetchAllCustomers, refreshCache } from '../finansit-client'
+import { client, fetchItems, fetchDocuments, fetchDocumentDetail, fetchBatchStock, searchDocuments, fetchAllStockItems, fetchAllItemChainLinks, fetchBatchPrices, fetchAllCustomers, refreshCache } from '../finansit-client'
 import { getCached, setCache, deleteCache } from '../redis-client'
 import { query as dbQuery } from '../db'
 import { readQueryAsync } from '../neon-read'
@@ -81,9 +81,85 @@ function mapRawItem(raw: any): FinansitItem | null {
   }
 }
 
+// ── Full-catalog chain links ──
+//
+// Chain links (new_item_id / old_item_id) come from the catalog fetch, but
+// fetchItems() is capped at 10k of ~113k items, so most of the catalog never
+// contributed links and buildChainMap left those chains unmerged: the old code
+// kept its own shelf qty (often 0 — a false critical on /stock-forecast) while
+// the successor row held the real stock (e.g. 1647880280 → 1695249780). The
+// full link set (~24k rows) streams from /api/stream/items in ~70s, so it is
+// fetched in the background, kept in Redis for a week and refreshed daily;
+// request paths only ever read the cache.
+
+type ChainLink = { code: string; new_item_id?: string; old_item_id?: string }
+
+const CHAIN_LINKS_CACHE_KEY = 'items:chain-links:v1'
+const CHAIN_LINKS_REDIS_TTL = 7 * 24 * 60 * 60 // survives FINAPI outages/redeploys
+const CHAIN_LINKS_REFRESH_MS = 24 * 60 * 60 * 1000 // supersessions change rarely
+
+let inMemoryChainLinks: { links: ChainLink[]; fetchedAt: number } | null = null
+let chainLinksRefreshInflight: Promise<void> | null = null
+
+function refreshChainLinksInBackground(): void {
+  if (chainLinksRefreshInflight) return
+  chainLinksRefreshInflight = (async () => {
+    const t0 = Date.now()
+    const links = await fetchAllItemChainLinks()
+    // A tiny result is a degraded/truncated stream, not "no chains exist" —
+    // keep the previous set rather than unmerging the whole catalog.
+    if (links.length < 1000) {
+      console.warn(`[Analytics] chain-links stream returned only ${links.length} rows — keeping previous set`)
+      return
+    }
+    const payload = { links, fetchedAt: Date.now() }
+    inMemoryChainLinks = payload
+    await setCache(CHAIN_LINKS_CACHE_KEY, payload, CHAIN_LINKS_REDIS_TTL)
+    console.log(`[Analytics] chain links refreshed: ${links.length} links in ${Date.now() - t0}ms`)
+    // The current items snapshot may have been built before these links were
+    // available — age it into the stale zone so the next request rebuilds
+    // (stale-while-revalidate) with fully merged chains.
+    if (inMemoryItemsCache) {
+      inMemoryItemsCache.time = Math.min(inMemoryItemsCache.time, Date.now() - IN_MEMORY_FRESH_TTL)
+    }
+  })().catch((e) => {
+    console.warn('[Analytics] chain-links refresh failed:', e)
+  }).finally(() => { chainLinksRefreshInflight = null })
+}
+
+/**
+ * Cached full-catalog chain links. Kicks a background refresh when missing or
+ * older than a day and NEVER blocks on the 70s stream — a true cold start
+ * (empty Redis) returns [] once, which degrades to the old 10k-window behavior
+ * until the background fetch lands.
+ */
+async function getChainLinks(): Promise<ChainLink[]> {
+  if (!inMemoryChainLinks) {
+    const cached = await getCached<{ links: ChainLink[]; fetchedAt: number }>(CHAIN_LINKS_CACHE_KEY)
+    if (cached?.links?.length) inMemoryChainLinks = cached
+  }
+  if (!inMemoryChainLinks || Date.now() - inMemoryChainLinks.fetchedAt > CHAIN_LINKS_REFRESH_MS) {
+    refreshChainLinksInBackground()
+  }
+  return inMemoryChainLinks?.links ?? []
+}
+
 // ── Chain Resolution (Union-Find) ──
 
-function buildChainMap(items: FinansitItem[]): { items: FinansitItem[]; codeToCanonical: Map<string, string> } {
+function buildChainMap(items: FinansitItem[], extraLinks: ChainLink[] = []): { items: FinansitItem[]; codeToCanonical: Map<string, string> } {
+  // Backfill link fields the truncated catalog window didn't supply — both the
+  // unions below and the canonical pick ("prefer the new_item_id target")
+  // depend on them being present on the item.
+  if (extraLinks.length > 0) {
+    const linkByCode = new Map(extraLinks.map(l => [l.code, l]))
+    for (const item of items) {
+      const link = linkByCode.get(item.code)
+      if (!link) continue
+      if (!item.new_item_id && link.new_item_id) item.new_item_id = link.new_item_id
+      if (!item.old_item_id && link.old_item_id) item.old_item_id = link.old_item_id
+    }
+  }
+
   // Union-Find structure
   const parent = new Map<string, string>()
 
@@ -551,7 +627,7 @@ async function _getItemsImpl(cacheKey: string, staleCacheKey?: string): Promise<
       }
     }
 
-    const resolved = buildChainMap(items)
+    const resolved = buildChainMap(items, await getChainLinks())
     cachedChainMap = resolved.codeToCanonical
     chainMapCacheTime = Date.now()
     console.log(`[Analytics] Chain resolution: ${items.length} → ${resolved.items.length} items`)
@@ -612,7 +688,7 @@ async function _getItemsImpl(cacheKey: string, staleCacheKey?: string): Promise<
   }
   console.log(`[Analytics] Enriched ${items.length} items with stock/sales data`)
 
-  const resolved = buildChainMap(items)
+  const resolved = buildChainMap(items, await getChainLinks())
   cachedChainMap = resolved.codeToCanonical
   chainMapCacheTime = Date.now()
   console.log(`[Analytics] Chain resolution: ${items.length} → ${resolved.items.length} items`)

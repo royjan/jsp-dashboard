@@ -173,6 +173,51 @@ export async function fetchItems(): Promise<any[]> {
   return allItems
 }
 
+/**
+ * Chain links (code → new_item_id / old_item_id) for the WHOLE catalog.
+ *
+ * fetchItems() is capped at 10k rows while the catalog holds ~113k, so items
+ * past the window never contribute their chain links and superseded codes
+ * surface as separate analytics rows (the old code shows its own shelf qty —
+ * often 0, flagging a false critical — while the successor holds the stock).
+ * /api/stream/items streams every item as NDJSON in ~70s; only the ~24k rows
+ * that actually carry a link are kept. Callers must cache the result — never
+ * fetch this on a request path.
+ */
+export async function fetchAllItemChainLinks(): Promise<Array<{ code: string; new_item_id?: string; old_item_id?: string }>> {
+  const res = await bulkClient.getRaw('/api/stream/items')
+  const links: Array<{ code: string; new_item_id?: string; old_item_id?: string }> = []
+  if (!res.body) return links
+  const push = (line: string) => {
+    if (!line) return
+    try {
+      const row = JSON.parse(line)
+      if (row?.code && (row.new_item_id || row.old_item_id)) {
+        links.push({
+          code: row.code,
+          new_item_id: row.new_item_id || undefined,
+          old_item_id: row.old_item_id || undefined,
+        })
+      }
+    } catch { /* skip malformed NDJSON line */ }
+  }
+  const reader = (res.body as ReadableStream<Uint8Array>).getReader()
+  const decoder = new TextDecoder()
+  let buf = ''
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buf += decoder.decode(value, { stream: true })
+    let nl
+    while ((nl = buf.indexOf('\n')) >= 0) {
+      push(buf.slice(0, nl).trim())
+      buf = buf.slice(nl + 1)
+    }
+  }
+  push(buf.trim())
+  return links
+}
+
 export async function fetchItemDetail(code: string): Promise<any> {
   return client.items.get(code)
 }

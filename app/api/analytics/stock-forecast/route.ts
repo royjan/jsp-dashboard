@@ -53,9 +53,10 @@ export async function GET(request: Request) {
     const sortKey = searchParams.get('sort') || ''
     const sortDir = searchParams.get('dir') === 'desc' ? 'desc' : 'asc'
 
-    // v5: rows cached before the price backfill widened / the inherited-price
-    // fallback landed still carry price 0.
-    const cacheKey = `stock-forecast:list:v5:${limit}:${urgencyFilter}:${search}:${sortKey}:${sortDir}`
+    // v6: rows cached before the full-catalog chain links landed have
+    // superseded codes unmerged (old code at stock 0 flagged critical while
+    // its successor holds the stock).
+    const cacheKey = `stock-forecast:list:v6:${limit}:${urgencyFilter}:${search}:${sortKey}:${sortDir}`
     const cached = await getCached<any>(cacheKey)
     if (cached) return NextResponse.json(cached)
 
