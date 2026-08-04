@@ -23,6 +23,7 @@ import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
 import { StockPageSkeleton } from '@/components/layout/PageSkeleton'
 import { cn } from '@/lib/utils'
+import { deriveBrand, brandChipClasses } from '@/lib/brand'
 import { ArrowUpDown, Search, Crown, TrendingUp, Layers, AlertTriangle, Sparkles, RefreshCw, TableIcon, LayoutGrid, ChevronDown, ChevronLeft, ChevronRight, Filter, Target, FileText, TrendingDown, Clock, ArrowRightLeft } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from 'recharts'
 import { ILS_FORMAT, formatNumber } from '@/lib/constants'
@@ -1256,7 +1257,12 @@ function StockPageContent() {
                               <EbayRecommendButton itemCode={item.code} itemName={item.name} />
                               <div className="min-w-0">
                                 <div className="font-medium leading-tight"><ItemLink code={item.code} name={item.name} /></div>
-                                <div className="text-xs text-muted-foreground font-mono"><ItemLink code={item.code} showCode className="text-muted-foreground hover:text-primary" /></div>
+                                <div className="text-xs text-muted-foreground font-mono flex items-center gap-1.5">
+                                  <ItemLink code={item.code} showCode className="text-muted-foreground hover:text-primary" />
+                                  <span className={cn('rounded px-1 py-px text-[10px] font-medium font-sans leading-none', brandChipClasses(deriveBrand(item.code)))}>
+                                    {deriveBrand(item.code)}
+                                  </span>
+                                </div>
                             {item.alias_codes && item.alias_codes.length > 0 && (
                               chain.length >= 2 ? (
                                 <UITooltip>

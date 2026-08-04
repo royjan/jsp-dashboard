@@ -166,6 +166,32 @@ export function useSeasonalItems(dateFrom?: string, dateTo?: string, ai = false,
   })
 }
 
+export interface ItemLinkRow {
+  code: string
+  brand: 'MG' | 'TOYOTA' | 'PSA'
+  description: string | null
+  hebrewDescription: string | null
+  confidence: string
+  illustrationNumber: string | null
+  callout: string | null
+  /** Matching erp.items code, or null when the part exists only in the partly catalog. */
+  erpCode: string | null
+}
+
+/** Cross-brand equivalent parts (partly.part_links) for the item card. */
+export function useItemLinks(code: string | null) {
+  return useQuery<{ links: ItemLinkRow[] }>({
+    queryKey: ['item-links', code],
+    queryFn: async () => {
+      const res = await fetch(`/api/items/${encodeURIComponent(code!)}/links`)
+      if (!res.ok) throw new Error('Failed')
+      return res.json()
+    },
+    enabled: !!code,
+    staleTime: 5 * 60 * 1000,
+  })
+}
+
 export function useItemDocuments(code: string, type: string | null) {
   return useQuery({
     queryKey: ['item-documents', code, type],

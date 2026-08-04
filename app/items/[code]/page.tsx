@@ -2,7 +2,9 @@
 
 import { use, useState } from 'react'
 import { motion } from 'framer-motion'
-import { useItemDetail, useItemDocuments } from '@/hooks/use-analytics'
+import { useItemDetail, useItemDocuments, useItemLinks } from '@/hooks/use-analytics'
+import { deriveBrand, brandChipClasses } from '@/lib/brand'
+import { ItemLink } from '@/components/shared/ItemLink'
 import { useLocale } from '@/lib/locale-context'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -10,7 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import Link from 'next/link'
 import {
   ArrowLeft, Package, DollarSign, Warehouse, TrendingUp, Tag, MapPin, Calendar, Layers, Hash,
-  FileText, X,
+  FileText, X, Link2,
 } from 'lucide-react'
 import { ILS_FORMAT, NUMBER_FORMAT } from '@/lib/constants'
 
@@ -118,6 +120,7 @@ export default function ItemDetailPage({ params }: { params: Promise<{ code: str
   const decodedCode = decodeURIComponent(code)
   const { t, locale } = useLocale()
   const { data, isLoading, error } = useItemDetail(decodedCode)
+  const { data: linksData } = useItemLinks(decodedCode)
   const isHe = locale === 'he'
   const [openDocs, setOpenDocs] = useState<DocType | null>(null)
   const toggleDocs = (type: DocType) => setOpenDocs((cur) => (cur === type ? null : type))
@@ -136,6 +139,10 @@ export default function ItemDetailPage({ params }: { params: Promise<{ code: str
   const totalSales = salesData.reduce((sum, s) => sum + s.value, 0)
   const maxSales = Math.max(...salesData.map(s => s.value), 1)
 
+  const displayedCode = data.canonical_code || data.code || decodedCode
+  const brand = deriveBrand(displayedCode)
+  const partLinks = linksData?.links || []
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -146,7 +153,10 @@ export default function ItemDetailPage({ params }: { params: Promise<{ code: str
         <div className="min-w-0 flex-1">
           <h1 className="text-lg sm:text-xl font-bold flex items-center gap-2">
             <Package className="h-5 w-5 text-primary" />
-            <span className="font-mono">{data.canonical_code || data.code || decodedCode}</span>
+            <span className="font-mono">{displayedCode}</span>
+            <span className={`rounded px-1.5 py-0.5 text-[11px] font-medium leading-none ${brandChipClasses(brand)}`}>
+              {brand}
+            </span>
           </h1>
           {data.name && (
             <p className="text-muted-foreground text-sm mt-0.5" dir="rtl">{data.name}</p>
@@ -341,6 +351,53 @@ export default function ItemDetailPage({ params }: { params: Promise<{ code: str
                   <span className="text-muted-foreground me-1">{cat.group_name}:</span>
                   {cat.value}
                 </Badge>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Cross-brand equivalent parts (partly.part_links) */}
+      {partLinks.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Link2 className="h-4 w-4 text-cyan-500" />
+              {isHe ? 'חלקים מקבילים בין יצרנים' : 'Cross-Brand Equivalents'}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {partLinks.map((link) => (
+                <div key={link.code} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                  <span className={`rounded px-1.5 py-0.5 text-[11px] font-medium leading-none ${brandChipClasses(link.brand)}`}>
+                    {link.brand}
+                  </span>
+                  {link.erpCode ? (
+                    <ItemLink code={link.erpCode} showCode copyable={false} />
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="font-mono text-xs">{link.code}</span>
+                      <span className="text-[10px] text-muted-foreground">
+                        {isHe ? 'קטלוג בלבד' : 'catalog only'}
+                      </span>
+                    </span>
+                  )}
+                  {link.description && (
+                    <span className="text-muted-foreground text-xs" dir="ltr">{link.description}</span>
+                  )}
+                  {link.hebrewDescription && (
+                    <span className="text-muted-foreground text-xs" dir="rtl">{link.hebrewDescription}</span>
+                  )}
+                  {link.confidence !== 'high' && (
+                    <span
+                      className="text-amber-500 font-bold cursor-help"
+                      title={isHe ? 'התאמה משוערת' : 'Approximate match'}
+                    >
+                      ~
+                    </span>
+                  )}
+                </div>
               ))}
             </div>
           </CardContent>
