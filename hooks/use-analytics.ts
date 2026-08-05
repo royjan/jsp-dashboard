@@ -172,6 +172,8 @@ export interface ItemLinkRow {
   description: string | null
   hebrewDescription: string | null
   confidence: string
+  /** 'schema-match' (derived from diagrams) or 'manual' (user-created, deletable). */
+  source: string
   illustrationNumber: string | null
   callout: string | null
   /** Matching erp.items code, or null when the part exists only in the partly catalog. */

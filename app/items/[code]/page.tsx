@@ -5,6 +5,7 @@ import { motion } from 'framer-motion'
 import { useItemDetail, useItemDocuments, useItemLinks } from '@/hooks/use-analytics'
 import { deriveBrand, brandChipClasses } from '@/lib/brand'
 import { ItemLink } from '@/components/shared/ItemLink'
+import { PartLinksCard } from '@/components/items/PartLinksCard'
 import { useLocale } from '@/lib/locale-context'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -379,52 +380,8 @@ export default function ItemDetailPage({ params }: { params: Promise<{ code: str
         </Card>
       )}
 
-      {/* Cross-brand equivalent parts (partly.part_links) */}
-      {partLinks.length > 0 && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Link2 className="h-4 w-4 text-cyan-500" />
-              {isHe ? 'חלקים מקבילים בין יצרנים' : 'Cross-Brand Equivalents'}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {partLinks.map((link) => (
-                <div key={link.code} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-                  <span className={`rounded px-1.5 py-0.5 text-[11px] font-medium leading-none ${brandChipClasses(link.brand)}`}>
-                    {link.brand}
-                  </span>
-                  {link.erpCode ? (
-                    <ItemLink code={link.erpCode} showCode copyable={false} />
-                  ) : (
-                    <span className="inline-flex items-center gap-1.5">
-                      <span className="font-mono text-xs">{link.code}</span>
-                      <span className="text-[10px] text-muted-foreground">
-                        {isHe ? 'קטלוג בלבד' : 'catalog only'}
-                      </span>
-                    </span>
-                  )}
-                  {link.description && (
-                    <span className="text-muted-foreground text-xs" dir="ltr">{link.description}</span>
-                  )}
-                  {link.hebrewDescription && (
-                    <span className="text-muted-foreground text-xs" dir="rtl">{link.hebrewDescription}</span>
-                  )}
-                  {link.confidence !== 'high' && (
-                    <span
-                      className="text-amber-500 font-bold cursor-help"
-                      title={isHe ? 'התאמה משוערת' : 'Approximate match'}
-                    >
-                      ~
-                    </span>
-                  )}
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      {/* Cross-brand equivalent parts (partly.part_links) + manual linking */}
+      <PartLinksCard code={decodedCode} links={partLinks} isHe={isHe} />
 
       {/* Item History Chain */}
       {data.item_id_history?.length > 1 && (
