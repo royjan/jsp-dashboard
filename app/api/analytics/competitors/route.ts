@@ -121,11 +121,19 @@ export async function GET(request: Request) {
     `)).rows as SnapshotRow[]
 
     // Jan catalog index: every normalized code in an item's chain → the item.
+    // Placeholder/fee pseudo-items are skipped (same junk filter the eBay
+    // recommender uses) — otherwise a competitor SKU can land on an item whose
+    // code is literally '0'.
     const items = await getItems()
     const codeIndex = new Map<string, FinansitItem>()
     for (const it of items) {
+      const name = (it.name || '').trim()
+      if (!name || name.length < 2 || ['!', '.', '-', '----'].includes(name)) continue
+      if (it.code.length <= 3 && /^\d+$/.test(it.code)) continue
       for (const c of [it.code, ...(it.alias_codes || []), ...(it.chain_history || []), ...(it.item_id_history || [])]) {
         const norm = normalizeOemCode(c)
+        // a 1-2 char code carries no identifying information
+        if (norm.length < 3) continue
         if (norm && !codeIndex.has(norm)) codeIndex.set(norm, it)
       }
     }
