@@ -14,7 +14,9 @@ import { useCompetitorComparison, useCompetitorItemHistory } from '@/hooks/use-c
 import { useLocale } from '@/lib/locale-context'
 import { formatCurrency, formatNumber } from '@/lib/constants'
 import { fixRtlItemName } from '@/lib/rtl-fix'
-import { Swords, Upload, PackageX, TrendingDown, SearchX, Search, ChevronLeft, ChevronRight, AlertTriangle } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { deriveBrand, brandChipClasses, BRAND_RANK, type Brand } from '@/lib/brand'
+import { Swords, Upload, PackageX, TrendingDown, SearchX, Search, ChevronLeft, ChevronRight, AlertTriangle, X } from 'lucide-react'
 import type { CompareRow, CompetitorCell } from '@/app/api/analytics/competitors/route'
 import type { TranslationKey } from '@/lib/i18n'
 
@@ -22,6 +24,13 @@ type SortField = 'code' | 'ourPrice' | 'ourStock' | 'minNet' | 'spread' | 'sold'
 type T = (k: TranslationKey) => string
 
 const PER_PAGE = 7
+
+/** "Low stock" = we still have it, but barely. Matches the /stock page's read of thin cover. */
+const LOW_STOCK_MAX = 3
+
+type StockFilter = 'in' | 'low' | 'out'
+type PriceFilter = 'them' | 'us'
+type OrigFilter = 'genuine' | 'aftermarket'
 
 /** Whole shekels stay clean; agorot are shown when they exist (71.16 ≠ 71). */
 function money(v: number | null | undefined): string {
@@ -79,6 +88,74 @@ function GenuineBadge({ value, t }: { value: string; t: T }) {
   return <span className="text-xs text-muted-foreground">—</span>
 }
 
+/**
+ * A text box backed by a query-string param.
+ *
+ * Typing stays local and updates the URL on a debounce, so a keystroke is not a
+ * history entry and filtering still feels instant. The reverse direction matters
+ * just as much: when the URL changes underneath us — Back/Forward, "clear
+ * filters", a pasted link — the box adopts that value instead of racing to
+ * overwrite it, which is what a one-way effect does.
+ */
+function useUrlTextInput(urlValue: string, commit: (v: string | null) => void) {
+  const [value, setValue] = useState(urlValue)
+  const pushed = useRef(urlValue)
+  useEffect(() => {
+    if (urlValue !== pushed.current) {
+      pushed.current = urlValue
+      setValue(urlValue)
+      return
+    }
+    if (value === urlValue) return
+    const id = setTimeout(() => {
+      pushed.current = value
+      commit(value || null)
+    }, 350)
+    return () => clearTimeout(id)
+  }, [value, urlValue, commit])
+  return [value, setValue] as const
+}
+
+/**
+ * A labelled segmented control — one row of mutually exclusive choices where
+ * `null` is the unfiltered default. Real <button>s, so it tabs and fires on
+ * Enter/Space for free; styling is logical-property only so it mirrors in RTL.
+ */
+function Segmented<V extends string>({
+  label, value, options, onChange,
+}: {
+  label: string
+  value: V | null
+  options: Array<{ value: V | null; label: string; title?: string }>
+  onChange: (v: V | null) => void
+}) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className="text-[11px] text-muted-foreground">{label}</span>
+      <div className="inline-flex rounded-md border p-0.5">
+        {options.map(o => {
+          const on = value === o.value
+          return (
+            <button
+              key={o.value ?? '_all'}
+              type="button"
+              title={o.title}
+              aria-pressed={on}
+              onClick={() => onChange(o.value)}
+              className={cn(
+                'rounded px-2 py-1 text-xs transition-colors',
+                on ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted',
+              )}
+            >
+              {o.label}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 function CompetitorsPageInner() {
   const { t } = useLocale()
   const { data, isLoading, error, refetch } = useCompetitorComparison()
@@ -86,26 +163,75 @@ function CompetitorsPageInner() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
 
-  const [search, setSearch] = useState('')
-  const [activeCompetitors, setActiveCompetitors] = useState<Set<string> | null>(null)
-  const [onlyTheyBeatUs, setOnlyTheyBeatUs] = useState(false)
-  const [onlyWeAreOut, setOnlyWeAreOut] = useState(false)
-  const [onlyGenuine, setOnlyGenuine] = useState(false)
-  const [showUnmatched, setShowUnmatched] = useState(false)
   const [showUploader, setShowUploader] = useState(false)
-  const [sort, setSort] = useState<DataTableSort<SortField>>({ field: 'spread', dir: 'asc' })
   const [historyRow, setHistoryRow] = useState<CompareRow | null>(null)
 
-  // Pagination lives in the URL (?page=1 is the first page) so a view can be
-  // linked and survives reloads. Internally it stays 0-based.
-  const page = Math.max(0, (Number(searchParams.get('page')) || 1) - 1)
-  const goToPage = useCallback((p: number) => {
-    const params = new URLSearchParams(searchParams.toString())
-    if (p <= 0) params.delete('page')
-    else params.set('page', String(p + 1))
-    const qs = params.toString()
+  /**
+   * The whole view lives in the query string — search, competitor selection,
+   * every toggle, sort and page — so any state of this table can be linked,
+   * bookmarked and reloaded. Writing a filter always drops ?page, since the
+   * old page number means nothing against a different result set.
+   */
+  const setParams = useCallback((updates: Record<string, string | null>, keepPage = false) => {
+    const next = new URLSearchParams(searchParams.toString())
+    for (const [k, v] of Object.entries(updates)) {
+      if (v === null || v === '') next.delete(k)
+      else next.set(k, v)
+    }
+    if (!keepPage) next.delete('page')
+    const qs = next.toString()
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
   }, [router, pathname, searchParams])
+
+  const flag = (key: string) => searchParams.get(key) === '1'
+  const compParam = searchParams.get('comp')
+  const activeCompetitors = useMemo(
+    () => (compParam === null ? null : new Set(compParam.split(',').filter(Boolean))),
+    [compParam],
+  )
+  const onlyWeAreOut = flag('they_stock')
+  const showUnmatched = searchParams.get('view') === 'unmatched'
+
+  const oneOf = <V extends string>(key: string, allowed: readonly V[]): V | null => {
+    const v = searchParams.get(key)
+    return allowed.includes(v as V) ? (v as V) : null
+  }
+
+  const stockFilter: StockFilter | null = oneOf('stock', ['in', 'low', 'out'] as const)
+  const brandParam = searchParams.get('brand')
+  const brandFilter = useMemo(
+    () => (brandParam ? new Set(brandParam.split(',').filter(Boolean)) : null),
+    [brandParam],
+  )
+
+  // `cheaper=1` and `genuine=1` were the first shipped form of these two
+  // filters. They now have a direction, but old links must keep resolving —
+  // the legacy flag is read as the value it used to mean.
+  const priceFilter: PriceFilter | null =
+    oneOf('price', ['them', 'us'] as const) ?? (flag('cheaper') ? 'them' : null)
+  const origFilter: OrigFilter | null =
+    oneOf('orig', ['genuine', 'aftermarket'] as const) ?? (flag('genuine') ? 'genuine' : null)
+
+  // Spread threshold, read as an absolute percentage: |spread| >= gap.
+  const gapParam = searchParams.get('gap')
+  const minGap = gapParam !== null && gapParam !== '' && Number.isFinite(Number(gapParam))
+    ? Math.abs(Number(gapParam))
+    : null
+  const sortField = (searchParams.get('sort') as SortField) || 'spread'
+  const sortDir = searchParams.get('dir') === 'desc' ? 'desc' : 'asc'
+  const sort = useMemo<DataTableSort<SortField>>(() => ({ field: sortField, dir: sortDir }), [sortField, sortDir])
+  const page = Math.max(0, (Number(searchParams.get('page')) || 1) - 1)
+  const goToPage = useCallback((p: number) => {
+    setParams({ page: p <= 0 ? null : String(p + 1) }, true)
+  }, [setParams])
+
+  // The search box stays local so typing is instant; the URL catches up on a
+  // short debounce rather than replacing history on every keystroke.
+  const commitQuery = useCallback((v: string | null) => setParams({ q: v }), [setParams])
+  const [search, setSearch] = useUrlTextInput(searchParams.get('q') ?? '', commitQuery)
+
+  const commitGap = useCallback((v: string | null) => setParams({ gap: v }), [setParams])
+  const [gapInput, setGapInput] = useUrlTextInput(searchParams.get('gap') ?? '', commitGap)
 
   const competitorNames = useMemo(() => data?.competitors.map(c => c.name) ?? [], [data])
   const enabled = useMemo(
@@ -119,9 +245,19 @@ function CompetitorsPageInner() {
     const filtered = data.rows.filter(r => {
       if (q && !r.code.toUpperCase().includes(q) && !r.name.toUpperCase().includes(q)) return false
       if (!Object.keys(r.competitors).some(n => enabled.has(n))) return false
-      if (onlyTheyBeatUs && !r.flags.cheaperThanUs) return false
+      if (brandFilter && !brandFilter.has(deriveBrand(r.code))) return false
+      // Jan stock, straight off ourStock (already coerced to a number by the API).
+      if (stockFilter === 'in' && r.ourStock <= 0) return false
+      if (stockFilter === 'out' && r.ourStock > 0) return false
+      if (stockFilter === 'low' && !(r.ourStock > 0 && r.ourStock <= LOW_STOCK_MAX)) return false
+      // Direction of the undercut. 'Jan' as cheapestCompetitor is the API's own
+      // verdict that our price ties or beats every non-cross-ref competitor.
+      if (priceFilter === 'them' && !r.flags.cheaperThanUs) return false
+      if (priceFilter === 'us' && r.cheapestCompetitor !== 'Jan') return false
+      // Threshold on the size of the gap, whichever way it points.
+      if (minGap !== null && (r.spreadPct === null || Math.abs(r.spreadPct) < minGap)) return false
+      if (origFilter && r.genuineness !== origFilter) return false
       if (onlyWeAreOut && !r.flags.theyStockWeDont) return false
-      if (onlyGenuine && r.genuineness !== 'genuine') return false
       return true
     })
     const dirMul = sort.dir === 'asc' ? 1 : -1
@@ -140,32 +276,45 @@ function CompetitorsPageInner() {
       if (typeof va === 'string' || typeof vb === 'string') return String(va).localeCompare(String(vb)) * dirMul
       return (va - (vb as number)) * dirMul
     })
-  }, [data, search, enabled, onlyTheyBeatUs, onlyWeAreOut, onlyGenuine, sort])
+  }, [data, search, enabled, brandFilter, stockFilter, priceFilter, minGap, origFilter, onlyWeAreOut, sort])
 
-  // Any change to what's listed sends you back to the first page. Skips the
-  // first run so a shared ?page=3 link isn't reset before it renders.
-  // Keyed on what the USER chose, not on `enabled` — the latter changes when
-  // the competitor list first loads, which would wipe a shared ?page= link.
-  const filterKey = JSON.stringify([
-    search,
-    activeCompetitors ? [...activeCompetitors].sort() : null,
-    onlyTheyBeatUs, onlyWeAreOut, onlyGenuine, sort, showUnmatched,
-  ])
-  const prevFilterKey = useRef(filterKey)
-  useEffect(() => {
-    if (filterKey === prevFilterKey.current) return
-    prevFilterKey.current = filterKey
-    goToPage(0)
-  }, [filterKey, goToPage])
-
+  // Unmatched rows are competitor SKUs with no Jan item behind them, so only the
+  // filters that describe the competitor's own row can apply: search, who listed
+  // it, and whether they call it genuine. The rest are hidden in this view.
   const unmatchedRows = useMemo(() => {
     if (!data) return []
     const q = search.trim().toUpperCase()
     return data.unmatched.filter(r => {
       if (q && !r.itemCode.includes(q) && !(r.name || '').toUpperCase().includes(q)) return false
+      if (origFilter && r.genuineness !== origFilter) return false
       return r.competitors.some(n => enabled.has(n))
     })
-  }, [data, search, enabled])
+  }, [data, search, enabled, origFilter])
+
+  // Only offer brands that actually occur in the data, in resolution order.
+  const availableBrands = useMemo(() => {
+    const seen = new Set<Brand>()
+    for (const r of data?.rows ?? []) seen.add(deriveBrand(r.code))
+    return [...seen].sort((a, b) => BRAND_RANK[a] - BRAND_RANK[b])
+  }, [data])
+
+  // Counted per view, so the badge never advertises a filter this view ignores.
+  const activeFilterCount = (showUnmatched
+    ? [search.trim() !== '', !!compParam, !!origFilter]
+    : [
+      search.trim() !== '', !!compParam, !!brandFilter, !!stockFilter,
+      !!priceFilter, minGap !== null, !!origFilter, onlyWeAreOut,
+    ]
+  ).filter(Boolean).length
+
+  const clearFilters = useCallback(() => {
+    setSearch('')
+    setGapInput('')
+    setParams({
+      q: null, comp: null, brand: null, stock: null, gap: null,
+      price: null, cheaper: null, orig: null, genuine: null, they_stock: null,
+    })
+  }, [setParams, setSearch, setGapInput])
 
   // Both views paginate off the same ?page, clamped to whichever list is shown.
   const activeCount = showUnmatched ? unmatchedRows.length : rows.length
@@ -188,23 +337,33 @@ function CompetitorsPageInner() {
         header: t('suppliers.itemCode'),
         sortable: true,
         sortKey: 'code',
-        cell: r => (
-          <span onClick={e => e.stopPropagation()}>
-            <ItemLink code={r.code} showCode />
-          </span>
-        ),
+        // The brand rides inline with the code rather than claiming a column of
+        // its own — this table already carries one column per competitor.
+        cell: r => {
+          const brand = deriveBrand(r.code)
+          return (
+            <span className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+              <ItemLink code={r.code} showCode />
+              <span className={cn('shrink-0 rounded px-1 py-px text-[10px] font-medium leading-tight', brandChipClasses(brand))}>
+                {brand}
+              </span>
+            </span>
+          )
+        },
       },
       {
         key: 'name',
         header: t('suppliers.itemName'),
-        truncate: 'max-w-[220px]',
         title: r => r.name,
+        // max-width on a <td> is ignored under auto table layout, so the clamp
+        // has to live on a block-level child — otherwise one long Hebrew name
+        // stretches the column and pushes the table past its container.
         cell: r => (
-          <span className="flex items-center gap-1">
+          <span className="flex max-w-[240px] items-center gap-1">
             {r.warnings.length > 0 && (
               <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" aria-label={r.warnings.join('; ')} />
             )}
-            {fixRtlItemName(r.name)}
+            <span className="truncate" title={r.name}>{fixRtlItemName(r.name)}</span>
           </span>
         ),
       },
@@ -342,7 +501,18 @@ function CompetitorsPageInner() {
               <div className="mt-1 text-2xl font-semibold tabular-nums">{formatNumber(data.kpis.matchedItems)}</div>
             </CardContent>
           </Card>
-          <Card className={data.kpis.theyStockWeDont > 0 ? 'border-destructive/50' : undefined}>
+          {/* Each of the three actionable KPIs is also the filter that isolates it. */}
+          <Card
+            role="button"
+            tabIndex={0}
+            onClick={() => setParams({ they_stock: onlyWeAreOut ? null : '1', view: null })}
+            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setParams({ they_stock: onlyWeAreOut ? null : '1', view: null }) } }}
+            className={cn(
+              'cursor-pointer transition-colors hover:bg-muted/40',
+              data.kpis.theyStockWeDont > 0 && 'border-destructive/50',
+              onlyWeAreOut && 'ring-2 ring-destructive',
+            )}
+          >
             <CardContent className="p-4">
               <div className="flex items-center gap-1 text-xs text-destructive">
                 <PackageX className="h-3.5 w-3.5" />
@@ -353,7 +523,16 @@ function CompetitorsPageInner() {
               </div>
             </CardContent>
           </Card>
-          <Card>
+          <Card
+            role="button"
+            tabIndex={0}
+            onClick={() => setParams({ price: priceFilter === 'them' ? null : 'them', cheaper: null, view: null })}
+            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setParams({ price: priceFilter === 'them' ? null : 'them', cheaper: null, view: null }) } }}
+            className={cn(
+              'cursor-pointer transition-colors hover:bg-muted/40',
+              priceFilter === 'them' && 'ring-2 ring-primary',
+            )}
+          >
             <CardContent className="p-4">
               <div className="flex items-center gap-1 text-xs text-muted-foreground">
                 <TrendingDown className="h-3.5 w-3.5" />
@@ -362,7 +541,16 @@ function CompetitorsPageInner() {
               <div className="mt-1 text-2xl font-semibold tabular-nums">{formatNumber(data.kpis.cheaperThanUs)}</div>
             </CardContent>
           </Card>
-          <Card>
+          <Card
+            role="button"
+            tabIndex={0}
+            onClick={() => setParams({ view: showUnmatched ? null : 'unmatched' })}
+            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setParams({ view: showUnmatched ? null : 'unmatched' }) } }}
+            className={cn(
+              'cursor-pointer transition-colors hover:bg-muted/40',
+              showUnmatched && 'ring-2 ring-primary',
+            )}
+          >
             <CardContent className="p-4">
               <div className="flex items-center gap-1 text-xs text-muted-foreground">
                 <SearchX className="h-3.5 w-3.5" />
@@ -376,52 +564,176 @@ function CompetitorsPageInner() {
         </div>
       )}
 
-      {/* Filters */}
+      {/* Filters — every control writes the query string, so the view is linkable. */}
       {hasData && (
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative">
-            <Search className="pointer-events-none absolute top-2.5 start-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder={t('competitors.searchPlaceholder')}
-              className="w-56 ps-9"
-            />
+        <div className="space-y-2.5 rounded-lg border bg-card/50 p-3">
+          {/* Search · who we're comparing against · result count */}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative">
+              <Search className="pointer-events-none absolute top-2.5 start-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder={t('competitors.searchPlaceholder')}
+                className="w-56 ps-9"
+              />
+            </div>
+            <span className="text-[11px] text-muted-foreground">{t('competitors.competitor')}</span>
+            {competitorNames.map(name => {
+              const on = enabled.has(name)
+              return (
+                <Button
+                  key={name}
+                  size="sm"
+                  variant={on ? 'secondary' : 'outline'}
+                  className={on ? '' : 'opacity-50'}
+                  onClick={() => {
+                    const next = new Set(enabled)
+                    if (on) next.delete(name)
+                    else next.add(name)
+                    // all selected == no filter, so drop the param entirely
+                    const all = next.size === competitorNames.length
+                    setParams({ comp: all ? null : [...next].join(',') })
+                  }}
+                >
+                  {name}
+                </Button>
+              )
+            })}
+            <div className="ms-auto flex items-center gap-2">
+              {activeFilterCount > 0 && (
+                <>
+                  <Badge variant="secondary" className="tabular-nums">
+                    {activeFilterCount} {t('competitors.filtersActive')}
+                  </Badge>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 text-xs text-muted-foreground"
+                    onClick={clearFilters}
+                  >
+                    <X className="h-3 w-3 me-1" />
+                    {t('competitors.clearFilters')}
+                  </Button>
+                </>
+              )}
+              <span className="text-xs tabular-nums text-muted-foreground">
+                {formatNumber(activeCount)} {t('competitors.results')}
+              </span>
+            </div>
           </div>
-          {competitorNames.map(name => {
-            const on = enabled.has(name)
-            return (
+
+          {/* Attribute filters. The Jan-side ones are meaningless against the
+              unmatched list (those rows have no Jan item), so they're hidden there. */}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            {!showUnmatched && (
+              <Segmented<StockFilter>
+                label={t('competitors.ourStock')}
+                value={stockFilter}
+                onChange={v => setParams({ stock: v })}
+                options={[
+                  { value: null, label: t('competitors.all') },
+                  { value: 'in', label: t('competitors.inStock') },
+                  { value: 'low', label: t('competitors.lowStock'), title: t('competitors.lowStockTitle') },
+                  { value: 'out', label: t('competitors.outOfStock') },
+                ]}
+              />
+            )}
+
+            {!showUnmatched && (
+              <Segmented<PriceFilter>
+                label={t('competitors.priceVs')}
+                value={priceFilter}
+                // clear the legacy flag too, or it would resurrect the old filter
+                onChange={v => setParams({ price: v, cheaper: null })}
+                options={[
+                  { value: null, label: t('competitors.all') },
+                  { value: 'them', label: t('competitors.theyCheaper') },
+                  { value: 'us', label: t('competitors.weCheaper') },
+                ]}
+              />
+            )}
+
+            {!showUnmatched && (
+              <div className="flex items-center gap-1.5" title={t('competitors.minGapTitle')}>
+                <span className="text-[11px] text-muted-foreground">{t('competitors.minGap')}</span>
+                <Input
+                  type="number"
+                  min={0}
+                  max={999}
+                  inputMode="numeric"
+                  value={gapInput}
+                  onChange={e => setGapInput(e.target.value)}
+                  placeholder="0"
+                  className="h-8 w-16 text-xs"
+                />
+                <span className="text-[11px] text-muted-foreground">%</span>
+              </div>
+            )}
+
+            <Segmented<OrigFilter>
+              label={t('competitors.original')}
+              value={origFilter}
+              onChange={v => setParams({ orig: v, genuine: null })}
+              options={[
+                { value: null, label: t('competitors.all') },
+                { value: 'genuine', label: t('competitors.genuine') },
+                { value: 'aftermarket', label: t('competitors.aftermarket') },
+              ]}
+            />
+
+            {!showUnmatched && availableBrands.length > 1 && (
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] text-muted-foreground">{t('competitors.brand')}</span>
+                {availableBrands.map(b => {
+                  const on = !brandFilter || brandFilter.has(b)
+                  return (
+                    <button
+                      key={b}
+                      type="button"
+                      aria-pressed={on}
+                      onClick={() => {
+                        const current = brandFilter ?? new Set(availableBrands)
+                        const next = new Set(current)
+                        if (next.has(b)) next.delete(b)
+                        else next.add(b)
+                        const all = next.size === availableBrands.length
+                        setParams({ brand: all || next.size === 0 ? null : [...next].join(',') })
+                      }}
+                      className={cn(
+                        'rounded px-1.5 py-1 text-[11px] font-medium transition-opacity',
+                        brandChipClasses(b),
+                        on ? '' : 'opacity-40',
+                      )}
+                    >
+                      {b}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+
+            {!showUnmatched && (
               <Button
-                key={name}
                 size="sm"
-                variant={on ? 'secondary' : 'outline'}
-                className={on ? '' : 'opacity-50'}
-                onClick={() => {
-                  const next = new Set(enabled)
-                  if (on) next.delete(name)
-                  else next.add(name)
-                  setActiveCompetitors(next)
-                }}
+                variant={onlyWeAreOut ? 'destructive' : 'outline'}
+                onClick={() => setParams({ they_stock: onlyWeAreOut ? null : '1' })}
               >
-                {name}
+                <PackageX className="h-3.5 w-3.5 me-1" />
+                {t('competitors.onlyWeAreOut')}
               </Button>
-            )
-          })}
-          <Button size="sm" variant={onlyTheyBeatUs ? 'default' : 'outline'} onClick={() => setOnlyTheyBeatUs(v => !v)}>
-            <TrendingDown className="h-3.5 w-3.5 me-1" />
-            {t('competitors.onlyTheyBeatUs')}
-          </Button>
-          <Button size="sm" variant={onlyWeAreOut ? 'destructive' : 'outline'} onClick={() => setOnlyWeAreOut(v => !v)}>
-            <PackageX className="h-3.5 w-3.5 me-1" />
-            {t('competitors.onlyWeAreOut')}
-          </Button>
-          <Button size="sm" variant={onlyGenuine ? 'secondary' : 'outline'} onClick={() => setOnlyGenuine(v => !v)}>
-            {t('competitors.onlyGenuine')}
-          </Button>
-          <Button size="sm" variant={showUnmatched ? 'secondary' : 'outline'} onClick={() => setShowUnmatched(v => !v)}>
-            <SearchX className="h-3.5 w-3.5 me-1" />
-            {t('competitors.showUnmatched')}
-          </Button>
+            )}
+
+            <Button
+              size="sm"
+              variant={showUnmatched ? 'secondary' : 'outline'}
+              className="ms-auto"
+              onClick={() => setParams({ view: showUnmatched ? null : 'unmatched' })}
+            >
+              <SearchX className="h-3.5 w-3.5 me-1" />
+              {t('competitors.showUnmatched')}
+            </Button>
+          </div>
         </div>
       )}
 
@@ -437,7 +749,7 @@ function CompetitorsPageInner() {
               error={error}
               onRetry={() => refetch()}
               sort={sort}
-              onSortChange={setSort}
+              onSortChange={s => setParams({ sort: s.field, dir: s.dir })}
               onRowClick={r => setHistoryRow(r)}
               rowClassName={r => (r.flags.theyStockWeDont ? 'bg-destructive/5' : undefined)}
               minWidth="min-w-[980px]"
@@ -458,7 +770,7 @@ function CompetitorsPageInner() {
             <DataTable
               columns={[
                 { key: 'code', header: t('suppliers.itemCode'), cell: (r: (typeof data.unmatched)[number]) => <span className="font-mono">{r.rawCode}</span> },
-                { key: 'name', header: t('suppliers.itemName'), truncate: 'max-w-[320px]', title: r => r.name ?? undefined, cell: r => (r.name ? fixRtlItemName(r.name) : '—') },
+                { key: 'name', header: t('suppliers.itemName'), cell: r => <span className="block max-w-[320px] truncate" title={r.name ?? undefined}>{r.name ? fixRtlItemName(r.name) : '—'}</span> },
                 { key: 'genuine', header: t('competitors.original'), align: 'center', cell: r => <GenuineBadge value={r.genuineness} t={t} /> },
                 { key: 'net', header: t('competitors.net'), align: 'end', cell: r => money(r.netPrice) },
                 { key: 'stock', header: t('competitors.stock'), align: 'center', cell: r => <StockPill qty={null} status={r.stockStatus} t={t} /> },
