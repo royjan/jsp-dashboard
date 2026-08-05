@@ -45,6 +45,32 @@ export async function GET(
       // (e.g. partly 10112700 = Finansit MG10112700), so try that as a fallback.
       item = await client.items.get('MG' + upper).catch(() => null)
     }
+    // TOYOTA infrastructure: Toyota (SU0*) codes are not stocked in the ERP —
+    // their value is the pointer to the equivalent PSA part discovered from
+    // shared catalog diagrams (partly.part_links). Resolve to the PSA item.
+    let toyotaResolution: { toyotaCode: string; psaCode: string; confidence: string } | null = null
+    if (!item && upper.startsWith('SU0')) {
+      const links = await query(
+        `SELECT gp_other.item_number AS psa_code, pl.confidence
+         FROM partly.global_parts gp_self
+         JOIN partly.part_links pl ON gp_self.id IN (pl.global_part_id_a, pl.global_part_id_b)
+         JOIN partly.global_parts gp_other
+           ON gp_other.id = CASE WHEN gp_self.id = pl.global_part_id_a
+                                 THEN pl.global_part_id_b ELSE pl.global_part_id_a END
+         WHERE gp_self.item_number = $1 AND gp_other.item_number NOT LIKE 'SU0%'
+         ORDER BY (pl.confidence = 'high') DESC
+         LIMIT 5`,
+        [upper]
+      ).catch(() => null)
+      for (const row of (links?.rows ?? []) as { psa_code: string; confidence: string }[]) {
+        const psaItem = await client.items.get(row.psa_code).catch(() => null)
+        if (psaItem) {
+          item = psaItem
+          toyotaResolution = { toyotaCode: upper, psaCode: row.psa_code, confidence: row.confidence }
+          break
+        }
+      }
+    }
     if (!item) {
       return NextResponse.json({ error: 'Item not found' }, { status: 404 })
     }
@@ -54,6 +80,7 @@ export async function GET(
       canonical_code: history?.canonical_code || item.code,
       canonical_name: history?.canonical_name || item.name,
       item_id_history: history?.item_id_history || item.item_id_history,
+      ...(toyotaResolution ? { toyota_resolution: toyotaResolution } : {}),
     })
   } catch (error) {
     return NextResponse.json(

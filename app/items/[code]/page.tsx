@@ -164,6 +164,23 @@ export default function ItemDetailPage({ params }: { params: Promise<{ code: str
         </div>
       </div>
 
+      {/* TOYOTA -> PSA resolution banner: the requested Toyota code is not an
+          ERP item; we show its PSA equivalent (derived from shared catalog
+          diagrams via partly.part_links). */}
+      {data.toyota_resolution && (
+        <div className="flex flex-wrap items-center gap-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm dark:border-rose-500/30 dark:bg-rose-500/10">
+          <span className={`rounded px-1.5 py-0.5 text-[11px] font-medium leading-none ${brandChipClasses('TOYOTA')}`}>TOYOTA</span>
+          <span className="font-mono" dir="ltr">{data.toyota_resolution.toyotaCode}</span>
+          <span className="text-muted-foreground">
+            {isHe ? 'הוא קוד טויוטה — מוצג החלק המקביל של PSA' : 'is a Toyota code — showing the equivalent PSA part'}
+          </span>
+          <span className="font-mono font-medium" dir="ltr">{data.toyota_resolution.psaCode}</span>
+          {data.toyota_resolution.confidence !== 'high' && (
+            <span className="text-xs text-muted-foreground" title={isHe ? 'התאמה משוערת' : 'approximate match'}>~</span>
+          )}
+        </div>
+      )}
+
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3">
         <motion.div custom={0} variants={cardVariants} initial="hidden" animate="visible">
