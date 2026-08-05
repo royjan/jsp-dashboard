@@ -30,6 +30,7 @@ import {
   Package,
   User,
   Sparkles,
+  Swords,
 } from 'lucide-react'
 
 const navItems: Array<{ href: string; labelKey: TranslationKey; icon: typeof LayoutDashboard }> = [
@@ -46,6 +47,7 @@ const navItems: Array<{ href: string; labelKey: TranslationKey; icon: typeof Lay
   { href: '/ebay', labelKey: 'ebay', icon: ShoppingCart },
   { href: '/ebay-reco', labelKey: 'ebayReco', icon: ShoppingCart },
   { href: '/margin', labelKey: 'margin', icon: Percent },
+  { href: '/competitors', labelKey: 'competitors', icon: Swords },
   { href: '/alerts', labelKey: 'alerts', icon: Bell },
   { href: '/pricing', labelKey: 'pricing', icon: DollarSign },
   { href: '/report', labelKey: 'report', icon: FileBarChart },

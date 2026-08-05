@@ -36,6 +36,7 @@ import {
   BotMessageSquare,
   ThumbsUp,
   ReceiptText,
+  Swords,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
@@ -76,6 +77,7 @@ const navSections: Array<{ id: string; labelKey: TranslationKey; items: NavItem[
   {
     id: 'operations', labelKey: 'sectionOperations', items: [
       { href: '/suppliers', labelKey: 'suppliers', icon: PackageCheck },
+      { href: '/competitors', labelKey: 'competitors', icon: Swords },
       { href: '/shipments', labelKey: 'inboundShipments', icon: Container },
       { href: '/deliveries', labelKey: 'deliveries', icon: Truck },
       { href: '/vehicle-intelligence', labelKey: 'vehicleIntelligence', icon: CarFront },

@@ -1,4 +1,4 @@
-import { pgSchema, pgTable, integer, text, numeric, date, real, timestamp, serial, primaryKey, boolean, uuid, varchar, jsonb } from 'drizzle-orm/pg-core'
+import { pgSchema, pgTable, integer, text, numeric, date, real, timestamp, serial, primaryKey, boolean, uuid, varchar, jsonb, index, uniqueIndex } from 'drizzle-orm/pg-core'
 
 // All tables live in the "dashboard" schema
 export const dashboardSchema = pgSchema('dashboard')
@@ -513,6 +513,78 @@ export type SupplierPriceUpload = typeof supplierPriceUploads.$inferSelect
 export type NewSupplierPriceUpload = typeof supplierPriceUploads.$inferInsert
 export type SupplierOrderConfirmation = typeof supplierOrderConfirmations.$inferSelect
 export type NewSupplierOrderConfirmation = typeof supplierOrderConfirmations.$inferInsert
+
+// ── Competitor Price Comparison ──
+
+/**
+ * Competitors (Record, Comet, RunParts, …) — auto-created from the sheet
+ * names of uploaded price-list workbooks. `latestUploadId` points at the most
+ * recent completed upload that carried this competitor's sheet; "current
+ * snapshot" reads join on it, while competitor_items keeps full history.
+ */
+export const competitors = dashboardSchema.table('competitors', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: text('name').notNull().unique(),
+  displayName: text('display_name'),
+  notes: text('notes'),
+  active: boolean('active').notNull().default(true),
+  latestUploadId: uuid('latest_upload_id'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+})
+
+/**
+ * One row per uploaded workbook. A single file may carry sheets for several
+ * competitors; per-sheet outcomes live in sheetsSummary. fileHash (sha256)
+ * guards against accidental duplicate uploads (re-upload requires force).
+ */
+export const competitorUploads = dashboardSchema.table('competitor_uploads', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  fileName: text('file_name').notNull(),
+  fileHash: text('file_hash').notNull(),
+  status: supplierUploadStatusEnum().notNull().default('pending'),
+  sheetsSummary: jsonb('sheets_summary'),
+  totalRows: integer('total_rows').default(0),
+  errorsCount: integer('errors_count').default(0),
+  uploadedAt: timestamp('uploaded_at', { withTimezone: true }).defaultNow().notNull(),
+  uploadedBy: varchar('uploaded_by', { length: 255 }),
+}, (table) => [
+  index('competitor_uploads_hash_idx').on(table.fileHash),
+])
+
+/**
+ * Competitor catalog rows — full history: every upload inserts its rows,
+ * nothing is overwritten. itemCode is the normalized canonical OEM code
+ * (prefixes/dots stripped, uppercased); rawCode preserves the sheet value.
+ */
+export const competitorItems = dashboardSchema.table('competitor_items', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  uploadId: uuid('upload_id').notNull().references(() => competitorUploads.id),
+  competitorId: uuid('competitor_id').notNull().references(() => competitors.id),
+  itemCode: text('item_code').notNull(),
+  rawCode: text('raw_code').notNull(),
+  name: text('name'),
+  brand: text('brand'),
+  grossPrice: numeric('gross_price'),
+  netPrice: numeric('net_price'),
+  discountPct: numeric('discount_pct'),
+  stockQty: numeric('stock_qty'),
+  stockStatus: varchar('stock_status', { length: 20 }).notNull().default('unknown'),
+  oemCodes: text('oem_codes').array(),
+  attrs: jsonb('attrs'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex('competitor_items_upload_comp_code_uq').on(table.uploadId, table.competitorId, table.itemCode),
+  index('competitor_items_comp_code_idx').on(table.competitorId, table.itemCode),
+  index('competitor_items_upload_idx').on(table.uploadId),
+])
+
+export type Competitor = typeof competitors.$inferSelect
+export type NewCompetitor = typeof competitors.$inferInsert
+export type CompetitorUpload = typeof competitorUploads.$inferSelect
+export type NewCompetitorUpload = typeof competitorUploads.$inferInsert
+export type CompetitorItem = typeof competitorItems.$inferSelect
+export type NewCompetitorItem = typeof competitorItems.$inferInsert
 
 /* ──────────────────────────────────────────────────────────────────────────
  * Chat-admin tables (owned by jsp-chat-js, public schema, shared Neon DB).

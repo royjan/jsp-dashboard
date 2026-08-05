@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { useLocale } from '@/lib/locale-context'
-import { LayoutDashboard, Sun, Warehouse, Users, Trash2, FileBarChart, Receipt, SearchX, TrendingDown, ShoppingCart, RotateCcw, CarFront, MoreHorizontal, X, Sparkles, Percent, Truck, Briefcase, PackageCheck } from 'lucide-react'
+import { LayoutDashboard, Sun, Warehouse, Users, Trash2, FileBarChart, Receipt, SearchX, TrendingDown, ShoppingCart, RotateCcw, CarFront, MoreHorizontal, X, Sparkles, Percent, Truck, Briefcase, PackageCheck, Swords } from 'lucide-react'
 import type { TranslationKey } from '@/lib/i18n'
 
 const primaryNav: Array<{ href: string; labelKey: TranslationKey; icon: typeof LayoutDashboard }> = [
@@ -27,6 +27,7 @@ const moreNav: Array<{ href: string; labelKey: TranslationKey; icon: typeof Layo
   { href: '/ebay-reco', labelKey: 'ebayReco', icon: PackageCheck },
   { href: '/margin', labelKey: 'margin', icon: Percent },
   { href: '/suppliers', labelKey: 'suppliers', icon: PackageCheck },
+  { href: '/competitors', labelKey: 'competitors', icon: Swords },
   { href: '/vehicle-intelligence', labelKey: 'vehicleIntelligence', icon: CarFront },
   { href: '/report', labelKey: 'report', icon: FileBarChart },
 ]
