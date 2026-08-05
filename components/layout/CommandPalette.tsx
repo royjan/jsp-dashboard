@@ -7,6 +7,7 @@ import { useTheme } from 'next-themes'
 import { useQueryClient } from '@tanstack/react-query'
 import { useLocale } from '@/lib/locale-context'
 import type { TranslationKey } from '@/lib/i18n'
+import { brandChipClasses } from '@/lib/brand'
 import {
   LayoutDashboard,
   Sun,
@@ -67,6 +68,13 @@ interface SearchResult {
     code: string
     name: string
     similarity: number
+  }>
+  /** Partly-catalog codes the ERP doesn't know — Toyota (SU0*) part ids etc. */
+  catalog?: Array<{
+    code: string
+    brand: string
+    description?: string | null
+    hebrewDescription?: string | null
   }>
 }
 
@@ -222,6 +230,36 @@ export function CommandPalette() {
                             {t('cmd.stockQty')}: {item.stock_qty}
                           </span>
                         )}
+                      </Command.Item>
+                    ))}
+                  </Command.Group>
+                )}
+
+                {/* Search Results: Partly catalog (Toyota/MG codes not in the ERP) */}
+                {searchResults?.catalog && searchResults.catalog.length > 0 && (
+                  <Command.Group
+                    heading={t('cmd.catalog')}
+                    className="[&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5"
+                  >
+                    {searchResults.catalog.map((item) => (
+                      <Command.Item
+                        key={`cat-${item.code}`}
+                        value={`catalog ${item.code} ${item.description || ''}`}
+                        onSelect={() => runAction(() => router.push(`/items/${encodeURIComponent(item.code)}`))}
+                        className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm cursor-pointer aria-selected:bg-accent aria-selected:text-accent-foreground"
+                      >
+                        <Package className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium truncate font-mono" dir="ltr">{item.code}</div>
+                          {(item.hebrewDescription || item.description) && (
+                            <div className="text-xs text-muted-foreground truncate" dir="auto">
+                              {item.hebrewDescription || item.description}
+                            </div>
+                          )}
+                        </div>
+                        <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium leading-none ${brandChipClasses(item.brand)}`}>
+                          {item.brand}
+                        </span>
                       </Command.Item>
                     ))}
                   </Command.Group>

@@ -56,6 +56,7 @@ export async function GET(
       resolvedBrand: string
       confidence: string
     } | null = null
+    let resolvedHistory: Awaited<ReturnType<typeof client.items.getHistory>> | null = null
     if (!item) {
       // Candidate partly item numbers for the requested code (partly stores
       // MG parts WITHOUT the MG prefix).
@@ -105,10 +106,23 @@ export async function GET(
           const resolved = await client.items.get(erpCode).catch(() => null)
           if (resolved) {
             item = resolved
+            let finalCode = erpCode
+            // Follow the ERP supersession chain: the catalog-linked code may
+            // be superseded (e.g. 1306J5 -> 6501634880) — always land on the
+            // newest code, exactly like opening the old code directly would.
+            resolvedHistory = await client.items.getHistory(erpCode).catch(() => null)
+            const canonical = resolvedHistory?.canonical_code
+            if (canonical && canonical !== erpCode) {
+              const canonicalItem = await client.items.get(canonical).catch(() => null)
+              if (canonicalItem) {
+                item = canonicalItem
+                finalCode = canonical
+              }
+            }
             brandResolution = {
               requestedCode: upper,
               requestedBrand: row.self_brand,
-              resolvedCode: erpCode,
+              resolvedCode: finalCode,
               resolvedBrand: row.other_brand,
               confidence: row.confidence,
             }
@@ -122,11 +136,14 @@ export async function GET(
       return NextResponse.json({ error: 'Item not found' }, { status: 404 })
     }
 
+    // For brand-resolved items the relevant history chain is the RESOLVED
+    // part's, not the requested (catalog-only) code's.
+    const effectiveHistory = resolvedHistory ?? history
     return NextResponse.json({
       ...item,
-      canonical_code: history?.canonical_code || item.code,
-      canonical_name: history?.canonical_name || item.name,
-      item_id_history: history?.item_id_history || item.item_id_history,
+      canonical_code: effectiveHistory?.canonical_code || item.code,
+      canonical_name: effectiveHistory?.canonical_name || item.name,
+      item_id_history: effectiveHistory?.item_id_history || item.item_id_history,
       ...(brandResolution ? { brand_resolution: brandResolution } : {}),
     })
   } catch (error) {
