@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { initializeSecrets } from '@/lib/aws-secrets'
 import { query } from '@/lib/db'
-import { deriveBrand } from '@/lib/brand'
+import { deriveBrand, BRAND_RANK } from '@/lib/brand'
 
 /**
  * Cross-brand linked parts ("aliases") for an item, from partly.part_links —
@@ -40,6 +40,7 @@ export async function GET(
     const { rows } = await query(
       `SELECT DISTINCT ON (gp_other.item_number)
               gp_other.item_number,
+              gp_other.brand,
               gp_other.description,
               gp_other.hebrew_description,
               pl.confidence,
@@ -63,7 +64,7 @@ export async function GET(
 
     const links = rows.map((r: any) => ({
       code: r.item_number as string,
-      brand: deriveBrand(r.erp_code || r.item_number),
+      brand: (r.brand as string) || deriveBrand(r.erp_code || r.item_number),
       description: r.description || null,
       // '-' is a common placeholder in partly for "no Hebrew description"
       hebrewDescription: r.hebrew_description && r.hebrew_description !== '-' ? r.hebrew_description : null,
@@ -73,6 +74,13 @@ export async function GET(
       // null = the part exists only in the partly catalog, not in the ERP.
       erpCode: (r.erp_code as string | null) || null,
     }))
+
+    // Resolution hierarchy: PSA first, then MG, then TOYOTA; high confidence first.
+    links.sort(
+      (a, b) =>
+        (BRAND_RANK[a.brand] ?? 9) - (BRAND_RANK[b.brand] ?? 9) ||
+        (a.confidence === 'high' ? 0 : 1) - (b.confidence === 'high' ? 0 : 1)
+    )
 
     return NextResponse.json({ links })
   } catch (error) {

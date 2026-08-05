@@ -45,30 +45,73 @@ export async function GET(
       // (e.g. partly 10112700 = Finansit MG10112700), so try that as a fallback.
       item = await client.items.get('MG' + upper).catch(() => null)
     }
-    // TOYOTA infrastructure: Toyota (SU0*) codes are not stocked in the ERP —
-    // their value is the pointer to the equivalent PSA part discovered from
-    // shared catalog diagrams (partly.part_links). Resolve to the PSA item.
-    let toyotaResolution: { toyotaCode: string; psaCode: string; confidence: string } | null = null
-    if (!item && upper.startsWith('SU0')) {
+    // Cross-brand resolution (brand hierarchy: PSA > MG > TOYOTA).
+    // A code whose own item isn't in the ERP resolves through
+    // partly.part_links to the highest-priority linked brand that is:
+    // TOYOTA -> PSA today; MG -> PSA the moment MG<->PSA links exist.
+    let brandResolution: {
+      requestedCode: string
+      requestedBrand: string
+      resolvedCode: string
+      resolvedBrand: string
+      confidence: string
+    } | null = null
+    if (!item) {
+      // Candidate partly item numbers for the requested code (partly stores
+      // MG parts WITHOUT the MG prefix).
+      const candidates = [upper]
+      if (upper.startsWith('MG')) candidates.push(upper.slice(2))
+      const flRes = await query(
+        `SELECT partly_item_number FROM partly.finansit_links WHERE finansit_code = $1`,
+        [upper]
+      ).catch(() => null)
+      for (const r of (flRes?.rows ?? []) as { partly_item_number: string }[]) {
+        if (!candidates.includes(r.partly_item_number)) candidates.push(r.partly_item_number)
+      }
+
       const links = await query(
-        `SELECT gp_other.item_number AS psa_code, pl.confidence
+        `SELECT DISTINCT ON (gp_other.item_number)
+                gp_self.brand AS self_brand,
+                gp_other.item_number AS other_code, gp_other.brand AS other_brand,
+                pl.confidence
          FROM partly.global_parts gp_self
          JOIN partly.part_links pl ON gp_self.id IN (pl.global_part_id_a, pl.global_part_id_b)
          JOIN partly.global_parts gp_other
            ON gp_other.id = CASE WHEN gp_self.id = pl.global_part_id_a
                                  THEN pl.global_part_id_b ELSE pl.global_part_id_a END
-         WHERE gp_self.item_number = $1 AND gp_other.item_number NOT LIKE 'SU0%'
-         ORDER BY (pl.confidence = 'high') DESC
-         LIMIT 5`,
-        [upper]
+         WHERE gp_self.item_number = ANY($1)
+         ORDER BY gp_other.item_number, (pl.confidence = 'high') DESC`,
+        [candidates]
       ).catch(() => null)
-      for (const row of (links?.rows ?? []) as { psa_code: string; confidence: string }[]) {
-        const psaItem = await client.items.get(row.psa_code).catch(() => null)
-        if (psaItem) {
-          item = psaItem
-          toyotaResolution = { toyotaCode: upper, psaCode: row.psa_code, confidence: row.confidence }
-          break
+
+      const BRAND_RANK: Record<string, number> = { PSA: 0, MG: 1, TOYOTA: 2 }
+      const ranked = ((links?.rows ?? []) as {
+        self_brand: string; other_code: string; other_brand: string; confidence: string
+      }[]).sort(
+        (a, b) =>
+          (BRAND_RANK[a.other_brand] ?? 9) - (BRAND_RANK[b.other_brand] ?? 9) ||
+          (a.confidence === 'high' ? 0 : 1) - (b.confidence === 'high' ? 0 : 1)
+      )
+      for (const row of ranked) {
+        // ERP code for the linked part: MG parts carry the MG prefix on the
+        // Finansit side; PSA codes are identical on both sides.
+        const erpCandidates =
+          row.other_brand === 'MG' ? ['MG' + row.other_code, row.other_code] : [row.other_code]
+        for (const erpCode of erpCandidates) {
+          const resolved = await client.items.get(erpCode).catch(() => null)
+          if (resolved) {
+            item = resolved
+            brandResolution = {
+              requestedCode: upper,
+              requestedBrand: row.self_brand,
+              resolvedCode: erpCode,
+              resolvedBrand: row.other_brand,
+              confidence: row.confidence,
+            }
+            break
+          }
         }
+        if (item) break
       }
     }
     if (!item) {
@@ -80,7 +123,7 @@ export async function GET(
       canonical_code: history?.canonical_code || item.code,
       canonical_name: history?.canonical_name || item.name,
       item_id_history: history?.item_id_history || item.item_id_history,
-      ...(toyotaResolution ? { toyota_resolution: toyotaResolution } : {}),
+      ...(brandResolution ? { brand_resolution: brandResolution } : {}),
     })
   } catch (error) {
     return NextResponse.json(
