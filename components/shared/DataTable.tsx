@@ -305,13 +305,15 @@ export function DataTable<TRow, TSortKey extends string = string>({
                           'py-2.5',
                           alignClass(col.align),
                           isNumeric && 'tabular-nums',
-                          truncateClass(col.truncate),
                           col.hideOnMobile && 'hidden sm:table-cell',
                           col.cellClassName,
                         )}
                         title={title}
                       >
-                        {value}
+                        {/* The clamp has to sit on a block-level child: browsers
+                            ignore max-width on a <td> under auto table layout,
+                            so putting it here is what makes `truncate` work. */}
+                        {col.truncate ? <div className={truncateClass(col.truncate)}>{value}</div> : value}
                       </td>
                     )
                   })}

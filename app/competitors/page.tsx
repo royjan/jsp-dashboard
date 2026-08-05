@@ -791,7 +791,9 @@ function CompetitorsPageInner() {
       {/* Pagination */}
       {hasData && activeCount > 0 && (
         <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-          <span className="text-xs text-muted-foreground">
+          {/* dir="ltr" isolates these composites: under RTL, BiDi reorders the
+              runs around the separators and "1–7 / 19" reads back as "19 / 7–1". */}
+          <span dir="ltr" className="text-xs tabular-nums text-muted-foreground">
             {formatNumber(safePage * PER_PAGE + 1)}–{formatNumber(Math.min((safePage + 1) * PER_PAGE, activeCount))}
             {' / '}{formatNumber(activeCount)}
           </span>
@@ -801,7 +803,7 @@ function CompetitorsPageInner() {
               <ChevronRight className="h-4 w-4 rtl:rotate-0 ltr:hidden" />
               <ChevronLeft className="hidden h-4 w-4 ltr:block" />
             </Button>
-            <span className="px-2 text-xs tabular-nums text-muted-foreground">
+            <span dir="ltr" className="px-2 text-xs tabular-nums text-muted-foreground">
               {safePage + 1} / {activePageCount}
             </span>
             <Button
