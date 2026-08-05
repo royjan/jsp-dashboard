@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Search, Sparkles, Package, Clock, X, ArrowLeft, ExternalLink } from 'lucide-react'
 import { SubTabs } from '@/components/shared/SubTabs'
+import { brandChipClasses } from '@/lib/brand'
 import { ILS_FORMAT } from '@/lib/constants'
 
 interface SemanticResult {
@@ -28,6 +29,14 @@ interface ExactResult {
   description?: string
   stock_qty?: number
   price?: number
+}
+
+/** Partly-catalog code the ERP doesn't know (Toyota SU0* ids etc.). */
+interface CatalogResult {
+  code: string
+  brand: string
+  description?: string | null
+  hebrewDescription?: string | null
 }
 
 const RECENT_SEARCHES_KEY = 'jan-parts-recent-searches'
@@ -146,7 +155,7 @@ export default function SearchPage() {
     queryFn: async () => {
       const res = await fetch(`/api/search?q=${encodeURIComponent(debouncedQuery)}`)
       if (!res.ok) throw new Error('Failed')
-      return res.json() as Promise<{ items: ExactResult[] }>
+      return res.json() as Promise<{ items: ExactResult[]; catalog?: CatalogResult[] }>
     },
     enabled: debouncedQuery.length >= 2,
     staleTime: 5 * 60 * 1000,
@@ -157,7 +166,8 @@ export default function SearchPage() {
   const hasQuery = debouncedQuery.length >= 2
   const semanticItems = semanticData?.items || []
   const exactItems = exactData?.items || []
-  const hasResults = semanticItems.length > 0 || exactItems.length > 0
+  const catalogItems = exactData?.catalog || []
+  const hasResults = semanticItems.length > 0 || exactItems.length > 0 || catalogItems.length > 0
 
   const handleRecentClick = useCallback((search: string) => {
     setQuery(search)
@@ -353,6 +363,56 @@ export default function SearchPage() {
                                 <span className="text-sm font-medium">{ILS_FORMAT.format(item.price)}</span>
                               )}
                             </div>
+                            <Link
+                              href={`/items/${encodeURIComponent(item.code)}`}
+                              className="text-xs text-primary hover:underline flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                              {t('search.viewDetails')}
+                              <ExternalLink className="h-3 w-3" />
+                            </Link>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </motion.div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Partly-catalog results: Toyota/MG codes the ERP doesn't know.
+                /items/{code} brand-resolves them (PSA > MG > TOYOTA). */}
+            {catalogItems.length > 0 && (
+              <div className="space-y-3">
+                <h2 className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
+                  <Package className="h-4 w-4" />
+                  {t('cmd.catalog')}
+                  <Badge variant="secondary" className="text-xs">{catalogItems.length}</Badge>
+                </h2>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {catalogItems.map((item, idx) => (
+                    <motion.div
+                      key={item.code}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: idx * 0.05 }}
+                    >
+                      <Card className="hover:shadow-md transition-shadow group">
+                        <CardContent className="p-4 space-y-2">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <Package className="h-4 w-4 text-muted-foreground shrink-0" />
+                                <span className="font-bold text-sm font-mono" dir="ltr">{item.code}</span>
+                                <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium leading-none ${brandChipClasses(item.brand)}`}>
+                                  {item.brand}
+                                </span>
+                              </div>
+                              <p className="text-sm text-muted-foreground truncate mt-1" dir="auto">
+                                {item.hebrewDescription || item.description || ''}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-end gap-2 pt-1">
                             <Link
                               href={`/items/${encodeURIComponent(item.code)}`}
                               className="text-xs text-primary hover:underline flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
