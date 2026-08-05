@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -9,8 +9,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { DataTable, type DataTableColumn, type DataTableSort } from '@/components/shared/DataTable'
 import { ItemLink } from '@/components/shared/ItemLink'
 import { CompetitorUploader } from '@/components/competitors/CompetitorUploader'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useCompetitorComparison, useCompetitorItemHistory } from '@/hooks/use-competitors'
-import { useUrlParams } from '@/hooks/use-url-params'
 import { useLocale } from '@/lib/locale-context'
 import { formatCurrency, formatNumber } from '@/lib/constants'
 import { fixRtlItemName } from '@/lib/rtl-fix'
@@ -82,7 +82,9 @@ function GenuineBadge({ value, t }: { value: string; t: T }) {
 function CompetitorsPageInner() {
   const { t } = useLocale()
   const { data, isLoading, error, refetch } = useCompetitorComparison()
-  const { set, searchParams } = useUrlParams()
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
 
   const [search, setSearch] = useState('')
   const [activeCompetitors, setActiveCompetitors] = useState<Set<string> | null>(null)
@@ -97,7 +99,13 @@ function CompetitorsPageInner() {
   // Pagination lives in the URL (?page=1 is the first page) so a view can be
   // linked and survives reloads. Internally it stays 0-based.
   const page = Math.max(0, (Number(searchParams.get('page')) || 1) - 1)
-  const goToPage = (p: number) => set('page', p <= 0 ? null : String(p + 1))
+  const goToPage = useCallback((p: number) => {
+    const params = new URLSearchParams(searchParams.toString())
+    if (p <= 0) params.delete('page')
+    else params.set('page', String(p + 1))
+    const qs = params.toString()
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+  }, [router, pathname, searchParams])
 
   const competitorNames = useMemo(() => data?.competitors.map(c => c.name) ?? [], [data])
   const enabled = useMemo(
@@ -147,8 +155,8 @@ function CompetitorsPageInner() {
   useEffect(() => {
     if (filterKey === prevFilterKey.current) return
     prevFilterKey.current = filterKey
-    set('page', null)
-  }, [filterKey, set])
+    goToPage(0)
+  }, [filterKey, goToPage])
 
   const unmatchedRows = useMemo(() => {
     if (!data) return []
