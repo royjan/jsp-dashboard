@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -10,6 +10,7 @@ import { DataTable, type DataTableColumn, type DataTableSort } from '@/component
 import { ItemLink } from '@/components/shared/ItemLink'
 import { CompetitorUploader } from '@/components/competitors/CompetitorUploader'
 import { useCompetitorComparison, useCompetitorItemHistory } from '@/hooks/use-competitors'
+import { useUrlParams } from '@/hooks/use-url-params'
 import { useLocale } from '@/lib/locale-context'
 import { formatCurrency, formatNumber } from '@/lib/constants'
 import { fixRtlItemName } from '@/lib/rtl-fix'
@@ -20,7 +21,7 @@ import type { TranslationKey } from '@/lib/i18n'
 type SortField = 'code' | 'ourPrice' | 'ourStock' | 'minNet' | 'spread' | 'sold'
 type T = (k: TranslationKey) => string
 
-const PER_PAGE = 50
+const PER_PAGE = 7
 
 /** Whole shekels stay clean; agorot are shown when they exist (71.16 ≠ 71). */
 function money(v: number | null | undefined): string {
@@ -78,9 +79,10 @@ function GenuineBadge({ value, t }: { value: string; t: T }) {
   return <span className="text-xs text-muted-foreground">—</span>
 }
 
-export default function CompetitorsPage() {
+function CompetitorsPageInner() {
   const { t } = useLocale()
   const { data, isLoading, error, refetch } = useCompetitorComparison()
+  const { set, searchParams } = useUrlParams()
 
   const [search, setSearch] = useState('')
   const [activeCompetitors, setActiveCompetitors] = useState<Set<string> | null>(null)
@@ -91,7 +93,11 @@ export default function CompetitorsPage() {
   const [showUploader, setShowUploader] = useState(false)
   const [sort, setSort] = useState<DataTableSort<SortField>>({ field: 'spread', dir: 'asc' })
   const [historyRow, setHistoryRow] = useState<CompareRow | null>(null)
-  const [page, setPage] = useState(0)
+
+  // Pagination lives in the URL (?page=1 is the first page) so a view can be
+  // linked and survives reloads. Internally it stays 0-based.
+  const page = Math.max(0, (Number(searchParams.get('page')) || 1) - 1)
+  const goToPage = (p: number) => set('page', p <= 0 ? null : String(p + 1))
 
   const competitorNames = useMemo(() => data?.competitors.map(c => c.name) ?? [], [data])
   const enabled = useMemo(
@@ -128,21 +134,38 @@ export default function CompetitorsPage() {
     })
   }, [data, search, enabled, onlyTheyBeatUs, onlyWeAreOut, onlyGenuine, sort])
 
-  // Any change to what's listed sends you back to the first page (adjusted
-  // during render rather than in an effect, so there's no second paint).
-  const filterKey = JSON.stringify([search, [...enabled].sort(), onlyTheyBeatUs, onlyWeAreOut, onlyGenuine, sort, showUnmatched])
-  const [prevFilterKey, setPrevFilterKey] = useState(filterKey)
-  if (filterKey !== prevFilterKey) {
-    setPrevFilterKey(filterKey)
-    setPage(0)
-  }
+  // Any change to what's listed sends you back to the first page. Skips the
+  // first run so a shared ?page=3 link isn't reset before it renders.
+  // Keyed on what the USER chose, not on `enabled` — the latter changes when
+  // the competitor list first loads, which would wipe a shared ?page= link.
+  const filterKey = JSON.stringify([
+    search,
+    activeCompetitors ? [...activeCompetitors].sort() : null,
+    onlyTheyBeatUs, onlyWeAreOut, onlyGenuine, sort, showUnmatched,
+  ])
+  const prevFilterKey = useRef(filterKey)
+  useEffect(() => {
+    if (filterKey === prevFilterKey.current) return
+    prevFilterKey.current = filterKey
+    set('page', null)
+  }, [filterKey, set])
 
-  const pageCount = Math.max(1, Math.ceil(rows.length / PER_PAGE))
-  const safePage = Math.min(page, pageCount - 1)
-  const pageRows = useMemo(
-    () => rows.slice(safePage * PER_PAGE, safePage * PER_PAGE + PER_PAGE),
-    [rows, safePage],
-  )
+  const unmatchedRows = useMemo(() => {
+    if (!data) return []
+    const q = search.trim().toUpperCase()
+    return data.unmatched.filter(r => {
+      if (q && !r.itemCode.includes(q) && !(r.name || '').toUpperCase().includes(q)) return false
+      return r.competitors.some(n => enabled.has(n))
+    })
+  }, [data, search, enabled])
+
+  // Both views paginate off the same ?page, clamped to whichever list is shown.
+  const activeCount = showUnmatched ? unmatchedRows.length : rows.length
+  const activePageCount = Math.max(1, Math.ceil(activeCount / PER_PAGE))
+  const safePage = Math.min(page, activePageCount - 1)
+  const from = safePage * PER_PAGE
+  const pageRows = useMemo(() => rows.slice(from, from + PER_PAGE), [rows, from])
+  const unmatchedPage = useMemo(() => unmatchedRows.slice(from, from + PER_PAGE), [unmatchedRows, from])
 
   const historyCodes = useMemo(() => {
     if (!historyRow) return null
@@ -281,17 +304,6 @@ export default function CompetitorsPage() {
   }, [competitorNames, t])
 
   const hasData = !!data && data.competitors.length > 0
-  const unmatchedRows = useMemo(() => {
-    if (!data) return []
-    const q = search.trim().toUpperCase()
-    return data.unmatched.filter(r => {
-      if (q && !r.itemCode.includes(q) && !(r.name || '').toUpperCase().includes(q)) return false
-      return r.competitors.some(n => enabled.has(n))
-    })
-  }, [data, search, enabled])
-  const unmatchedPage = unmatchedRows.slice(safePage * PER_PAGE, safePage * PER_PAGE + PER_PAGE)
-  const activeCount = showUnmatched ? unmatchedRows.length : rows.length
-  const activePageCount = Math.max(1, Math.ceil(activeCount / PER_PAGE))
 
   return (
     <div className="w-full min-w-0 space-y-4">
@@ -464,8 +476,8 @@ export default function CompetitorsPage() {
             {' / '}{formatNumber(activeCount)}
           </span>
           <div className="flex items-center gap-1">
-            <Button size="sm" variant="outline" disabled={safePage === 0} onClick={() => setPage(0)}>«</Button>
-            <Button size="sm" variant="outline" disabled={safePage === 0} onClick={() => setPage(p => Math.max(0, p - 1))}>
+            <Button size="sm" variant="outline" disabled={safePage === 0} onClick={() => goToPage(0)}>«</Button>
+            <Button size="sm" variant="outline" disabled={safePage === 0} onClick={() => goToPage(safePage - 1)}>
               <ChevronRight className="h-4 w-4 rtl:rotate-0 ltr:hidden" />
               <ChevronLeft className="hidden h-4 w-4 ltr:block" />
             </Button>
@@ -476,12 +488,12 @@ export default function CompetitorsPage() {
               size="sm"
               variant="outline"
               disabled={safePage >= activePageCount - 1}
-              onClick={() => setPage(p => Math.min(activePageCount - 1, p + 1))}
+              onClick={() => goToPage(safePage + 1)}
             >
               <ChevronLeft className="h-4 w-4 ltr:hidden" />
               <ChevronRight className="hidden h-4 w-4 ltr:block" />
             </Button>
-            <Button size="sm" variant="outline" disabled={safePage >= activePageCount - 1} onClick={() => setPage(activePageCount - 1)}>»</Button>
+            <Button size="sm" variant="outline" disabled={safePage >= activePageCount - 1} onClick={() => goToPage(activePageCount - 1)}>»</Button>
           </div>
         </div>
       )}
@@ -527,5 +539,14 @@ export default function CompetitorsPage() {
         </DialogContent>
       </Dialog>
     </div>
+  )
+}
+
+export default function CompetitorsPage() {
+  // useSearchParams (via useUrlParams) needs a Suspense boundary to prerender.
+  return (
+    <Suspense fallback={<div className="p-6 text-muted-foreground">טוען…</div>}>
+      <CompetitorsPageInner />
+    </Suspense>
   )
 }
