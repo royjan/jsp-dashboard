@@ -109,6 +109,7 @@ export async function POST(request: Request) {
               discountPct: row.discountPct != null ? String(row.discountPct) : null,
               stockQty: row.stockQty != null ? String(row.stockQty) : null,
               stockStatus: row.stockStatus,
+              genuineness: row.genuineness,
               oemCodes: row.oemCodes.length ? row.oemCodes : null,
               attrs: row.attrs,
             })))

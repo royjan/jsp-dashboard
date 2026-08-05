@@ -10,6 +10,25 @@ import * as XLSX from 'xlsx'
  */
 
 export type StockStatus = 'in_stock' | 'out_of_stock' | 'unknown'
+export type Genuineness = 'genuine' | 'aftermarket' | 'unknown'
+
+/** Upper sanity bounds — anything past these is a parse artefact, not data. */
+const MAX_PRICE = 1_000_000
+const MAX_STOCK = 100_000
+
+/**
+ * Genuine (OEM) vs aftermarket, from the sheet's brand/manufacturer column.
+ * 'מקורי' (Record), 'GENUINE PARTS' (Comet) and the PSA marques RunParts sells
+ * under (CITROEN/PEUGEOT/DS/OPEL) all mean a genuine part.
+ */
+export function classifyGenuineness(brand: string | null | undefined): Genuineness {
+  const b = (brand || '').trim()
+  if (!b) return 'unknown'
+  if (/מקורי|genuine|original|\bOEM\b/i.test(b)) return 'genuine'
+  if (/^(citroen|citroën|peugeot|\bDS\b|opel|vauxhall|psa|stellantis)/i.test(b)) return 'genuine'
+  if (/חליפי|תחליפי|aftermarket|after.?market/i.test(b)) return 'aftermarket'
+  return 'aftermarket'
+}
 
 export interface ParsedCompetitorRow {
   itemCode: string
@@ -21,6 +40,7 @@ export interface ParsedCompetitorRow {
   discountPct: number | null
   stockQty: number | null
   stockStatus: StockStatus
+  genuineness: Genuineness
   oemCodes: string[]
   attrs: Record<string, unknown> | null
 }
@@ -47,20 +67,28 @@ export function normalizeOemCode(raw: unknown): string {
   return String(raw ?? '')
     .trim()
     .toUpperCase()
-    .replace(/^(DIN|ORG)(?=[A-Z0-9]{4,})/, '')
+    // Separators go first: Comet writes both 'DIN0249.E6' and 'ORG 9847019780',
+    // so the prefix is only adjacent to the number once spacing is gone.
     .replace(/[.\s\-'"׳״]/g, '')
+    .replace(/^(DIN|ORG)(?=[A-Z0-9]{4,})/, '')
 }
 
-/** '29.00 ₪' / 916 / '1,022.50' → number; empty, NaN and 0 → null (0 = unknown, never free). */
+/**
+ * '29.00 ₪' / 916 / '1,022.50' → number. Anything that isn't a finite positive
+ * amount within sane bounds becomes null: 0 means "not quoted", never "free",
+ * and a value past MAX_PRICE is a mis-parsed cell rather than a real price.
+ */
 export function parseMoney(v: unknown): number | null {
   if (v === null || v === undefined || v === '') return null
   const n = typeof v === 'number' ? v : Number(String(v).replace(/[₪,\s]/g, ''))
-  return Number.isFinite(n) && n > 0 ? n : null
+  if (!Number.isFinite(n) || n <= 0 || n > MAX_PRICE) return null
+  return Math.round(n * 100) / 100
 }
 
-/** Discount %: like parseMoney but 0 is kept as null (no discount info). */
+/** Discount %: a real percentage or nothing. */
 function parsePct(v: unknown): number | null {
-  return parseMoney(v)
+  const n = parseMoney(v)
+  return n !== null && n <= 100 ? n : null
 }
 
 /**
@@ -75,7 +103,10 @@ export function parseStock(qty: unknown, statusText?: unknown, emptyStatusMeansI
   }
   if (qty !== null && qty !== undefined && qty !== '') {
     const n = typeof qty === 'number' ? qty : Number(String(qty).replace(/[,\s]/g, ''))
-    if (Number.isFinite(n)) return { stockQty: n, stockStatus: n > 0 ? 'in_stock' : 'out_of_stock' }
+    if (Number.isFinite(n) && n >= 0 && n <= MAX_STOCK) {
+      const rounded = Math.round(n)
+      return { stockQty: rounded, stockStatus: rounded > 0 ? 'in_stock' : 'out_of_stock' }
+    }
   }
   if (emptyStatusMeansInStock) return { stockQty: null, stockStatus: 'in_stock' }
   return { stockQty: null, stockStatus: 'unknown' }
@@ -128,17 +159,20 @@ function genericMap(row: RawRow): Omit<ParsedCompetitorRow, 'itemCode'> | null {
   const rawCode = str(pick(row, CODE_ALIASES))
   if (!rawCode) return null
   const oemRaw = str(pick(row, OEM_ALIASES))
+  const selfCode = normalizeOemCode(rawCode)
   const oemCodes = oemRaw
-    ? [...new Set(oemRaw.split(',').map(normalizeOemCode).filter(Boolean))]
+    ? [...new Set(oemRaw.split(',').map(normalizeOemCode).filter(c => c && c !== selfCode))]
     : []
+  const brand = str(pick(row, BRAND_ALIASES))
   return {
     rawCode,
     name: str(pick(row, NAME_ALIASES)),
-    brand: str(pick(row, BRAND_ALIASES)),
+    brand,
     grossPrice: parseMoney(pick(row, GROSS_ALIASES)),
     netPrice: parseMoney(pick(row, NET_ALIASES)),
     discountPct: parsePct(pick(row, DISCOUNT_ALIASES)),
     ...parseStock(pick(row, STOCK_QTY_ALIASES), pick(row, STOCK_STATUS_ALIASES)),
+    genuineness: classifyGenuineness(brand),
     oemCodes,
     attrs: null,
   }

@@ -13,18 +13,69 @@ import { useCompetitorComparison, useCompetitorItemHistory } from '@/hooks/use-c
 import { useLocale } from '@/lib/locale-context'
 import { formatCurrency, formatNumber } from '@/lib/constants'
 import { fixRtlItemName } from '@/lib/rtl-fix'
-import { Swords, Upload, PackageX, TrendingDown, SearchX, Search } from 'lucide-react'
-import type { CompareRow } from '@/app/api/analytics/competitors/route'
+import { Swords, Upload, PackageX, TrendingDown, SearchX, Search, ChevronLeft, ChevronRight, AlertTriangle } from 'lucide-react'
+import type { CompareRow, CompetitorCell } from '@/app/api/analytics/competitors/route'
 import type { TranslationKey } from '@/lib/i18n'
 
 type SortField = 'code' | 'ourPrice' | 'ourStock' | 'minNet' | 'spread' | 'sold'
+type T = (k: TranslationKey) => string
 
-function StockBadge({ qty, status, t }: { qty: number | null; status: string; t: (k: TranslationKey) => string }) {
+const PER_PAGE = 50
+
+/** Whole shekels stay clean; agorot are shown when they exist (71.16 ≠ 71). */
+function money(v: number | null | undefined): string {
+  if (v == null) return '—'
+  return formatCurrency(v, Number.isInteger(v) ? 0 : 2)
+}
+
+function StockPill({ qty, status, t }: { qty: number | null; status: string; t: T }) {
   if (status === 'in_stock') {
-    return <Badge variant="success">{qty != null ? formatNumber(qty) : (t('competitors.inStock'))}</Badge>
+    return <Badge variant="success">{qty != null ? formatNumber(qty) : t('competitors.inStock')}</Badge>
   }
-  if (status === 'out_of_stock') return <Badge variant="destructive">{t('competitors.outOfStock')}</Badge>
-  return <span className="text-muted-foreground">—</span>
+  if (status === 'out_of_stock') {
+    return <Badge variant="destructive">{qty != null ? formatNumber(qty) : t('competitors.outOfStock')}</Badge>
+  }
+  return <span className="text-xs text-muted-foreground">—</span>
+}
+
+/** Codes compared the way the importer normalises them, minus the xlsx import. */
+const looseCode = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, '').replace(/^(DIN|ORG)(?=[A-Z0-9]{4,})/, '')
+
+/** One price-over-stock cell — used identically for Jan and every competitor. */
+function PriceStockCell({
+  price, qty, status, highlight, crossRef, rawCode, janCode, t,
+}: {
+  price: number | null
+  qty: number | null
+  status: string
+  highlight?: boolean
+  crossRef?: boolean
+  rawCode?: string
+  janCode?: string
+  t: T
+}) {
+  // They list this part under a different number (our supersession chain, or an
+  // OEM cross-reference) — show it, so every price on screen is traceable.
+  const otherCode = rawCode && janCode && looseCode(rawCode) !== looseCode(janCode) ? rawCode : null
+  return (
+    <div
+      className={`flex flex-col items-center gap-0.5 ${crossRef ? 'opacity-60' : ''}`}
+      title={crossRef ? `${t('competitors.crossRefTooltip')} ${rawCode ?? ''}` : rawCode}
+    >
+      <span className={highlight ? 'font-semibold text-emerald-600 dark:text-emerald-400' : undefined}>
+        {crossRef && <span className="me-0.5 text-muted-foreground">≈</span>}
+        {money(price)}
+      </span>
+      <StockPill qty={qty} status={status} t={t} />
+      {otherCode && <span className="font-mono text-[10px] text-muted-foreground">{otherCode}</span>}
+    </div>
+  )
+}
+
+function GenuineBadge({ value, t }: { value: string; t: T }) {
+  if (value === 'genuine') return <Badge variant="success">{t('competitors.genuine')}</Badge>
+  if (value === 'aftermarket') return <Badge variant="secondary">{t('competitors.aftermarket')}</Badge>
+  return <span className="text-xs text-muted-foreground">—</span>
 }
 
 export default function CompetitorsPage() {
@@ -35,10 +86,12 @@ export default function CompetitorsPage() {
   const [activeCompetitors, setActiveCompetitors] = useState<Set<string> | null>(null)
   const [onlyTheyBeatUs, setOnlyTheyBeatUs] = useState(false)
   const [onlyWeAreOut, setOnlyWeAreOut] = useState(false)
+  const [onlyGenuine, setOnlyGenuine] = useState(false)
   const [showUnmatched, setShowUnmatched] = useState(false)
   const [showUploader, setShowUploader] = useState(false)
   const [sort, setSort] = useState<DataTableSort<SortField>>({ field: 'spread', dir: 'asc' })
   const [historyRow, setHistoryRow] = useState<CompareRow | null>(null)
+  const [page, setPage] = useState(0)
 
   const competitorNames = useMemo(() => data?.competitors.map(c => c.name) ?? [], [data])
   const enabled = useMemo(
@@ -49,12 +102,12 @@ export default function CompetitorsPage() {
   const rows = useMemo(() => {
     if (!data) return []
     const q = search.trim().toUpperCase()
-    let out = data.rows.filter(r => {
+    const filtered = data.rows.filter(r => {
       if (q && !r.code.toUpperCase().includes(q) && !r.name.toUpperCase().includes(q)) return false
-      const visibleCells = Object.keys(r.competitors).filter(n => enabled.has(n))
-      if (!visibleCells.length) return false
+      if (!Object.keys(r.competitors).some(n => enabled.has(n))) return false
       if (onlyTheyBeatUs && !r.flags.cheaperThanUs) return false
       if (onlyWeAreOut && !r.flags.theyStockWeDont) return false
+      if (onlyGenuine && r.genuineness !== 'genuine') return false
       return true
     })
     const dirMul = sort.dir === 'asc' ? 1 : -1
@@ -68,19 +121,32 @@ export default function CompetitorsPage() {
         case 'sold': return r.soldThisYear
       }
     }
-    out = [...out].sort((a, b) => {
+    return [...filtered].sort((a, b) => {
       const va = val(a); const vb = val(b)
       if (typeof va === 'string' || typeof vb === 'string') return String(va).localeCompare(String(vb)) * dirMul
       return (va - (vb as number)) * dirMul
     })
-    return out
-  }, [data, search, enabled, onlyTheyBeatUs, onlyWeAreOut, sort])
+  }, [data, search, enabled, onlyTheyBeatUs, onlyWeAreOut, onlyGenuine, sort])
+
+  // Any change to what's listed sends you back to the first page (adjusted
+  // during render rather than in an effect, so there's no second paint).
+  const filterKey = JSON.stringify([search, [...enabled].sort(), onlyTheyBeatUs, onlyWeAreOut, onlyGenuine, sort, showUnmatched])
+  const [prevFilterKey, setPrevFilterKey] = useState(filterKey)
+  if (filterKey !== prevFilterKey) {
+    setPrevFilterKey(filterKey)
+    setPage(0)
+  }
+
+  const pageCount = Math.max(1, Math.ceil(rows.length / PER_PAGE))
+  const safePage = Math.min(page, pageCount - 1)
+  const pageRows = useMemo(
+    () => rows.slice(safePage * PER_PAGE, safePage * PER_PAGE + PER_PAGE),
+    [rows, safePage],
+  )
 
   const historyCodes = useMemo(() => {
     if (!historyRow) return null
-    const codes = new Set<string>()
-    for (const cell of Object.values(historyRow.competitors)) codes.add(cell.itemCode)
-    return [...codes]
+    return [...new Set(Object.values(historyRow.competitors).map(c => c.itemCode))]
   }, [historyRow])
   const { data: history } = useCompetitorItemHistory(historyCodes)
 
@@ -100,28 +166,40 @@ export default function CompetitorsPage() {
       {
         key: 'name',
         header: t('suppliers.itemName'),
-        truncate: 'max-w-[240px]',
+        truncate: 'max-w-[220px]',
         title: r => r.name,
-        cell: r => fixRtlItemName(r.name),
+        cell: r => (
+          <span className="flex items-center gap-1">
+            {r.warnings.length > 0 && (
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" aria-label={r.warnings.join('; ')} />
+            )}
+            {fixRtlItemName(r.name)}
+          </span>
+        ),
       },
       {
-        key: 'ourPrice',
-        header: t('competitors.ourPrice'),
-        align: 'end',
+        key: 'genuine',
+        header: t('competitors.original'),
+        align: 'center',
+        hideOnMobile: true,
+        cell: r => <GenuineBadge value={r.genuineness} t={t} />,
+      },
+      // Jan reads exactly like a competitor column: price over stock.
+      {
+        key: 'jan',
+        header: t('competitors.weWin'),
+        align: 'center',
         sortable: true,
         sortKey: 'ourPrice',
-        cell: r => (r.ourPrice != null ? formatCurrency(r.ourPrice) : '—'),
-      },
-      {
-        key: 'ourStock',
-        header: t('competitors.ourStock'),
-        align: 'end',
-        sortable: true,
-        sortKey: 'ourStock',
+        headerClassName: 'text-primary',
         cell: r => (
-          <span className={r.flags.theyStockWeDont ? 'text-destructive font-semibold' : undefined}>
-            {formatNumber(r.ourStock)}
-          </span>
+          <PriceStockCell
+            price={r.ourPrice}
+            qty={r.ourStock}
+            status={r.ourStock > 0 ? 'in_stock' : 'out_of_stock'}
+            highlight={r.cheapestCompetitor === 'Jan'}
+            t={t}
+          />
         ),
       },
     ]
@@ -132,16 +210,19 @@ export default function CompetitorsPage() {
         header: name,
         align: 'center',
         cell: r => {
-          const cell = r.competitors[name]
+          const cell: CompetitorCell | undefined = r.competitors[name]
           if (!cell) return <span className="text-muted-foreground">—</span>
-          const isCheapest = r.cheapestCompetitor === name
           return (
-            <div className="flex flex-col items-center gap-0.5">
-              <span className={isCheapest ? 'font-semibold text-emerald-600 dark:text-emerald-400' : undefined}>
-                {cell.netPrice != null ? formatCurrency(cell.netPrice) : '—'}
-              </span>
-              <StockBadge qty={cell.stockQty} status={cell.stockStatus} t={t} />
-            </div>
+            <PriceStockCell
+              price={cell.netPrice}
+              qty={cell.stockQty}
+              status={cell.stockStatus}
+              highlight={!cell.crossRef && r.cheapestCompetitor === name}
+              crossRef={cell.crossRef}
+              rawCode={cell.rawCode}
+              janCode={r.code}
+              t={t}
+            />
           )
         },
       })
@@ -190,9 +271,20 @@ export default function CompetitorsPage() {
   }, [competitorNames, t])
 
   const hasData = !!data && data.competitors.length > 0
+  const unmatchedRows = useMemo(() => {
+    if (!data) return []
+    const q = search.trim().toUpperCase()
+    return data.unmatched.filter(r => {
+      if (q && !r.itemCode.includes(q) && !(r.name || '').toUpperCase().includes(q)) return false
+      return r.competitors.some(n => enabled.has(n))
+    })
+  }, [data, search, enabled])
+  const unmatchedPage = unmatchedRows.slice(safePage * PER_PAGE, safePage * PER_PAGE + PER_PAGE)
+  const activeCount = showUnmatched ? unmatchedRows.length : rows.length
+  const activePageCount = Math.max(1, Math.ceil(activeCount / PER_PAGE))
 
   return (
-    <div className="space-y-4 p-4 sm:p-6">
+    <div className="w-full min-w-0 space-y-4">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -257,12 +349,12 @@ export default function CompetitorsPage() {
       {hasData && (
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative">
-            <Search className="absolute top-2.5 h-4 w-4 text-muted-foreground ms-2.5 start-0" />
+            <Search className="pointer-events-none absolute top-2.5 start-2.5 h-4 w-4 text-muted-foreground" />
             <Input
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder={t('competitors.searchPlaceholder')}
-              className="w-56 ps-8"
+              className="w-56 ps-9"
             />
           </div>
           {competitorNames.map(name => {
@@ -292,21 +384,23 @@ export default function CompetitorsPage() {
             <PackageX className="h-3.5 w-3.5 me-1" />
             {t('competitors.onlyWeAreOut')}
           </Button>
+          <Button size="sm" variant={onlyGenuine ? 'secondary' : 'outline'} onClick={() => setOnlyGenuine(v => !v)}>
+            {t('competitors.onlyGenuine')}
+          </Button>
           <Button size="sm" variant={showUnmatched ? 'secondary' : 'outline'} onClick={() => setShowUnmatched(v => !v)}>
             <SearchX className="h-3.5 w-3.5 me-1" />
             {t('competitors.showUnmatched')}
           </Button>
-          <span className="text-xs text-muted-foreground ms-auto">{formatNumber(rows.length)} / {formatNumber(data?.rows.length ?? 0)}</span>
         </div>
       )}
 
       {/* Main comparison table */}
       {!showUnmatched && (
-        <Card>
+        <Card className="w-full min-w-0 overflow-hidden">
           <CardContent className="p-3">
             <DataTable<CompareRow, SortField>
               columns={columns}
-              rows={rows}
+              rows={pageRows}
               getRowKey={r => r.code}
               loading={isLoading}
               error={error}
@@ -315,7 +409,11 @@ export default function CompetitorsPage() {
               onSortChange={setSort}
               onRowClick={r => setHistoryRow(r)}
               rowClassName={r => (r.flags.theyStockWeDont ? 'bg-destructive/5' : undefined)}
-              minWidth="min-w-[900px]"
+              minWidth="min-w-[980px]"
+              maxHeight="65vh"
+              // the vertical scrollbar sits on the inline-end side and would
+              // otherwise sit on top of the last column's digits
+              className="pe-4"
               labels={{ empty: t('competitors.noData') }}
             />
           </CardContent>
@@ -324,26 +422,57 @@ export default function CompetitorsPage() {
 
       {/* Unmatched competitor items (catalog intel) */}
       {showUnmatched && data && (
-        <Card>
+        <Card className="w-full min-w-0 overflow-hidden">
           <CardContent className="p-3">
             <DataTable
               columns={[
                 { key: 'code', header: t('suppliers.itemCode'), cell: (r: (typeof data.unmatched)[number]) => <span className="font-mono">{r.rawCode}</span> },
                 { key: 'name', header: t('suppliers.itemName'), truncate: 'max-w-[320px]', title: r => r.name ?? undefined, cell: r => (r.name ? fixRtlItemName(r.name) : '—') },
-                { key: 'net', header: 'נטו ₪', align: 'end', cell: r => (r.netPrice != null ? formatCurrency(r.netPrice) : '—') },
-                { key: 'stock', header: t('competitors.inStock'), align: 'center', cell: r => <StockBadge qty={null} status={r.stockStatus} t={t} /> },
+                { key: 'genuine', header: t('competitors.original'), align: 'center', cell: r => <GenuineBadge value={r.genuineness} t={t} /> },
+                { key: 'net', header: t('competitors.net'), align: 'end', cell: r => money(r.netPrice) },
+                { key: 'stock', header: t('competitors.stock'), align: 'center', cell: r => <StockPill qty={null} status={r.stockStatus} t={t} /> },
                 { key: 'competitors', header: t('competitors'), cell: r => r.competitors.join(', ') },
               ]}
-              rows={data.unmatched.filter(r => {
-                const q = search.trim().toUpperCase()
-                if (q && !r.itemCode.includes(q) && !(r.name || '').toUpperCase().includes(q)) return false
-                return r.competitors.some(n => enabled.has(n))
-              })}
+              rows={unmatchedPage}
               getRowKey={r => r.itemCode}
-              minWidth="min-w-[700px]"
+              minWidth="min-w-[760px]"
+              maxHeight="65vh"
+              // the vertical scrollbar sits on the inline-end side and would
+              // otherwise sit on top of the last column's digits
+              className="pe-4"
             />
           </CardContent>
         </Card>
+      )}
+
+      {/* Pagination */}
+      {hasData && activeCount > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+          <span className="text-xs text-muted-foreground">
+            {formatNumber(safePage * PER_PAGE + 1)}–{formatNumber(Math.min((safePage + 1) * PER_PAGE, activeCount))}
+            {' / '}{formatNumber(activeCount)}
+          </span>
+          <div className="flex items-center gap-1">
+            <Button size="sm" variant="outline" disabled={safePage === 0} onClick={() => setPage(0)}>«</Button>
+            <Button size="sm" variant="outline" disabled={safePage === 0} onClick={() => setPage(p => Math.max(0, p - 1))}>
+              <ChevronRight className="h-4 w-4 rtl:rotate-0 ltr:hidden" />
+              <ChevronLeft className="hidden h-4 w-4 ltr:block" />
+            </Button>
+            <span className="px-2 text-xs tabular-nums text-muted-foreground">
+              {safePage + 1} / {activePageCount}
+            </span>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={safePage >= activePageCount - 1}
+              onClick={() => setPage(p => Math.min(activePageCount - 1, p + 1))}
+            >
+              <ChevronLeft className="h-4 w-4 ltr:hidden" />
+              <ChevronRight className="hidden h-4 w-4 ltr:block" />
+            </Button>
+            <Button size="sm" variant="outline" disabled={safePage >= activePageCount - 1} onClick={() => setPage(activePageCount - 1)}>»</Button>
+          </div>
+        </div>
       )}
 
       {/* Price history dialog */}
@@ -358,17 +487,23 @@ export default function CompetitorsPage() {
           {historyRow && (
             <div className="space-y-3 text-sm">
               <div className="text-muted-foreground">{fixRtlItemName(historyRow.name)}</div>
+              {historyRow.warnings.length > 0 && (
+                <div className="flex items-start gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/5 p-2 text-xs">
+                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
+                  <span>{historyRow.warnings.join(' · ')}</span>
+                </div>
+              )}
               {(history?.series ?? []).map((s: { competitor: string; points: Array<{ uploadedAt: string; netPrice: number | null; stockQty: number | null; stockStatus: string }> }) => (
                 <div key={s.competitor}>
                   <div className="mb-1 font-medium">{s.competitor}</div>
-                  <div className="rounded border overflow-hidden">
+                  <div className="overflow-hidden rounded border">
                     <table className="w-full text-xs">
                       <tbody>
                         {s.points.map((p, i) => (
                           <tr key={i} className="border-b last:border-b-0">
                             <td className="px-2 py-1">{new Date(p.uploadedAt).toLocaleDateString('he-IL')}</td>
-                            <td className="px-2 py-1 text-end tabular-nums">{p.netPrice != null ? formatCurrency(p.netPrice) : '—'}</td>
-                            <td className="px-2 py-1 text-center"><StockBadge qty={p.stockQty} status={p.stockStatus} t={t} /></td>
+                            <td className="px-2 py-1 text-end tabular-nums">{money(p.netPrice)}</td>
+                            <td className="px-2 py-1 text-center"><StockPill qty={p.stockQty} status={p.stockStatus} t={t} /></td>
                           </tr>
                         ))}
                       </tbody>

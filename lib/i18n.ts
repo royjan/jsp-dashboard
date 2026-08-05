@@ -627,6 +627,13 @@ export const translations = {
     'competitors.showUnmatched': 'פריטים שלא נמצאו בקטלוג שלנו',
     'competitors.lastUpload': 'העלאה אחרונה',
     'competitors.weWin': 'Jan',
+    'competitors.original': 'מקוריות',
+    'competitors.genuine': 'מקורי',
+    'competitors.aftermarket': 'חליפי',
+    'competitors.onlyGenuine': 'מקורי בלבד',
+    'competitors.net': 'נטו ₪',
+    'competitors.stock': 'מלאי',
+    'competitors.crossRefTooltip': 'התאמה לפי מק"ט חלופי (OEM) — המחיר שייך למק"ט:',
   },
   en: {
     overview: 'Overview',
@@ -1243,6 +1250,13 @@ export const translations = {
     'competitors.showUnmatched': 'Items not found in our catalog',
     'competitors.lastUpload': 'Last upload',
     'competitors.weWin': 'Jan',
+    'competitors.original': 'Original',
+    'competitors.genuine': 'Genuine',
+    'competitors.aftermarket': 'Aftermarket',
+    'competitors.onlyGenuine': 'Genuine only',
+    'competitors.net': 'Net ₪',
+    'competitors.stock': 'Stock',
+    'competitors.crossRefTooltip': 'Matched via OEM cross-reference — price belongs to code:',
   },
 } as const
 

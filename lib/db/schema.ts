@@ -570,6 +570,8 @@ export const competitorItems = dashboardSchema.table('competitor_items', {
   discountPct: numeric('discount_pct'),
   stockQty: numeric('stock_qty'),
   stockStatus: varchar('stock_status', { length: 20 }).notNull().default('unknown'),
+  // genuine (OEM) vs aftermarket, derived from the sheet's brand column
+  genuineness: varchar('genuineness', { length: 20 }).notNull().default('unknown'),
   oemCodes: text('oem_codes').array(),
   attrs: jsonb('attrs'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
