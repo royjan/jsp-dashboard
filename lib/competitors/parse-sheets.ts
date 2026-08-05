@@ -58,9 +58,15 @@ export interface SheetParseResult {
 const SKIP_SHEETS = [/^combined/i, /^סיכום/, /^summary/i]
 
 /**
- * Canonical OEM code: distributor prefixes (DIN/ORG) stripped, separators
- * (dots, spaces, dashes, quote marks) removed, uppercased.
- * 'DIN0249.E6' → '0249E6', '1531.30' → '153130', 'ORG9813930180' → '9813930180'.
+ * Supplier prefixes Comet puts in front of the real part number
+ * (ORG/DIN/SOE/PEU/TYE — 191 of its 195 rows carry one).
+ */
+const SUPPLIER_PREFIX = /^(ORG|DIN|SOE|PEU|TYE)(?=[A-Z0-9]{4,})/
+
+/**
+ * Canonical OEM code: supplier prefix stripped, separators (dots, spaces,
+ * dashes, quote marks) removed, uppercased.
+ * 'DIN0249.E6' → '0249E6', '1531.30' → '153130', 'PEU0805.K3' → '0805K3'.
  * Jan catalog codes are passed through the same function before matching.
  */
 export function normalizeOemCode(raw: unknown): string {
@@ -70,7 +76,7 @@ export function normalizeOemCode(raw: unknown): string {
     // Separators go first: Comet writes both 'DIN0249.E6' and 'ORG 9847019780',
     // so the prefix is only adjacent to the number once spacing is gone.
     .replace(/[.\s\-'"׳״]/g, '')
-    .replace(/^(DIN|ORG)(?=[A-Z0-9]{4,})/, '')
+    .replace(SUPPLIER_PREFIX, '')
 }
 
 /**

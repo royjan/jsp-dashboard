@@ -39,7 +39,7 @@ function StockPill({ qty, status, t }: { qty: number | null; status: string; t: 
 }
 
 /** Codes compared the way the importer normalises them, minus the xlsx import. */
-const looseCode = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, '').replace(/^(DIN|ORG)(?=[A-Z0-9]{4,})/, '')
+const looseCode = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, '').replace(/^(ORG|DIN|SOE|PEU|TYE)(?=[A-Z0-9]{4,})/, '')
 
 /** One price-over-stock cell — used identically for Jan and every competitor. */
 function PriceStockCell({
