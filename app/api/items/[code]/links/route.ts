@@ -13,10 +13,12 @@ import { deriveBrand, BRAND_RANK } from '@/lib/brand'
  *          finansit_links mapping — so we fan out to all candidate partly
  *          item_numbers first. Always 200 with { links: [] } on failure —
  *          this feeds a secondary card and must never break the item page.
- * POST   — create a manual link: body { targetCode }. source='manual'.
- * DELETE — remove a manual link: body { targetCode }. Only source='manual'
- *          rows are deletable: schema-match rows are derived data and would
- *          be re-created by the next build-part-links run anyway.
+ * POST   — create a manual link: body { targetCode }. source='manual',
+ *          base = higher-hierarchy brand (PSA > MG > TOYOTA); reactivates a
+ *          previously rejected pair.
+ * DELETE — unlink: body { targetCode }. Manual rows are deleted; automatic
+ *          (schema-match) rows are set status='rejected' so the rebuild
+ *          script cannot resurrect them.
  */
 
 /** Candidate partly item_numbers for a dashboard/Finansit code. */
@@ -67,6 +69,7 @@ export async function GET(
               gp_other.hebrew_description,
               pl.confidence,
               pl.source,
+              (pl.base_global_part_id = gp_other.id) AS is_base,
               pl.illustration_number,
               pl.callout,
               COALESCE(ei.code, ei_mg.code) AS erp_code
@@ -81,6 +84,7 @@ export async function GET(
        LEFT JOIN erp.items ei_mg ON ei_mg.code = 'MG' || gp_other.item_number
        WHERE gp_self.item_number = ANY($1)
          AND gp_other.item_number <> ALL($1)
+         AND pl.status = 'active'
        ORDER BY gp_other.item_number`,
       [candidates]
     )
@@ -93,6 +97,8 @@ export async function GET(
       hebrewDescription: r.hebrew_description && r.hebrew_description !== '-' ? r.hebrew_description : null,
       confidence: r.confidence || 'high',
       source: (r.source as string) || 'schema-match',
+      // true = the linked part shown on this row is the BASE (canonical) part
+      isBase: Boolean(r.is_base),
       illustrationNumber: r.illustration_number || null,
       callout: r.callout || null,
       // null = the part exists only in the partly catalog, not in the ERP.
@@ -144,11 +150,17 @@ export async function POST(
     // Direction-free pair: A = the smaller item number (matches the builder).
     const [a, b] =
       self.item_number < target.item_number ? [self, target] : [target, self]
+    // Base = the higher-hierarchy brand side (PSA > MG > TOYOTA).
+    const baseId =
+      (BRAND_RANK[self.brand] ?? 9) <= (BRAND_RANK[target.brand] ?? 9) ? self.id : target.id
     await query(
-      `INSERT INTO partly.part_links (global_part_id_a, global_part_id_b, source, confidence)
-       VALUES ($1, $2, 'manual', 'high')
-       ON CONFLICT ON CONSTRAINT part_links_pair_uq DO NOTHING`,
-      [a.id, b.id]
+      `INSERT INTO partly.part_links (global_part_id_a, global_part_id_b, source, confidence, base_global_part_id, status)
+       VALUES ($1, $2, 'manual', 'high', $3, 'active')
+       ON CONFLICT ON CONSTRAINT part_links_pair_uq DO UPDATE
+         SET status = 'active',
+             source = CASE WHEN part_links.status = 'rejected' THEN 'manual' ELSE partly.part_links.source END,
+             base_global_part_id = COALESCE(part_links.base_global_part_id, EXCLUDED.base_global_part_id)`,
+      [a.id, b.id, baseId]
     )
     return NextResponse.json({ ok: true, linked: { code: target.item_number, brand: target.brand } })
   } catch (error) {
@@ -181,21 +193,31 @@ export async function DELETE(
       return NextResponse.json({ error: 'not in catalog' }, { status: 404 })
     }
 
+    // Manual links are deleted; automatic (schema-match) links are set to
+    // status='rejected' so the rebuild script cannot resurrect them.
     const res = await query(
-      `DELETE FROM partly.part_links
-       WHERE source = 'manual'
-         AND ((global_part_id_a = $1 AND global_part_id_b = $2)
-           OR (global_part_id_a = $2 AND global_part_id_b = $1))
-       RETURNING id`,
+      `WITH target AS (
+         SELECT id, source FROM partly.part_links
+         WHERE status = 'active'
+           AND ((global_part_id_a = $1 AND global_part_id_b = $2)
+             OR (global_part_id_a = $2 AND global_part_id_b = $1))
+       ),
+       deleted AS (
+         DELETE FROM partly.part_links WHERE id IN (SELECT id FROM target WHERE source = 'manual')
+         RETURNING id, 'deleted'::text AS action
+       ),
+       rejected AS (
+         UPDATE partly.part_links SET status = 'rejected'
+         WHERE id IN (SELECT id FROM target WHERE source <> 'manual')
+         RETURNING id, 'rejected'::text AS action
+       )
+       SELECT * FROM deleted UNION ALL SELECT * FROM rejected`,
       [self.id, target.id]
     )
     if (!res.rows.length) {
-      return NextResponse.json(
-        { error: 'no manual link between these parts (automatic links cannot be removed)' },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: 'no active link between these parts' }, { status: 404 })
     }
-    return NextResponse.json({ ok: true })
+    return NextResponse.json({ ok: true, action: (res.rows[0] as any).action })
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'failed' },

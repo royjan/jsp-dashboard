@@ -73,22 +73,26 @@ export async function GET(
         `SELECT DISTINCT ON (gp_other.item_number)
                 gp_self.brand AS self_brand,
                 gp_other.item_number AS other_code, gp_other.brand AS other_brand,
-                pl.confidence
+                pl.confidence,
+                (pl.base_global_part_id = gp_other.id) AS other_is_base
          FROM partly.global_parts gp_self
          JOIN partly.part_links pl ON gp_self.id IN (pl.global_part_id_a, pl.global_part_id_b)
          JOIN partly.global_parts gp_other
            ON gp_other.id = CASE WHEN gp_self.id = pl.global_part_id_a
                                  THEN pl.global_part_id_b ELSE pl.global_part_id_a END
-         WHERE gp_self.item_number = ANY($1)
+         WHERE gp_self.item_number = ANY($1) AND pl.status = 'active'
          ORDER BY gp_other.item_number, (pl.confidence = 'high') DESC`,
         [candidates]
       ).catch(() => null)
 
+      // Explicit base wins; then brand hierarchy (PSA > MG > TOYOTA); then confidence.
       const BRAND_RANK: Record<string, number> = { PSA: 0, MG: 1, TOYOTA: 2 }
       const ranked = ((links?.rows ?? []) as {
         self_brand: string; other_code: string; other_brand: string; confidence: string
+        other_is_base: boolean
       }[]).sort(
         (a, b) =>
+          Number(Boolean(b.other_is_base)) - Number(Boolean(a.other_is_base)) ||
           (BRAND_RANK[a.other_brand] ?? 9) - (BRAND_RANK[b.other_brand] ?? 9) ||
           (a.confidence === 'high' ? 0 : 1) - (b.confidence === 'high' ? 0 : 1)
       )

@@ -11,9 +11,9 @@ import type { ItemLinkRow } from '@/hooks/use-analytics'
 
 /**
  * "Cross-Brand Equivalents" card: lists partly.part_links aliases for the
- * item and lets the user add/remove MANUAL links (automatic schema-match
- * links are derived data and can't be removed here — they'd be re-created
- * by the next build run anyway).
+ * item and lets the user add or remove links. Manual links are deleted;
+ * automatic (schema-match) links are durably rejected (status='rejected')
+ * so the rebuild script cannot resurrect them.
  */
 export function PartLinksCard({
   code,
@@ -150,6 +150,11 @@ export function PartLinksCard({
                     </span>
                   </span>
                 )}
+                {link.isBase && (
+                  <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium leading-none text-primary">
+                    {isHe ? 'בסיס' : 'BASE'}
+                  </span>
+                )}
                 {link.description && (
                   <span className="text-muted-foreground text-xs" dir="ltr">{link.description}</span>
                 )}
@@ -164,16 +169,18 @@ export function PartLinksCard({
                     ~
                   </span>
                 )}
-                {link.source === 'manual' && (
-                  <button
-                    type="button"
-                    onClick={() => remove(link)}
-                    className="inline-flex h-5 w-5 items-center justify-center rounded text-muted-foreground opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
-                    title={isHe ? 'הסר קישור ידני' : 'Remove manual link'}
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => remove(link)}
+                  className="inline-flex h-5 w-5 items-center justify-center rounded text-muted-foreground opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
+                  title={
+                    link.source === 'manual'
+                      ? (isHe ? 'הסר קישור ידני' : 'Remove manual link')
+                      : (isHe ? 'דחה קישור אוטומטי (לא ישוחזר)' : 'Reject automatic link (will not return)')
+                  }
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
               </div>
             ))}
           </div>

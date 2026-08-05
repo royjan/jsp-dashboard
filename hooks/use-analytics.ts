@@ -172,8 +172,10 @@ export interface ItemLinkRow {
   description: string | null
   hebrewDescription: string | null
   confidence: string
-  /** 'schema-match' (derived from diagrams) or 'manual' (user-created, deletable). */
+  /** 'schema-match' (derived from diagrams) or 'manual' (user-created). */
   source: string
+  /** true = this linked part is the BASE (canonical) part of the pair. */
+  isBase: boolean
   illustrationNumber: string | null
   callout: string | null
   /** Matching erp.items code, or null when the part exists only in the partly catalog. */
