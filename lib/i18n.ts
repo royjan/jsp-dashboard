@@ -634,6 +634,9 @@ export const translations = {
     'competitors.net': 'נטו ₪',
     'competitors.stock': 'מלאי',
     'competitors.crossRefTooltip': 'התאמה לפי מק"ט חלופי (OEM) — המחיר שייך למק"ט:',
+    'competitors.netLabel': 'נטו',
+    'competitors.janPriceLabel': 'מחיר לצרכן',
+    'competitors.subtitle2': 'מחירי המתחרים הם נטו; מחיר Jan הוא מחיר לצרכן — הפער אינו השוואה זהה',
   },
   en: {
     overview: 'Overview',
@@ -1257,6 +1260,9 @@ export const translations = {
     'competitors.net': 'Net ₪',
     'competitors.stock': 'Stock',
     'competitors.crossRefTooltip': 'Matched via OEM cross-reference — price belongs to code:',
+    'competitors.netLabel': 'net',
+    'competitors.janPriceLabel': 'consumer',
+    'competitors.subtitle2': 'Competitor prices are net; the Jan price is the consumer price — the spread is not like-for-like',
   },
 } as const
 

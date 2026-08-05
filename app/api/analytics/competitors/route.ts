@@ -25,6 +25,8 @@ export interface CompetitorCell {
    * for reference and excluded from cheapest/spread/flag maths.
    */
   crossRef: boolean
+  /** Their code IS this part number, rather than a chain alias of it. */
+  exact: boolean
 }
 
 export interface CompareRow {
@@ -164,7 +166,7 @@ export async function GET(request: Request) {
       return out
     }
 
-    const toCell = (row: SnapshotRow, crossRef: boolean): CompetitorCell => ({
+    const toCell = (row: SnapshotRow, crossRef: boolean, exact: boolean): CompetitorCell => ({
       netPrice: sanePrice(row.net_price),
       grossPrice: sanePrice(row.gross_price),
       stockQty: saneQty(row.stock_qty),
@@ -173,7 +175,20 @@ export async function GET(request: Request) {
       rawCode: row.raw_code,
       itemCode: row.item_code,
       crossRef,
+      exact,
     })
+
+    /**
+     * Several rows from one competitor can land on the same Jan item: their own
+     * code, plus older/newer codes from our supersession chain. Rank them so the
+     * result never depends on row order — the row filed under this exact part
+     * number always wins over a chain alias, which wins over a cross-reference.
+     */
+    const rank = (c: CompetitorCell) => (c.crossRef ? 0 : c.exact ? 2 : 1)
+    const place = (out: CompareRow, name: string, cell: CompetitorCell) => {
+      const current = out.competitors[name]
+      if (!current || rank(cell) > rank(current)) out.competitors[name] = cell
+    }
 
     // Pass 1 — direct matches only: the competitor lists this part under a code
     // that resolves to one of our catalog codes (incl. our alias/supersession
@@ -186,9 +201,7 @@ export async function GET(request: Request) {
         continue
       }
       const out = ensureRow(item)
-      if (!out.competitors[row.competitor_name] || out.competitors[row.competitor_name].crossRef) {
-        out.competitors[row.competitor_name] = toCell(row, false)
-      }
+      place(out, row.competitor_name, toCell(row, false, row.item_code === normalizeOemCode(item.code)))
     }
 
     // Pass 2 — cross-reference fallback. A competitor row whose own code we don't
@@ -217,10 +230,7 @@ export async function GET(request: Request) {
         }
         continue
       }
-      const out = ensureRow(item)
-      if (!out.competitors[row.competitor_name]) {
-        out.competitors[row.competitor_name] = toCell(row, true)
-      }
+      place(ensureRow(item), row.competitor_name, toCell(row, true, false))
     }
 
     const rows: CompareRow[] = []

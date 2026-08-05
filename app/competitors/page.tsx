@@ -187,7 +187,12 @@ export default function CompetitorsPage() {
       // Jan reads exactly like a competitor column: price over stock.
       {
         key: 'jan',
-        header: t('competitors.weWin'),
+        header: (
+          <span className="flex flex-col items-center leading-tight">
+            <span>{t('competitors.weWin')}</span>
+            <span className="text-[10px] font-normal text-muted-foreground">{t('competitors.janPriceLabel')}</span>
+          </span>
+        ),
         align: 'center',
         sortable: true,
         sortKey: 'ourPrice',
@@ -207,7 +212,12 @@ export default function CompetitorsPage() {
     for (const name of competitorNames) {
       cols.push({
         key: `comp-${name}`,
-        header: name,
+        header: (
+          <span className="flex flex-col items-center leading-tight">
+            <span>{name}</span>
+            <span className="text-[10px] font-normal text-muted-foreground">{t('competitors.netLabel')}</span>
+          </span>
+        ),
         align: 'center',
         cell: r => {
           const cell: CompetitorCell | undefined = r.competitors[name]
@@ -293,6 +303,7 @@ export default function CompetitorsPage() {
             {t('competitors.title')}
           </h1>
           <p className="text-sm text-muted-foreground">{t('competitors.subtitle')}</p>
+          <p className="text-xs text-muted-foreground/70">{t('competitors.subtitle2')}</p>
         </div>
         <Button variant={showUploader ? 'secondary' : 'default'} size="sm" onClick={() => setShowUploader(v => !v)}>
           <Upload className="h-4 w-4 me-1.5" />
