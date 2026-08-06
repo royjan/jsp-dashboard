@@ -37,6 +37,7 @@ import {
   ThumbsUp,
   ReceiptText,
   Swords,
+  PackageX,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
@@ -59,6 +60,7 @@ const navSections: Array<{ id: string; labelKey: TranslationKey; items: NavItem[
       { href: '/stock-forecast', labelKey: 'stockForecast', icon: TrendingDown },
       // Catalog Links hidden from nav (route still reachable at /catalog-links)
       { href: '/gap', labelKey: 'gapAnalysis', icon: SearchX },
+      { href: '/gap/catalog', labelKey: 'catalogGap', icon: PackageX },
       { href: '/scrap', labelKey: 'scrap', icon: Trash2 },
       { href: '/returns', labelKey: 'returns', icon: RotateCcw },
     ],

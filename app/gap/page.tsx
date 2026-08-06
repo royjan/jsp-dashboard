@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { ItemLink } from '@/components/shared/ItemLink'
+import { SubTabs } from '@/components/shared/SubTabs'
 import { EbayRecommendButton } from '@/components/shared/EbayRecommendButton'
 import {
   SearchX, Package, FileText, Search, ArrowUpDown,
@@ -173,6 +174,16 @@ export default function GapAnalysisPage() {
         <h1 className="text-xl sm:text-2xl font-bold">{t('page.gap')}</h1>
         <p className="text-sm text-muted-foreground mt-1">{t('gapSubtitle')}</p>
       </div>
+
+      {/* Two different gaps share this entry: what customers asked for and we
+          couldn't supply (here), and what sits on their cars and we can't sell
+          at all (/gap/catalog). */}
+      <SubTabs
+        tabs={[
+          { href: '/gap', label: t('catalogGap.tabDemand') },
+          { href: '/gap/catalog', label: t('catalogGap.tabCatalog') },
+        ]}
+      />
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3">
