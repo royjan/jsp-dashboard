@@ -30,6 +30,7 @@ import {
   Power
 } from 'lucide-react'
 import { toast } from '@/lib/toast'
+import { copyText } from '@/lib/clipboard'
 import { AdminStatCard, StatusBadge } from '@/components/chat-admin/shared'
 import type { LambdaType } from '@/lib/chat-admin/queue-config'
 
@@ -185,11 +186,10 @@ function CopyableVin({ vin }: { vin: string }) {
 
   const handleCopy = async (e: React.MouseEvent) => {
     e.stopPropagation()
-    try {
-      await navigator.clipboard.writeText(vin)
+    if (await copyText(vin)) {
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
-    } catch {
+    } else {
       toast.error('Failed to copy VIN')
     }
   }

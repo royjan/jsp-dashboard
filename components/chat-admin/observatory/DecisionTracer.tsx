@@ -4,7 +4,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { Search, Loader2, AlertTriangle, GitBranch, ExternalLink, Car, ShieldCheck, ShieldAlert, Copy } from 'lucide-react'
 import SimulatorVehicleInput, { type VehicleInputData } from '@/components/chat-admin/SimulatorVehicleInput'
 import { TraceGraph } from './TraceGraph'
-import { copyText } from '@/lib/chat-admin/clipboard'
+import { copyText } from '@/lib/clipboard'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 

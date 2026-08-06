@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import type { FlowDecisionRecord, FlowDecisionStatus } from '@/types/chat-admin/flow-decision'
 import { toast } from '@/lib/toast'
-import { copyText } from '@/lib/chat-admin/clipboard'
+import { copyText } from '@/lib/clipboard'
 import { FLOW_STATUS_PILL } from '@/components/chat-admin/shared/colors'
 import { compactCount, relTime } from '@/lib/chat-admin/format'
 

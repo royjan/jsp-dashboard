@@ -21,7 +21,7 @@ import { CustomerLink } from '@/components/shared/CustomerLink'
 import { ItemLink } from '@/components/shared/ItemLink'
 import { NODE_COLORS, TURN_STATUS_BAR, TURN_STATUS_DOT, type TurnStatus } from '@/components/chat-admin/shared/colors'
 import { dayKey, fmtDateTime, fmtDayLabel, fmtTimeShort, relTime } from '@/lib/chat-admin/format'
-import { copyText } from '@/lib/chat-admin/clipboard'
+import { copyText } from '@/lib/clipboard'
 import { toast } from '@/lib/toast'
 
 const ADK_WEB = process.env.NEXT_PUBLIC_ADK_WEB_BASE ?? 'http://192.168.0.230:8000'

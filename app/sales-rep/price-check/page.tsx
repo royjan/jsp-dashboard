@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { SalesRepBottomNav } from '@/components/sales-rep/BottomNav'
 import { ILS_FORMAT } from '@/lib/constants'
+import { copyText } from '@/lib/clipboard'
 
 interface PriceResult {
   item_code: string
@@ -99,18 +100,9 @@ export default function PriceCheckPage() {
     if (result.incoming_qty > 0) lines.push(`בדרך: ${result.incoming_qty}`)
 
     const text = lines.join('\n')
-    try {
-      await navigator.clipboard.writeText(text)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch {
-      // Fallback
-      const textarea = document.createElement('textarea')
-      textarea.value = text
-      document.body.appendChild(textarea)
-      textarea.select()
-      document.execCommand('copy')
-      document.body.removeChild(textarea)
+    // Only flash the "copied" checkmark if the copy actually landed — the old
+    // inline fallback ignored execCommand's return and always claimed success.
+    if (await copyText(text)) {
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     }
