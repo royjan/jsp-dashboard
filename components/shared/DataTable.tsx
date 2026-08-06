@@ -206,7 +206,10 @@ export function DataTable<TRow, TSortKey extends string = string>({
   return (
     <div className={cn('overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0', maxHeight && 'overflow-y-auto', className)} style={maxHeight ? { maxHeight } : undefined}>
       <table className={cn('w-full text-xs sm:text-sm', minWidth)}>
-        <thead className="sticky top-0 z-10 bg-background">
+        {/* A sticky header needs an opaque background, and it has to be the
+            surface it actually sits on — `bg-background` is darker than `bg-card`,
+            which made the header read as a cropped rectangle inside the card. */}
+        <thead className="sticky top-0 z-10 bg-card">
           <tr className="border-b text-muted-foreground">
             {selectable && (
               <th className="w-8 py-2 ps-1 text-start">

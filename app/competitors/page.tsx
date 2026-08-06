@@ -718,9 +718,9 @@ function CompetitorsPageInner() {
               rowClassName={r => (r.flags.theyStockWeDont ? 'bg-destructive/5' : undefined)}
               minWidth="min-w-[720px]"
               maxHeight="65vh"
-              // the vertical scrollbar sits on the inline-end side and would
-              // otherwise sit on top of the last column's digits
-              className="pe-4"
+              // symmetric padding: keeps the RTL scrollbar off the last column and
+              // stops the header band butting against the card edge
+              className="px-4 sm:px-4"
               labels={{ empty: t('competitors.noData') }}
             />
           </CardContent>
@@ -744,9 +744,9 @@ function CompetitorsPageInner() {
               getRowKey={r => r.itemCode}
               minWidth="min-w-[760px]"
               maxHeight="65vh"
-              // the vertical scrollbar sits on the inline-end side and would
-              // otherwise sit on top of the last column's digits
-              className="pe-4"
+              // symmetric padding: keeps the RTL scrollbar off the last column and
+              // stops the header band butting against the card edge
+              className="px-4 sm:px-4"
             />
           </CardContent>
         </Card>
