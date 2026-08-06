@@ -14,6 +14,8 @@ import Link from 'next/link'
 import {
   ArrowLeft, Package, DollarSign, Warehouse, TrendingUp, Tag, MapPin, Calendar, Layers, Hash,
   FileText, X, Link2,
+  Car,
+  ExternalLink,
 } from 'lucide-react'
 import { ILS_FORMAT, NUMBER_FORMAT } from '@/lib/constants'
 
@@ -175,13 +177,41 @@ export default function ItemDetailPage({ params }: { params: Promise<{ code: str
             {data.description && (
               <p className="text-xs text-muted-foreground" dir="ltr">{data.description}</p>
             )}
-            {data.fits?.length > 0 && (
-              <p className="text-xs text-muted-foreground">
-                {isHe ? 'מתאים ל: ' : 'Fits: '}{data.fits.join(' · ')}
-              </p>
-            )}
           </CardContent>
         </Card>
+
+        {data.fits?.length > 0 && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Car className="h-4 w-4 text-indigo-500" />
+                {isHe ? 'מתאים לרכבים' : 'Fits these vehicles'}
+                <Badge variant="secondary" className="text-xs">{data.fits.length}</Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ul className="divide-y">
+                {data.fits.map((f: any) => (
+                  <li key={f.vin || f.label} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2 text-sm">
+                    <a
+                      href={f.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-medium text-primary hover:underline inline-flex items-center gap-1"
+                    >
+                      {f.label}
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                    {f.vin && <span className="font-mono text-[11px] text-muted-foreground" dir="ltr">{f.vin}</span>}
+                    {f.schema && (
+                      <span className="text-xs text-muted-foreground truncate" dir="auto">{f.schema}</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </CardContent>
+          </Card>
+        )}
 
         {data.equivalents?.length > 0 && (
           <Card>

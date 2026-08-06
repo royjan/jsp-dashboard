@@ -161,12 +161,26 @@ export async function GET(
          ORDER BY (COALESCE(ei.code, ei_mg.code) IS NOT NULL) DESC`,
         [c.id]
       ).catch(() => null)
+      // Deep-link each vehicle into partly, at the exact diagram the part sits on when
+      // we know it — "מתאים ל: <8 names>" as flat text is a dead end; every one of these
+      // is a real scanned vehicle the user may want to open.
       const veh = await query(
-        `SELECT DISTINCT p.make, p.model, p.year FROM partly.project_parts pp
+        `SELECT DISTINCT ON (p.id)
+                p.id AS project_id, p.vin, p.make, p.model, p.year,
+                c.name AS category, sub.name AS subcategory, s.name AS schema_name
+         FROM partly.project_parts pp
          JOIN partly.projects p ON p.id = pp.project_id
-         WHERE pp.global_part_id = $1 AND pp.deleted_at IS NULL LIMIT 8`,
+         LEFT JOIN partly.schemas s ON s.id = pp.schema_id
+         LEFT JOIN partly.subcategories sub ON sub.id = s.subcategory_id
+         LEFT JOIN partly.categories c ON c.id = sub.category_id
+         WHERE pp.global_part_id = $1 AND pp.deleted_at IS NULL
+         ORDER BY p.id, p.year DESC NULLS LAST
+         LIMIT 30`,
         [c.id]
       ).catch(() => null)
+      // must match slugify in partly's vehicle page (spaces -> _, drop the rest)
+      const slug = (t: string) => t.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_-]/g, '')
+      const partlyBase = (process.env.PARTLY_URL || 'http://192.168.0.112:3001').replace(/\/$/, '')
       return NextResponse.json({
         catalog_only: true,
         code: c.item_number,
@@ -177,7 +191,14 @@ export async function GET(
           code: r.item_number, brand: r.brand, erpCode: r.erp_code,
           name: (r.hebrew_description && r.hebrew_description !== '-') ? r.hebrew_description : r.description,
         })),
-        fits: (veh?.rows ?? []).map((r: any) => [r.make, r.model, r.year].filter(Boolean).join(' ')),
+        fits: (veh?.rows ?? []).map((r: any) => ({
+          label: [r.make, r.model, r.year].filter(Boolean).join(' '),
+          vin: r.vin,
+          url: r.category && r.subcategory && r.schema_name
+            ? `${partlyBase}/vehicle/${r.project_id}/${encodeURIComponent(slug(r.category))}/${encodeURIComponent(slug(r.subcategory))}/${encodeURIComponent(slug(r.schema_name))}`
+            : `${partlyBase}/vehicle/${r.project_id}`,
+          schema: r.schema_name || null,
+        })),
       })
     }
 
