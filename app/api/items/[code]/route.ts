@@ -133,7 +133,52 @@ export async function GET(
       }
     }
     if (!item) {
-      return NextResponse.json({ error: 'Item not found' }, { status: 404 })
+      // Not in the ERP — but partly's catalog (the manufacturer's, far larger than our
+      // stock) may still know exactly what this part is. Returning what we know beats a
+      // 404: the customer sees the description, which vehicles it fits, and above all
+      // whether an EQUIVALENT is something we do sell.
+      const cat = await query(
+        `SELECT gp.id, gp.item_number, gp.brand, gp.description, gp.hebrew_description
+         FROM partly.global_parts gp
+         WHERE gp.item_number = ANY($1) LIMIT 1`,
+        [[upper, upper.replace(/^MG/, ''), 'MG' + upper]]
+      ).catch(() => null)
+      const c = cat?.rows?.[0] as any
+      if (!c) {
+        return NextResponse.json({ error: 'Item not found' }, { status: 404 })
+      }
+      const eq = await query(
+        `SELECT gp_other.item_number, gp_other.brand, gp_other.description,
+                gp_other.hebrew_description,
+                COALESCE(ei.code, ei_mg.code) AS erp_code
+         FROM partly.part_links pl
+         JOIN partly.global_parts gp_other
+           ON gp_other.id = CASE WHEN pl.global_part_id_a = $1
+                                 THEN pl.global_part_id_b ELSE pl.global_part_id_a END
+         LEFT JOIN erp.items ei    ON ei.code = gp_other.item_number
+         LEFT JOIN erp.items ei_mg ON ei_mg.code = 'MG' || gp_other.item_number
+         WHERE $1 IN (pl.global_part_id_a, pl.global_part_id_b) AND pl.status = 'active'
+         ORDER BY (COALESCE(ei.code, ei_mg.code) IS NOT NULL) DESC`,
+        [c.id]
+      ).catch(() => null)
+      const veh = await query(
+        `SELECT DISTINCT p.make, p.model, p.year FROM partly.project_parts pp
+         JOIN partly.projects p ON p.id = pp.project_id
+         WHERE pp.global_part_id = $1 AND pp.deleted_at IS NULL LIMIT 8`,
+        [c.id]
+      ).catch(() => null)
+      return NextResponse.json({
+        catalog_only: true,
+        code: c.item_number,
+        name: (c.hebrew_description && c.hebrew_description !== '-') ? c.hebrew_description : c.description,
+        description: c.description,
+        brand: c.brand,
+        equivalents: (eq?.rows ?? []).map((r: any) => ({
+          code: r.item_number, brand: r.brand, erpCode: r.erp_code,
+          name: (r.hebrew_description && r.hebrew_description !== '-') ? r.hebrew_description : r.description,
+        })),
+        fits: (veh?.rows ?? []).map((r: any) => [r.make, r.model, r.year].filter(Boolean).join(' ')),
+      })
     }
 
     // For brand-resolved items the relevant history chain is the RESOLVED

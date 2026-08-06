@@ -144,6 +144,84 @@ export default function ItemDetailPage({ params }: { params: Promise<{ code: str
   const brand = deriveBrand(displayedCode)
   const partLinks = linksData?.links || []
 
+  // Not in the ERP, but partly's catalog knows it: show what the part IS and, above all,
+  // whether an equivalent is something we actually sell — instead of a dead 404.
+  if (data.catalog_only) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center gap-3 sm:gap-4">
+          <button onClick={() => window.history.back()} className="text-muted-foreground hover:text-foreground transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center">
+            <ArrowLeft className="h-5 w-5" />
+          </button>
+          <div className="min-w-0 flex-1">
+            <h1 className="text-lg sm:text-xl font-bold flex items-center gap-2">
+              <Package className="h-5 w-5 text-primary" />
+              <span className="font-mono">{data.code}</span>
+              <span className={`rounded px-1.5 py-0.5 text-[11px] font-medium leading-none ${brandChipClasses(data.brand || deriveBrand(data.code))}`}>
+                {data.brand || deriveBrand(data.code)}
+              </span>
+            </h1>
+            {data.name && <p className="text-muted-foreground text-sm mt-0.5" dir="auto">{data.name}</p>}
+          </div>
+        </div>
+
+        <Card>
+          <CardContent className="p-4 space-y-3">
+            <p className="text-sm">
+              {isHe
+                ? 'הפריט מופיע בקטלוג היצרן אך לא נמכר אצלנו — אין לו מלאי, מחיר או היסטוריה.'
+                : "This part is in the manufacturer's catalog but we don't carry it — no stock, price or history."}
+            </p>
+            {data.description && (
+              <p className="text-xs text-muted-foreground" dir="ltr">{data.description}</p>
+            )}
+            {data.fits?.length > 0 && (
+              <p className="text-xs text-muted-foreground">
+                {isHe ? 'מתאים ל: ' : 'Fits: '}{data.fits.join(' · ')}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
+        {data.equivalents?.length > 0 && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Link2 className="h-4 w-4 text-cyan-500" />
+                {isHe ? 'מק״טים מקבילים' : 'Equivalents'}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {data.equivalents.map((e: any) => (
+                <div key={e.code} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                  <span className={`rounded px-1.5 py-0.5 text-[11px] font-medium leading-none ${brandChipClasses(e.brand)}`}>
+                    {e.brand}
+                  </span>
+                  {e.erpCode ? (
+                    <>
+                      <ItemLink code={e.erpCode} showCode copyable={false} />
+                      <span className="text-[10px] text-emerald-600 dark:text-emerald-400">
+                        {isHe ? 'נמכר אצלנו' : 'we sell this'}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="font-mono text-xs">{e.code}</span>
+                      <span className="text-[10px] text-muted-foreground">
+                        {isHe ? 'קטלוג בלבד' : 'catalog only'}
+                      </span>
+                    </span>
+                  )}
+                  {e.name && <span className="text-muted-foreground text-xs" dir="auto">{e.name}</span>}
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
