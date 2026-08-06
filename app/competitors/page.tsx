@@ -74,7 +74,9 @@ function PriceStockCell({
         {money(price)}
       </span>
       <StockPill qty={qty} status={status} t={t} />
-      {otherCode && <span className="font-mono text-[10px] text-muted-foreground">{otherCode}</span>}
+      {/* their own SKU, shown when it differs from ours — detail worth dropping
+          before the table starts overflowing on a narrow window */}
+      {otherCode && <span className="hidden font-mono text-[10px] text-muted-foreground lg:block">{otherCode}</span>}
     </div>
   )
 }
@@ -299,7 +301,9 @@ function CompetitorsPageInner() {
           return (
             <span className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
               <ItemLink code={r.code} showCode />
-              <span className={cn('shrink-0 rounded px-1 py-px text-[10px] font-medium leading-tight', brandChipClasses(brand))}>
+              {/* the brand is the first thing to go when width is tight — the
+                  code itself already implies it to anyone reading this table */}
+              <span className={cn('hidden shrink-0 rounded px-1 py-px text-[10px] font-medium leading-tight xl:inline', brandChipClasses(brand))}>
                 {brand}
               </span>
             </span>
@@ -314,7 +318,7 @@ function CompetitorsPageInner() {
         // has to live on a block-level child — otherwise one long Hebrew name
         // stretches the column and pushes the table past its container.
         cell: r => (
-          <span className="flex max-w-[240px] items-center gap-1">
+          <span className="flex max-w-[130px] items-center gap-1 lg:max-w-[190px] xl:max-w-[240px]">
             {r.warnings.length > 0 && (
               <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" aria-label={r.warnings.join('; ')} />
             )}
@@ -707,7 +711,7 @@ function CompetitorsPageInner() {
               onSortChange={s => setParams({ sort: s.field, dir: s.dir })}
               onRowClick={r => setHistoryRow(r)}
               rowClassName={r => (r.flags.theyStockWeDont ? 'bg-destructive/5' : undefined)}
-              minWidth="min-w-[980px]"
+              minWidth="min-w-[720px]"
               maxHeight="65vh"
               // the vertical scrollbar sits on the inline-end side and would
               // otherwise sit on top of the last column's digits
