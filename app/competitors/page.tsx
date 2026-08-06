@@ -50,7 +50,7 @@ const looseCode = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, '').repla
 
 /** One price-over-stock cell — used identically for Jan and every competitor. */
 function PriceStockCell({
-  price, qty, status, highlight, crossRef, rawCode, janCode, t,
+  price, qty, status, highlight, crossRef, rawCode, janCode, alternates, t,
 }: {
   price: number | null
   qty: number | null
@@ -59,15 +59,21 @@ function PriceStockCell({
   crossRef?: boolean
   rawCode?: string
   janCode?: string
+  alternates?: Array<{ rawCode: string; netPrice: number | null }>
   t: T
 }) {
   // They list this part under a different number (our supersession chain, or an
   // OEM cross-reference) — show it, so every price on screen is traceable.
   const otherCode = rawCode && janCode && looseCode(rawCode) !== looseCode(janCode) ? rawCode : null
+  // Other rows the same competitor files against this part. The best one is
+  // priced above; naming the rest here keeps them from vanishing entirely.
+  const alsoLine = alternates?.length
+    ? `\n${t('competitors.alsoListedAs')} ${alternates.map(a => `${a.rawCode} ${money(a.netPrice)}`).join(', ')}`
+    : ''
   return (
     <div
       className={`flex flex-col items-center gap-0.5 ${crossRef ? 'opacity-60' : ''}`}
-      title={crossRef ? `${t('competitors.crossRefTooltip')} ${rawCode ?? ''}` : rawCode}
+      title={(crossRef ? `${t('competitors.crossRefTooltip')} ${rawCode ?? ''}` : rawCode ?? '') + alsoLine}
     >
       <span className={highlight ? 'font-semibold text-emerald-600 dark:text-emerald-400' : undefined}>
         {crossRef && <span className="me-0.5 text-muted-foreground">≈</span>}
@@ -380,6 +386,7 @@ function CompetitorsPageInner() {
               crossRef={cell.crossRef}
               rawCode={cell.rawCode}
               janCode={r.code}
+              alternates={cell.alternates}
               t={t}
             />
           )
@@ -523,6 +530,13 @@ function CompetitorsPageInner() {
               <div className="mt-1 text-2xl font-semibold tabular-nums">
                 {formatNumber(data.kpis.unmatchedCompetitorItems)}
               </div>
+              {/* Reconciles this view against a per-code source like the source
+                  spreadsheet, which lists every code as its own line. */}
+              {data.kpis.mergedAlternates > 0 && (
+                <div className="mt-0.5 text-[11px] text-muted-foreground/70">
+                  +{formatNumber(data.kpis.mergedAlternates)} {t('competitors.mergedAlternates')}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>

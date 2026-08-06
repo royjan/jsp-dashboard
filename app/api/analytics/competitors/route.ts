@@ -28,6 +28,12 @@ export interface CompetitorCell {
   crossRef: boolean
   /** Their code IS this part number, rather than a chain alias of it. */
   exact: boolean
+  /**
+   * Other rows the same competitor files against this part — older or newer
+   * codes from our supersession chain. The best one is shown; these are kept
+   * so a competitor SKU never silently disappears from the comparison.
+   */
+  alternates?: Array<Omit<CompetitorCell, 'alternates'>>
 }
 
 export interface CompareRow {
@@ -58,6 +64,12 @@ interface CompareDataset {
     cheaperThanUs: number
     theyStockWeDont: number
     unmatchedCompetitorItems: number
+    /**
+     * Competitor rows folded into a row filed under a different code of the
+     * same part. Counted so the totals reconcile with a per-code source like
+     * the source spreadsheet, which lists each code separately.
+     */
+    mergedAlternates: number
   }
   brands: string[]
   rows: CompareRow[]
@@ -197,7 +209,20 @@ async function buildDataset(): Promise<{ dataset: CompareDataset; catalogSize: n
     const rank = (c: CompetitorCell) => (c.crossRef ? 0 : c.exact ? 2 : 1)
     const place = (out: CompareRow, name: string, cell: CompetitorCell) => {
       const current = out.competitors[name]
-      if (!current || rank(cell) > rank(current)) out.competitors[name] = cell
+      if (!current) {
+        out.competitors[name] = cell
+        return
+      }
+      // The loser is kept as an alternate rather than dropped — otherwise that
+      // competitor SKU appears in neither this table nor the unmatched list.
+      const { alternates: incoming, ...bare } = cell
+      const { alternates: held, ...currentBare } = current
+      if (rank(cell) > rank(current)) {
+        cell.alternates = [...(held ?? []), ...(incoming ?? []), currentBare]
+        out.competitors[name] = cell
+      } else {
+        current.alternates = [...(held ?? []), ...(incoming ?? []), bare]
+      }
     }
 
     // Pass 1 — direct matches only: the competitor lists this part under a code
@@ -305,6 +330,10 @@ async function buildDataset(): Promise<{ dataset: CompareDataset; catalogSize: n
         cheaperThanUs: rows.filter(r => r.flags.cheaperThanUs).length,
         theyStockWeDont: rows.filter(r => r.flags.theyStockWeDont).length,
         unmatchedCompetitorItems: unmatchedByCode.size,
+        mergedAlternates: rows.reduce(
+          (n, r) => n + Object.values(r.competitors).reduce((m, c) => m + (c.alternates?.length ?? 0), 0),
+          0,
+        ),
       },
       brands,
       rows,
