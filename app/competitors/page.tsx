@@ -15,7 +15,7 @@ import { useLocale } from '@/lib/locale-context'
 import { formatCurrency, formatNumber } from '@/lib/constants'
 import { fixRtlItemName } from '@/lib/rtl-fix'
 import { cn } from '@/lib/utils'
-import { deriveBrand, brandChipClasses, BRAND_RANK, type Brand } from '@/lib/brand'
+import { deriveBrand, brandChipClasses, BRAND_RANK } from '@/lib/brand'
 import { Swords, Upload, PackageX, TrendingDown, SearchX, Search, ChevronLeft, ChevronRight, AlertTriangle, X } from 'lucide-react'
 import type { CompareRow, CompetitorCell } from '@/app/api/analytics/competitors/route'
 import type { TranslationKey } from '@/lib/i18n'
@@ -24,9 +24,6 @@ type SortField = 'code' | 'ourPrice' | 'ourStock' | 'minNet' | 'spread' | 'sold'
 type T = (k: TranslationKey) => string
 
 const PER_PAGE = 7
-
-/** "Low stock" = we still have it, but barely. Matches the /stock page's read of thin cover. */
-const LOW_STOCK_MAX = 3
 
 type StockFilter = 'in' | 'low' | 'out'
 type PriceFilter = 'them' | 'us'
@@ -158,10 +155,18 @@ function Segmented<V extends string>({
 
 function CompetitorsPageInner() {
   const { t } = useLocale()
-  const { data, isLoading, error, refetch } = useCompetitorComparison()
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
+
+  // The URL IS the request: every filter the API understands is a query param,
+  // so the address bar and the fetch can't drift apart. `per` pins the page size.
+  const apiParams = useMemo(() => {
+    const p = new URLSearchParams(searchParams.toString())
+    p.set('per', String(PER_PAGE))
+    return p.toString()
+  }, [searchParams])
+  const { data, isLoading, error, refetch } = useCompetitorComparison(apiParams)
 
   const [showUploader, setShowUploader] = useState(false)
   const [historyRow, setHistoryRow] = useState<CompareRow | null>(null)
@@ -239,64 +244,16 @@ function CompetitorsPageInner() {
     [activeCompetitors, competitorNames],
   )
 
-  const rows = useMemo(() => {
-    if (!data) return []
-    const q = search.trim().toUpperCase()
-    const filtered = data.rows.filter(r => {
-      if (q && !r.code.toUpperCase().includes(q) && !r.name.toUpperCase().includes(q)) return false
-      if (!Object.keys(r.competitors).some(n => enabled.has(n))) return false
-      if (brandFilter && !brandFilter.has(deriveBrand(r.code))) return false
-      // Jan stock, straight off ourStock (already coerced to a number by the API).
-      if (stockFilter === 'in' && r.ourStock <= 0) return false
-      if (stockFilter === 'out' && r.ourStock > 0) return false
-      if (stockFilter === 'low' && !(r.ourStock > 0 && r.ourStock <= LOW_STOCK_MAX)) return false
-      // Direction of the undercut. 'Jan' as cheapestCompetitor is the API's own
-      // verdict that our price ties or beats every non-cross-ref competitor.
-      if (priceFilter === 'them' && !r.flags.cheaperThanUs) return false
-      if (priceFilter === 'us' && r.cheapestCompetitor !== 'Jan') return false
-      // Threshold on the size of the gap, whichever way it points.
-      if (minGap !== null && (r.spreadPct === null || Math.abs(r.spreadPct) < minGap)) return false
-      if (origFilter && r.genuineness !== origFilter) return false
-      if (onlyWeAreOut && !r.flags.theyStockWeDont) return false
-      return true
-    })
-    const dirMul = sort.dir === 'asc' ? 1 : -1
-    const val = (r: CompareRow): number | string => {
-      switch (sort.field) {
-        case 'code': return r.code
-        case 'ourPrice': return r.ourPrice ?? -1
-        case 'ourStock': return r.ourStock
-        case 'minNet': return r.minCompetitorNet ?? -1
-        case 'spread': return r.spreadPct ?? 999
-        case 'sold': return r.soldThisYear
-      }
-    }
-    return [...filtered].sort((a, b) => {
-      const va = val(a); const vb = val(b)
-      if (typeof va === 'string' || typeof vb === 'string') return String(va).localeCompare(String(vb)) * dirMul
-      return (va - (vb as number)) * dirMul
-    })
-  }, [data, search, enabled, brandFilter, stockFilter, priceFilter, minGap, origFilter, onlyWeAreOut, sort])
+  // The API already filtered, sorted and sliced — these are exactly the rows
+  // for this page of this view.
+  const pageRows = data?.rows ?? []
+  const unmatchedPage = data?.unmatched ?? []
 
-  // Unmatched rows are competitor SKUs with no Jan item behind them, so only the
-  // filters that describe the competitor's own row can apply: search, who listed
-  // it, and whether they call it genuine. The rest are hidden in this view.
-  const unmatchedRows = useMemo(() => {
-    if (!data) return []
-    const q = search.trim().toUpperCase()
-    return data.unmatched.filter(r => {
-      if (q && !r.itemCode.includes(q) && !(r.name || '').toUpperCase().includes(q)) return false
-      if (origFilter && r.genuineness !== origFilter) return false
-      return r.competitors.some(n => enabled.has(n))
-    })
-  }, [data, search, enabled, origFilter])
-
-  // Only offer brands that actually occur in the data, in resolution order.
-  const availableBrands = useMemo(() => {
-    const seen = new Set<Brand>()
-    for (const r of data?.rows ?? []) seen.add(deriveBrand(r.code))
-    return [...seen].sort((a, b) => BRAND_RANK[a] - BRAND_RANK[b])
-  }, [data])
+  // Brands that actually occur across the whole dataset, in resolution order.
+  const availableBrands = useMemo(
+    () => (data?.brands ?? []).slice().sort((a, b) => (BRAND_RANK[a] ?? 99) - (BRAND_RANK[b] ?? 99)),
+    [data],
+  )
 
   // Counted per view, so the badge never advertises a filter this view ignores.
   const activeFilterCount = (showUnmatched
@@ -316,13 +273,11 @@ function CompetitorsPageInner() {
     })
   }, [setParams, setSearch, setGapInput])
 
-  // Both views paginate off the same ?page, clamped to whichever list is shown.
-  const activeCount = showUnmatched ? unmatchedRows.length : rows.length
+  // Totals and the effective page come back with the data, already clamped to
+  // whichever list this view is showing.
+  const activeCount = data?.total ?? 0
   const activePageCount = Math.max(1, Math.ceil(activeCount / PER_PAGE))
-  const safePage = Math.min(page, activePageCount - 1)
-  const from = safePage * PER_PAGE
-  const pageRows = useMemo(() => rows.slice(from, from + PER_PAGE), [rows, from])
-  const unmatchedPage = useMemo(() => unmatchedRows.slice(from, from + PER_PAGE), [unmatchedRows, from])
+  const safePage = data ? data.page : Math.min(page, activePageCount - 1)
 
   const historyCodes = useMemo(() => {
     if (!historyRow) return null

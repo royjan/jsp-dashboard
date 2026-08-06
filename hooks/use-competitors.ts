@@ -14,14 +14,21 @@ export class DuplicateUploadError extends Error {
   }
 }
 
-export function useCompetitorComparison() {
+/**
+ * Filtering, sorting and paging all happen server-side, so the query key is the
+ * query string — each distinct view is its own cache entry and only one page of
+ * rows crosses the wire. `placeholderData` keeps the previous page on screen
+ * while the next one loads, so paging doesn't flash the skeleton.
+ */
+export function useCompetitorComparison(params: string) {
   return useQuery<CompetitorCompareResponse>({
-    queryKey: ['competitors-compare'],
+    queryKey: ['competitors-compare', params],
     queryFn: async () => {
-      const res = await fetch('/api/analytics/competitors')
+      const res = await fetch(`/api/analytics/competitors${params ? `?${params}` : ''}`)
       if (!res.ok) throw new Error('Failed to fetch competitor comparison')
       return res.json()
     },
+    placeholderData: previous => previous,
     staleTime: 5 * 60 * 1000,
     gcTime: 15 * 60 * 1000,
     retry: 2,

@@ -8,6 +8,7 @@ import { query } from '@/lib/db'
 import { getCached, setCache } from '@/lib/redis-client'
 import { CACHE_TTL, CACHE_VERSIONS } from '@/lib/constants'
 import { normalizeOemCode, type StockStatus, type Genuineness } from '@/lib/competitors/parse-sheets'
+import { deriveBrand, BRAND_RANK } from '@/lib/brand'
 import type { FinansitItem } from '@/lib/types'
 
 export interface CompetitorCell {
@@ -46,7 +47,10 @@ export interface CompareRow {
   warnings: string[]
 }
 
-export interface CompetitorCompareResponse {
+export type UnmatchedRow = { itemCode: string; rawCode: string; name: string | null; netPrice: number | null; stockStatus: StockStatus; genuineness: Genuineness; competitors: string[] }
+
+/** The whole computed comparison — expensive to build, cached as one blob. */
+interface CompareDataset {
   computedAt: string
   competitors: Array<{ id: string; name: string; lastUploadAt: string | null; itemCount: number }>
   kpis: {
@@ -55,8 +59,25 @@ export interface CompetitorCompareResponse {
     theyStockWeDont: number
     unmatchedCompetitorItems: number
   }
+  brands: string[]
   rows: CompareRow[]
-  unmatched: Array<{ itemCode: string; rawCode: string; name: string | null; netPrice: number | null; stockStatus: StockStatus; genuineness: Genuineness; competitors: string[] }>
+  unmatched: UnmatchedRow[]
+}
+
+/** What a request gets back: the dataset's headline figures plus ONE page. */
+export interface CompetitorCompareResponse {
+  computedAt: string
+  competitors: CompareDataset['competitors']
+  kpis: CompareDataset['kpis']
+  brands: string[]
+  /** Rows for the requested page of the matched list (empty in the unmatched view). */
+  rows: CompareRow[]
+  /** Rows for the requested page of the unmatched list (empty in the default view). */
+  unmatched: UnmatchedRow[]
+  /** Size of the filtered list backing the current view — drives pagination. */
+  total: number
+  page: number
+  perPage: number
 }
 
 type SnapshotRow = {
@@ -92,19 +113,8 @@ function saneQty(v: number | null | undefined): number | null {
   return Math.round(n)
 }
 
-// Latest competitor snapshots vs live Jan catalog (price + stock from getItems).
-export async function GET(request: Request) {
-  try {
-    await initializeSecrets()
-    const { searchParams } = new URL(request.url)
-    const refresh = searchParams.get('refresh') === '1'
-
-    const cacheKey = CACHE_VERSIONS.COMPETITOR_COMPARE
-    if (!refresh) {
-      const cached = await getCached<CompetitorCompareResponse>(cacheKey)
-      if (cached) return NextResponse.json(cached)
-    }
-
+/** Latest competitor snapshots joined to the live Jan catalog. */
+async function buildDataset(): Promise<{ dataset: CompareDataset; catalogSize: number }> {
     const competitorsMeta = (await query(`
       SELECT c.id, c.name, u.uploaded_at AS last_upload_at,
              (SELECT count(*) FROM dashboard.competitor_items ci WHERE ci.upload_id = c.latest_upload_id AND ci.competitor_id = c.id) AS item_count
@@ -141,7 +151,7 @@ export async function GET(request: Request) {
     }
 
     const rowsByJanCode = new Map<string, CompareRow>()
-    const unmatchedByCode = new Map<string, CompetitorCompareResponse['unmatched'][number]>()
+    const unmatchedByCode = new Map<string, UnmatchedRow>()
 
     const ensureRow = (item: FinansitItem): CompareRow => {
       let out = rowsByJanCode.get(item.code)
@@ -279,7 +289,10 @@ export async function GET(request: Request) {
       return (a.spreadPct ?? 999) - (b.spreadPct ?? 999)
     })
 
-    const response: CompetitorCompareResponse = {
+    const brands = [...new Set(rows.map(r => deriveBrand(r.code)))]
+      .sort((a, b) => (BRAND_RANK[a] ?? 99) - (BRAND_RANK[b] ?? 99))
+
+    const dataset: CompareDataset = {
       computedAt: new Date().toISOString(),
       competitors: competitorsMeta.map(c => ({
         id: c.id,
@@ -293,16 +306,132 @@ export async function GET(request: Request) {
         theyStockWeDont: rows.filter(r => r.flags.theyStockWeDont).length,
         unmatchedCompetitorItems: unmatchedByCode.size,
       },
+      brands,
       rows,
       unmatched: [...unmatchedByCode.values()],
     }
 
-    // A degraded getItems() fallback (tiny catalog) produces mostly-unmatched
-    // rows — return it, but don't cache it for 3h.
-    if (items.length >= 1000) {
-      await setCache(cacheKey, response, CACHE_TTL.ANALYTICS)
+    return { dataset, catalogSize: items.length }
+}
+
+const SORT_FIELDS = ['code', 'ourPrice', 'ourStock', 'minNet', 'spread', 'sold'] as const
+type SortField = (typeof SORT_FIELDS)[number]
+
+/** "Low stock" = we still have it, but barely. Mirrors the client's old read. */
+const LOW_STOCK_MAX = 3
+const MAX_PER_PAGE = 200
+
+/**
+ * Filter + sort + slice happen here rather than in the browser: the full set is
+ * ~1900 rows / ~1MB, which the client had to download and re-filter on every
+ * load. The expensive join is still computed once and cached whole; a request
+ * only pays for the page it asks for.
+ */
+export async function GET(request: Request) {
+  try {
+    await initializeSecrets()
+    const { searchParams } = new URL(request.url)
+    const refresh = searchParams.get('refresh') === '1'
+
+    const cacheKey = CACHE_VERSIONS.COMPETITOR_COMPARE
+    let dataset = refresh ? null : await getCached<CompareDataset>(cacheKey)
+    if (!dataset) {
+      const built = await buildDataset()
+      dataset = built.dataset
+      // A degraded getItems() fallback (tiny catalog) produces mostly-unmatched
+      // rows — serve it, but don't cache it for 3h.
+      if (built.catalogSize >= 1000) await setCache(cacheKey, dataset, CACHE_TTL.ANALYTICS)
     }
-    return NextResponse.json(response)
+
+    const q = (searchParams.get('q') ?? '').trim().toUpperCase()
+    const comp = searchParams.get('comp')
+    const enabled = comp === null ? null : new Set(comp.split(',').filter(Boolean))
+    const brandParam = searchParams.get('brand')
+    const brandFilter = brandParam ? new Set(brandParam.split(',').filter(Boolean)) : null
+    const oneOf = <V extends string>(key: string, allowed: readonly V[]): V | null => {
+      const v = searchParams.get(key)
+      return (allowed as readonly string[]).includes(v ?? '') ? (v as V) : null
+    }
+    const stockFilter = oneOf('stock', ['in', 'low', 'out'] as const)
+    // `cheaper=1` / `genuine=1` were the first shipped form of these two filters.
+    const priceFilter = oneOf('price', ['them', 'us'] as const) ?? (searchParams.get('cheaper') === '1' ? 'them' : null)
+    const origFilter = oneOf('orig', ['genuine', 'aftermarket'] as const) ?? (searchParams.get('genuine') === '1' ? 'genuine' : null)
+    const gapRaw = searchParams.get('gap')
+    const minGap = gapRaw !== null && gapRaw !== '' && Number.isFinite(Number(gapRaw)) ? Math.abs(Number(gapRaw)) : null
+    const onlyWeAreOut = searchParams.get('they_stock') === '1'
+    const unmatchedView = searchParams.get('view') === 'unmatched'
+
+    const sortField: SortField = (SORT_FIELDS as readonly string[]).includes(searchParams.get('sort') ?? '')
+      ? (searchParams.get('sort') as SortField)
+      : 'spread'
+    const sortDir = searchParams.get('dir') === 'desc' ? 'desc' : 'asc'
+
+    const perPage = Math.min(MAX_PER_PAGE, Math.max(1, Number(searchParams.get('per')) || 7))
+    const requestedPage = Math.max(0, (Number(searchParams.get('page')) || 1) - 1)
+
+    let rows: CompareRow[] = []
+    let unmatched: UnmatchedRow[] = []
+    let total: number
+
+    if (unmatchedView) {
+      // These rows have no Jan item behind them, so only filters describing the
+      // competitor's own row apply: search, who listed it, genuine-or-not.
+      const filtered = dataset.unmatched.filter(r => {
+        if (q && !r.itemCode.includes(q) && !(r.name || '').toUpperCase().includes(q)) return false
+        if (origFilter && r.genuineness !== origFilter) return false
+        return enabled === null || r.competitors.some(n => enabled.has(n))
+      })
+      total = filtered.length
+      const page = Math.min(requestedPage, Math.max(0, Math.ceil(total / perPage) - 1))
+      unmatched = filtered.slice(page * perPage, page * perPage + perPage)
+      return NextResponse.json({
+        computedAt: dataset.computedAt, competitors: dataset.competitors, kpis: dataset.kpis,
+        brands: dataset.brands, rows, unmatched, total, page, perPage,
+      } satisfies CompetitorCompareResponse)
+    }
+
+    const filtered = dataset.rows.filter(r => {
+      if (q && !r.code.toUpperCase().includes(q) && !r.name.toUpperCase().includes(q)) return false
+      if (enabled && !Object.keys(r.competitors).some(n => enabled.has(n))) return false
+      if (brandFilter && !brandFilter.has(deriveBrand(r.code))) return false
+      if (stockFilter === 'in' && r.ourStock <= 0) return false
+      if (stockFilter === 'out' && r.ourStock > 0) return false
+      if (stockFilter === 'low' && !(r.ourStock > 0 && r.ourStock <= LOW_STOCK_MAX)) return false
+      // 'Jan' as cheapestCompetitor is this route's own verdict that our price
+      // ties or beats every non-cross-ref competitor.
+      if (priceFilter === 'them' && !r.flags.cheaperThanUs) return false
+      if (priceFilter === 'us' && r.cheapestCompetitor !== 'Jan') return false
+      if (minGap !== null && (r.spreadPct === null || Math.abs(r.spreadPct) < minGap)) return false
+      if (origFilter && r.genuineness !== origFilter) return false
+      if (onlyWeAreOut && !r.flags.theyStockWeDont) return false
+      return true
+    })
+
+    const dirMul = sortDir === 'asc' ? 1 : -1
+    const val = (r: CompareRow): number | string => {
+      switch (sortField) {
+        case 'code': return r.code
+        case 'ourPrice': return r.ourPrice ?? -1
+        case 'ourStock': return r.ourStock
+        case 'minNet': return r.minCompetitorNet ?? -1
+        case 'spread': return r.spreadPct ?? 999
+        case 'sold': return r.soldThisYear
+      }
+    }
+    const sorted = [...filtered].sort((a, b) => {
+      const va = val(a); const vb = val(b)
+      if (typeof va === 'string' || typeof vb === 'string') return String(va).localeCompare(String(vb)) * dirMul
+      return (va - (vb as number)) * dirMul
+    })
+
+    total = sorted.length
+    const page = Math.min(requestedPage, Math.max(0, Math.ceil(total / perPage) - 1))
+    rows = sorted.slice(page * perPage, page * perPage + perPage)
+
+    return NextResponse.json({
+      computedAt: dataset.computedAt, competitors: dataset.competitors, kpis: dataset.kpis,
+      brands: dataset.brands, rows, unmatched, total, page, perPage,
+    } satisfies CompetitorCompareResponse)
   } catch (error) {
     console.error('[analytics/competitors] failed:', error)
     return NextResponse.json(
