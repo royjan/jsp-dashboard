@@ -15,6 +15,7 @@ import {
   ArrowLeft, Package, DollarSign, Warehouse, TrendingUp, Tag, MapPin, Calendar, Layers, Hash,
   FileText, X, Link2,
   Car,
+  ChevronDown,
   ExternalLink,
 } from 'lucide-react'
 import { ILS_FORMAT, NUMBER_FORMAT } from '@/lib/constants'
@@ -118,6 +119,8 @@ function LoadingSkeleton() {
   )
 }
 
+const VEHICLE_PREVIEW = 5      // vehicles shown before "show all"
+
 export default function ItemDetailPage({ params }: { params: Promise<{ code: string }> }) {
   const { code } = use(params)
   const decodedCode = decodeURIComponent(code)
@@ -126,6 +129,8 @@ export default function ItemDetailPage({ params }: { params: Promise<{ code: str
   const { data: linksData } = useItemLinks(decodedCode)
   const isHe = locale === 'he'
   const [openDocs, setOpenDocs] = useState<DocType | null>(null)
+  // 30 vehicles is a lot of card: show a few, let the user open the rest
+  const [vehiclesOpen, setVehiclesOpen] = useState(false)
   const toggleDocs = (type: DocType) => setOpenDocs((cur) => (cur === type ? null : type))
 
   if (isLoading) return <LoadingSkeleton />
@@ -187,11 +192,24 @@ export default function ItemDetailPage({ params }: { params: Promise<{ code: str
                 <Car className="h-4 w-4 text-indigo-500" />
                 {isHe ? 'מתאים לרכבים' : 'Fits these vehicles'}
                 <Badge variant="secondary" className="text-xs">{data.fits.length}</Badge>
+                {data.fits.length > VEHICLE_PREVIEW && (
+                  <button
+                    type="button"
+                    onClick={() => setVehiclesOpen((v) => !v)}
+                    aria-expanded={vehiclesOpen}
+                    className="ms-auto inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-normal text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                  >
+                    {vehiclesOpen
+                      ? (isHe ? 'הסתר' : 'Show less')
+                      : (isHe ? 'הצג הכל' : 'Show all')}
+                    <ChevronDown className={`h-3.5 w-3.5 transition-transform ${vehiclesOpen ? 'rotate-180' : ''}`} />
+                  </button>
+                )}
               </CardTitle>
             </CardHeader>
             <CardContent>
               <ul className="divide-y">
-                {data.fits.map((f: any) => (
+                {(vehiclesOpen ? data.fits : data.fits.slice(0, VEHICLE_PREVIEW)).map((f: any) => (
                   <li key={f.vin || f.label} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2 text-sm">
                     <a
                       href={f.url}
@@ -209,6 +227,17 @@ export default function ItemDetailPage({ params }: { params: Promise<{ code: str
                   </li>
                 ))}
               </ul>
+              {!vehiclesOpen && data.fits.length > VEHICLE_PREVIEW && (
+                <button
+                  type="button"
+                  onClick={() => setVehiclesOpen(true)}
+                  className="mt-2 text-xs text-primary hover:underline"
+                >
+                  {isHe
+                    ? `ועוד ${data.fits.length - VEHICLE_PREVIEW} רכבים`
+                    : `+${data.fits.length - VEHICLE_PREVIEW} more vehicles`}
+                </button>
+              )}
             </CardContent>
           </Card>
         )}
