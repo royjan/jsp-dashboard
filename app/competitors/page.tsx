@@ -393,6 +393,11 @@ function CompetitorsPageInner() {
         header: t('competitors.cheapest'),
         align: 'center',
         hideOnMobile: true,
+        // Redundant until there's room for it: the winning price is already the
+        // green one in the competitor cells, and this column's Hebrew header is
+        // wide enough to push the table into overflow on a laptop screen.
+        headerClassName: 'hidden xl:table-cell',
+        cellClassName: 'hidden xl:table-cell',
         cell: r =>
           r.cheapestCompetitor ? (
             <Badge variant={r.cheapestCompetitor === 'Jan' ? 'success' : 'warning'}>{r.cheapestCompetitor}</Badge>
