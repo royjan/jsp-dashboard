@@ -102,12 +102,14 @@ export default function AlertsPage() {
 
   return (
     <div className="space-y-4 md:space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Bell className="h-6 w-6 text-primary" />
-          <h1 className="text-2xl font-bold">Stock Alerts</h1>
+      {/* Title + both actions don't fit on one line at 320px, so the row wraps
+          instead of forcing the whole page into horizontal scroll. */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <Bell className="h-6 w-6 text-primary shrink-0" />
+          <h1 className="text-2xl font-bold truncate">Stock Alerts</h1>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 shrink-0">
           <Button onClick={runNow} variant="outline">
             Run Now
           </Button>

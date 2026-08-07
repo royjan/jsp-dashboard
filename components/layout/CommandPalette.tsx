@@ -164,7 +164,8 @@ export function CommandPalette() {
       {/* Trigger button for TopBar */}
       <button
         onClick={() => setOpen(true)}
-        className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-muted-foreground border rounded-lg hover:bg-accent hover:text-foreground transition-colors"
+        aria-label={t('search')}
+        className="flex items-center justify-center gap-1.5 px-2.5 py-1.5 text-xs text-muted-foreground border rounded-lg hover:bg-accent hover:text-foreground transition-colors pointer-coarse:min-h-11 pointer-coarse:min-w-11"
       >
         <Search className="h-3.5 w-3.5" />
         <span className="hidden sm:inline">{t('search')}</span>
@@ -183,7 +184,9 @@ export function CommandPalette() {
           />
 
           {/* Palette */}
-          <div className="fixed inset-x-0 top-[15%] mx-auto max-w-lg px-4">
+          {/* Sits higher on a phone: the on-screen keyboard eats the lower half,
+              and at top-[15%] the first results were pushed under it. */}
+          <div className="fixed inset-x-0 top-[5%] sm:top-[15%] mx-auto max-w-lg px-4">
             <Command
               className="rounded-xl border bg-popover text-popover-foreground shadow-2xl overflow-hidden"
               dir="rtl"
@@ -200,7 +203,7 @@ export function CommandPalette() {
                 {searching && <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" />}
               </div>
 
-              <Command.List className="max-h-[min(60vh,400px)] overflow-y-auto p-2">
+              <Command.List className="max-h-[min(60dvh,400px)] overflow-y-auto overscroll-contain p-2">
                 <Command.Empty className="py-6 text-center text-sm text-muted-foreground">
                   {searching ? t('cmd.searching') : t('cmd.noResults')}
                 </Command.Empty>

@@ -68,6 +68,7 @@ export function Segmented<V extends string>({
               onClick={() => onChange(o.value)}
               className={cn(
                 'rounded px-2 py-1 text-xs transition-colors',
+                'inline-flex items-center justify-center pointer-coarse:min-h-11 pointer-coarse:px-3',
                 on ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted',
               )}
             >

@@ -57,6 +57,9 @@ export function ItemLink({ code, name, className, showCode = false, dir, copyabl
 
   if (!showCopy) return link
 
+  // The icon alone is a 12×12 hit area — fine for a cursor, unusable with a thumb.
+  // p-1/-m-1 cancel out so the dense desktop row is unchanged, and the touch-only
+  // minimum grows it to 44×44 where it actually matters.
   return (
     <span className="inline-flex items-center gap-1">
       {link}
@@ -65,7 +68,7 @@ export function ItemLink({ code, name, className, showCode = false, dir, copyabl
         onClick={handleCopy}
         title={`העתק ${code}`}
         aria-label={`העתק ${code}`}
-        className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
+        className="text-muted-foreground hover:text-foreground transition-colors shrink-0 inline-flex items-center justify-center p-1 -m-1 pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:m-0"
       >
         {copied ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
       </button>

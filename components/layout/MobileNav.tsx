@@ -48,12 +48,16 @@ export function MobileNav() {
         <div className="fixed inset-0 z-50 lg:hidden" onClick={() => setShowMore(false)}>
           <div className="absolute inset-0 bg-black/50" />
           <div
-            className="absolute bottom-14 inset-x-0 bg-background border-t rounded-t-2xl p-2 pb-1 max-h-[60vh] overflow-y-auto"
+            className="absolute bottom-[calc(3.5rem+env(safe-area-inset-bottom))] inset-x-0 bg-background border-t rounded-t-2xl p-2 pb-1 max-h-[60vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-3 py-2 mb-1">
-              <span className="text-sm font-medium text-muted-foreground">{t('page.overview')}</span>
-              <button onClick={() => setShowMore(false)} className="p-1 rounded-md hover:bg-muted">
+              <span className="text-sm font-medium text-muted-foreground">{t('more')}</span>
+              <button
+                onClick={() => setShowMore(false)}
+                aria-label="Close menu"
+                className="p-2 -me-1 rounded-md hover:bg-muted min-h-11 min-w-11 flex items-center justify-center"
+              >
                 <X className="h-4 w-4" />
               </button>
             </div>
@@ -92,24 +96,24 @@ export function MobileNav() {
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  'flex flex-col items-center justify-center gap-0.5 text-[11px] transition-colors min-h-[44px] min-w-[44px] px-1',
+                  'flex flex-col items-center justify-center gap-0.5 text-[11px] transition-colors min-h-[44px] px-1 flex-1 min-w-0',
                   isActive ? 'text-primary' : 'text-muted-foreground'
                 )}
               >
-                <Icon className="h-5 w-5" />
-                <span>{t(item.labelKey)}</span>
+                <Icon className="h-5 w-5 shrink-0" />
+                <span className="truncate max-w-full">{t(item.labelKey)}</span>
               </Link>
             )
           })}
           <button
             onClick={() => setShowMore(!showMore)}
             className={cn(
-              'flex flex-col items-center justify-center gap-0.5 text-[11px] transition-colors min-h-[44px] min-w-[44px] px-1',
+              'flex flex-col items-center justify-center gap-0.5 text-[11px] transition-colors min-h-[44px] px-1 flex-1 min-w-0',
               isMoreActive || showMore ? 'text-primary' : 'text-muted-foreground'
             )}
           >
-            <MoreHorizontal className="h-5 w-5" />
-            <span>{t('more') || 'More'}</span>
+            <MoreHorizontal className="h-5 w-5 shrink-0" />
+            <span className="truncate max-w-full">{t('more') || 'More'}</span>
           </button>
         </div>
       </nav>

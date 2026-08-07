@@ -54,6 +54,7 @@ export function EbayRecommendButton({ itemCode, itemName, source = 'dashboard', 
           'focus:outline-none focus:ring-1 focus:ring-ring',
           'disabled:opacity-50 disabled:pointer-events-none',
           size === 'sm' ? 'h-7 w-7' : 'h-8 w-8',
+          'pointer-coarse:min-h-11 pointer-coarse:min-w-11',
           isRecommended
             ? 'bg-blue-100 text-blue-700 hover:bg-blue-200 dark:bg-blue-950 dark:text-blue-400 dark:hover:bg-blue-900'
             : 'text-muted-foreground hover:bg-muted hover:text-foreground',

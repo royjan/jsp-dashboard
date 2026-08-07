@@ -37,7 +37,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} />
       <div className={cn('min-h-screen transition-all duration-300', marginClass)}>
         <TopBar />
-        <main className="p-2 sm:p-4 lg:p-6 pb-20 lg:pb-6">
+        {/* Bottom clearance = nav (3.5rem) + breathing room + the home-indicator
+            inset. Deliberately NOT the `p-*` shorthand: Tailwind emits `sm:p-4`
+            after the unprefixed `pb-*`, so the shorthand won above 640px and
+            left only 16px of clearance under a 57px nav — the last row of every
+            table sat behind it on tablets. Separate px/pt/pb can't collide. */}
+        <main className="px-2 sm:px-4 lg:px-6 pt-2 sm:pt-4 lg:pt-6 pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-6">
           {/* Enter-only fade keyed on the route — no mode="wait" exit delay, so navigation
               shows the new page immediately instead of waiting for the old one to animate out. */}
           <motion.div

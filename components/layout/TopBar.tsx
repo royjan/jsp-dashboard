@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { usePathname } from 'next/navigation'
-import { Moon, Sun, Languages, RefreshCw, LogOut } from 'lucide-react'
+import { Moon, Sun, Languages, RefreshCw, LogOut, MoreVertical } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { useLocale } from '@/lib/locale-context'
 import { useQueryClient } from '@tanstack/react-query'
@@ -62,50 +62,112 @@ export function TopBar() {
 
   const titleKey = pageTitleKeys[pathname]
 
+  // Five inline actions left ~110px for the title on a 390px screen, so every
+  // page read as "ניתוח מ…". On mobile the secondary ones move into this menu;
+  // from sm up the bar is unchanged.
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!menuOpen) return
+    const onDown = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false)
+    }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenuOpen(false) }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [menuOpen])
+
+  // `labelled` renders the same action as a menu row (icon + visible text) rather
+  // than the bare icon the top bar uses, so the mobile overflow menu is readable.
+  const actions = (labelled: boolean) => (
+    <>
+      <Button
+        variant="ghost"
+        size={labelled ? 'sm' : 'sm'}
+        onClick={handleSync}
+        disabled={syncing}
+        className="gap-1.5 text-xs"
+        title={t('refresh')}
+      >
+        <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
+        {labelled ? <span>{syncStatus || t('refresh')}</span>
+                  : syncing && syncStatus && <span className="hidden sm:inline text-muted-foreground">{syncStatus}</span>}
+      </Button>
+
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => setLocale(locale === 'he' ? 'en' : 'he')}
+        className="gap-1.5 text-xs"
+      >
+        <Languages className="h-4 w-4" />
+        {locale === 'he' ? 'EN' : 'HE'}
+      </Button>
+
+      <Button
+        variant="ghost"
+        size={labelled ? 'sm' : 'icon'}
+        onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+        className={labelled ? 'gap-1.5 text-xs' : undefined}
+      >
+        <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+        <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+        <span className={labelled ? 'ms-5' : 'sr-only'}>{t('toggleTheme')}</span>
+      </Button>
+
+      <Button
+        variant="ghost"
+        size={labelled ? 'sm' : 'icon'}
+        onClick={() => { window.location.href = '/api/auth/logout' }}
+        title={t('logout')}
+        className={labelled ? 'gap-1.5 text-xs' : undefined}
+      >
+        <LogOut className="h-4 w-4" />
+        <span className={labelled ? undefined : 'sr-only'}>{t('logout')}</span>
+      </Button>
+    </>
+  )
+
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4 md:px-6">
-      <h1 className="text-sm sm:text-lg font-semibold truncate">{titleKey ? t(titleKey) : t('dashboard')}</h1>
-      <div className="flex items-center gap-1">
+    <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-2 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4 md:px-6">
+      {/* min-w-0 is what lets the flex child actually shrink so truncate works. */}
+      <h1 className="text-sm sm:text-lg font-semibold truncate min-w-0 flex-1">
+        {titleKey ? t(titleKey) : t('dashboard')}
+      </h1>
+      <div className="flex items-center gap-1 shrink-0">
         <CommandPalette />
         <AppSwitcher currentApp="dashboard" />
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={handleSync}
-          disabled={syncing}
-          className="gap-1.5 text-xs"
-          title={t('refresh')}
-        >
-          <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
-          {syncing && syncStatus && <span className="hidden sm:inline text-muted-foreground">{syncStatus}</span>}
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setLocale(locale === 'he' ? 'en' : 'he')}
-          className="gap-1.5 text-xs"
-        >
-          <Languages className="h-4 w-4" />
-          {locale === 'he' ? 'EN' : 'HE'}
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-        >
-          <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-          <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-          <span className="sr-only">{t('toggleTheme')}</span>
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => { window.location.href = '/api/auth/logout' }}
-          title={t('logout')}
-        >
-          <LogOut className="h-4 w-4" />
-          <span className="sr-only">{t('logout')}</span>
-        </Button>
+
+        {/* sm+ : everything inline, exactly as before */}
+        <div className="hidden sm:flex items-center gap-1">{actions(false)}</div>
+
+        {/* mobile : one overflow button */}
+        <div className="relative sm:hidden" ref={menuRef}>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setMenuOpen(o => !o)}
+            aria-label="More actions"
+            aria-expanded={menuOpen}
+            aria-haspopup="menu"
+          >
+            <MoreVertical className="h-4 w-4" />
+          </Button>
+          {menuOpen && (
+            <div
+              role="menu"
+              onClick={() => setMenuOpen(false)}
+              className="absolute top-full mt-1 end-0 z-50 min-w-[11rem] rounded-lg border bg-popover p-1 shadow-lg flex flex-col items-stretch [&>*]:w-full [&>*]:justify-start"
+            >
+              {actions(true)}
+            </div>
+          )}
+        </div>
       </div>
     </header>
   )

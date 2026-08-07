@@ -350,7 +350,9 @@ export default function StockForecastPage() {
               <Filter className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm font-medium">{he ? 'סנן לפי דחיפות:' : 'Filter by urgency:'}</span>
             </div>
-            <div className="flex gap-1.5">
+            {/* wraps rather than overflowing — the five urgency chips total 333px,
+                just past a 320px-wide phone */}
+            <div className="flex flex-wrap gap-1.5">
               {[
                 { key: undefined, label: he ? 'הכל' : 'All' },
                 { key: 'critical', label: he ? 'קריטי' : 'Critical' },
