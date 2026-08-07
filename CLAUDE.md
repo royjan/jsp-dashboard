@@ -145,12 +145,20 @@ app serves on `:3002`). Dokploy builds from the `main` branch via the repo's
 `Dockerfile` — so **push to `main`, then trigger a deploy**:
 
 ```bash
-# push, then POST the Dokploy deploy webhook (token at ~/.config/dokploy/api-token)
+# push, then hit the app's deploy WEBHOOK. NOTE: /api/application.deploy now
+# returns 200 but silently does NOTHING for github-sourced apps (verified
+# 2026-08-07 — no deployment row is created). The webhook requires a
+# GitHub-shaped request or it answers "Branch Not Match":
 git push origin main
-curl -X POST -H "x-api-key: $(cat ~/.config/dokploy/api-token)" \
-  -H "Content-Type: application/json" \
-  -d '{"applicationId":"fS6YxDi2AGcFvYIdaOtAJ"}' \
-  http://192.168.0.112:3000/api/application.deploy
+RT=$(curl -s -H "x-api-key: $(cat ~/.config/dokploy/api-token)" \
+  'http://192.168.0.112:3000/api/application.one?applicationId=fS6YxDi2AGcFvYIdaOtAJ' \
+  | python3 -c 'import json,sys; print(json.load(sys.stdin)["refreshToken"])')
+curl -X POST -H "Content-Type: application/json" -H "X-GitHub-Event: push" \
+  -d '{"ref":"refs/heads/main"}' \
+  "http://192.168.0.112:3000/api/deploy/$RT"
+# then poll /api/deployment.all for TODAY'S row reaching done — polling
+# applicationStatus alone reads the PREVIOUS deploy's "done" and lies.
+# (No GitHub webhook is configured on the repo, so pushes do NOT auto-deploy.)
 ```
 
 - Build: Node 25 Alpine multi-stage Dockerfile, runs as non-root user
