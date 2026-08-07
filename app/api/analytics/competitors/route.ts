@@ -269,44 +269,7 @@ async function buildDataset(): Promise<{ dataset: CompareDataset; catalogSize: n
     }
 
     const rows: CompareRow[] = []
-    for (const out of rowsByJanCode.values()) {
-      let minNet: number | null = null
-      let maxNet: number | null = null
-      let cheapest: string | null = null
-      let anyStock = false
-      const seenGenuineness = new Set<Genuineness>()
-
-      for (const [name, cell] of Object.entries(out.competitors)) {
-        // Cross-reference cells describe a different part number — reference only.
-        if (cell.crossRef) continue
-        if (cell.genuineness !== 'unknown') seenGenuineness.add(cell.genuineness)
-        if (cell.netPrice != null) {
-          if (cell.grossPrice != null && cell.netPrice > cell.grossPrice) {
-            out.warnings.push(`${name}: net above gross`)
-          }
-          if (minNet === null || cell.netPrice < minNet) { minNet = cell.netPrice; cheapest = name }
-          if (maxNet === null || cell.netPrice > maxNet) maxNet = cell.netPrice
-        }
-        if (cell.stockStatus === 'in_stock') anyStock = true
-      }
-
-      out.genuineness = seenGenuineness.size === 1 ? [...seenGenuineness][0] : (seenGenuineness.size > 1 ? 'aftermarket' : 'unknown')
-      out.minCompetitorNet = minNet
-      out.maxCompetitorNet = maxNet
-      out.spreadPct = minNet != null && out.ourPrice ? Math.round((minNet / out.ourPrice - 1) * 100) : null
-      out.flags.cheaperThanUs = minNet != null && out.ourPrice != null && minNet < out.ourPrice
-      out.cheapestCompetitor = minNet == null ? null : (out.ourPrice != null && out.ourPrice <= minNet ? 'Jan' : cheapest)
-      out.flags.theyStockWeDont = anyStock && out.ourStock === 0
-
-      // An order-of-magnitude gap is nearly always a unit/packaging mismatch
-      // (single vs kit) rather than a real price difference — flag, don't hide.
-      if (out.spreadPct != null && (out.spreadPct <= -90 || out.spreadPct >= 400)) {
-        out.warnings.push('implausible price gap — check units/packaging')
-      }
-      if (out.ourPrice == null) out.warnings.push('no Jan price')
-
-      rows.push(out)
-    }
+    for (const out of rowsByJanCode.values()) rows.push(deriveComparison(out))
 
     // Most actionable first: they stock what we're out of, then deepest undercut.
     rows.sort((a, b) => {
@@ -341,6 +304,57 @@ async function buildDataset(): Promise<{ dataset: CompareDataset; catalogSize: n
     }
 
     return { dataset, catalogSize: items.length }
+}
+
+/**
+ * Fills in every derived comparison field on a row from whatever competitor
+ * cells it currently carries: cheapest, spread, the two flags, genuineness and
+ * the data-quality warnings.
+ *
+ * Deliberately idempotent — it clears `warnings` before regenerating — because
+ * it runs twice: once over the full competitor set when the (cached) dataset is
+ * built, and again at request time over the narrowed set when `?comp=` selects
+ * a subset. Mutates and returns the row it is given, so callers that must not
+ * touch the shared cached dataset have to hand it a copy.
+ */
+function deriveComparison(out: CompareRow): CompareRow {
+  let minNet: number | null = null
+  let maxNet: number | null = null
+  let cheapest: string | null = null
+  let anyStock = false
+  const seenGenuineness = new Set<Genuineness>()
+  out.warnings = []
+
+  for (const [name, cell] of Object.entries(out.competitors)) {
+    // Cross-reference cells describe a different part number — reference only.
+    if (cell.crossRef) continue
+    if (cell.genuineness !== 'unknown') seenGenuineness.add(cell.genuineness)
+    if (cell.netPrice != null) {
+      if (cell.grossPrice != null && cell.netPrice > cell.grossPrice) {
+        out.warnings.push(`${name}: net above gross`)
+      }
+      if (minNet === null || cell.netPrice < minNet) { minNet = cell.netPrice; cheapest = name }
+      if (maxNet === null || cell.netPrice > maxNet) maxNet = cell.netPrice
+    }
+    if (cell.stockStatus === 'in_stock') anyStock = true
+  }
+
+  out.genuineness = seenGenuineness.size === 1 ? [...seenGenuineness][0] : (seenGenuineness.size > 1 ? 'aftermarket' : 'unknown')
+  out.minCompetitorNet = minNet
+  out.maxCompetitorNet = maxNet
+  out.spreadPct = minNet != null && out.ourPrice ? Math.round((minNet / out.ourPrice - 1) * 100) : null
+  out.flags.cheaperThanUs = minNet != null && out.ourPrice != null && minNet < out.ourPrice
+  out.cheapestCompetitor = minNet == null ? null : (out.ourPrice != null && out.ourPrice <= minNet ? 'Jan' : cheapest)
+  out.flags.theyStockWeDont = anyStock && out.ourStock === 0
+
+  // An order-of-magnitude gap is nearly always a unit/packaging mismatch
+  // (single vs kit) rather than a real price difference — flag, don't hide.
+  if (out.spreadPct != null && (out.spreadPct <= -90 || out.spreadPct >= 400)) {
+    out.warnings.push('implausible price gap — check units/packaging')
+  }
+  if (out.ourPrice == null) out.warnings.push('no Jan price')
+
+  return out
 }
 
 const SORT_FIELDS = ['code', 'ourPrice', 'ourStock', 'minNet', 'spread', 'sold'] as const
@@ -419,9 +433,34 @@ export async function GET(request: Request) {
       } satisfies CompetitorCompareResponse)
     }
 
-    const filtered = dataset.rows.filter(r => {
+    // Picking competitors has to narrow the COMPARISON, not merely which rows
+    // survive. Every price-ish field on a row — cheapest, spread, cheaperThanUs,
+    // theyStockWeDont — is derived, and was derived once over ALL competitors
+    // when the dataset was built and cached. So a row kept for "Comet" still
+    // showed Record's prices and a Record-derived spread, and the price/gap/
+    // stock filters and the sort all still ran on the all-competitor numbers.
+    // That is why toggling the filter appeared to do nothing.
+    //
+    // Re-project onto the selected competitors and re-derive. Into FRESH
+    // objects: dataset.rows belongs to the shared 3h cache and must not be
+    // mutated. Rows left with no selected competitor drop out here, which is
+    // what the old `enabled` test in the filter below used to do.
+    const scoped = enabled === null
+      ? dataset.rows
+      : dataset.rows.reduce<CompareRow[]>((acc, r) => {
+        const kept = Object.entries(r.competitors).filter(([n]) => enabled.has(n))
+        if (kept.length === 0) return acc
+        acc.push(deriveComparison({
+          ...r,
+          competitors: Object.fromEntries(kept),
+          flags: { ...r.flags },
+          warnings: [],
+        }))
+        return acc
+      }, [])
+
+    const filtered = scoped.filter(r => {
       if (q && !r.code.toUpperCase().includes(q) && !r.name.toUpperCase().includes(q)) return false
-      if (enabled && !Object.keys(r.competitors).some(n => enabled.has(n))) return false
       if (brandFilter && !brandFilter.has(deriveBrand(r.code))) return false
       if (stockFilter === 'in' && r.ourStock <= 0) return false
       if (stockFilter === 'out' && r.ourStock > 0) return false

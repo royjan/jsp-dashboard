@@ -364,7 +364,10 @@ function CompetitorsPageInner() {
       },
     ]
 
-    for (const name of competitorNames) {
+    // Only the selected competitors get a column. The API now scopes each row's
+    // cells to the selection too, so rendering all of them would leave dead "—"
+    // columns for the ones you just switched off.
+    for (const name of competitorNames.filter(n => enabled.has(n))) {
       cols.push({
         key: `comp-${name}`,
         header: (
@@ -439,7 +442,7 @@ function CompetitorsPageInner() {
     )
 
     return cols
-  }, [competitorNames, t])
+  }, [competitorNames, enabled, t])
 
   const hasData = !!data && data.competitors.length > 0
 
