@@ -121,6 +121,79 @@ function LoadingSkeleton() {
 
 const VEHICLE_PREVIEW = 5      // vehicles shown before "show all"
 
+
+/**
+ * The scanned vehicles this part appears on, deep-linked into Partly at the
+ * exact diagram. Shared by both item states — it used to live inside the
+ * catalog-only branch, so a part we actually stock showed no vehicles.
+ */
+function FitsCard({ fits, isHe, open, setOpen }: {
+  fits?: Array<{ label: string; vin?: string; url: string; schema?: string | null }>
+  isHe: boolean
+  open: boolean
+  setOpen: React.Dispatch<React.SetStateAction<boolean>>
+}) {
+  if (!fits?.length) return null
+  const vehiclesOpen = open
+  const setVehiclesOpen = setOpen
+  return (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Car className="h-4 w-4 text-indigo-500" />
+              {isHe ? 'מתאים לרכבים' : 'Fits these vehicles'}
+              <Badge variant="secondary" className="text-xs">{fits.length}</Badge>
+              {fits.length > VEHICLE_PREVIEW && (
+                <button
+                  type="button"
+                  onClick={() => setVehiclesOpen((v) => !v)}
+                  aria-expanded={vehiclesOpen}
+                  className="ms-auto inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-normal text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                >
+                  {vehiclesOpen
+                    ? (isHe ? 'הסתר' : 'Show less')
+                    : (isHe ? 'הצג הכל' : 'Show all')}
+                  <ChevronDown className={`h-3.5 w-3.5 transition-transform ${vehiclesOpen ? 'rotate-180' : ''}`} />
+                </button>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="divide-y">
+              {(vehiclesOpen ? fits : fits.slice(0, VEHICLE_PREVIEW)).map((f: any) => (
+                <li key={f.vin || f.label} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2 text-sm">
+                  <a
+                    href={f.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-medium text-primary hover:underline inline-flex items-center gap-1"
+                  >
+                    {f.label}
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                  {f.vin && <span className="font-mono text-[11px] text-muted-foreground" dir="ltr">{f.vin}</span>}
+                  {f.schema && (
+                    <span className="text-xs text-muted-foreground truncate" dir="auto">{f.schema}</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+            {!vehiclesOpen && fits.length > VEHICLE_PREVIEW && (
+              <button
+                type="button"
+                onClick={() => setVehiclesOpen(true)}
+                className="mt-2 text-xs text-primary hover:underline"
+              >
+                {isHe
+                  ? `ועוד ${fits.length - VEHICLE_PREVIEW} רכבים`
+                  : `+${fits.length - VEHICLE_PREVIEW} more vehicles`}
+              </button>
+            )}
+          </CardContent>
+        </Card>
+  )
+}
+
 export default function ItemDetailPage({ params }: { params: Promise<{ code: string }> }) {
   const { code } = use(params)
   const decodedCode = decodeURIComponent(code)
@@ -185,62 +258,7 @@ export default function ItemDetailPage({ params }: { params: Promise<{ code: str
           </CardContent>
         </Card>
 
-        {data.fits?.length > 0 && (
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Car className="h-4 w-4 text-indigo-500" />
-                {isHe ? 'מתאים לרכבים' : 'Fits these vehicles'}
-                <Badge variant="secondary" className="text-xs">{data.fits.length}</Badge>
-                {data.fits.length > VEHICLE_PREVIEW && (
-                  <button
-                    type="button"
-                    onClick={() => setVehiclesOpen((v) => !v)}
-                    aria-expanded={vehiclesOpen}
-                    className="ms-auto inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-normal text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                  >
-                    {vehiclesOpen
-                      ? (isHe ? 'הסתר' : 'Show less')
-                      : (isHe ? 'הצג הכל' : 'Show all')}
-                    <ChevronDown className={`h-3.5 w-3.5 transition-transform ${vehiclesOpen ? 'rotate-180' : ''}`} />
-                  </button>
-                )}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ul className="divide-y">
-                {(vehiclesOpen ? data.fits : data.fits.slice(0, VEHICLE_PREVIEW)).map((f: any) => (
-                  <li key={f.vin || f.label} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2 text-sm">
-                    <a
-                      href={f.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="font-medium text-primary hover:underline inline-flex items-center gap-1"
-                    >
-                      {f.label}
-                      <ExternalLink className="h-3 w-3" />
-                    </a>
-                    {f.vin && <span className="font-mono text-[11px] text-muted-foreground" dir="ltr">{f.vin}</span>}
-                    {f.schema && (
-                      <span className="text-xs text-muted-foreground truncate" dir="auto">{f.schema}</span>
-                    )}
-                  </li>
-                ))}
-              </ul>
-              {!vehiclesOpen && data.fits.length > VEHICLE_PREVIEW && (
-                <button
-                  type="button"
-                  onClick={() => setVehiclesOpen(true)}
-                  className="mt-2 text-xs text-primary hover:underline"
-                >
-                  {isHe
-                    ? `ועוד ${data.fits.length - VEHICLE_PREVIEW} רכבים`
-                    : `+${data.fits.length - VEHICLE_PREVIEW} more vehicles`}
-                </button>
-              )}
-            </CardContent>
-          </Card>
-        )}
+        <FitsCard fits={data.fits} isHe={isHe} open={vehiclesOpen} setOpen={setVehiclesOpen} />
 
         {data.equivalents?.length > 0 && (
           <Card>
@@ -516,6 +534,10 @@ export default function ItemDetailPage({ params }: { params: Promise<{ code: str
           </CardContent>
         </Card>
       )}
+
+      {/* Which scanned vehicles carry this part — same card the catalog-only
+          view shows, previously missing here entirely. */}
+      <FitsCard fits={data.fits} isHe={isHe} open={vehiclesOpen} setOpen={setVehiclesOpen} />
 
       {/* Cross-brand equivalent parts (partly.part_links) + manual linking */}
       <PartLinksCard code={decodedCode} links={partLinks} isHe={isHe} />

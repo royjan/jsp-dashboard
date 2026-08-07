@@ -3,6 +3,47 @@ import { client } from '@/lib/finansit-client'
 import { initializeSecrets } from '@/lib/aws-secrets'
 import { query } from '@/lib/db'
 
+/** Must match slugify() in partly's vehicle route so deep links resolve. */
+const slug = (t: string) => t.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_-]/g, '')
+const partlyBase = (process.env.PARTLY_URL || 'http://192.168.0.112:3001').replace(/\/$/, '')
+
+/**
+ * The scanned vehicles a part appears on, deep-linked to the exact diagram.
+ *
+ * Matched on the normalised number: exactly, or with Jan's trailing letter
+ * suffix stripped (`1686490780` ↔ `1686490780J`). `partly.finansit_links`
+ * exists for an explicit mapping but is empty. Trailing letters come off only
+ * OUR code, never the OEM number, so real `…A`/`…B` variants can't collide.
+ */
+async function vehiclesFor(itemCode: string) {
+  const norm = itemCode.replace(/[^A-Za-z0-9]/g, '').toUpperCase()
+  const stem = norm.replace(/[A-Z]+$/, '')
+  const res = await query(
+    `SELECT DISTINCT ON (p.id)
+            p.id AS project_id, p.vin, p.make, p.model, p.year,
+            c.name AS category, sub.name AS subcategory, s.name AS schema_name
+       FROM partly.global_parts gp
+       JOIN partly.project_parts pp ON pp.global_part_id = gp.id AND pp.deleted_at IS NULL
+       JOIN partly.projects p ON p.id = pp.project_id
+       LEFT JOIN partly.schemas s ON s.id = pp.schema_id
+       LEFT JOIN partly.subcategories sub ON sub.id = s.subcategory_id
+       LEFT JOIN partly.categories c ON c.id = sub.category_id
+      WHERE upper(regexp_replace(gp.item_number, '[^A-Za-z0-9]', '', 'g')) IN ($1, $2)
+      ORDER BY p.id, p.year DESC NULLS LAST
+      LIMIT 30`,
+    [norm, stem],
+  ).catch(() => null)
+
+  return (res?.rows ?? []).map((r: any) => ({
+    label: [r.make, r.model, r.year].filter(Boolean).join(' '),
+    vin: r.vin,
+    url: r.category && r.subcategory && r.schema_name
+      ? `${partlyBase}/vehicle/${r.project_id}/${encodeURIComponent(slug(r.category))}/${encodeURIComponent(slug(r.subcategory))}/${encodeURIComponent(slug(r.schema_name))}`
+      : `${partlyBase}/vehicle/${r.project_id}`,
+    schema: r.schema_name || null,
+  }))
+}
+
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ code: string }> }
@@ -179,8 +220,6 @@ export async function GET(
         [c.id]
       ).catch(() => null)
       // must match slugify in partly's vehicle page (spaces -> _, drop the rest)
-      const slug = (t: string) => t.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_-]/g, '')
-      const partlyBase = (process.env.PARTLY_URL || 'http://192.168.0.112:3001').replace(/\/$/, '')
       return NextResponse.json({
         catalog_only: true,
         code: c.item_number,
@@ -205,8 +244,13 @@ export async function GET(
     // For brand-resolved items the relevant history chain is the RESOLVED
     // part's, not the requested (catalog-only) code's.
     const effectiveHistory = resolvedHistory ?? history
+    /* Stocked parts want this just as much as unstocked ones — it used to be
+       computed only on the catalog-only fallback, so an item we sell showed
+       no vehicles at all. */
+    const fits = await vehiclesFor(item.code).catch(() => [])
     return NextResponse.json({
       ...item,
+      fits,
       canonical_code: effectiveHistory?.canonical_code || item.code,
       canonical_name: effectiveHistory?.canonical_name || item.name,
       item_id_history: effectiveHistory?.item_id_history || item.item_id_history,

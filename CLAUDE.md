@@ -4,7 +4,9 @@
 
 Analytics dashboard for Jan Parts (Israeli auto-parts distributor). Provides real-time KPIs, sales trends, customer analytics, inventory optimization, and seasonal demand patterns — all sourced from the Finansit ERP via `@jan/finansit-sdk`.
 
-Live at `dashboard.jan.parts`.
+Runs on Dokploy at `192.168.0.112:3002` (see Deployment). **Not**
+`dashboard.jan.parts` — that was the AWS App Runner host and is retired, but
+this line said otherwise for a while and sent code to a dead URL.
 
 ## Architecture
 
