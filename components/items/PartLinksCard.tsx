@@ -5,8 +5,10 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Link2, Plus, X, Loader2 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ItemLink } from '@/components/shared/ItemLink'
+import { PartCodeCombobox } from '@/components/items/PartCodeCombobox'
 import { brandChipClasses } from '@/lib/brand'
 import { toast } from '@/lib/toast'
+import type { CatalogHit } from '@/app/api/catalog/search/route'
 import type { ItemLinkRow } from '@/hooks/use-analytics'
 
 /**
@@ -27,6 +29,7 @@ export function PartLinksCard({
   const queryClient = useQueryClient()
   const [adding, setAdding] = useState(false)
   const [targetCode, setTargetCode] = useState('')
+  const [picked, setPicked] = useState<CatalogHit | null>(null)
   const [busy, setBusy] = useState(false)
   const [addError, setAddError] = useState<string | null>(null)
 
@@ -47,15 +50,22 @@ export function PartLinksCard({
       if (!res.ok) {
         setAddError(
           body?.error === 'target not in catalog'
-            ? (isHe ? 'הקוד לא נמצא בקטלוג partly' : 'Code not found in the partly catalog')
+            ? (isHe
+                ? 'הקוד לא קיים בקטלוג היצרן — בחר חלק מהרשימה'
+                : 'That code is not in the manufacturer catalog — pick one from the list')
             : body?.error === 'source not in catalog'
-              ? (isHe ? 'הפריט הנוכחי לא קיים בקטלוג partly' : 'This item is not in the partly catalog')
+              // 1920LL is a real erp.items code with no partly row: the item exists for us but
+              // not in any scanned diagram, so there is nothing to hang an equivalence on.
+              ? (isHe
+                  ? `${code} קיים ב-ERP אך לא בקטלוג היצרן, ולכן אי אפשר לקשר אליו חלקים מקבילים`
+                  : `${code} exists in the ERP but not in the manufacturer catalog, so equivalents cannot be linked to it`)
               : body?.error || (isHe ? 'הקישור נכשל' : 'Linking failed')
         )
         return
       }
       toast.success(isHe ? `קושר ל-${target}` : `Linked to ${target}`)
       setTargetCode('')
+      setPicked(null)
       setAdding(false)
       refresh()
     } finally {
@@ -103,15 +113,15 @@ export function PartLinksCard({
       <CardContent>
         {adding && (
           <div className="mb-3 space-y-1.5">
-            <div className="flex items-center gap-2">
-              <input
-                autoFocus
+            <div className="flex items-start gap-2">
+              <PartCodeCombobox
                 value={targetCode}
-                onChange={(e) => setTargetCode(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && submit()}
-                placeholder={isHe ? 'קוד חלק (למשל 0816K8)' : 'Part code (e.g. 0816K8)'}
-                dir="ltr"
-                className="h-8 w-52 rounded-md border bg-background px-2 font-mono text-sm outline-none focus:ring-1 focus:ring-ring"
+                onChange={(v) => { setTargetCode(v); setAddError(null) }}
+                onPick={(hit) => { setTargetCode(hit.code); setPicked(hit); setAddError(null) }}
+                onSubmit={submit}
+                isHe={isHe}
+                exclude={code.toUpperCase()}
+                disabled={busy}
               />
               <button
                 type="button"
@@ -123,6 +133,15 @@ export function PartLinksCard({
                 {isHe ? 'קשר' : 'Link'}
               </button>
             </div>
+            {/* Confirm WHAT is about to be linked — the code alone is unverifiable at a glance */}
+            {picked && picked.code === targetCode.trim().toUpperCase() && (
+              <p className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium leading-none ${brandChipClasses(picked.brand)}`}>
+                  {picked.brand}
+                </span>
+                <span dir="auto">{picked.hebrewDescription || picked.description || (isHe ? 'ללא תיאור' : 'no description')}</span>
+              </p>
+            )}
             {addError && <p className="text-xs text-destructive">{addError}</p>}
           </div>
         )}
