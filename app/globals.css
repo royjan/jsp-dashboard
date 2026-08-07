@@ -176,12 +176,26 @@
   }
 
   /* Item codes and customer names are inline <a>s in dense table cells, ~16px
-     tall. Padding the block axis grows the hit box toward the row height without
-     making them block-level — inline-block would change how BiDi wraps mixed
-     Hebrew/Latin cell content. */
+     tall — far under a thumb's target. Two steps, in this order:
+
+     1. Grow the ROW. `td[class]` is required to outrank Tailwind's own py-*
+        utility on the cell (a bare `td` selector loses to any class).
+     2. Then pad the LINK. Padding an inline element doesn't push line boxes
+        apart, so without step 1 the enlarged hit boxes would spill into the
+        neighbouring row and you'd tap the wrong one. Kept inline rather than
+        inline-block on purpose: inline-block changes how BiDi wraps mixed
+        Hebrew/Latin cell content.
+
+     Costs ~12px of row height on touch only; the mouse-driven desktop keeps its
+     density. */
+  td,
+  td[class] {
+    padding-block: 0.75rem;
+  }
+
   td a,
   th a {
-    padding-block: 0.4rem;
+    padding-block: 0.75rem;
   }
 }
 

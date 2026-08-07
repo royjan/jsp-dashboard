@@ -1,12 +1,34 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Bell, Plus, Trash2, Power, Loader2, AlertCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
+
+/**
+ * Defined at module scope on purpose. This used to be declared inside
+ * NewRuleForm's body, which gave it a fresh component identity on every render —
+ * React unmounted and remounted the <input> on each keystroke, so the field lost
+ * focus after every character typed.
+ */
+function LabelledInput({
+  label,
+  ...rest
+}: React.InputHTMLAttributes<HTMLInputElement> & { label: string }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <label className="text-xs font-medium text-muted-foreground">{label}</label>
+      <input
+        className="h-9 pointer-coarse:h-11 rounded-md border border-input bg-transparent px-3 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+        {...rest}
+      />
+    </div>
+  )
+}
 
 interface AlertRule {
   id: string
@@ -25,34 +47,35 @@ interface AlertRule {
 }
 
 export default function AlertsPage() {
-  const [rules, setRules] = useState<AlertRule[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
   const [showNew, setShowNew] = useState(false)
+  const queryClient = useQueryClient()
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
+  // React Query instead of fetch-in-useEffect. The old version called
+  // setLoading/setRules synchronously from an effect on mount — the cascading-
+  // render pattern react-hooks flags — and hand-rolled caching the rest of the
+  // app already gets from the query client.
+  const QUERY_KEY = ['alert-rules']
+  const { data: rules = [], isPending, error } = useQuery<AlertRule[]>({
+    queryKey: QUERY_KEY,
+    queryFn: async () => {
       const res = await fetch('/api/alerts/rules')
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
-      setRules(data.rules || [])
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed')
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+      return data.rules ?? []
+    },
+  })
 
-  useEffect(() => {
-    load()
-  }, [load])
+  // Writes optimistically into the cache and hands back a rollback closure
+  // holding the pre-change snapshot — same behaviour the local-state version had.
+  const patchRules = (fn: (r: AlertRule[]) => AlertRule[]) => {
+    const prev = queryClient.getQueryData<AlertRule[]>(QUERY_KEY) ?? []
+    queryClient.setQueryData<AlertRule[]>(QUERY_KEY, fn(prev))
+    return () => queryClient.setQueryData<AlertRule[]>(QUERY_KEY, prev)
+  }
 
   const toggleEnabled = async (rule: AlertRule) => {
-    const prev = rules
-    setRules(r =>
+    const rollback = patchRules(r =>
       r.map(x => (x.id === rule.id ? { ...x, enabled: !x.enabled } : x)),
     )
     try {
@@ -63,19 +86,18 @@ export default function AlertsPage() {
       })
       if (!res.ok) throw new Error()
     } catch {
-      setRules(prev)
+      rollback()
     }
   }
 
   const deleteRule = async (id: string) => {
     if (!confirm('Delete this rule?')) return
-    const prev = rules
-    setRules(r => r.filter(x => x.id !== id))
+    const rollback = patchRules(r => r.filter(x => x.id !== id))
     try {
       const res = await fetch(`/api/alerts/rules/${id}`, { method: 'DELETE' })
       if (!res.ok) throw new Error()
     } catch {
-      setRules(prev)
+      rollback()
     }
   }
 
@@ -91,7 +113,7 @@ export default function AlertsPage() {
     }
   }
 
-  if (loading) {
+  if (isPending) {
     return (
       <div className="space-y-4">
         <Skeleton className="h-10 w-40" />
@@ -122,7 +144,7 @@ export default function AlertsPage() {
       {error && (
         <Card>
           <CardContent className="p-4 flex items-center gap-2 text-red-500 text-sm">
-            <AlertCircle className="h-4 w-4" /> {error}
+            <AlertCircle className="h-4 w-4" /> {error.message}
           </CardContent>
         </Card>
       )}
@@ -133,7 +155,7 @@ export default function AlertsPage() {
           setCreating={setCreating}
           onCreated={() => {
             setShowNew(false)
-            load()
+            queryClient.invalidateQueries({ queryKey: QUERY_KEY })
           }}
         />
       )}
@@ -273,27 +295,17 @@ function NewRuleForm({
     }
   }
 
-  const Input = ({ label, ...rest }: any) => (
-    <div className="flex flex-col gap-1">
-      <label className="text-xs font-medium text-muted-foreground">{label}</label>
-      <input
-        className="h-9 rounded-md border border-input bg-transparent px-3 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-        {...rest}
-      />
-    </div>
-  )
-
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-base">New Alert Rule</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <Input
+        <LabelledInput
           label="Name"
           type="text"
           value={name}
-          onChange={(e: any) => setName(e.target.value)}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)}
           placeholder="e.g. Top sellers OOS warning"
         />
 
@@ -319,17 +331,17 @@ function NewRuleForm({
           </div>
           {mode === 'topN' ? (
             <div className="grid grid-cols-2 gap-3">
-              <Input
+              <LabelledInput
                 label="Top N"
                 type="number"
                 value={topN}
-                onChange={(e: any) => setTopN(Number(e.target.value))}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTopN(Number(e.target.value))}
               />
-              <Input
+              <LabelledInput
                 label="Look back (months)"
                 type="number"
                 value={topNMonths}
-                onChange={(e: any) => setTopNMonths(Number(e.target.value))}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTopNMonths(Number(e.target.value))}
               />
             </div>
           ) : (
@@ -343,11 +355,11 @@ function NewRuleForm({
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <Input
+          <LabelledInput
             label="Threshold Qty"
             type="number"
             value={thresholdQty}
-            onChange={(e: any) => setThresholdQty(Number(e.target.value))}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setThresholdQty(Number(e.target.value))}
           />
           <div className="flex flex-col gap-1">
             <label className="text-xs font-medium text-muted-foreground">
@@ -365,11 +377,11 @@ function NewRuleForm({
               <option value="eq">= equals</option>
             </select>
           </div>
-          <Input
+          <LabelledInput
             label="Cooldown (hours)"
             type="number"
             value={cooldownHours}
-            onChange={(e: any) => setCooldownHours(Number(e.target.value))}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCooldownHours(Number(e.target.value))}
           />
         </div>
 
