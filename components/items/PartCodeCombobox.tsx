@@ -147,7 +147,16 @@ export function PartCodeCombobox({
                 : 'Not found in the catalog — you can still press Link to try'}
             </p>
           ) : (
-            <ul className="max-h-72 overflow-y-auto py-1" role="listbox">
+            <>
+              {/* What the reader is looking at. Without this the rows are just codes: it isn't
+                  obvious they come from the MANUFACTURER's catalog (not our stock list), nor
+                  that the badge says whether we can actually supply the part. */}
+              <p className="border-b px-3 py-1.5 text-[10px] leading-snug text-muted-foreground">
+                {isHe
+                  ? 'תוצאות מקטלוג היצרן (PSA / MG / טויוטה). "במלאי שלנו" = קיים ב-ERP וניתן למכירה; "קטלוג בלבד" = חלק מקורי שאיננו מחזיקים.'
+                  : 'Results from the manufacturer catalog (PSA / MG / Toyota). "in ERP" = we can sell it; "catalog only" = a genuine part we do not stock.'}
+              </p>
+              <ul className="max-h-72 overflow-y-auto py-1" role="listbox">
               {hits.map((hit, i) => (
                 <li key={hit.code} role="option" aria-selected={i === active}>
                   <button
@@ -186,8 +195,9 @@ export function PartCodeCombobox({
                     )}
                   </button>
                 </li>
-              ))}
-            </ul>
+                ))}
+              </ul>
+            </>
           )}
         </div>
       )}

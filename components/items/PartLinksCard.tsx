@@ -4,6 +4,9 @@ import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Link2, Plus, X, Loader2 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog'
 import { ItemLink } from '@/components/shared/ItemLink'
 import { PartCodeCombobox } from '@/components/items/PartCodeCombobox'
 import { brandChipClasses } from '@/lib/brand'
@@ -30,14 +33,25 @@ export function PartLinksCard({
   const [adding, setAdding] = useState(false)
   const [targetCode, setTargetCode] = useState('')
   const [picked, setPicked] = useState<CatalogHit | null>(null)
+  const [confirming, setConfirming] = useState(false)
   const [busy, setBusy] = useState(false)
   const [addError, setAddError] = useState<string | null>(null)
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['item-links', code] })
 
+  /** Ask before writing: a link is shared data — it changes what Diego quotes to customers
+      and what every other user sees on both parts — and it is not obvious from the code alone
+      that you picked the right one. */
+  const confirmSubmit = () => {
+    const target = targetCode.trim().toUpperCase()
+    if (!target || busy) return
+    setConfirming(true)
+  }
+
   const submit = async () => {
     const target = targetCode.trim().toUpperCase()
     if (!target || busy) return
+    setConfirming(false)
     setBusy(true)
     setAddError(null)
     try {
@@ -94,7 +108,78 @@ export function PartLinksCard({
     }
   }
 
+  const target = targetCode.trim().toUpperCase()
+
   return (
+    <>
+    <Dialog open={confirming} onOpenChange={(o) => !o && setConfirming(false)}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{isHe ? 'לקשר את החלקים?' : 'Link these parts?'}</DialogTitle>
+          <DialogDescription>
+            {isHe
+              ? 'הקישור משותף לכל המשתמשים, ודייגו יציע את החלק המקביל ללקוחות על סמך הקישור הזה. אפשר להסיר אותו אחר כך.'
+              : 'The link is shared with everyone, and Diego offers the equivalent to customers based on it. You can remove it later.'}
+          </DialogDescription>
+        </DialogHeader>
+
+        {/* Both sides spelled out — the code alone doesn't tell you if you picked right */}
+        <div className="space-y-2 rounded-md border p-3 text-sm">
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-xs" dir="ltr">{code}</span>
+            <span className="text-xs text-muted-foreground">{isHe ? '(הפריט הנוכחי)' : '(this item)'}</span>
+          </div>
+          <div className="text-center text-muted-foreground">↕</div>
+          <div className="flex flex-wrap items-center gap-2">
+            {picked?.code === target && (
+              <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium leading-none ${brandChipClasses(picked.brand)}`}>
+                {picked.brand}
+              </span>
+            )}
+            <span className="font-mono text-xs" dir="ltr">{target}</span>
+            {picked?.code === target && (
+              <span className={`text-[10px] ${picked.inErp ? 'text-emerald-500' : 'text-muted-foreground'}`}>
+                {picked.inErp ? (isHe ? 'במלאי שלנו' : 'in ERP') : (isHe ? 'קטלוג בלבד' : 'catalog only')}
+              </span>
+            )}
+          </div>
+          {picked?.code === target && (picked.hebrewDescription || picked.description) && (
+            <p className="text-xs text-muted-foreground" dir="auto">
+              {[picked.hebrewDescription, picked.description].filter(Boolean).join(' · ')}
+            </p>
+          )}
+          {picked?.code !== target && (
+            // typed by hand rather than chosen from the list — we have nothing to show back
+            <p className="text-xs text-amber-500">
+              {isHe
+                ? 'הקוד הוקלד ידנית ולא נבחר מהרשימה — ודא שהוא נכון'
+                : 'This code was typed by hand, not picked from the list — make sure it is right'}
+            </p>
+          )}
+        </div>
+
+        <DialogFooter className="gap-2 sm:gap-0">
+          <button
+            type="button"
+            onClick={() => setConfirming(false)}
+            className="inline-flex h-9 items-center rounded-md border px-4 text-sm transition-colors hover:bg-accent"
+          >
+            {isHe ? 'ביטול' : 'Cancel'}
+          </button>
+          <button
+            type="button"
+            autoFocus
+            onClick={submit}
+            disabled={busy}
+            className="inline-flex h-9 items-center gap-1.5 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-opacity disabled:opacity-50"
+          >
+            {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            {isHe ? 'כן, קשר' : 'Yes, link'}
+          </button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="text-base flex items-center gap-2">
@@ -118,14 +203,14 @@ export function PartLinksCard({
                 value={targetCode}
                 onChange={(v) => { setTargetCode(v); setAddError(null) }}
                 onPick={(hit) => { setTargetCode(hit.code); setPicked(hit); setAddError(null) }}
-                onSubmit={submit}
+                onSubmit={confirmSubmit}
                 isHe={isHe}
                 exclude={code.toUpperCase()}
                 disabled={busy}
               />
               <button
                 type="button"
-                onClick={submit}
+                onClick={confirmSubmit}
                 disabled={busy || !targetCode.trim()}
                 className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground transition-opacity disabled:opacity-50"
               >
@@ -206,5 +291,6 @@ export function PartLinksCard({
         )}
       </CardContent>
     </Card>
+    </>
   )
 }
