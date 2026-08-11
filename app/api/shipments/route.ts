@@ -11,6 +11,8 @@ export async function GET(request: Request) {
     await initializeSecrets()
     const { searchParams } = new URL(request.url)
     const supplier = searchParams.get('supplier') || undefined
+    // '1' = only internal (Lubinski) deliveries, '0' = only real suppliers.
+    const internal = searchParams.get('internal') || undefined
     const date = searchParams.get('date') || undefined
     const limit = Math.min(Number(searchParams.get('limit')) || 30, 100)
     const offset = Math.max(0, Number(searchParams.get('offset')) || 0)
@@ -33,9 +35,12 @@ export async function GET(request: Request) {
     const snap = await db.collection('shipments').get()
 
     const supplierFilter = supplier?.trim().toLowerCase()
-    const headers = snap.docs
+    // Everything matching the date filter, before the supplier/internal one —
+    // the roll-up below is built from this so the UI's filter options stay put
+    // once one of them is selected.
+    const base = snap.docs
       .map((doc) => {
-        const data = doc.data() as Record<string, any>
+        const data = doc.data() as Record<string, unknown>
         const { folder, isInternal, tag, matchedSupplier } = resolveShipmentSupplier(data, registry, matcher)
         return {
           doc,
@@ -50,6 +55,10 @@ export async function GET(request: Request) {
         }
       })
       .filter((h) => !date || h.sortKey.slice(0, 10) === date)
+      .sort((a, b) => b.sortKey.localeCompare(a.sortKey))
+
+    const headers = base
+      .filter((h) => (internal === '1' ? h.isInternal : internal === '0' ? !h.isInternal : true))
       .filter(
         (h) =>
           // A filter value can be a supplier code, a folder, or an alias tag.
@@ -58,7 +67,6 @@ export async function GET(request: Request) {
           h.folder?.toLowerCase() === supplierFilter ||
           h.tag?.toLowerCase() === supplierFilter,
       )
-      .sort((a, b) => b.sortKey.localeCompare(a.sortKey))
 
     const total = headers.length
     const pageHeaders = headers.slice(offset, offset + limit)
@@ -71,7 +79,7 @@ export async function GET(request: Request) {
         const prodSnap = await h.doc.ref.collection('products').get()
         let totalScanned = 0, totalExpected = 0, missing = 0, faulty = 0
         prodSnap.docs.forEach((p) => {
-          const pd = p.data() as Record<string, any>
+          const pd = p.data() as Record<string, unknown>
           const sc = Number(pd.scanned) || 0, tot = Number(pd.total) || 0
           totalScanned += sc; totalExpected += tot
           if (sc < tot) missing += tot - sc
@@ -92,13 +100,16 @@ export async function GET(request: Request) {
       }),
     )
 
-    // Distinct-supplier roll-up — keyed by the real supplier code, over every
-    // matching shipment rather than just this page (headers are already in
-    // hand, so the KPI no longer changes as you page). Internal (Lubinski)
-    // deliveries are not a supplier and must not inflate the count.
+    // Distinct-supplier roll-up — keyed by the real supplier code, built from
+    // `base` (pre supplier/internal filter) so it doubles as the filter's
+    // option list and doesn't collapse to one entry once a filter is applied.
+    // Internal (Lubinski) deliveries are not a supplier: they get their own
+    // count rather than inflating this one.
     const supMap = new Map<string, { name: string; count: number; latest: string }>()
-    for (const h of headers) {
-      if (h.isInternal || !h.matchedSupplier) continue
+    let internalCount = 0
+    for (const h of base) {
+      if (h.isInternal) { internalCount += 1; continue }
+      if (!h.matchedSupplier) continue
       const { code, name } = h.matchedSupplier
       const c = supMap.get(code) || { name, count: 0, latest: '' }
       c.count += 1
@@ -112,6 +123,8 @@ export async function GET(request: Request) {
     return NextResponse.json({
       shipments,
       suppliers,
+      internalCount,
+      unfilteredTotal: base.length,
       hasMore,
       offset,
       limit,

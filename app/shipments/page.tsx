@@ -28,8 +28,17 @@ interface Shipment {
   faulty: number
   uniqueProducts: number
 }
+interface SupplierRollup {
+  supplier: string
+  name: string
+  count: number
+  latest: string
+}
 interface ShipmentsResponse {
   shipments: Shipment[]
+  suppliers?: SupplierRollup[]
+  internalCount?: number
+  unfilteredTotal?: number
   hasMore: boolean
   offset: number
   limit: number
@@ -46,11 +55,23 @@ export default function ShipmentsPage() {
   const isHe = locale === 'he'
   const t = (he: string, en: string) => (isHe ? he : en)
   const [offset, setOffset] = useState(0)
+  // '' = everything, 'internal' = Lubinski deliveries, otherwise a supplier code.
+  const [filter, setFilter] = useState('')
+
+  // Changing the filter re-pages from the top; keeping the old offset would
+  // land past the end of a smaller result set and show an empty table.
+  const selectFilter = (next: string) => {
+    setFilter(next)
+    setOffset(0)
+  }
 
   const { data, isLoading, isFetching, error } = useQuery<ShipmentsResponse>({
-    queryKey: ['inbound-shipments', offset],
+    queryKey: ['inbound-shipments', offset, filter],
     queryFn: async () => {
-      const res = await fetch(`/api/shipments?limit=${PAGE}&offset=${offset}`)
+      const params = new URLSearchParams({ limit: String(PAGE), offset: String(offset) })
+      if (filter === 'internal') params.set('internal', '1')
+      else if (filter) params.set('supplier', filter)
+      const res = await fetch(`/api/shipments?${params}`)
       if (!res.ok) throw new Error('Failed')
       return res.json()
     },
@@ -62,6 +83,10 @@ export default function ShipmentsPage() {
   // stay defensive: a non-string here used to throw on .slice and blank the page.
   const fmtDate = (s: unknown) => (typeof s === 'string' && s ? s.slice(0, 10) : '—')
   const summary = data?.summary
+  // Both are computed server-side over the unfiltered set, so the chips keep
+  // their labels and counts while a filter is active.
+  const supplierOptions = data?.suppliers ?? []
+  const internalCount = data?.internalCount ?? 0
   const { sorted, sortKey, sortDir, toggleSort } = useSortable<Shipment>(data?.shipments ?? [])
 
   return (
@@ -93,12 +118,57 @@ export default function ShipmentsPage() {
       </div>
 
       <Card>
-        <CardHeader className="pb-2 flex flex-row items-center justify-between gap-2">
-          <CardTitle className="text-base">{t('משלוחים אחרונים', 'Recent shipments')}</CardTitle>
-          <span className="text-xs text-muted-foreground tabular-nums">
-            {offset + 1}–{offset + (data?.shipments?.length ?? 0)}
-            {data?.total != null ? ` / ${formatNumber(data.total)}` : ''}{isFetching ? ' …' : ''}
-          </span>
+        <CardHeader className="pb-2 space-y-2">
+          <div className="flex flex-row items-center justify-between gap-2">
+            <CardTitle className="text-base">{t('משלוחים אחרונים', 'Recent shipments')}</CardTitle>
+            <span className="text-xs text-muted-foreground tabular-nums">
+              {offset + 1}–{offset + (data?.shipments?.length ?? 0)}
+              {data?.total != null ? ` / ${formatNumber(data.total)}` : ''}{isFetching ? ' …' : ''}
+            </span>
+          </div>
+          {/* Filter by supplier. The options come from the API's roll-up over
+              the whole set (not the page), so they stay put once one is
+              picked. Internal deliveries have no supplier — they get their
+              own chip rather than being lumped in with one. */}
+          {(supplierOptions.length > 0 || internalCount > 0) && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Button
+                size="sm"
+                variant={filter === '' ? 'default' : 'outline'}
+                className="h-7 text-xs"
+                onClick={() => selectFilter('')}
+              >
+                {t('הכל', 'All')}
+                {data?.unfilteredTotal != null && (
+                  <span className="ms-1 opacity-70 tabular-nums">{formatNumber(data.unfilteredTotal)}</span>
+                )}
+              </Button>
+              {supplierOptions.map((s) => (
+                <Button
+                  key={s.supplier}
+                  size="sm"
+                  variant={filter === s.supplier ? 'default' : 'outline'}
+                  className="h-7 text-xs max-w-[220px]"
+                  onClick={() => selectFilter(s.supplier)}
+                  title={s.name}
+                >
+                  <span className="truncate">{s.name}</span>
+                  <span className="ms-1 opacity-70 tabular-nums">{formatNumber(s.count)}</span>
+                </Button>
+              ))}
+              {internalCount > 0 && (
+                <Button
+                  size="sm"
+                  variant={filter === 'internal' ? 'default' : 'outline'}
+                  className="h-7 text-xs"
+                  onClick={() => selectFilter('internal')}
+                >
+                  {t('פנימי', 'Internal')}
+                  <span className="ms-1 opacity-70 tabular-nums">{formatNumber(internalCount)}</span>
+                </Button>
+              )}
+            </div>
+          )}
         </CardHeader>
         <CardContent>
           {isLoading ? (
