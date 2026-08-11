@@ -7,13 +7,13 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useLocale } from '@/lib/locale-context'
-import { useSupplierDetail, useUpdateSupplier, useSupplierOrders } from '@/hooks/use-suppliers'
+import { useSupplierDetail, useUpdateSupplier, useSupplierOrders, useSupplierShipments } from '@/hooks/use-suppliers'
 import { OrderConfirmation } from '@/components/suppliers/OrderConfirmation'
 import { DemandForecast } from '@/components/suppliers/DemandForecast'
 import { PriceUploader } from '@/components/suppliers/PriceUploader'
 import {
   Loader2, AlertCircle, ArrowRight, Save,
-  Package, TrendingDown, Truck, FileSpreadsheet,
+  Package, TrendingDown, Truck, FileSpreadsheet, Container,
   Mail, Phone, Clock, FileText, CheckCircle2,
 } from 'lucide-react'
 import Link from 'next/link'
@@ -23,6 +23,7 @@ export default function SupplierDetailPage() {
   const { code } = useParams<{ code: string }>()
   const { data, isLoading, isError, refetch } = useSupplierDetail(code)
   const { data: ordersData, isLoading: ordersLoading } = useSupplierOrders(code)
+  const { data: shipmentsData, isLoading: shipmentsLoading } = useSupplierShipments(code)
   const updateMutation = useUpdateSupplier(code)
   const [editing, setEditing] = useState(false)
   const [editForm, setEditForm] = useState<Record<string, any>>({})
@@ -54,6 +55,7 @@ export default function SupplierDetailPage() {
   const confirmations = data?.confirmations || []
   const pendingOrders = ordersData?.orders || data?.pendingOrders || []
   const uploads = data?.uploads || []
+  const shipments = shipmentsData?.shipments || []
 
   const startEdit = () => {
     setEditing(true)
@@ -247,6 +249,13 @@ export default function SupplierDetailPage() {
             <TrendingDown className="h-3.5 w-3.5" />
             {t('suppliers.demandForecast')}
           </TabsTrigger>
+          <TabsTrigger value="shipments" className="gap-1.5">
+            <Container className="h-3.5 w-3.5" />
+            {t('suppliers.shipments')}
+            {shipments.length > 0 && (
+              <span className="text-xs text-muted-foreground ms-1">({shipments.length})</span>
+            )}
+          </TabsTrigger>
           <TabsTrigger value="history" className="gap-1.5">
             <Truck className="h-3.5 w-3.5" />
             {t('suppliers.deliveryHistory')}
@@ -288,6 +297,60 @@ export default function SupplierDetailPage() {
         {/* Demand Forecast */}
         <TabsContent value="demand">
           <DemandForecast supplierCode={code} />
+        </TabsContent>
+
+        {/* Inbound shipments — warehouse receiving from the container app.
+            Distinct from "delivery history" below, which is ERP order
+            confirmations marked delivered/shipped. */}
+        <TabsContent value="shipments">
+          {shipmentsLoading ? (
+            <div className="flex items-center justify-center h-32 text-muted-foreground gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span>{t('suppliers.loadingShipments')}</span>
+            </div>
+          ) : shipments.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-32 text-muted-foreground gap-2">
+              <Container className="h-6 w-6" />
+              <span>{t('suppliers.noShipments')}</span>
+            </div>
+          ) : (
+            <div className="rounded border overflow-x-auto">
+              <table className="w-full text-sm min-w-[560px]">
+                <thead className="bg-muted/50">
+                  <tr>
+                    <th className="px-3 py-2 text-start text-xs font-medium">{t('suppliers.shipmentDate')}</th>
+                    <th className="px-3 py-2 text-start text-xs font-medium">{t('suppliers.shipmentName')}</th>
+                    <th className="px-3 py-2 text-end text-xs font-medium">{t('suppliers.scanned')}</th>
+                    <th className="px-3 py-2 text-end text-xs font-medium">{t('suppliers.missingQty')}</th>
+                    <th className="px-3 py-2 text-end text-xs font-medium">{t('suppliers.products')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {shipments.map((s) => (
+                    <tr key={s.id} className="border-t hover:bg-accent/50">
+                      <td className="px-3 py-2 tabular-nums whitespace-nowrap">
+                        {typeof s.shipmentDate === 'string' ? s.shipmentDate.slice(0, 10) : '—'}
+                      </td>
+                      <td className="px-3 py-2">
+                        <Link href={`/shipments/${encodeURIComponent(s.id)}`} className="hover:underline">
+                          {s.name || s.id} ↗
+                        </Link>
+                      </td>
+                      <td className="px-3 py-2 text-end tabular-nums">
+                        {s.totalScanned} / {s.totalExpected}
+                      </td>
+                      <td className="px-3 py-2 text-end tabular-nums">
+                        {s.missing > 0
+                          ? <span className="text-amber-500 font-semibold">{s.missing}</span>
+                          : <span className="text-muted-foreground">0</span>}
+                      </td>
+                      <td className="px-3 py-2 text-end tabular-nums">{s.uniqueProducts}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </TabsContent>
 
         {/* Delivery History */}

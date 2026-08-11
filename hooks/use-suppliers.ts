@@ -19,6 +19,41 @@ export function useSuppliers(search?: string) {
   })
 }
 
+// ── Inbound shipments for one supplier ──
+
+export interface SupplierShipment {
+  id: string
+  name: string
+  supplier: string | null
+  folder: string | null
+  isInternal: boolean
+  shipmentDate: string
+  totalScanned: number
+  totalExpected: number
+  missing: number
+  faulty: number
+  uniqueProducts: number
+}
+
+/**
+ * Warehouse receiving for this supplier, from the shipments Firestore. Kept
+ * out of /api/suppliers/[code] on purpose — that route also calls FINAPI for
+ * pending orders and is slow, and this tab should not wait on it.
+ */
+export function useSupplierShipments(code: string) {
+  return useQuery<{ shipments: SupplierShipment[]; total?: number }>({
+    queryKey: ['supplier-shipments', code],
+    queryFn: async () => {
+      const res = await fetch(`/api/shipments?supplier=${encodeURIComponent(code)}&limit=100`)
+      if (!res.ok) throw new Error('Failed to fetch shipments')
+      return res.json()
+    },
+    enabled: !!code,
+    staleTime: 5 * 60 * 1000,
+    retry: 1,
+  })
+}
+
 // ── Create / update supplier ──
 
 export function useCreateSupplier() {
