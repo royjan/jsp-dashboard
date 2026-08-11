@@ -17,8 +17,11 @@ interface Shipment {
   id: string
   name: string
   supplier: string | null
+  folder: string | null
+  isInternal: boolean
   matchedSupplier: { code: string; name: string } | null
   shipmentDate: string
+  createdAt: string | null
   totalScanned: number
   totalExpected: number
   missing: number
@@ -30,6 +33,7 @@ interface ShipmentsResponse {
   hasMore: boolean
   offset: number
   limit: number
+  total?: number
   summary: { total: number; suppliers: number; totalScanned: number; missing: number } | null
   error?: string
 }
@@ -54,7 +58,9 @@ export default function ShipmentsPage() {
     placeholderData: keepPreviousData,
   })
 
-  const fmtDate = (s: string) => (s ? s.slice(0, 10) : '—')
+  // The API normalises Firestore's mixed string/Timestamp dates to ISO, but
+  // stay defensive: a non-string here used to throw on .slice and blank the page.
+  const fmtDate = (s: unknown) => (typeof s === 'string' && s ? s.slice(0, 10) : '—')
   const summary = data?.summary
   const { sorted, sortKey, sortDir, toggleSort } = useSortable<Shipment>(data?.shipments ?? [])
 
@@ -90,7 +96,8 @@ export default function ShipmentsPage() {
         <CardHeader className="pb-2 flex flex-row items-center justify-between gap-2">
           <CardTitle className="text-base">{t('משלוחים אחרונים', 'Recent shipments')}</CardTitle>
           <span className="text-xs text-muted-foreground tabular-nums">
-            {offset + 1}–{offset + (data?.shipments?.length ?? 0)}{isFetching ? ' …' : ''}
+            {offset + 1}–{offset + (data?.shipments?.length ?? 0)}
+            {data?.total != null ? ` / ${formatNumber(data.total)}` : ''}{isFetching ? ' …' : ''}
           </span>
         </CardHeader>
         <CardContent>
@@ -127,7 +134,12 @@ export default function ShipmentsPage() {
                       >
                         <td className="p-2 tabular-nums whitespace-nowrap">{fmtDate(s.shipmentDate)}</td>
                         <td className="p-2">
-                          {s.matchedSupplier ? (
+                          {s.isInternal ? (
+                            // Not a supplier at all — an internal delivery.
+                            <Badge variant="secondary" className="max-w-[200px] truncate">
+                              {t('פנימי', 'Internal')}{s.folder ? ` · ${s.folder}` : ''}
+                            </Badge>
+                          ) : s.matchedSupplier ? (
                             <Link
                               href={`/suppliers/${encodeURIComponent(s.matchedSupplier.code)}`}
                               onClick={(e) => e.stopPropagation()}

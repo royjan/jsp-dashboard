@@ -6,6 +6,7 @@ import { supplierProfiles, supplierOrderConfirmations, supplierPriceUploads } fr
 import { eq, desc } from 'drizzle-orm'
 import { initializeSecrets } from '@/lib/aws-secrets'
 import { fetchDocuments } from '@/lib/finansit-client'
+import { getSupplierRegistry } from '@/lib/supplier-registry'
 
 export async function GET(
   _request: Request,
@@ -24,6 +25,11 @@ export async function GET(
       .limit(1)
 
     const profile = profiles[0] || null
+
+    // Authoritative name + warehouse alias tags, when the registry knows this
+    // supplier. Best-effort — null without Firebase.
+    const registry = await getSupplierRegistry()
+    const reg = registry.byCode(code)
 
     // Fetch order confirmations
     const confirmations = await db
@@ -55,6 +61,7 @@ export async function GET(
 
     return NextResponse.json({
       profile,
+      registry: reg ? { name: reg.name, aliases: reg.aliases, active: reg.active, currency: reg.currency ?? null } : null,
       confirmations,
       uploads,
       pendingOrders,

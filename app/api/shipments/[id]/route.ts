@@ -2,8 +2,9 @@ export const maxDuration = 30
 
 import { NextResponse } from 'next/server'
 import { initializeSecrets } from '@/lib/aws-secrets'
-import { getShipmentsFirestore } from '@/lib/firebase'
-import { buildSupplierMatcher, leadToken } from '@/lib/supplier-match'
+import { getShipmentsFirestore, toIso } from '@/lib/firebase'
+import { buildSupplierMatcher } from '@/lib/supplier-match'
+import { getSupplierRegistry, resolveShipmentSupplier } from '@/lib/supplier-registry'
 
 // Detail for one inbound shipment: header + products (scanned/expected/missing/
 // faulty/location) + who scanned. Mirrors the SDK's shipments helpers.
@@ -37,7 +38,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     })
     products.sort((a, b) => b.missing - a.missing)
 
-    const matcher = await buildSupplierMatcher().catch(() => null)
+    const [registry, matcher] = await Promise.all([
+      getSupplierRegistry(),
+      buildSupplierMatcher().catch(() => null),
+    ])
+    const { folder, isInternal, tag, matchedSupplier } = resolveShipmentSupplier(data, registry, matcher)
 
     // Who scanned (from logs sub-collection), best-effort.
     let scanners: { name: string; count: number }[] = []
@@ -55,9 +60,14 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       shipment: {
         id: doc.id,
         name: data.name || '',
-        supplier: leadToken(data.name),
-        matchedSupplier: matcher?.match(data.name) || null,
-        shipmentDate: data.shipmentDate || '',
+        supplier: tag,
+        folder,
+        isInternal,
+        matchedSupplier,
+        // Mixed string/Timestamp in Firestore — normalise or the client gets
+        // a `{_seconds}` object where it expects a date string.
+        shipmentDate: toIso(data.shipmentDate) || '',
+        createdAt: toIso(data.createdAt),
         totalScanned, totalExpected, missing, faulty,
         uniqueProducts: products.length,
       },

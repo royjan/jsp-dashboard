@@ -25,8 +25,11 @@ interface Product {
 interface DetailResponse {
   shipment?: {
     id: string; name: string; supplier: string | null
+    folder: string | null
+    isInternal: boolean
     matchedSupplier: { code: string; name: string } | null
     shipmentDate: string
+    createdAt: string | null
     totalScanned: number; totalExpected: number; missing: number; faulty: number; uniqueProducts: number
   }
   products: Product[]
@@ -74,7 +77,12 @@ export default function ShipmentDetailPage() {
               <Container className="h-6 w-6 text-primary" />{sh.name || sh.id}
             </h1>
             <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
-              {sh.matchedSupplier ? (
+              {sh.isInternal ? (
+                // Internal delivery — deliberately no supplier link.
+                <Badge variant="secondary">
+                  {t('פנימי', 'Internal')}{sh.folder ? ` · ${sh.folder}` : ''}
+                </Badge>
+              ) : sh.matchedSupplier ? (
                 <Link href={`/suppliers/${encodeURIComponent(sh.matchedSupplier.code)}`}>
                   <Badge variant="outline" className="cursor-pointer hover:bg-accent">
                     {t('ספק', 'Supplier')} {sh.supplier ? `${sh.supplier} · ` : ''}{sh.matchedSupplier.name} ↗
@@ -87,7 +95,7 @@ export default function ShipmentDetailPage() {
               ) : (
                 <Badge variant="outline">{t('ספק', 'Supplier')} —</Badge>
               )}
-              <span>{(sh.shipmentDate || '').slice(0, 10)}</span>
+              <span>{typeof sh.shipmentDate === 'string' ? sh.shipmentDate.slice(0, 10) : '—'}</span>
             </div>
           </div>
 

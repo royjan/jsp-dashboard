@@ -2,8 +2,9 @@ export const maxDuration = 30
 
 import { NextResponse } from 'next/server'
 import { initializeSecrets } from '@/lib/aws-secrets'
-import { getShipmentsFirestore } from '@/lib/firebase'
-import { buildSupplierMatcher, leadToken } from '@/lib/supplier-match'
+import { dateSortKey, getShipmentsFirestore, toIso } from '@/lib/firebase'
+import { buildSupplierMatcher } from '@/lib/supplier-match'
+import { getSupplierRegistry, resolveShipmentSupplier } from '@/lib/supplier-registry'
 
 export async function GET(request: Request) {
   try {
@@ -15,58 +16,97 @@ export async function GET(request: Request) {
     const offset = Math.max(0, Number(searchParams.get('offset')) || 0)
 
     const db = await getShipmentsFirestore()
-    // Resolve each shipment's leading tag/number to a real supplier (best-effort).
-    const matcher = await buildSupplierMatcher().catch(() => null)
-    // Fetch one extra to detect whether there's a next page.
-    let q: FirebaseFirestore.Query = db.collection('shipments').orderBy('shipmentDate', 'desc')
-    if (date) {
-      q = db
-        .collection('shipments')
-        .where('shipmentDate', '>=', `${date}T00:00:00.000`)
-        .where('shipmentDate', '<', `${date}T23:59:59.999`)
-    }
-    q = q.offset(offset).limit(limit + 1)
+    // The Firestore supplier registry is authoritative; the name-parsing
+    // matcher stays as the last-resort fallback. Both are best-effort.
+    const [registry, matcher] = await Promise.all([
+      getSupplierRegistry(),
+      buildSupplierMatcher().catch(() => null),
+    ])
+    // `shipmentDate` is written as an ISO string on older docs and as a real
+    // Timestamp on newer ones, and Firestore orders by TYPE before value —
+    // Timestamp ranks below String, so orderBy('shipmentDate','desc') pushes
+    // every Timestamp doc behind every string doc no matter when it happened
+    // (that hid the most recent shipments on the last page). The same split
+    // breaks a `where` range filter, which only ever matches one of the two
+    // types. So read the collection — a few hundred small header docs — and do
+    // the ordering, date filter and paging here on normalised ISO values.
+    const snap = await db.collection('shipments').get()
 
-    const snap = await q.get()
-    const hasMore = snap.docs.length > limit
-    const pageDocs = snap.docs.slice(0, limit)
-    const shipments: any[] = []
-    for (const doc of pageDocs) {
-      const data = doc.data() as Record<string, any>
-      const sup = leadToken(data.name)
-      if (supplier && sup?.toLowerCase() !== supplier.toLowerCase()) continue
-      // Aggregate the products sub-collection (scanned / expected / missing).
-      const prodSnap = await doc.ref.collection('products').get()
-      let totalScanned = 0, totalExpected = 0, missing = 0, faulty = 0
-      prodSnap.docs.forEach((p) => {
-        const pd = p.data() as Record<string, any>
-        const sc = Number(pd.scanned) || 0, tot = Number(pd.total) || 0
-        totalScanned += sc; totalExpected += tot
-        if (sc < tot) missing += tot - sc
-        if (pd.faulty) faulty += 1
+    const supplierFilter = supplier?.trim().toLowerCase()
+    const headers = snap.docs
+      .map((doc) => {
+        const data = doc.data() as Record<string, any>
+        const { folder, isInternal, tag, matchedSupplier } = resolveShipmentSupplier(data, registry, matcher)
+        return {
+          doc,
+          name: (data.name as string) || '',
+          folder,
+          isInternal,
+          tag,
+          matchedSupplier,
+          shipmentDate: toIso(data.shipmentDate) || '',
+          createdAt: toIso(data.createdAt),
+          sortKey: dateSortKey(data.shipmentDate, data.createdAt),
+        }
       })
-      shipments.push({
-        id: doc.id,
-        name: data.name || '',
-        supplier: sup,
-        matchedSupplier: matcher?.match(data.name) || null,
-        shipmentDate: data.shipmentDate || '',
-        totalScanned, totalExpected, missing, faulty,
-        uniqueProducts: prodSnap.size,
-      })
-    }
+      .filter((h) => !date || h.sortKey.slice(0, 10) === date)
+      .filter(
+        (h) =>
+          // A filter value can be a supplier code, a folder, or an alias tag.
+          !supplierFilter ||
+          h.matchedSupplier?.code.toLowerCase() === supplierFilter ||
+          h.folder?.toLowerCase() === supplierFilter ||
+          h.tag?.toLowerCase() === supplierFilter,
+      )
+      .sort((a, b) => b.sortKey.localeCompare(a.sortKey))
 
-    // Distinct-supplier roll-up
-    const supMap = new Map<string, { count: number; latest: string }>()
-    for (const s of shipments) {
-      if (!s.supplier) continue
-      const c = supMap.get(s.supplier) || { count: 0, latest: '' }
+    const total = headers.length
+    const pageHeaders = headers.slice(offset, offset + limit)
+    const hasMore = offset + limit < total
+
+    // Aggregate each page row's products sub-collection (scanned / expected /
+    // missing). Only the page is read — the roll-up below needs headers only.
+    const shipments = await Promise.all(
+      pageHeaders.map(async (h) => {
+        const prodSnap = await h.doc.ref.collection('products').get()
+        let totalScanned = 0, totalExpected = 0, missing = 0, faulty = 0
+        prodSnap.docs.forEach((p) => {
+          const pd = p.data() as Record<string, any>
+          const sc = Number(pd.scanned) || 0, tot = Number(pd.total) || 0
+          totalScanned += sc; totalExpected += tot
+          if (sc < tot) missing += tot - sc
+          if (pd.faulty) faulty += 1
+        })
+        return {
+          id: h.doc.id,
+          name: h.name,
+          supplier: h.tag,
+          folder: h.folder,
+          isInternal: h.isInternal,
+          matchedSupplier: h.matchedSupplier,
+          shipmentDate: h.shipmentDate,
+          createdAt: h.createdAt,
+          totalScanned, totalExpected, missing, faulty,
+          uniqueProducts: prodSnap.size,
+        }
+      }),
+    )
+
+    // Distinct-supplier roll-up — keyed by the real supplier code, over every
+    // matching shipment rather than just this page (headers are already in
+    // hand, so the KPI no longer changes as you page). Internal (Lubinski)
+    // deliveries are not a supplier and must not inflate the count.
+    const supMap = new Map<string, { name: string; count: number; latest: string }>()
+    for (const h of headers) {
+      if (h.isInternal || !h.matchedSupplier) continue
+      const { code, name } = h.matchedSupplier
+      const c = supMap.get(code) || { name, count: 0, latest: '' }
       c.count += 1
-      if (s.shipmentDate > c.latest) c.latest = s.shipmentDate
-      supMap.set(s.supplier, c)
+      if (h.sortKey > c.latest) c.latest = h.sortKey
+      supMap.set(code, c)
     }
     const suppliers = [...supMap.entries()]
-      .map(([s, v]) => ({ supplier: s, ...v }))
+      .map(([code, v]) => ({ supplier: code, ...v }))
       .sort((a, b) => b.latest.localeCompare(a.latest))
 
     return NextResponse.json({
@@ -75,7 +115,9 @@ export async function GET(request: Request) {
       hasMore,
       offset,
       limit,
+      total,
       summary: {
+        // total/scanned/missing are this page; suppliers is the whole set.
         total: shipments.length,
         suppliers: suppliers.length,
         totalScanned: shipments.reduce((s, x) => s + x.totalScanned, 0),

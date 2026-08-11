@@ -47,6 +47,10 @@ export default function SupplierDetailPage() {
   }
 
   const profile = data?.profile
+  // The Firestore registry is the authoritative name; the stored profile name
+  // was often seeded from a junk ERP-derived one.
+  const registry = data?.registry
+  const displayName = registry?.name || profile?.supplierName || code
   const confirmations = data?.confirmations || []
   const pendingOrders = ordersData?.orders || data?.pendingOrders || []
   const uploads = data?.uploads || []
@@ -84,7 +88,7 @@ export default function SupplierDetailPage() {
           {t('suppliers')}
         </Link>
         <ArrowRight className="h-3 w-3 rotate-180" />
-        <span className="text-foreground">{profile?.supplierName || code}</span>
+        <span className="text-foreground">{displayName}</span>
       </div>
 
       {/* Profile card */}
@@ -92,8 +96,13 @@ export default function SupplierDetailPage() {
         <CardHeader className="p-4 pb-0">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <CardTitle className="text-lg">{profile?.supplierName || code}</CardTitle>
-              {profile?.active && <Badge variant="success">פעיל</Badge>}
+              <CardTitle className="text-lg">{displayName}</CardTitle>
+              {(registry ? registry.active : profile?.active) && <Badge variant="success">פעיל</Badge>}
+              {registry?.aliases?.length > 0 && (
+                <Badge variant="outline" className="font-mono">
+                  {t('suppliers.aliases')}: {registry.aliases.join(', ')}
+                </Badge>
+              )}
               {profile?.shipmentTag && (
                 <Badge variant="outline" className="font-mono">{t('suppliers.shipmentTag')}: {profile.shipmentTag}</Badge>
               )}

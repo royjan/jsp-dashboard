@@ -5,24 +5,31 @@ import { getDb, query } from '@/lib/db'
 import { supplierProfiles } from '@/lib/db/schema'
 import { desc } from 'drizzle-orm'
 import { initializeSecrets } from '@/lib/aws-secrets'
+import { padNum, supplierNumberFromName } from '@/lib/supplier-match'
+import { getSupplierRegistry, type SupplierRegistry } from '@/lib/supplier-registry'
 
-// The shipments-app tags suppliers by a short number (e.g. "08"); Finansit
-// embeds that number in the vendor name ("PCEX AUTOMOTIVE 08", "04 SP - P",
-// "70 נשלח אושר"). Pull it out so a supplier is findable by its number and can
-// be linked from inbound shipments.
-function supplierNumberFromName(name: string): string | null {
-  if (!name) return null
-  const lead = name.trim().match(/^(\d{1,3})(?=\s|$)/)
-  if (lead) return lead[1].padStart(2, '0')
-  const trail = name.trim().match(/(?:^|\s)(\d{1,3})\s*$/)
-  if (trail) return trail[1].padStart(2, '0')
-  return null
+// The warehouse tags suppliers by a short number (e.g. "08"). The registry
+// states those tags outright as `aliases`; for vendors it doesn't know, fall
+// back to the number Finansit embeds in the name ("PCEX AUTOMOTIVE 08").
+function shipmentNumber(registry: SupplierRegistry, code: string, name: string): string | null {
+  const aliases = registry.byCode(code)?.aliases ?? []
+  for (const a of aliases) {
+    const n = padNum(a)
+    if (n) return n
+  }
+  return supplierNumberFromName(name)
 }
 
 export async function GET(request: Request) {
   try {
     await initializeSecrets()
     const db = await getDb()
+
+    // The Firestore registry is the authority on supplier NAMES: the derived
+    // name below is a MAX() over purchase documents, which regularly picks a
+    // junk string (0000055082 came out as "70 נשלח אושר"). Best-effort —
+    // without Firebase it degrades to empty and the derived names stand.
+    const registry = await getSupplierRegistry()
 
     // Manual profiles (lead time, contacts, payment terms) — enrichment only.
     const profiles = await db.select().from(supplierProfiles).orderBy(desc(supplierProfiles.updatedAt))
@@ -45,12 +52,18 @@ export async function GET(request: Request) {
 
     const suppliers = derived.rows.map((r: any) => {
       const p = profileMap[r.code]
+      const reg = registry.byCode(r.code)
+      // registry > manual profile > derived: profile rows were themselves
+      // seeded from the derived name, so they carry the same junk.
+      const name = reg?.name || p?.supplierName || r.name || r.code
       return {
         supplierCode: r.code,
-        supplierName: r.name || p?.supplierName || r.code,
-        supplierNumber: supplierNumberFromName(r.name || ''),
+        supplierName: name,
+        supplierNumber: shipmentNumber(registry, r.code, name),
+        aliases: reg?.aliases ?? [],
+        inRegistry: !!reg,
         shipmentTag: p?.shipmentTag ?? null,
-        active: p?.active ?? true,
+        active: reg?.active ?? p?.active ?? true,
         leadTimeDays: p?.leadTimeDays ?? null,
         contactEmail: p?.contactEmail ?? null,
         contactPhone: p?.contactPhone ?? null,
@@ -64,12 +77,16 @@ export async function GET(request: Request) {
     // Manual-only suppliers that have no purchase docs yet.
     for (const p of profiles) {
       if (!suppliers.some((s) => s.supplierCode === p.supplierCode)) {
+        const reg = registry.byCode(p.supplierCode)
+        const name = reg?.name || p.supplierName
         suppliers.push({
           supplierCode: p.supplierCode,
-          supplierName: p.supplierName,
-          supplierNumber: supplierNumberFromName(p.supplierName || ''),
+          supplierName: name,
+          supplierNumber: shipmentNumber(registry, p.supplierCode, name || ''),
+          aliases: reg?.aliases ?? [],
+          inRegistry: !!reg,
           shipmentTag: p.shipmentTag ?? null,
-          active: p.active ?? true,
+          active: reg?.active ?? p.active ?? true,
           leadTimeDays: p.leadTimeDays ?? null,
           contactEmail: p.contactEmail ?? null,
           contactPhone: p.contactPhone ?? null,
@@ -79,6 +96,28 @@ export async function GET(request: Request) {
           lastDelivery: null,
         })
       }
+    }
+
+    // Registry suppliers the ERP hasn't traded with yet (no purchase docs, no
+    // profile) — they still exist and can receive shipments.
+    for (const reg of registry.all()) {
+      if (suppliers.some((s) => s.supplierCode === reg.code)) continue
+      suppliers.push({
+        supplierCode: reg.code,
+        supplierName: reg.name,
+        supplierNumber: shipmentNumber(registry, reg.code, reg.name),
+        aliases: reg.aliases,
+        inRegistry: true,
+        shipmentTag: null,
+        active: reg.active,
+        leadTimeDays: null,
+        contactEmail: null,
+        contactPhone: null,
+        paymentTerms: null,
+        pendingOrders: 0,
+        totalOrders: 0,
+        lastDelivery: null,
+      })
     }
 
     // If a search query is provided, sort by relevance. Users type the supplier
@@ -93,7 +132,8 @@ export async function GET(request: Request) {
             const num = s.supplierNumber || ''
             const code = (s.supplierCode || '').toLowerCase()
             const name = (s.supplierName || '').toLowerCase()
-            if (num === q) return 0
+            const aliases = (s.aliases || []).map((a) => a.toLowerCase())
+            if (num === q || aliases.includes(qLower)) return 0
             if (num.includes(q) || code === qLower) return 1
             if (name.includes(qLower) || code.includes(qLower)) return 2
             return 3
