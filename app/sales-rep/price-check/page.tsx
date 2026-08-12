@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { SalesRepBottomNav } from '@/components/sales-rep/BottomNav'
+import { LookupCombobox } from '@/components/shared/LookupCombobox'
 import { ILS_FORMAT } from '@/lib/constants'
 import { copyText } from '@/lib/clipboard'
 
@@ -31,6 +32,7 @@ type SearchState = 'idle' | 'loading' | 'result' | 'not_found' | 'error'
 export default function PriceCheckPage() {
   const [itemCode, setItemCode] = useState('')
   const [customerCode, setCustomerCode] = useState('')
+  const [customerName, setCustomerName] = useState('')
   const [state, setState] = useState<SearchState>('idle')
   const [result, setResult] = useState<PriceResult | null>(null)
   const [errorMsg, setErrorMsg] = useState('')
@@ -78,6 +80,7 @@ export default function PriceCheckPage() {
   const handleClear = () => {
     setItemCode('')
     setCustomerCode('')
+    setCustomerName('')
     setState('idle')
     setResult(null)
     setErrorMsg('')
@@ -127,18 +130,22 @@ export default function PriceCheckPage() {
       <form onSubmit={handleSubmit} className="px-4 py-3 space-y-3">
         <div className="relative">
           <Search className="absolute right-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground pointer-events-none" />
-          <input
-            ref={itemRef}
-            type="text"
-            inputMode="text"
-            autoComplete="off"
-            autoCorrect="off"
-            autoCapitalize="characters"
-            spellCheck={false}
+          <LookupCombobox
+            kind="item"
             value={itemCode}
-            onChange={(e) => setItemCode(e.target.value)}
-            placeholder='מק"ט פריט...'
-            className="w-full h-14 pr-12 pl-12 rounded-xl border-2 border-input bg-background text-2xl font-mono placeholder:text-lg placeholder:font-sans focus:outline-none focus:border-primary transition-colors"
+            onChange={setItemCode}
+            onSubmit={doSearch}
+            inputRef={itemRef}
+            placeholder='מק"ט או שם פריט...'
+            // Clear button sits at left-3; keep the spinner clear of it.
+            spinnerClassName="end-11"
+            inputProps={{
+              inputMode: 'text',
+              autoCorrect: 'off',
+              autoCapitalize: 'characters',
+              spellCheck: false,
+            }}
+            className="h-14 pr-12 pl-12 rounded-xl border-2 border-input text-2xl font-mono placeholder:text-lg placeholder:font-sans focus:outline-none focus:border-primary transition-colors"
           />
           {itemCode && (
             <button
@@ -151,14 +158,22 @@ export default function PriceCheckPage() {
           )}
         </div>
 
-        <input
-          type="text"
-          inputMode="numeric"
-          value={customerCode}
-          onChange={(e) => setCustomerCode(e.target.value)}
-          placeholder="קוד לקוח (אופציונלי)..."
-          className="w-full h-12 px-4 rounded-xl border-2 border-input bg-background text-lg font-mono placeholder:text-base placeholder:font-sans focus:outline-none focus:border-primary transition-colors"
-        />
+        {/* Reps know customers by name far more often than by code, so this
+            searches both and fills in the code on pick. */}
+        <div>
+          <LookupCombobox
+            kind="customer"
+            value={customerCode}
+            onChange={setCustomerCode}
+            onPick={(hit) => setCustomerName(hit.name)}
+            onSubmit={doSearch}
+            placeholder="שם או קוד לקוח (אופציונלי)..."
+            className="h-12 px-4 rounded-xl border-2 border-input text-lg font-mono placeholder:text-base placeholder:font-sans focus:outline-none focus:border-primary transition-colors"
+          />
+          {customerName && (
+            <p className="mt-1 px-1 text-xs text-muted-foreground truncate">{customerName}</p>
+          )}
+        </div>
 
         <Button
           type="submit"
