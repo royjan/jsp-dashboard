@@ -41,12 +41,13 @@ export async function GET(request: Request) {
     const base = snap.docs
       .map((doc) => {
         const data = doc.data() as Record<string, unknown>
-        const { folder, isInternal, tag, matchedSupplier } = resolveShipmentSupplier(data, registry, matcher)
+        const { folder, isInternal, internalSource, tag, matchedSupplier } = resolveShipmentSupplier(data, registry, matcher)
         return {
           doc,
           name: (data.name as string) || '',
           folder,
           isInternal,
+          internalSource,
           tag,
           matchedSupplier,
           shipmentDate: toIso(data.shipmentDate) || '',
@@ -61,9 +62,11 @@ export async function GET(request: Request) {
       .filter((h) => (internal === '1' ? h.isInternal : internal === '0' ? !h.isInternal : true))
       .filter(
         (h) =>
-          // A filter value can be a supplier code, a folder, or an alias tag.
+          // A filter value can be a supplier code, a folder, an alias tag, or
+          // an internal sender ("קאר איסט").
           !supplierFilter ||
           h.matchedSupplier?.code.toLowerCase() === supplierFilter ||
+          h.internalSource?.toLowerCase() === supplierFilter ||
           h.folder?.toLowerCase() === supplierFilter ||
           h.tag?.toLowerCase() === supplierFilter,
       )
@@ -91,6 +94,7 @@ export async function GET(request: Request) {
           supplier: h.tag,
           folder: h.folder,
           isInternal: h.isInternal,
+          internalSource: h.internalSource,
           matchedSupplier: h.matchedSupplier,
           shipmentDate: h.shipmentDate,
           createdAt: h.createdAt,
@@ -106,9 +110,20 @@ export async function GET(request: Request) {
     // Internal (Lubinski) deliveries are not a supplier: they get their own
     // count rather than inflating this one.
     const supMap = new Map<string, { name: string; count: number; latest: string }>()
+    // Internal deliveries roll up by who actually sent them, not by the single
+    // "לובינסקי" folder they all share.
+    const intMap = new Map<string, { count: number; latest: string }>()
     let internalCount = 0
     for (const h of base) {
-      if (h.isInternal) { internalCount += 1; continue }
+      if (h.isInternal) {
+        internalCount += 1
+        const key = h.internalSource || h.folder || '—'
+        const c = intMap.get(key) || { count: 0, latest: '' }
+        c.count += 1
+        if (h.sortKey > c.latest) c.latest = h.sortKey
+        intMap.set(key, c)
+        continue
+      }
       if (!h.matchedSupplier) continue
       const { code, name } = h.matchedSupplier
       const c = supMap.get(code) || { name, count: 0, latest: '' }
@@ -119,10 +134,14 @@ export async function GET(request: Request) {
     const suppliers = [...supMap.entries()]
       .map(([code, v]) => ({ supplier: code, ...v }))
       .sort((a, b) => b.latest.localeCompare(a.latest))
+    const internalSources = [...intMap.entries()]
+      .map(([source, v]) => ({ source, ...v }))
+      .sort((a, b) => b.count - a.count)
 
     return NextResponse.json({
       shipments,
       suppliers,
+      internalSources,
       internalCount,
       unfilteredTotal: base.length,
       hasMore,

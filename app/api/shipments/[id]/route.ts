@@ -42,7 +42,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       getSupplierRegistry(),
       buildSupplierMatcher().catch(() => null),
     ])
-    const { folder, isInternal, tag, matchedSupplier } = resolveShipmentSupplier(data, registry, matcher)
+    const { folder, isInternal, internalSource, tag, matchedSupplier } = resolveShipmentSupplier(data, registry, matcher)
 
     // Who scanned (from logs sub-collection), best-effort.
     let scanners: { name: string; count: number }[] = []
@@ -63,6 +63,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
         supplier: tag,
         folder,
         isInternal,
+        internalSource,
         matchedSupplier,
         // Mixed string/Timestamp in Firestore — normalise or the client gets
         // a `{_seconds}` object where it expects a date string.

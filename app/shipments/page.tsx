@@ -19,6 +19,7 @@ interface Shipment {
   supplier: string | null
   folder: string | null
   isInternal: boolean
+  internalSource: string | null
   matchedSupplier: { code: string; name: string } | null
   shipmentDate: string
   createdAt: string | null
@@ -34,9 +35,15 @@ interface SupplierRollup {
   count: number
   latest: string
 }
+interface InternalRollup {
+  source: string
+  count: number
+  latest: string
+}
 interface ShipmentsResponse {
   shipments: Shipment[]
   suppliers?: SupplierRollup[]
+  internalSources?: InternalRollup[]
   internalCount?: number
   unfilteredTotal?: number
   hasMore: boolean
@@ -86,7 +93,7 @@ export default function ShipmentsPage() {
   // Both are computed server-side over the unfiltered set, so the chips keep
   // their labels and counts while a filter is active.
   const supplierOptions = data?.suppliers ?? []
-  const internalCount = data?.internalCount ?? 0
+  const internalSources = data?.internalSources ?? []
   const { sorted, sortKey, sortDir, toggleSort } = useSortable<Shipment>(data?.shipments ?? [])
 
   return (
@@ -128,9 +135,10 @@ export default function ShipmentsPage() {
           </div>
           {/* Filter by supplier. The options come from the API's roll-up over
               the whole set (not the page), so they stay put once one is
-              picked. Internal deliveries have no supplier — they get their
-              own chip rather than being lumped in with one. */}
-          {(supplierOptions.length > 0 || internalCount > 0) && (
+              picked. Internal deliveries have no supplier — they get a chip
+              per actual sender (they all share one folder, so the folder
+              cannot tell them apart). */}
+          {(supplierOptions.length > 0 || internalSources.length > 0) && (
             <div className="flex flex-wrap items-center gap-1.5">
               <Button
                 size="sm"
@@ -156,17 +164,18 @@ export default function ShipmentsPage() {
                   <span className="ms-1 opacity-70 tabular-nums">{formatNumber(s.count)}</span>
                 </Button>
               ))}
-              {internalCount > 0 && (
+              {internalSources.map((s) => (
                 <Button
+                  key={s.source}
                   size="sm"
-                  variant={filter === 'internal' ? 'default' : 'outline'}
-                  className="h-7 text-xs"
-                  onClick={() => selectFilter('internal')}
+                  variant={filter === s.source ? 'secondary' : 'outline'}
+                  className="h-7 text-xs max-w-[220px]"
+                  onClick={() => selectFilter(s.source)}
                 >
-                  {t('פנימי', 'Internal')}
-                  <span className="ms-1 opacity-70 tabular-nums">{formatNumber(internalCount)}</span>
+                  <span className="truncate">{t('פנימי', 'Internal')} · {s.source}</span>
+                  <span className="ms-1 opacity-70 tabular-nums">{formatNumber(s.count)}</span>
                 </Button>
-              )}
+              ))}
             </div>
           )}
         </CardHeader>
@@ -207,7 +216,7 @@ export default function ShipmentsPage() {
                           {s.isInternal ? (
                             // Not a supplier at all — an internal delivery.
                             <Badge variant="secondary" className="max-w-[200px] truncate">
-                              {t('פנימי', 'Internal')}{s.folder ? ` · ${s.folder}` : ''}
+                              {t('פנימי', 'Internal')}{s.internalSource ? ` · ${s.internalSource}` : ''}
                             </Badge>
                           ) : s.matchedSupplier ? (
                             <Link

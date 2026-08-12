@@ -113,11 +113,39 @@ export async function getSupplierRegistry(): Promise<SupplierRegistry> {
 export type ShipmentSupplier = {
   /** Warehouse folder the shipment sits in ("08", "לובינסקי"). */
   folder: string | null
-  /** Internal (Lubinski) delivery — no supplier, and not counted as one. */
+  /** Internal delivery — no supplier, and not counted as one. */
   isInternal: boolean
+  /** Who an internal delivery actually came from (see internalSource). */
+  internalSource: string | null
   /** Display tag for the shipment: the folder, else the name's lead token. */
   tag: string | null
   matchedSupplier: MatchedSupplier | null
+}
+
+// Every internal delivery is filed under the one folder "לובינסקי" regardless
+// of who actually sent it — the real sender only appears in the free-text
+// `name`, spelled inconsistently ("לוינסקי", "לובניסקי", "דוד לובינסקי",
+// "מקבוצת לובינסקי"). These are the distinct senders, each with the spellings
+// seen in the data; matching is on a punctuation-stripped name so a typo in
+// the middle of a word still lands in the right group.
+const INTERNAL_SOURCES: Array<{ label: string; match: RegExp }> = [
+  { label: 'קאר איסט', match: /קאר\s*איסט/ },
+  { label: "ג'אן", match: /ג['׳]?אן/ },
+  // לובינסקי and its misspellings: לוב/לוו/לו + optional נ/ל + ינסקי.
+  { label: 'לובינסקי', match: /לו[בו]?[נל]?[יל]?[נל]?סקי/ },
+]
+
+/**
+ * Which company an internal delivery came from. Derived from the name because
+ * the folder cannot distinguish them; falls back to the folder when no known
+ * sender matches, so an unrecognised one still shows something.
+ */
+export function internalSource(name?: string | null, folder?: string | null): string | null {
+  const clean = (name || '').replace(/["'׳״]/g, '').replace(/\s+/g, ' ').trim()
+  for (const s of INTERNAL_SOURCES) {
+    if (s.match.test(clean)) return s.label
+  }
+  return folder || null
 }
 
 /**
@@ -144,38 +172,38 @@ export function resolveShipmentSupplier(
   const name = str(data.name)
   const tag = folder || leadToken(name)
 
-  if (isInternal) return { folder, isInternal, tag, matchedSupplier: null }
+  if (isInternal) {
+    // The folder says "לובינסקי" for all of them; the name says who it really was.
+    const src = internalSource(name, folder)
+    return { folder, isInternal, internalSource: src, tag: src || tag, matchedSupplier: null }
+  }
+
+  const base = { folder, isInternal, internalSource: null, tag }
 
   const code = str(data.supplierCode)
   if (code) {
     return {
-      folder,
-      isInternal,
-      tag,
+      ...base,
       matchedSupplier: { code, name: registry?.name(code) || str(data.supplierName) || code },
     }
   }
 
   const byFolder = registry?.resolve(folder)
   if (byFolder) {
-    return { folder, isInternal, tag, matchedSupplier: { code: byFolder.code, name: byFolder.name } }
+    return { ...base, matchedSupplier: { code: byFolder.code, name: byFolder.name } }
   }
 
   const legacy = matcher?.match(name) || null
   if (legacy) {
     return {
-      folder,
-      isInternal,
-      tag,
+      ...base,
       matchedSupplier: { code: legacy.code, name: registry?.name(legacy.code) || legacy.name },
     }
   }
 
   const byToken = registry?.resolve(leadToken(name))
   return {
-    folder,
-    isInternal,
-    tag,
+    ...base,
     matchedSupplier: byToken ? { code: byToken.code, name: byToken.name } : null,
   }
 }
