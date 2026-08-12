@@ -6,9 +6,10 @@ import { useLocale } from '@/lib/locale-context'
 import { formatNumber } from '@/lib/constants'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Loader2, Truck } from 'lucide-react'
+import { Loader2, Truck, Download, Eye } from 'lucide-react'
 
 interface HistoryDoc {
+  year: number
   format: string
   formatLabel: { he: string; en: string }
   docNumber: string
@@ -93,21 +94,38 @@ export default function SupplierHistoryPage() {
               <th className="px-3 py-2 text-start text-xs font-medium">{t('suppliers.docType')}</th>
               <th className="px-3 py-2 text-start text-xs font-medium">{t('suppliers.docNumber')}</th>
               <th className="px-3 py-2 text-end text-xs font-medium">{t('suppliers.totalValue')}</th>
+              <th className="px-3 py-2 text-center text-xs font-medium">{t('suppliers.document')}</th>
             </tr>
           </thead>
           <tbody>
-            {documents.map((d) => (
-              <tr key={`${d.format}-${d.docNumber}-${d.docDate}`} className="border-t hover:bg-accent/50">
-                <td className="px-3 py-2 tabular-nums whitespace-nowrap">{d.docDate?.slice(0, 10) || '—'}</td>
-                <td className="px-3 py-2">
-                  <Badge variant={d.format === '58' ? 'secondary' : 'outline'} className="text-xs">
-                    {isHe ? d.formatLabel.he : d.formatLabel.en}
-                  </Badge>
-                </td>
-                <td className="px-3 py-2 font-mono text-xs">{d.docNumber}</td>
-                <td className="px-3 py-2 text-end tabular-nums">₪{formatNumber(Math.round(d.grandTotal))}</td>
-              </tr>
-            ))}
+            {documents.map((d) => {
+              const pdf = `/api/documents/${encodeURIComponent(d.format)}/${encodeURIComponent(d.docNumber)}/pdf?year=${d.year}`
+              return (
+                <tr key={`${d.format}-${d.docNumber}-${d.docDate}`} className="border-t hover:bg-accent/50">
+                  <td className="px-3 py-2 tabular-nums whitespace-nowrap">{d.docDate?.slice(0, 10) || '—'}</td>
+                  <td className="px-3 py-2">
+                    <Badge variant={d.format === '58' ? 'secondary' : 'outline'} className="text-xs">
+                      {isHe ? d.formatLabel.he : d.formatLabel.en}
+                    </Badge>
+                  </td>
+                  <td className="px-3 py-2 font-mono text-xs">{d.docNumber}</td>
+                  <td className="px-3 py-2 text-end tabular-nums">₪{formatNumber(Math.round(d.grandTotal))}</td>
+                  <td className="px-3 py-2">
+                    <div className="flex items-center justify-center gap-1">
+                      {/* View opens the ERP's own rendering; download saves it. */}
+                      <a href={pdf} target="_blank" rel="noopener noreferrer" title={t('suppliers.viewDoc')}
+                         className="inline-flex items-center rounded p-1 text-muted-foreground hover:text-foreground hover:bg-accent">
+                        <Eye className="h-3.5 w-3.5" />
+                      </a>
+                      <a href={`${pdf}&download=1`} title={t('suppliers.downloadDoc')}
+                         className="inline-flex items-center rounded p-1 text-muted-foreground hover:text-foreground hover:bg-accent">
+                        <Download className="h-3.5 w-3.5" />
+                      </a>
+                    </div>
+                  </td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </div>

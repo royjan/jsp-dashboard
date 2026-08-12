@@ -1,36 +1,45 @@
-import { NextRequest, NextResponse } from 'next/server'
+export const maxDuration = 60
+
+import { NextResponse } from 'next/server'
 import { initializeSecrets } from '@/lib/aws-secrets'
 import { fetchDocumentPdf } from '@/lib/finansit-client'
 
-export const runtime = 'nodejs'
-export const maxDuration = 30
-
-// Stream a document's PDF (invoice/quote/delivery note/credit note) from FINAPI.
+/**
+ * Streams a document PDF (תעודת משלוח, חשבונית, הזמנה) straight from FINAPI.
+ *
+ * The synced `dashboard.document_lines` cannot stand in for this: only 167 of
+ * 1133 delivery notes for a sampled supplier have any lines at all, and those
+ * carry quantity 0 / line_total 0 against a non-zero header. The ERP's own
+ * rendering is the only complete representation of the document.
+ */
 export async function GET(
-  req: NextRequest,
-  { params }: { params: Promise<{ format: string; number: string }> }
+  request: Request,
+  { params }: { params: Promise<{ format: string; number: string }> },
 ) {
   try {
     await initializeSecrets()
     const { format, number } = await params
-    const year = new URL(req.url).searchParams.get('year') || undefined
+    const year = new URL(request.url).searchParams.get('year') || undefined
 
-    const res = await fetchDocumentPdf(format, number, year)
-    if (!res.ok) {
-      return NextResponse.json(
-        { error: `Document PDF unavailable (${res.status})` },
-        { status: res.status }
-      )
-    }
-    const buf = await res.arrayBuffer()
-    return new NextResponse(buf, {
+    const upstream = await fetchDocumentPdf(format, number, year)
+    const body = await upstream.arrayBuffer()
+
+    // `inline` so a click opens the viewer; the UI adds ?download=1 when the
+    // user explicitly asks to save it.
+    const disposition = new URL(request.url).searchParams.get('download') === '1' ? 'attachment' : 'inline'
+    const filename = `${format}-${number}${year ? `-${year}` : ''}.pdf`
+
+    return new NextResponse(body, {
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `inline; filename="doc-${format}-${number}.pdf"`,
-        'Cache-Control': 'private, max-age=3600',
+        'Content-Disposition': `${disposition}; filename="${filename}"`,
+        'Cache-Control': 'private, max-age=300',
       },
     })
   } catch (error) {
-    return NextResponse.json({ error: String(error) }, { status: 500 })
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Failed to fetch document PDF' },
+      { status: 502 },
+    )
   }
 }
