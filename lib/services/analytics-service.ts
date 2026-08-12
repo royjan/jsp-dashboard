@@ -1,4 +1,4 @@
-import { client, fetchItems, fetchDocuments, fetchDocumentDetail, fetchBatchStock, searchDocuments, fetchAllStockItems, fetchAllItemChainLinks, fetchBatchPrices, fetchAllCustomers, refreshCache } from '../finansit-client'
+import { client, fetchItems, fetchDocuments, fetchDocumentDetail, fetchBatchStock, searchDocuments, fetchAllStockItems, fetchAllItemChainLinks, fetchBatchPrices, fetchAllCustomers, refreshCache, fetchRecommendationReport } from '../finansit-client'
 import { getCached, setCache, deleteCache } from '../redis-client'
 import { query as dbQuery } from '../db'
 import { readQueryAsync } from '../neon-read'
@@ -1432,51 +1432,87 @@ export async function getDeadStock(yearsThreshold: number = 1, forceRefresh = fa
 
 // ── Reorder Recommendations ──
 
+/**
+ * Reorder recommendations — thin wrapper over FINAPI's recommendation report.
+ *
+ * The recommended qty is NOT computed here. FINAPI owns it (method=coverage,
+ * 3 months, rate measured over 90 days), because it reads real document lines;
+ * this dashboard only ever saw pre-aggregated annual item-master totals. Before
+ * this change the two engines disagreed on 78 of 150 active items (374 units vs
+ * 210 over the same 90-day slice) — that gap was the whole reason to unify.
+ *
+ * The urgency score keeps its original multiplicative shape but runs on signals
+ * that actually exist. The old score multiplied inquiry_count by 3, its heaviest
+ * term — and inquiry_count is ERP field ItmMaxQty, which the paged /api/items
+ * endpoint returns as 0 for every item. So the live formula had silently
+ * degraded to (sold_this_year * 2 / pipeline) * recencyBoost, and
+ * customer_breadth was pinned at 0. asked_qty (real format-31 quote lines in the
+ * window) replaces it.
+ *
+ * Cost: the report is a 60-120s scan, so this must stay on a cached/cron path.
+ */
 export async function getReorderRecommendations(dateFrom?: string, dateTo?: string, forceRefresh = false): Promise<ReorderItem[]> {
-  const cacheKey = `analytics:reorder:v2:${dateFrom || 'all'}:${dateTo || 'all'}`
+  const cacheKey = `analytics:reorder:v3:${dateFrom || 'all'}:${dateTo || 'all'}`
   const cached = forceRefresh ? null : await getCached<ReorderItem[]>(cacheKey)
   if (cached) return cached
 
-  const items = await getItems()
+  const [items, report] = await Promise.all([
+    getItems(),
+    fetchRecommendationReport().catch((e) => {
+      console.warn('[Analytics] recommendation report failed:', e)
+      return { rows: [], meta: {} }
+    }),
+  ])
   const now = new Date()
+  const byCode = new Map(items.map(i => [i.code, i]))
 
-  // Note: dateFrom/dateTo are accepted but not used to filter items because
-  // sold_this_year, sold_last_year, inquiry_count are pre-aggregated annual
-  // totals from Finansit — filtering by sale_date would just remove items
-  // whose last sale falls outside the range, not filter actual sales data.
+  // dateFrom/dateTo are accepted for API compatibility but the demand window is
+  // owned by the report (trailing 90 days); narrowing here would desync the
+  // recommended_qty from the demand it was computed over.
   const currentMonth = now.getMonth() + 1
   const summerMonths = [5, 6, 7, 8, 9, 10]
 
-  const reorderItems: ReorderItem[] = items
-    .filter(item =>
-      item.inquiry_count > 0 ||
-      item.sold_this_year > 0 ||
-      item.sold_last_year > 0 ||
-      (item.stock_qty > 0 && (item.sold_2y_ago > 0 || item.sold_3y_ago > 0))
-    )
-    .map(item => {
-      const incomingQty = item.incoming_qty || 0
-      const orderedQty = item.ordered_qty || 0
+  const reorderItems: ReorderItem[] = report.rows
+    .map(row => {
+      const item = byCode.get(row.code)
+      const incomingQty = row.incoming ?? 0
+      const orderedQty = row.on_order ?? 0
       // effectiveQty = on-hand + arriving + on-order (all supply pipeline)
-      const effectiveQty = item.stock_qty + incomingQty + orderedQty
+      const effectiveQty = row.pipeline ?? (row.stock + incomingQty + orderedQty)
 
-      // Boost urgency for items with recent sale_date (trending)
-      const daysSinceSale = item.sale_date
-        ? Math.floor((now.getTime() - new Date(item.sale_date).getTime()) / 86400000)
+      // Recency from the report's own last_sold, falling back to last_quoted —
+      // an item only ever quoted still carries live demand.
+      const lastActivity = row.last_sold || row.last_quoted || item?.sale_date
+      const daysSinceSale = lastActivity
+        ? Math.floor((now.getTime() - new Date(lastActivity).getTime()) / 86400000)
         : 365
       const recencyBoost = daysSinceSale < 30 ? 1.5 : daysSinceSale < 90 ? 1.2 : 1.0
 
-      const urgencyScore = ((item.inquiry_count * 3 + item.sold_this_year * 2) /
-        Math.max(effectiveQty, 1)) * recencyBoost
+      // FINAPI's flags are earned from document evidence — trust them over
+      // anything re-derived here.
+      const flags = row.flags ?? []
+      const flagBoost =
+        (flags.includes('lost_sales') ? 1.5 : 1) *      // quoted with zero stock — provably lost
+        (flags.includes('stockout') ? 1.3 : 1) *        // runs out inside lead time
+        (flags.includes('unreplenished') ? 1.2 : 1) *   // selling, nothing on order
+        (flags.includes('dead_stock') ? 0.3 : 1)        // damp, don't hide
 
-      const demandVelocity = Math.min(item.sold_this_year / Math.max(item.sold_last_year, 1), 2)
-      const stockCoverage = effectiveQty / Math.max(item.sold_this_year / 12, 1)
-      const customerBreadth = Math.min(item.inquiry_count / 10, 1)
+      const urgencyScore = ((row.asked_qty * 3 + row.sold_qty * 2) /
+        Math.max(effectiveQty, 1)) * recencyBoost * flagBoost
 
-      // Dynamic seasonal relevance from sale_date month vs current season
+      const soldThisYear = row.sold_this_year ?? item?.sold_this_year ?? 0
+      const soldLastYear = row.sold_last_year ?? item?.sold_last_year ?? 0
+      const demandVelocity = Math.min(soldThisYear / Math.max(soldLastYear, 1), 2)
+      const stockCoverage = effectiveQty / Math.max(soldThisYear / 12, 1)
+      // Breadth of demand: how much was asked for relative to a "broad" 10 units.
+      // Was min(inquiry_count/10, 1), which was always 0.
+      const customerBreadth = Math.min(row.asked_qty / 10, 1)
+
+      // Dynamic seasonal relevance from last-sale month vs current season
       let seasonalRelevance = 0.5
-      if (item.sale_date) {
-        const saleMonth = parseInt(item.sale_date.substring(5, 7), 10)
+      const seasonSource = row.last_sold || item?.sale_date
+      if (seasonSource) {
+        const saleMonth = parseInt(seasonSource.substring(5, 7), 10)
         const itemIsSummer = summerMonths.includes(saleMonth)
         const nowIsSummer = summerMonths.includes(currentMonth)
         // Higher relevance if item's season matches current season
@@ -1487,40 +1523,50 @@ export async function getReorderRecommendations(dateFrom?: string, dateTo?: stri
       }
 
       // Supplier freshness from update_date
-      const daysSinceUpdate = item.update_date
+      const daysSinceUpdate = item?.update_date
         ? Math.floor((now.getTime() - new Date(item.update_date).getTime()) / 86400000)
         : undefined
       const supplierFreshness = daysSinceUpdate !== undefined
         ? Math.max(0, Math.min(1, 1 - daysSinceUpdate / 365))
         : 0.5
 
-      // Recommended order quantity: enough for 3 months, minus full supply pipeline
-      const bestAnnualSales = Math.max(item.sold_this_year, item.sold_last_year, 1)
-      const monthlyVelocity = bestAnnualSales / 12
-      const targetStock = Math.ceil(monthlyVelocity * 3)
-      const recommendedQty = Math.max(0, targetStock - effectiveQty)
-
       return {
-        code: item.code,
-        name: item.name,
-        stock_qty: item.stock_qty,
+        code: row.code,
+        name: item?.name || row.name,
+        stock_qty: row.stock,
         incoming_qty: incomingQty,
         ordered_qty: orderedQty,
-        inquiry_count: Math.round(item.inquiry_count),
-        sold_this_year: Math.round(item.sold_this_year),
-        sold_last_year: Math.round(item.sold_last_year),
-        price: item.price,
+        inquiry_count: 0,   // deprecated — see the type; asked_qty replaces it
+        sold_this_year: Math.round(soldThisYear),
+        sold_last_year: Math.round(soldLastYear),
+        price: row.retail_price ?? item?.price ?? 0,
         urgency_score: Math.round(urgencyScore * 100) / 100,
         demand_velocity: Math.round(demandVelocity * 100) / 100,
         stock_coverage: Math.round(stockCoverage * 10) / 10,
         seasonal_relevance: Math.round(seasonalRelevance * 100) / 100,
         customer_breadth: Math.round(customerBreadth * 100) / 100,
-        sale_date: item.sale_date,
-        purchase_date: item.purchase_date,
+        sale_date: row.last_sold ?? item?.sale_date,
+        purchase_date: item?.purchase_date,
         days_since_sale: daysSinceSale,
         supplier_freshness: Math.round(supplierFreshness * 100) / 100,
-        alias_codes: item.alias_codes,
-        recommended_qty: recommendedQty,
+        alias_codes: item?.alias_codes,
+        // FINAPI's number, not ours — one recommendation across page, board and MCP.
+        recommended_qty: row.recommended_qty,
+
+        // Report provenance, so the UI can explain WHY an item is here.
+        asked_qty: row.asked_qty,
+        sold_qty: row.sold_qty,
+        gap: row.gap,
+        pipeline: effectiveQty,
+        monthly_sold: row.monthly_sold,
+        monthly_asked: row.monthly_asked,
+        days_of_stock_left: row.days_of_stock_left,
+        stockout_date: row.stockout_date,
+        flags,
+        last_sold: row.last_sold,
+        last_quoted: row.last_quoted,
+        order_age_days: row.order_age_days,
+        replaced_by: row.replaced_by,
       }
     })
     .sort((a, b) => b.urgency_score - a.urgency_score)

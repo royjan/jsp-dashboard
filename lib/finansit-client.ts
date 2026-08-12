@@ -15,6 +15,7 @@ import type {
   CloneDocumentParams,
   ConvertDocumentParams,
   UpdateDocumentParams,
+  RecommendationReport,
 } from './types'
 
 // FINANSIT_BASE_URL = primary FINAPI box; FINANSIT_BASE_URL_FALLBACK = secondary.
@@ -324,6 +325,49 @@ export async function waitForStockCache(maxWaitMs = 60000): Promise<boolean> {
   }
   console.warn(`[FINAPI] Stock cache not ready after ${maxWaitMs}ms`)
   return false
+}
+
+/**
+ * FINAPI's recommendation report — the same engine behind the /items/recommendations
+ * page, and the demand source of truth for reorder suggestions.
+ *
+ * Scans real document lines in [date_from, date_to]: quotes (31) and net invoices
+ * (11/13/19 minus 12 credit notes), joined to stock and the open 61/62 pipeline.
+ *
+ * Defaults here are deliberate and differ from the web page's:
+ *   - method=coverage over 3 months, so the number is INDEPENDENT of the window
+ *     length. The page defaults to shortfall over 6 months, which recommends
+ *     re-buying everything sold in the window — that figure moves whenever
+ *     someone changes the date picker.
+ *   - sources includes 31, so asked_qty (נשאל) is real. The page's default
+ *     excludes quotes, which is why its asked_qty column is 0 on every row.
+ *
+ * HEAVY: 60-120s. Uses bulkClient (180s timeout). FINAPI caches an identical
+ * parameter set for 10 minutes, but only the PAGE's default combo is pre-warmed,
+ * so this call pays the scan. Callers must cache — never hit this on a request path.
+ */
+export async function fetchRecommendationReport(opts: {
+  windowDays?: number
+  method?: 'shortfall' | 'coverage' | 'reorder_point' | 'minmax'
+  coverageMonths?: number
+  rateWindowDays?: number
+  sources?: string
+  minDemand?: number
+} = {}): Promise<RecommendationReport> {
+  const windowDays = opts.windowDays ?? 90
+  const to = new Date()
+  const from = new Date(to.getTime() - windowDays * 86400000)
+  const data = await bulkClient.get('/api/export/recommendation-report', {
+    date_from: from.toISOString().slice(0, 10),
+    date_to: to.toISOString().slice(0, 10),
+    sources: opts.sources ?? '31,11,13,19',
+    method: opts.method ?? 'coverage',
+    coverage_months: opts.coverageMonths ?? 3,
+    rate_window_days: opts.rateWindowDays ?? 90,
+    min_demand: opts.minDemand ?? 1,
+    format: 'json',
+  })
+  return { rows: data?.rows ?? [], meta: data?.meta ?? {} }
 }
 
 let stockRebuildInFlight = false

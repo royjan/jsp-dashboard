@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useDeadStock, useABCClassification, useReorderRecommendations, useConversionAnalysis } from '@/hooks/use-analytics'
 import { useItems } from '@/hooks/use-dashboard'
 import { useLocale } from '@/lib/locale-context'
+import { isUrgent } from '@/lib/constants'
 import { useUrlParams } from '@/hooks/use-url-params'
 import { DateRangePicker } from '@/components/shared/DateRangePicker'
 import { DateRangePresets } from '@/components/shared/DateRangePresets'
@@ -766,7 +767,7 @@ function StockPageContent() {
     const directMatch = unifiedItems.some(i => {
       if (!(i.code.toLowerCase().includes(q) || i.name.toLowerCase().includes(q) || i.alias_codes?.some(c => c.toLowerCase().includes(q)))) return false
       if (quickView === 'at_risk' && !i.is_at_risk) return false
-      if (quickView === 'urgent' && i.urgency_score <= 5) return false
+      if (quickView === 'urgent' && !isUrgent(i.urgency_score)) return false
       if (quickView === 'dead' && !i.is_dead) return false
       if (quickView === 'excess' && !(i.health_tier === 'excess' && !i.is_dead)) return false
       if (abcFilter !== 'all' && i.abc_class !== abcFilter) return false
@@ -790,7 +791,7 @@ function StockPageContent() {
   const qvCounts = useMemo(() => ({
     all:     unifiedItems.length,
     at_risk: unifiedItems.filter(i => i.is_at_risk).length,
-    urgent:  unifiedItems.filter(i => i.urgency_score > 5).length,
+    urgent:  unifiedItems.filter(i => isUrgent(i.urgency_score)).length,
     dead:    unifiedItems.filter(i => i.is_dead).length,
     excess:  unifiedItems.filter(i => i.health_tier === 'excess' && !i.is_dead).length,
   }), [unifiedItems])
@@ -812,7 +813,7 @@ function StockPageContent() {
 
     // quick view
     if (quickView === 'at_risk') result = result.filter(i => i.is_at_risk)
-    else if (quickView === 'urgent') result = result.filter(i => i.urgency_score > 5)
+    else if (quickView === 'urgent') result = result.filter(i => isUrgent(i.urgency_score))
     else if (quickView === 'dead') result = result.filter(i => i.is_dead)
     else if (quickView === 'excess') result = result.filter(i => i.health_tier === 'excess' && !i.is_dead)
 
@@ -1357,7 +1358,7 @@ function StockPageContent() {
                           </td>
                           <td className="py-2 text-end font-mono tabular-nums px-2">
                             {item.urgency_score > 0
-                              ? <span className={item.urgency_score > 5 ? 'text-amber-500 font-bold' : 'text-muted-foreground'}>{item.urgency_score}</span>
+                              ? <span className={isUrgent(item.urgency_score) ? 'text-amber-500 font-bold' : 'text-muted-foreground'}>{item.urgency_score}</span>
                               : <span className="text-muted-foreground/40">—</span>}
                           </td>
 

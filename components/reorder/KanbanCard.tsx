@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 import type { ReorderQueueItem } from '@/lib/db/schema'
 import type { ReorderStage } from '@/hooks/use-reorder-queue'
 import { useUpdateItem, useDeleteItem } from '@/hooks/use-reorder-queue'
-import { formatNumber } from '@/lib/constants'
+import { formatNumber, urgencyBand } from '@/lib/constants'
 import { format } from 'date-fns'
 
 interface KanbanCardProps {
@@ -56,7 +56,8 @@ export function KanbanCard({ item, stage }: KanbanCardProps) {
   }
 
   const urgency = Number(item.urgencyScore) || 0
-  const urgencyColor = urgency > 5 ? 'destructive' : urgency > 2 ? 'warning' : 'secondary'
+  const band = urgencyBand(urgency)
+  const urgencyColor = band === 'low' ? 'secondary' : band === 'watch' ? 'warning' : 'destructive'
 
   return (
     <div

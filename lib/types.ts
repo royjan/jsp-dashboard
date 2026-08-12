@@ -425,6 +425,11 @@ export interface ReorderItem {
   stock_qty: number
   incoming_qty: number
   ordered_qty: number
+  /**
+   * @deprecated ERP field ItmMaxQty, which /api/items (the paged endpoint this
+   * dashboard ingests) returns as 0 for every item — it is NOT a count of
+   * inquiries. Use asked_qty, which counts real quote lines in the window.
+   */
   inquiry_count: number
   sold_this_year: number
   sold_last_year: number
@@ -440,6 +445,60 @@ export interface ReorderItem {
   supplier_freshness?: number
   alias_codes?: string[]
   recommended_qty: number
+
+  // ── From FINAPI's recommendation report (the demand source of truth) ──
+  /** quoted qty (נשאל) in the demand window — real format-31 lines */
+  asked_qty?: number
+  /** net invoiced qty (נמכר) in the demand window, credit notes deducted */
+  sold_qty?: number
+  /** asked − sold: demand we quoted but did not fulfil */
+  gap?: number
+  /** stock + on_order + incoming */
+  pipeline?: number
+  monthly_sold?: number
+  monthly_asked?: number
+  days_of_stock_left?: number | null
+  stockout_date?: string | null
+  /** stockout | trending | lost_sales | unreplenished | dead_stock | replaced */
+  flags?: string[]
+  last_sold?: string | null
+  last_quoted?: string | null
+  /** age in days of the oldest open 61/62 order — high means a stuck order */
+  order_age_days?: number | null
+  replaced_by?: string | null
+}
+
+/** Raw row shape returned by FINAPI GET /api/export/recommendation-report. */
+export interface RecommendationReportRow {
+  code: string
+  name: string
+  asked_qty: number
+  sold_qty: number
+  gap: number
+  stock: number
+  on_order: number
+  incoming: number
+  pipeline: number
+  sold_this_year: number
+  sold_last_year: number
+  monthly_sold: number
+  monthly_asked: number
+  monthly_demand: number
+  days_of_stock_left: number | null
+  stockout_date: string | null
+  recommended_qty: number
+  last_sold: string | null
+  last_quoted: string | null
+  oldest_order_date: string | null
+  order_age_days: number | null
+  replaced_by: string | null
+  flags: string[]
+  retail_price: number | null
+}
+
+export interface RecommendationReport {
+  rows: RecommendationReportRow[]
+  meta: Record<string, unknown>
 }
 
 // ── AI Types ──

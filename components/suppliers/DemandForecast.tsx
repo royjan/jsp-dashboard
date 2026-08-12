@@ -3,14 +3,15 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { useLocale } from '@/lib/locale-context'
-import { formatNumber } from '@/lib/constants'
+import { formatNumber, urgencyBand } from '@/lib/constants'
 import { useSupplierDemand } from '@/hooks/use-suppliers'
 import { TrendingDown, AlertTriangle, Loader2 } from 'lucide-react'
 
 function getUrgencyBadge(score: number, t: (key: any) => string) {
-  if (score >= 20) return <Badge variant="destructive">{t('suppliers.critical')}</Badge>
-  if (score >= 10) return <Badge variant="warning">{t('suppliers.high')}</Badge>
-  if (score >= 5) return <Badge variant="default">{t('suppliers.medium')}</Badge>
+  const band = urgencyBand(score)
+  if (band === 'severe' || band === 'critical') return <Badge variant="destructive">{t('suppliers.critical')}</Badge>
+  if (band === 'high') return <Badge variant="warning">{t('suppliers.high')}</Badge>
+  if (band === 'watch') return <Badge variant="default">{t('suppliers.medium')}</Badge>
   return <Badge variant="secondary">{t('suppliers.low')}</Badge>
 }
 
