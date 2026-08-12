@@ -86,10 +86,14 @@ export default function SupplierHistoryPage() {
         </div>
       )}
 
-      <div className="rounded border overflow-x-auto">
+      {/* Bounded height makes THIS the scroll container, which is what a sticky
+          thead latches onto — inside a plain overflow-x-auto wrapper the header
+          has nothing to stick to. Background must be opaque (bg-muted/50 is
+          translucent, so rows would show through the header as they scroll). */}
+      <div className="rounded border overflow-auto max-h-[calc(100vh-22rem)]">
         <table className="w-full text-sm min-w-[560px]">
-          <thead className="bg-muted/50">
-            <tr>
+          <thead className="sticky top-0 z-20 bg-card">
+            <tr className="border-b">
               <th className="px-3 py-2 text-start text-xs font-medium">{t('suppliers.shipmentDate')}</th>
               <th className="px-3 py-2 text-start text-xs font-medium">{t('suppliers.docType')}</th>
               <th className="px-3 py-2 text-start text-xs font-medium">{t('suppliers.docNumber')}</th>
