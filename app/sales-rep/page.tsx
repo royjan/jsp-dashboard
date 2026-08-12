@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
 import {
-  Package, DollarSign, Users, ClipboardList, AlertTriangle,
+  DollarSign, Users, ClipboardList, AlertTriangle,
   CalendarCheck, Loader2, Briefcase,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
@@ -144,24 +144,13 @@ export default function SalesRepHubPage() {
         <div>
           <h2 className="text-base font-semibold text-muted-foreground mb-3">פעולות מהירות</h2>
           <div className="grid grid-cols-2 gap-3">
-            <Link href="/stock/quick-check">
-              <Card className="hover:bg-accent/50 transition-colors cursor-pointer h-full">
-                <CardContent className="p-5 flex flex-col items-center justify-center gap-3 min-h-[120px]">
-                  <div className="h-14 w-14 rounded-full bg-emerald-500/10 flex items-center justify-center">
-                    <Package className="h-7 w-7 text-emerald-600 dark:text-emerald-400" />
-                  </div>
-                  <span className="text-base font-semibold text-center">בדיקת מלאי</span>
-                </CardContent>
-              </Card>
-            </Link>
-
             <Link href="/sales-rep/price-check">
               <Card className="hover:bg-accent/50 transition-colors cursor-pointer h-full">
                 <CardContent className="p-5 flex flex-col items-center justify-center gap-3 min-h-[120px]">
                   <div className="h-14 w-14 rounded-full bg-blue-500/10 flex items-center justify-center">
                     <DollarSign className="h-7 w-7 text-blue-600 dark:text-blue-400" />
                   </div>
-                  <span className="text-base font-semibold text-center">בדיקת מחיר</span>
+                  <span className="text-base font-semibold text-center">בדיקת מחיר ומלאי</span>
                 </CardContent>
               </Card>
             </Link>

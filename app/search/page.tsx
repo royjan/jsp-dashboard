@@ -183,7 +183,7 @@ export default function SearchPage() {
       <SubTabs
         tabs={[
           { href: '/search', label: t('smartSearch') },
-          { href: '/stock/quick-check', label: t('stockCheck') },
+          { href: '/sales-rep/price-check', label: t('stockCheck') },
         ]}
       />
       {/* Header */}

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import Link from 'next/link'
 import {
   Search, X, ArrowRight, DollarSign, Loader2, Package,
@@ -24,7 +24,16 @@ interface PriceResult {
   stock_qty: number
   incoming_qty: number
   ordered_qty: number
+  warehouses?: Warehouse[]
   in_stock: boolean
+}
+
+interface Warehouse {
+  warehouse: string
+  stock_qty: number
+  incoming_qty: number
+  ordered_qty: number
+  place: string | null
 }
 
 type SearchState = 'idle' | 'loading' | 'result' | 'not_found' | 'error'
@@ -38,6 +47,12 @@ export default function PriceCheckPage() {
   const [errorMsg, setErrorMsg] = useState('')
   const [copied, setCopied] = useState(false)
   const itemRef = useRef<HTMLInputElement>(null)
+
+  // Barcode scanners type into whatever holds focus, so the part field must own
+  // it on arrival — carried over from the retired /stock/quick-check.
+  useEffect(() => {
+    itemRef.current?.focus()
+  }, [])
 
   const doSearch = useCallback(async () => {
     const code = itemCode.trim()
@@ -122,7 +137,7 @@ export default function PriceCheckPage() {
         </Link>
         <div className="flex items-center gap-2">
           <DollarSign className="h-6 w-6 text-primary" />
-          <h1 className="text-xl font-bold">בדיקת מחיר</h1>
+          <h1 className="text-xl font-bold">בדיקת פריט</h1>
         </div>
       </header>
 
@@ -136,7 +151,7 @@ export default function PriceCheckPage() {
             onChange={setItemCode}
             onSubmit={doSearch}
             inputRef={itemRef}
-            placeholder='מק"ט או שם פריט...'
+            placeholder='מק"ט, שם פריט או סרוק ברקוד...'
             // Clear button sits at left-3; keep the spinner clear of it.
             spinnerClassName="end-11"
             inputProps={{
@@ -294,6 +309,40 @@ export default function PriceCheckPage() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Per-warehouse breakdown. Shown when stock is split across more
+                than one, or when there is a shelf location to give — a single
+                warehouse row otherwise just repeats the total above. */}
+            {((result.warehouses?.length ?? 0) > 1 || result.warehouses?.[0]?.place) && (
+              <Card>
+                <CardContent className="p-5 space-y-3">
+                  <p className="text-sm font-medium text-muted-foreground">פירוט לפי מחסן</p>
+                  <div className="divide-y">
+                    {result.warehouses!.map((wh) => (
+                      <div key={wh.warehouse} className="flex items-center justify-between py-3 first:pt-0 last:pb-0">
+                        <span className="flex items-baseline gap-2">
+                          <span className="text-base font-medium">{wh.warehouse}</span>
+                          {wh.place && (
+                            <span className="font-mono text-sm text-muted-foreground">{wh.place}</span>
+                          )}
+                        </span>
+                        <div className="flex gap-4 text-base">
+                          <span className={wh.stock_qty > 0 ? 'text-emerald-600 dark:text-emerald-400 font-bold' : 'text-muted-foreground'}>
+                            {wh.stock_qty}
+                          </span>
+                          {wh.incoming_qty > 0 && (
+                            <span className="text-amber-600 dark:text-amber-400">+{wh.incoming_qty}</span>
+                          )}
+                          {wh.ordered_qty > 0 && (
+                            <span className="text-blue-600 dark:text-blue-400">{wh.ordered_qty} הוזמן</span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Share button */}
             <Button
