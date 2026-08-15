@@ -165,6 +165,24 @@ curl -X POST -H "Content-Type: application/json" -H "X-GitHub-Event: push" \
 - CodeArtifact auth required for `@jan/finansit-sdk` during build
 - The former AWS App Runner + ECR path (`dashboard.jan.parts`) is retired
 
+**Verify a deploy against the running thing, never the tool's own report.**
+On 2026-08-15 four deploys across this stack reported success while shipping
+nothing: a green CI `deploy` job over a swarm service that never moved, Dokploy's
+`application.update` + `.deploy` returning 200 while only its own DB row changed,
+`docker service update` printing "converged" with the spec unchanged (needed
+`--force`), and `./deploy.sh` exiting 0 because the real failure — "Cannot
+connect to the Docker daemon" — was swallowed by a `tail` in the pipeline.
+
+So after any deploy, check the artefact itself:
+
+```bash
+ssh jan-box "sudo docker service ls | grep -E 'partly|dashboard'"   # spec image
+ssh jan-box "sudo docker ps --format '{{.Image}} | {{.Status}}'"    # what's live
+```
+
+and `set -o pipefail` before piping a deploy script into `tail`, or you read the
+wrong exit code.
+
 ## Dashboard Pages
 
 | Page | Purpose |
