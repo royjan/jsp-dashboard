@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { ItemLink } from '@/components/shared/ItemLink'
 import { useSortable, SortableTh } from '@/components/shared/sortable-table'
 import { Loader2, TrendingDown, Search } from 'lucide-react'
+import { formatDate } from '@/lib/format'
 
 interface DemandItem {
   itemCode: string
@@ -179,7 +180,7 @@ export default function SupplierDemandPage() {
                     i.coverMonths
                   )}
                 </td>
-                <td className="px-3 py-2 tabular-nums whitespace-nowrap">{i.lastOrder?.slice(0, 10) || '—'}</td>
+                <td className="px-3 py-2 tabular-nums whitespace-nowrap">{formatDate(i.lastOrder)}</td>
               </tr>
             ))}
           </tbody>

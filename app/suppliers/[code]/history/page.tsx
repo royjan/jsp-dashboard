@@ -7,6 +7,7 @@ import { formatNumber } from '@/lib/constants'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Loader2, Truck, Download, Eye } from 'lucide-react'
+import { formatDate } from '@/lib/format'
 
 interface HistoryDoc {
   year: number
@@ -106,7 +107,7 @@ export default function SupplierHistoryPage() {
               const pdf = `/api/documents/${encodeURIComponent(d.format)}/${encodeURIComponent(d.docNumber)}/pdf?year=${d.year}`
               return (
                 <tr key={`${d.format}-${d.docNumber}-${d.docDate}`} className="border-t hover:bg-accent/50">
-                  <td className="px-3 py-2 tabular-nums whitespace-nowrap">{d.docDate?.slice(0, 10) || '—'}</td>
+                  <td className="px-3 py-2 tabular-nums whitespace-nowrap">{formatDate(d.docDate)}</td>
                   <td className="px-3 py-2">
                     <Badge variant={d.format === '58' ? 'secondary' : 'outline'} className="text-xs">
                       {isHe ? d.formatLabel.he : d.formatLabel.en}

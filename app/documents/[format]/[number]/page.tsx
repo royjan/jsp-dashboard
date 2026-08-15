@@ -9,7 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { ItemLink } from '@/components/shared/ItemLink'
 import { CustomerLink } from '@/components/shared/CustomerLink'
 import { ArrowRight, FileText, ExternalLink } from 'lucide-react'
-import { formatCurrency } from '@/lib/format'
+import { formatCurrency, formatDate } from '@/lib/format'
 
 const DOC_TYPE_NAMES: Record<string, string> = {
   '11': 'חשבונית מס', '12': 'זיכוי', '14': 'חשבונית עסקה',
@@ -95,12 +95,12 @@ export default function DocumentDetailPage({
                 )}
                 <div>
                   <div className="text-xs text-muted-foreground">תאריך</div>
-                  <div>{(data?.doc_date || '').slice(0, 10) || '—'}</div>
+                  <div>{formatDate(data?.doc_date)}</div>
                 </div>
                 {data?.due_date && (
                   <div>
                     <div className="text-xs text-muted-foreground">לתשלום עד</div>
-                    <div>{data.due_date.slice(0, 10)}</div>
+                    <div>{formatDate(data.due_date)}</div>
                   </div>
                 )}
               </div>

@@ -6,6 +6,7 @@ import { useLocale } from '@/lib/locale-context'
 import { useSupplierShipments } from '@/hooks/use-suppliers'
 import { formatNumber } from '@/lib/constants'
 import { Loader2, Container } from 'lucide-react'
+import { formatDate } from '@/lib/format'
 
 /**
  * Warehouse receiving for this supplier. Distinct from "delivery history",
@@ -51,7 +52,7 @@ export default function SupplierShipmentsPage() {
           {shipments.map((s) => (
             <tr key={s.id} className="border-t hover:bg-accent/50">
               <td className="px-3 py-2 tabular-nums whitespace-nowrap">
-                {typeof s.shipmentDate === 'string' ? s.shipmentDate.slice(0, 10) : '—'}
+                {formatDate(s.shipmentDate as string | null | undefined)}
               </td>
               <td className="px-3 py-2">
                 <Link href={`/shipments/${encodeURIComponent(s.id)}`} className="hover:underline">

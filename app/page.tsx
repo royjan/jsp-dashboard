@@ -22,7 +22,7 @@ import {
   ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Cell, ZAxis,
 } from 'recharts'
-import { formatCurrency, formatNumber } from '@/lib/format'
+import { formatCurrency, formatDate, formatNumber } from '@/lib/format'
 import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
 
 function getPreviousPeriodRange(period: Period): { dateFrom: string; dateTo: string } {
@@ -399,7 +399,7 @@ function HomePageContent() {
                     const p = payload?.[0]?.payload
                     if (!p) return ''
                     const parts = [`${p.name} (${p.code})`]
-                    if (p.sale_date) parts.push(`Last sale: ${p.sale_date.substring(0, 10)}`)
+                    if (p.sale_date) parts.push(`Last sale: ${formatDate(p.sale_date)}`)
                     return parts.join('\n')
                   }}
                   labelStyle={{ color: 'var(--popover-foreground)', fontWeight: 'bold' }}

@@ -28,7 +28,7 @@ import { deriveBrand, brandChipClasses } from '@/lib/brand'
 import { ArrowUpDown, Search, Crown, TrendingUp, Layers, AlertTriangle, Sparkles, RefreshCw, TableIcon, LayoutGrid, ChevronDown, ChevronLeft, ChevronRight, Filter, Target, FileText, TrendingDown, Clock, ArrowRightLeft } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from 'recharts'
 import { incrementStreaming, decrementStreaming } from '@/lib/streaming-counter'
-import { formatCurrency, formatNumber } from '@/lib/format'
+import { formatCurrency, formatDate, formatNumber } from '@/lib/format'
 
 // ── Types ──
 
@@ -597,7 +597,7 @@ function ConversionSection({ searchQuery }: { searchQuery: string }) {
                           <td className="py-2.5 text-end tabular-nums">{formatNumber(item.timesQuoted)}</td>
                           <td className="py-2.5 text-end tabular-nums">{formatNumber(item.timesSold)}</td>
                           <td className="py-2.5 text-end font-mono text-destructive">{formatCurrency(item.lostValue)}</td>
-                          <td className="py-2.5 text-end text-muted-foreground pe-4 md:pe-0">{item.lastQuoted?.substring(0, 10)}</td>
+                          <td className="py-2.5 text-end text-muted-foreground pe-4 md:pe-0">{formatDate(item.lastQuoted)}</td>
                         </motion.tr>
                       ))}
                       {unconvertedItems.length === 0 && <tr><td colSpan={5} className="py-12 text-center text-muted-foreground">{t('noInsights')}</td></tr>}
@@ -1366,7 +1366,7 @@ function StockPageContent() {
                           <td className="py-2 text-end tabular-nums border-l border-muted/30 px-2 pe-4 md:pe-0">
                             {item.sale_date ? (
                               <div>
-                                <div className="text-xs text-muted-foreground">{item.sale_date.substring(0, 10)}</div>
+                                <div className="text-xs text-muted-foreground">{formatDate(item.sale_date)}</div>
                                 {item.days_since_sale != null && (
                                   <div className={cn('text-[10px]', item.days_since_sale > 365 ? 'text-red-500' : 'text-muted-foreground/60')}>
                                     {item.days_since_sale}d
@@ -1506,8 +1506,8 @@ function StockPageContent() {
                               <td className="py-2 text-end">{formatNumber(item.stock_qty)}</td>
                               <td className="py-2 text-end font-mono">&#8362;{item.price.toLocaleString()}</td>
                               <td className="py-2 text-end font-mono font-semibold">&#8362;{item.capital_tied.toLocaleString()}</td>
-                              <td className="py-2 text-end text-xs text-muted-foreground">{item.sale_date ? item.sale_date.substring(0, 10) : t('neverSold')}</td>
-                              <td className="py-2 text-end text-xs text-muted-foreground">{item.count_date ? item.count_date.substring(0, 10) : t('neverCounted')}</td>
+                              <td className="py-2 text-end text-xs text-muted-foreground">{item.sale_date ? formatDate(item.sale_date) : t('neverSold')}</td>
+                              <td className="py-2 text-end text-xs text-muted-foreground">{item.count_date ? formatDate(item.count_date) : t('neverCounted')}</td>
                               <td className="py-2 text-end">
                                 <Badge variant={item.years_dead >= 3 ? 'destructive' : item.years_dead >= 2 ? 'warning' : 'secondary'}>{item.years_dead}</Badge>
                               </td>

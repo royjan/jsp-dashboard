@@ -12,6 +12,7 @@ import { formatNumber } from '@/lib/constants'
 import { useSortable, SortableTh } from '@/components/shared/sortable-table'
 import { ItemLink } from '@/components/shared/ItemLink'
 import { ArrowRight, ArrowLeft, AlertTriangle, PackageCheck, Container } from 'lucide-react'
+import { formatDate } from '@/lib/format'
 
 interface Product {
   part_id: string
@@ -96,7 +97,7 @@ export default function ShipmentDetailPage() {
               ) : (
                 <Badge variant="outline">{t('ספק', 'Supplier')} —</Badge>
               )}
-              <span>{typeof sh.shipmentDate === 'string' ? sh.shipmentDate.slice(0, 10) : '—'}</span>
+              <span>{formatDate(sh.shipmentDate as string | null | undefined)}</span>
             </div>
           </div>
 

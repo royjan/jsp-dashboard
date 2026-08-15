@@ -12,6 +12,7 @@ import { useLocale } from '@/lib/locale-context'
 import { formatNumber } from '@/lib/constants'
 import { useSortable, SortableTh } from '@/components/shared/sortable-table'
 import { Container, PackageCheck, AlertTriangle, Truck, ChevronLeft, ChevronRight} from 'lucide-react'
+import { formatDate } from '@/lib/format'
 
 interface Shipment {
   id: string
@@ -88,7 +89,7 @@ export default function ShipmentsPage() {
 
   // The API normalises Firestore's mixed string/Timestamp dates to ISO, but
   // stay defensive: a non-string here used to throw on .slice and blank the page.
-  const fmtDate = (s: unknown) => (typeof s === 'string' && s ? s.slice(0, 10) : '—')
+  const fmtDate = (s: unknown) => formatDate(s as string | null | undefined)
   const summary = data?.summary
   // Both are computed server-side over the unfiltered set, so the chips keep
   // their labels and counts while a filter is active.

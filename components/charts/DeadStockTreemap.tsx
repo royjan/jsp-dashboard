@@ -5,6 +5,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
 import { useLocale } from '@/lib/locale-context'
 import type { DeadStockItem } from '@/lib/types'
+import { formatDate } from '@/lib/format'
 
 const COLORS_BY_YEARS: Record<number, string> = {
   1: '#fbbf24',
@@ -112,7 +113,7 @@ export function DeadStockTreemap({ data, isLoading, bare, page = 0, pageSize = 5
                   strokeWidth={2}
                   rx={3}
                 >
-                  <title>{`${item.name} (${item.code})\n₪${item.capital_tied.toLocaleString()} | ${item.years_dead} ${Number(item.years_dead) > 1 ? t('yearsDead') : t('yearDead')} | ${t('stock')}: ${item.stock_qty}${item.sale_date ? `\n${t('lastSale')}: ${item.sale_date.substring(0, 10)}` : ''}${item.count_date ? `\n${t('lastCount')}: ${item.count_date.substring(0, 10)}` : ''}`}</title>
+                  <title>{`${item.name} (${item.code})\n₪${item.capital_tied.toLocaleString()} | ${item.years_dead} ${Number(item.years_dead) > 1 ? t('yearsDead') : t('yearDead')} | ${t('stock')}: ${item.stock_qty}${item.sale_date ? `\n${t('lastSale')}: ${formatDate(item.sale_date)}` : ''}${item.count_date ? `\n${t('lastCount')}: ${formatDate(item.count_date)}` : ''}`}</title>
                 </rect>
                 {showText && (
                   <>

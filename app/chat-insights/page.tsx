@@ -20,6 +20,7 @@ import {
 } from 'recharts'
 import { formatNumber } from '@/lib/constants'
 import { cardVariants } from '@/lib/motion'
+import { formatDate } from '@/lib/format'
 
 // ── types (mirror the API) ──
 interface ChatInsights {
@@ -465,7 +466,7 @@ function ChatInsightsContent() {
                           <div className="text-xs text-muted-foreground font-mono truncate max-w-[180px]" dir="ltr">{p.schema || '—'}</div>
                           <div className="flex items-center gap-1.5 mt-0.5">
                             {p.vehicle_model && <span className="text-[10px] text-muted-foreground">{p.vehicle_model}</span>}
-                            <span className="text-[10px] text-muted-foreground/70">{p.created_at?.slice(0, 10)}</span>
+                            <span className="text-[10px] text-muted-foreground/70">{formatDate(p.created_at)}</span>
                           </div>
                         </td>
                         <td className="py-2 px-1">
@@ -544,7 +545,7 @@ function ChatInsightsContent() {
                         {u.email && <div className="text-xs text-muted-foreground truncate max-w-[220px]" dir="ltr">{u.email}</div>}
                       </td>
                       <td className="py-2 text-end tabular-nums font-semibold">{formatNumber(u.conversation_count)}</td>
-                      <td className="py-2 text-end text-muted-foreground text-xs">{u.last_active?.slice(0, 10)}</td>
+                      <td className="py-2 text-end text-muted-foreground text-xs">{formatDate(u.last_active)}</td>
                     </motion.tr>
                   ))}
                 </tbody>

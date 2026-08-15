@@ -19,7 +19,7 @@ import {
   User, DollarSign, Clock, FileText, Receipt, ArrowLeft, AlertTriangle, ShoppingCart, ExternalLink,
   ChevronDown,
 } from 'lucide-react'
-import { formatCurrency, formatNumber } from '@/lib/format'
+import { formatCurrency, formatDate, formatNumber } from '@/lib/format'
 import { cardVariants } from '@/lib/motion'
 
 
@@ -287,7 +287,7 @@ function PurchasesTable({
                       <td className="p-2 text-end tabular-nums text-muted-foreground">{formatNumber(item.line_count)}</td>
                       <td className="p-2 text-end tabular-nums text-muted-foreground">
                         <span className="inline-flex items-center gap-1.5">
-                          {item.last_purchased?.slice(0, 10) || '—'}
+                          {formatDate(item.last_purchased)}
                           <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', open && 'rotate-180')} />
                         </span>
                       </td>
@@ -383,7 +383,7 @@ function PurchaseItemInvoices({ customerCode, itemCode, days, expected }: {
                   )}
                 </span>
               </td>
-              <td className="p-1.5 text-muted-foreground">{(r.doc_date || '—').slice(0, 10)}</td>
+              <td className="p-1.5 text-muted-foreground">{formatDate(r.doc_date)}</td>
               <td className="p-1.5 text-end tabular-nums">{formatNumber(r.quantity)}</td>
               <td className="p-1.5 text-end tabular-nums">{formatCurrency(r.unit_price)}</td>
               <td className="p-1.5 text-end tabular-nums text-muted-foreground">{r.discount_percent ? `${r.discount_percent}%` : '—'}</td>
@@ -495,7 +495,7 @@ function DocumentTable({ items, t, isReceipt, isLoading, expandable, caption }: 
                     <td className="p-2">
                       <Badge variant="secondary">{row.docType || '-'}</Badge>
                     </td>
-                    <td className="p-2 text-muted-foreground">{(row.date || '-').slice(0, 10)}</td>
+                    <td className="p-2 text-muted-foreground">{formatDate(row.date)}</td>
                     <td className="p-2 text-end font-medium">{formatCurrency(row.amount)}</td>
                     {!isReceipt && (
                       <td className="p-2 text-end">
