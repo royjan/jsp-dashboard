@@ -4,61 +4,73 @@ import { useIsFetching } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
 import { useStreamingCount } from '@/lib/streaming-counter'
 
+/** How long the finished "Done" card lingers before it disappears. */
+const HIDE_DELAY_MS = 900
+
+/** The creep curve: starts at 10%, decays toward 85%, never reaches it. */
+const PROGRESS_FLOOR = 10
+const PROGRESS_CEILING = 85
+/** Time constant, tuned to match the old 150ms `p += (85 - p) * 0.04` stepper. */
+const PROGRESS_TAU_MS = 3675
+
+/**
+ * A bottom-centre progress card for in-flight queries.
+ *
+ * The previous version scheduled its own hide inside the same effect that drove
+ * the progress animation, and that effect's cleanup cancelled the hide. Because
+ * the effect only re-ran when `fetching > 0` CHANGED, any cleanup not followed
+ * by a real transition cancelled the hide without scheduling a new one — the
+ * card was then stuck on "Done" at 100% until a reload.
+ *
+ * The fix is an invariant rather than choreography: whenever the card is
+ * visible and nothing is fetching, a hide timer exists. That effect re-runs on
+ * both `isLoading` and `visible`, so a cancelled timer is always recreated.
+ * Progress is derived from elapsed time instead of being ticked into state,
+ * which removes the second timer that had to stay in sync with the first.
+ */
 export function QueryLoadingBar() {
   const fetching = useIsFetching() + useStreamingCount()
-  const [progress, setProgress] = useState(0)
+  const isLoading = fetching > 0
+
   const [visible, setVisible] = useState(false)
   const [elapsed, setElapsed] = useState(0)
   const startRef = useRef<number | null>(null)
-  const animRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const elapsedRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const hideRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // ── Show, and tick the elapsed clock, while loading ──
   useEffect(() => {
-    const isLoading = fetching > 0
+    if (!isLoading) return
 
-    if (isLoading) {
-      if (!startRef.current) startRef.current = Date.now()
-      if (hideRef.current) { clearTimeout(hideRef.current); hideRef.current = null }
-      setVisible(true)
-      setProgress(p => Math.max(10, p))
+    if (!startRef.current) startRef.current = Date.now()
+    setVisible(true)
 
-      if (!animRef.current) {
-        animRef.current = setInterval(() => {
-          setProgress(p => {
-            if (p >= 85) return p
-            return Math.min(85, p + Math.max(0.3, (85 - p) * 0.04))
-          })
-        }, 150)
-      }
-      if (!elapsedRef.current) {
-        elapsedRef.current = setInterval(() => {
-          if (startRef.current) setElapsed(Date.now() - startRef.current)
-        }, 100)
-      }
-    } else {
-      if (animRef.current) { clearInterval(animRef.current); animRef.current = null }
-      if (elapsedRef.current) { clearInterval(elapsedRef.current); elapsedRef.current = null }
-      setProgress(100)
-      hideRef.current = setTimeout(() => {
-        setVisible(false)
-        setProgress(0)
-        setElapsed(0)
-        startRef.current = null
-      }, 900)
-    }
+    const ticker = setInterval(() => {
+      if (startRef.current) setElapsed(Date.now() - startRef.current)
+    }, 100)
 
-    return () => {
-      if (animRef.current) clearInterval(animRef.current)
-      if (elapsedRef.current) clearInterval(elapsedRef.current)
-      if (hideRef.current) clearTimeout(hideRef.current)
-    }
-  }, [fetching > 0]) // eslint-disable-line react-hooks/exhaustive-deps
+    return () => clearInterval(ticker)
+  }, [isLoading])
+
+  // ── Hide once nothing is fetching ──
+  // Depends on `visible` too, so the timer is re-established on every run of
+  // this effect. That is what makes stranding impossible.
+  useEffect(() => {
+    if (isLoading || !visible) return
+
+    const hide = setTimeout(() => {
+      setVisible(false)
+      setElapsed(0)
+      startRef.current = null
+    }, HIDE_DELAY_MS)
+
+    return () => clearTimeout(hide)
+  }, [isLoading, visible])
 
   if (!visible) return null
 
-  const elapsedSec = elapsed / 1000
-  const isDone = progress >= 100
+  const isDone = !isLoading
+  const progress = isDone
+    ? 100
+    : PROGRESS_CEILING - (PROGRESS_CEILING - PROGRESS_FLOOR) * Math.exp(-elapsed / PROGRESS_TAU_MS)
 
   return (
     <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[9999] pointer-events-none">
@@ -78,7 +90,7 @@ export function QueryLoadingBar() {
             {isDone ? 'Done' : 'Loading data…'}
           </span>
           {!isDone && (
-            <span className="text-xs text-muted-foreground ml-auto tabular-nums">
+            <span className="text-xs text-muted-foreground ms-auto tabular-nums">
               {fetching} {fetching === 1 ? 'request' : 'requests'}
             </span>
           )}
@@ -87,18 +99,20 @@ export function QueryLoadingBar() {
         {/* Progress bar */}
         <div className="relative h-1.5 bg-muted rounded-full overflow-hidden">
           <div
-            className="absolute inset-y-0 left-0 bg-primary rounded-full transition-all ease-out"
+            className="absolute inset-y-0 start-0 bg-primary rounded-full transition-all ease-out"
             style={{
               width: `${progress}%`,
               transitionDuration: isDone ? '300ms' : '150ms',
-              boxShadow: isDone ? 'none' : '0 0 8px 2px hsl(var(--primary) / 0.4)',
+              // `--primary` is a hex colour, not HSL channels, so the old
+              // `hsl(var(--primary) / 0.4)` was invalid and rendered no glow.
+              boxShadow: isDone ? 'none' : '0 0 8px 2px color-mix(in srgb, var(--primary) 40%, transparent)',
             }}
           />
         </div>
 
         {/* Time row */}
         <div className="flex justify-between text-xs text-muted-foreground tabular-nums">
-          <span>{elapsedSec.toFixed(1)}s elapsed</span>
+          <span>{(elapsed / 1000).toFixed(1)}s elapsed</span>
           {!isDone && elapsed > 10000 && <span>still loading…</span>}
         </div>
       </div>
