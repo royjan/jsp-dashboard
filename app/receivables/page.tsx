@@ -18,7 +18,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
   PieChart, Pie,
 } from 'recharts'
-import { ILS_FORMAT, NUMBER_FORMAT } from '@/lib/constants'
+import { formatCurrency, formatNumber } from '@/lib/format'
 
 type SortField = 'name' | 'balance' | 'days_30' | 'days_60' | 'days_90' | 'over_90'
 type SortDir = 'asc' | 'desc'
@@ -88,11 +88,11 @@ export default function ReceivablesPage() {
       {/* KPI Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 sm:gap-3">
         {[
-          { label: t('totalBalance'), value: ILS_FORMAT.format(totals?.total_balance ?? 0), icon: DollarSign, color: 'text-blue-600' },
-          { label: t('currentDebt'), value: ILS_FORMAT.format(totals?.total_current ?? 0), icon: Receipt, color: 'text-green-600' },
-          { label: t('overdue30') + '+', value: ILS_FORMAT.format((totals?.total_30 ?? 0) + (totals?.total_60 ?? 0) + (totals?.total_90 ?? 0) + (totals?.total_over_90 ?? 0)), icon: Clock, color: 'text-yellow-600' },
-          { label: t('overdue90Plus'), value: ILS_FORMAT.format(totals?.total_over_90 ?? 0), icon: AlertTriangle, color: 'text-red-600' },
-          { label: t('overdueCustomers'), value: NUMBER_FORMAT.format(overdueCount), icon: AlertTriangle, color: 'text-orange-600' },
+          { label: t('totalBalance'), value: formatCurrency(totals?.total_balance ?? 0), icon: DollarSign, color: 'text-blue-600' },
+          { label: t('currentDebt'), value: formatCurrency(totals?.total_current ?? 0), icon: Receipt, color: 'text-green-600' },
+          { label: t('overdue30') + '+', value: formatCurrency((totals?.total_30 ?? 0) + (totals?.total_60 ?? 0) + (totals?.total_90 ?? 0) + (totals?.total_over_90 ?? 0)), icon: Clock, color: 'text-yellow-600' },
+          { label: t('overdue90Plus'), value: formatCurrency(totals?.total_over_90 ?? 0), icon: AlertTriangle, color: 'text-red-600' },
+          { label: t('overdueCustomers'), value: formatNumber(overdueCount), icon: AlertTriangle, color: 'text-orange-600' },
         ].map((kpi, i) => (
           <motion.div key={kpi.label} custom={i} variants={cardVariants} initial="hidden" animate="visible">
             <Card>
@@ -119,7 +119,7 @@ export default function ReceivablesPage() {
                 <Pie data={agingPieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} label={({ name, percent }) => `${((percent ?? 0) * 100).toFixed(0)}%`} labelLine={false}>
                   {agingPieData.map((_, i) => <Cell key={i} fill={AGING_COLORS[i]} />)}
                 </Pie>
-                <Tooltip formatter={(v) => ILS_FORMAT.format(v as number)} />
+                <Tooltip formatter={(v) => formatCurrency(v as number)} />
               </PieChart>
             </ResponsiveContainer>
             <div className="flex flex-wrap justify-center gap-x-4 gap-y-2 mt-2" dir="auto">
@@ -127,7 +127,7 @@ export default function ReceivablesPage() {
                 <div key={entry.name} className="flex items-center gap-2 text-sm">
                   <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: AGING_COLORS[i] }} />
                   <span className="text-muted-foreground">{entry.name}</span>
-                  <span className="font-semibold">{ILS_FORMAT.format(entry.value)}</span>
+                  <span className="font-semibold">{formatCurrency(entry.value)}</span>
                 </div>
               ))}
             </div>
@@ -141,9 +141,9 @@ export default function ReceivablesPage() {
             <ResponsiveContainer width="100%" height={280}>
               <BarChart data={customers.filter((c: any) => c.aging.over_90 > 0).slice(0, 10)} layout="vertical" margin={{ left: 10 }}>
                 <CartesianGrid strokeDasharray="3 3" opacity={0.15} />
-                <XAxis type="number" tickFormatter={(v) => ILS_FORMAT.format(v)} tick={{ fontSize: 11 }} />
+                <XAxis type="number" tickFormatter={(v) => formatCurrency(v)} tick={{ fontSize: 11 }} />
                 <YAxis type="category" dataKey="name" width={140} tick={{ fontSize: 11 }} tickFormatter={(v: string) => v.length > 20 ? v.substring(0, 20) + '…' : v} />
-                <Tooltip formatter={(v) => ILS_FORMAT.format(v as number)} />
+                <Tooltip formatter={(v) => formatCurrency(v as number)} />
                 <Bar dataKey="aging.over_90" fill="#ef4444" name={t('overdue90Plus')} radius={[0, 4, 4, 0]}>
                   {customers.filter((c: any) => c.aging.over_90 > 0).slice(0, 10).map((c: any, i: number) => (
                     <Cell key={c.code || i} fill={c.aging.over_90 > 1000 ? '#dc2626' : '#ef4444'} />
@@ -211,19 +211,19 @@ export default function ReceivablesPage() {
                       </Link>
                     </td>
                     <td className="p-2 text-muted-foreground">{c.agent || '-'}</td>
-                    <td className="p-2 text-end font-medium">{ILS_FORMAT.format(c.balance)}</td>
-                    <td className="p-2 text-end">{c.aging.current ? ILS_FORMAT.format(c.aging.current) : '-'}</td>
+                    <td className="p-2 text-end font-medium">{formatCurrency(c.balance)}</td>
+                    <td className="p-2 text-end">{c.aging.current ? formatCurrency(c.aging.current) : '-'}</td>
                     <td className="p-2 text-end">
-                      {c.aging.days_30 > 0 ? <span className="text-yellow-600 font-medium">{ILS_FORMAT.format(c.aging.days_30)}</span> : '-'}
+                      {c.aging.days_30 > 0 ? <span className="text-yellow-600 font-medium">{formatCurrency(c.aging.days_30)}</span> : '-'}
                     </td>
                     <td className="p-2 text-end">
-                      {c.aging.days_60 > 0 ? <span className="text-orange-600 font-medium">{ILS_FORMAT.format(c.aging.days_60)}</span> : '-'}
+                      {c.aging.days_60 > 0 ? <span className="text-orange-600 font-medium">{formatCurrency(c.aging.days_60)}</span> : '-'}
                     </td>
                     <td className="p-2 text-end">
-                      {c.aging.days_90 > 0 ? <span className="text-red-500 font-medium">{ILS_FORMAT.format(c.aging.days_90)}</span> : '-'}
+                      {c.aging.days_90 > 0 ? <span className="text-red-500 font-medium">{formatCurrency(c.aging.days_90)}</span> : '-'}
                     </td>
                     <td className="p-2 text-end">
-                      {c.aging.over_90 > 0 ? <Badge variant="destructive">{ILS_FORMAT.format(c.aging.over_90)}</Badge> : '-'}
+                      {c.aging.over_90 > 0 ? <Badge variant="destructive">{formatCurrency(c.aging.over_90)}</Badge> : '-'}
                     </td>
                   </tr>
                 ))}

@@ -17,12 +17,12 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Skeleton } from '@/components/ui/skeleton'
 import { OverviewPageSkeleton } from '@/components/layout/PageSkeleton'
-import { ILS_FORMAT } from '@/lib/constants'
 import type { Period, SalesDataPoint, TopSellingItem } from '@/lib/types'
 import {
   ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Cell, ZAxis,
 } from 'recharts'
+import { formatCurrency } from '@/lib/format'
 
 function getPreviousPeriodRange(period: Period): { dateFrom: string; dateTo: string } {
   const now = new Date()
@@ -330,8 +330,8 @@ function HomePageContent() {
                       <td className="py-2 pe-4 font-mono text-xs"><ItemLink code={item.code} showCode /></td>
                       <td className="py-2 pe-4"><ItemLink code={item.code} name={item.name} /></td>
                       <td className="py-2 pe-4 text-end">{item.total_qty_sold.toLocaleString()}</td>
-                      <td className="py-2 pe-4 text-end font-medium">{ILS_FORMAT.format(item.total_revenue)}</td>
-                      <td className="py-2 pe-4 text-end">{ILS_FORMAT.format(item.avg_price)}</td>
+                      <td className="py-2 pe-4 text-end font-medium">{formatCurrency(item.total_revenue)}</td>
+                      <td className="py-2 pe-4 text-end">{formatCurrency(item.avg_price)}</td>
                       <td className="py-2 text-end">
                         <span className={item.stock_qty <= 0 ? 'text-destructive font-medium' : ''}>
                           {item.stock_qty.toLocaleString()}

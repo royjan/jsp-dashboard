@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { SalesRepBottomNav } from '@/components/sales-rep/BottomNav'
 import { VisitLogger } from '@/components/sales-rep/VisitLogger'
-import { ILS_FORMAT, formatNumber } from '@/lib/constants'
+import { formatCurrency, formatNumber } from '@/lib/format'
 
 interface Customer {
   code: string
@@ -213,7 +213,7 @@ export default function SalesRepCustomersPage() {
                   </div>
                   <div className="text-left shrink-0 flex items-center gap-2">
                     <div>
-                      <p className="text-sm font-bold">{ILS_FORMAT.format(customer.total_revenue)}</p>
+                      <p className="text-sm font-bold">{formatCurrency(customer.total_revenue)}</p>
                       <Badge
                         variant="secondary"
                         className={`text-[10px] ${

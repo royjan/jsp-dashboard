@@ -16,16 +16,9 @@ import { SubTabs } from '@/components/shared/SubTabs'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts'
-import { NUMBER_FORMAT, formatNumber } from '@/lib/constants'
+import { formatNumber } from '@/lib/format'
+import { cardVariants } from '@/lib/motion'
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const cardVariants: any = {
-  hidden: { opacity: 0, y: 20, scale: 0.95 },
-  visible: (i: number) => ({
-    opacity: 1, y: 0, scale: 1,
-    transition: { delay: i * 0.08, duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] },
-  }),
-}
 
 function LoadingSkeleton() {
   return (
@@ -89,7 +82,7 @@ export default function DemandPage() {
                 <Search className="h-3.5 w-3.5 text-blue-500" />
                 {t('chatSearches')}
               </div>
-              <div className="text-xl sm:text-2xl font-bold">{NUMBER_FORMAT.format(metrics.total_searches || 0)}</div>
+              <div className="text-xl sm:text-2xl font-bold">{formatNumber(metrics.total_searches || 0)}</div>
             </CardContent>
           </Card>
         </motion.div>
@@ -103,7 +96,7 @@ export default function DemandPage() {
               </div>
               <div className="text-xl sm:text-2xl font-bold">{metrics.zero_result_rate || 0}%</div>
               <div className="text-xs text-muted-foreground">
-                {NUMBER_FORMAT.format(metrics.zero_result_count || 0)} failed
+                {formatNumber(metrics.zero_result_count || 0)} failed
               </div>
             </CardContent>
           </Card>
@@ -116,7 +109,7 @@ export default function DemandPage() {
                 <Clock className="h-3.5 w-3.5 text-violet-500" />
                 {t('avgResponseTime')}
               </div>
-              <div className="text-xl sm:text-2xl font-bold">{NUMBER_FORMAT.format(metrics.avg_response_ms || 0)}ms</div>
+              <div className="text-xl sm:text-2xl font-bold">{formatNumber(metrics.avg_response_ms || 0)}ms</div>
             </CardContent>
           </Card>
         </motion.div>
@@ -128,7 +121,7 @@ export default function DemandPage() {
                 <Users className="h-3.5 w-3.5 text-green-500" />
                 {t('uniqueSearchUsers')}
               </div>
-              <div className="text-xl sm:text-2xl font-bold">{NUMBER_FORMAT.format(metrics.unique_users || 0)}</div>
+              <div className="text-xl sm:text-2xl font-bold">{formatNumber(metrics.unique_users || 0)}</div>
             </CardContent>
           </Card>
         </motion.div>
@@ -314,7 +307,7 @@ export default function DemandPage() {
                           {formatNumber(item.stock_qty)}
                         </span>
                       </td>
-                      <td className="py-2 px-2 text-end">{item.price > 0 ? `₪${NUMBER_FORMAT.format(item.price)}` : '-'}</td>
+                      <td className="py-2 px-2 text-end">{item.price > 0 ? `₪${formatNumber(item.price)}` : '-'}</td>
                     </tr>
                   ))}
                 </tbody>

@@ -11,16 +11,9 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell,
 } from 'recharts'
-import { NUMBER_FORMAT } from '@/lib/constants'
+import { formatNumber } from '@/lib/format'
+import { cardVariants } from '@/lib/motion'
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const cardVariants: any = {
-  hidden: { opacity: 0, y: 20, scale: 0.95 },
-  visible: (i: number) => ({
-    opacity: 1, y: 0, scale: 1,
-    transition: { delay: i * 0.08, duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] },
-  }),
-}
 
 const PIE_COLORS = ['#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#f97316', '#ec4899']
 
@@ -67,7 +60,7 @@ export function MarketTab() {
                 <Car className="h-3.5 w-3.5 text-blue-500" />
                 {isHe ? 'סה״כ רכבים בישראל' : 'Total Vehicles'}
               </div>
-              <div className="text-xl sm:text-2xl font-bold">{NUMBER_FORMAT.format(data.total_vehicles || 0)}</div>
+              <div className="text-xl sm:text-2xl font-bold">{formatNumber(data.total_vehicles || 0)}</div>
             </CardContent>
           </Card>
         </motion.div>
@@ -80,7 +73,7 @@ export function MarketTab() {
                 {isHe ? 'יצרן מוביל' : 'Top Manufacturer'}
               </div>
               <div className="text-lg font-bold">{topMfr?.manufacturer || topMfr?.model || '-'}</div>
-              <div className="text-xs text-muted-foreground">{NUMBER_FORMAT.format(topMfr?.count || topMfr?.quantity || 0)} {isHe ? 'רכבים' : 'vehicles'}</div>
+              <div className="text-xs text-muted-foreground">{formatNumber(topMfr?.count || topMfr?.quantity || 0)} {isHe ? 'רכבים' : 'vehicles'}</div>
             </CardContent>
           </Card>
         </motion.div>
@@ -92,7 +85,7 @@ export function MarketTab() {
                 <TrendingUp className="h-3.5 w-3.5 text-violet-500" />
                 {isHe ? 'רכבי PSA' : 'PSA Vehicles'}
               </div>
-              <div className="text-xl sm:text-2xl font-bold">{NUMBER_FORMAT.format(data.psa_total || 0)}</div>
+              <div className="text-xl sm:text-2xl font-bold">{formatNumber(data.psa_total || 0)}</div>
               <div className="text-xs text-muted-foreground">Peugeot + Citroën + Opel</div>
             </CardContent>
           </Card>
@@ -132,9 +125,9 @@ export function MarketTab() {
                   margin={{ left: 0, right: 10 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
-                  <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={(v) => NUMBER_FORMAT.format(v)} />
+                  <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={(v) => formatNumber(v)} />
                   <YAxis type="category" dataKey="name" width={80} tick={{ fontSize: 10 }} />
-                  <Tooltip formatter={(v) => NUMBER_FORMAT.format(Number(v))} />
+                  <Tooltip formatter={(v) => formatNumber(Number(v))} />
                   <Bar dataKey="count" fill="#3b82f6" radius={[0, 4, 4, 0]} name={isHe ? 'רכבים' : 'Vehicles'} />
                 </BarChart>
               </ResponsiveContainer>
@@ -167,7 +160,7 @@ export function MarketTab() {
                       <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(v) => NUMBER_FORMAT.format(Number(v))} />
+                  <Tooltip formatter={(v) => formatNumber(Number(v))} />
                 </PieChart>
               </ResponsiveContainer>
             </CardContent>
@@ -202,7 +195,7 @@ export function MarketTab() {
                         <Badge variant="outline" className="text-xs">{m.brand}</Badge>
                       </td>
                       <td className="py-2 px-2 font-medium">{m.model || m.manufacturer || '-'}</td>
-                      <td className="py-2 px-2 text-end font-bold">{NUMBER_FORMAT.format(m.count || m.quantity || 0)}</td>
+                      <td className="py-2 px-2 text-end font-bold">{formatNumber(m.count || m.quantity || 0)}</td>
                     </tr>
                   ))}
                 </tbody>

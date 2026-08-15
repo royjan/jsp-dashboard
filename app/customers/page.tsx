@@ -25,7 +25,7 @@ import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend,
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
 } from 'recharts'
-import { ILS_FORMAT, NUMBER_FORMAT, formatNumber } from '@/lib/constants'
+import { formatCurrency, formatNumber } from '@/lib/format'
 
 type CustomerSortField = 'name' | 'total_revenue' | 'gross_invoices' | 'total_credits' | 'invoice_count' | 'avg_order_value' | 'trend' | 'last_purchase'
 type ChurnSortField = 'name' | 'last_year_revenue' | 'last_purchase'
@@ -268,9 +268,9 @@ function CustomersSection({ searchQuery }: { searchQuery: string }) {
                                   </div>
                                 </div>
                               </td>
-                              <td className="py-2.5 text-end font-mono tabular-nums">{ILS_FORMAT.format(cust.gross_invoices)}</td>
-                              <td className="py-2.5 text-end font-mono tabular-nums text-destructive">{cust.total_credits > 0 ? `-${ILS_FORMAT.format(cust.total_credits)}` : '—'}</td>
-                              <td className="py-2.5 text-end font-mono tabular-nums font-semibold">{ILS_FORMAT.format(cust.total_revenue)}</td>
+                              <td className="py-2.5 text-end font-mono tabular-nums">{formatCurrency(cust.gross_invoices)}</td>
+                              <td className="py-2.5 text-end font-mono tabular-nums text-destructive">{cust.total_credits > 0 ? `-${formatCurrency(cust.total_credits)}` : '—'}</td>
+                              <td className="py-2.5 text-end font-mono tabular-nums font-semibold">{formatCurrency(cust.total_revenue)}</td>
                               <td className="py-2.5 text-end tabular-nums">{formatNumber(cust.invoice_count)}</td>
                               <td className="py-2.5 text-center"><TrendIcon trend={cust.trend} /></td>
                               <td className="py-2.5 text-end text-muted-foreground pe-4 md:pe-0">{cust.last_purchase?.substring(0, 10)}</td>
@@ -305,7 +305,7 @@ function CustomersSection({ searchQuery }: { searchQuery: string }) {
                                   <Link href={`/customers/${cust.code}`} className="font-medium truncate max-w-[200px] md:max-w-none text-primary hover:underline block">{cust.name}</Link>
                                   <div className="text-xs text-muted-foreground">{cust.code}</div>
                                 </td>
-                                <td className="py-2.5 text-end font-mono text-destructive tabular-nums">{ILS_FORMAT.format(cust.last_year_revenue)}</td>
+                                <td className="py-2.5 text-end font-mono text-destructive tabular-nums">{formatCurrency(cust.last_year_revenue)}</td>
                                 <td className="py-2.5 text-end text-muted-foreground pe-4 md:pe-0">{cust.last_purchase?.substring(0, 10)}</td>
                               </tr>
                             ))}
@@ -331,7 +331,7 @@ function CustomersSection({ searchQuery }: { searchQuery: string }) {
                   <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={45} outerRadius={80} paddingAngle={2} animationDuration={800} animationBegin={500}>
                     {pieData.map((entry: any, index: number) => <Cell key={index} fill={entry.fill} />)}
                   </Pie>
-                  <Tooltip contentStyle={{ backgroundColor: 'var(--popover)', borderColor: 'var(--border)', borderRadius: '8px', color: 'var(--popover-foreground)' }} formatter={(value: any, name: any, props: any) => [ILS_FORMAT.format(value as number), props.payload.fullName || name]} />
+                  <Tooltip contentStyle={{ backgroundColor: 'var(--popover)', borderColor: 'var(--border)', borderRadius: '8px', color: 'var(--popover-foreground)' }} formatter={(value: any, name: any, props: any) => [formatCurrency(value as number), props.payload.fullName || name]} />
                   <Legend formatter={(value) => <span className="text-xs">{value}</span>} />
                   <text x="50%" y="46%" textAnchor="middle" fill="var(--foreground)" fontSize={18}>{data.concentration.top5_pct}%</text>
                   <text x="50%" y="57%" textAnchor="middle" fill="var(--muted-foreground)" fontSize={10}>{t('top5')}</text>
@@ -349,7 +349,7 @@ function CustomersSection({ searchQuery }: { searchQuery: string }) {
                   <CartesianGrid strokeDasharray="3 3" horizontal={false} />
                   <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}K`} />
                   <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={80} />
-                  <Tooltip contentStyle={{ backgroundColor: 'var(--popover)', borderColor: 'var(--border)', borderRadius: '8px', color: 'var(--popover-foreground)' }} formatter={(value: any) => [ILS_FORMAT.format(value), t('revenue')]} />
+                  <Tooltip contentStyle={{ backgroundColor: 'var(--popover)', borderColor: 'var(--border)', borderRadius: '8px', color: 'var(--popover-foreground)' }} formatter={(value: any) => [formatCurrency(value), t('revenue')]} />
                   <Bar dataKey="revenue" fill="#60a5fa" radius={[0, 4, 4, 0]} animationDuration={800} animationBegin={600} />
                 </BarChart>
               </ResponsiveContainer>

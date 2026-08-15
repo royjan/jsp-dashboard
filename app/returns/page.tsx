@@ -15,16 +15,9 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   LineChart, Line,
 } from 'recharts'
-import { NUMBER_FORMAT, ILS_FORMAT } from '@/lib/constants'
+import { formatCurrency, formatNumber } from '@/lib/format'
+import { cardVariants } from '@/lib/motion'
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const cardVariants: any = {
-  hidden: { opacity: 0, y: 20, scale: 0.95 },
-  visible: (i: number) => ({
-    opacity: 1, y: 0, scale: 1,
-    transition: { delay: i * 0.08, duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] },
-  }),
-}
 
 function LoadingSkeleton() {
   return (
@@ -73,7 +66,7 @@ function ReturnsContent() {
                 <RotateCcw className="h-3.5 w-3.5 text-red-500" />
                 {isHe ? 'זיכויים' : 'Credit Notes'}
               </div>
-              <div className="text-xl sm:text-2xl font-bold">{NUMBER_FORMAT.format(kpis.total_credits || 0)}</div>
+              <div className="text-xl sm:text-2xl font-bold">{formatNumber(kpis.total_credits || 0)}</div>
             </CardContent>
           </Card>
         </motion.div>
@@ -87,7 +80,7 @@ function ReturnsContent() {
               </div>
               <div className={`text-xl sm:text-2xl font-bold ${returnRateColor}`}>{kpis.return_rate || 0}%</div>
               <div className="text-xs text-muted-foreground">
-                {NUMBER_FORMAT.format(kpis.total_credits || 0)} / {NUMBER_FORMAT.format(kpis.total_invoices || 0)}
+                {formatNumber(kpis.total_credits || 0)} / {formatNumber(kpis.total_invoices || 0)}
               </div>
             </CardContent>
           </Card>
@@ -100,7 +93,7 @@ function ReturnsContent() {
                 <Receipt className="h-3.5 w-3.5 text-blue-500" />
                 {isHe ? 'חשבוניות' : 'Invoices'}
               </div>
-              <div className="text-xl sm:text-2xl font-bold">{NUMBER_FORMAT.format(kpis.total_invoices || 0)}</div>
+              <div className="text-xl sm:text-2xl font-bold">{formatNumber(kpis.total_invoices || 0)}</div>
             </CardContent>
           </Card>
         </motion.div>
@@ -112,7 +105,7 @@ function ReturnsContent() {
                 <TrendingDown className="h-3.5 w-3.5 text-red-500" />
                 {isHe ? 'נותחו' : 'Analyzed'}
               </div>
-              <div className="text-xl sm:text-2xl font-bold">{NUMBER_FORMAT.format(data.credit_notes_analyzed || 0)}</div>
+              <div className="text-xl sm:text-2xl font-bold">{formatNumber(data.credit_notes_analyzed || 0)}</div>
             </CardContent>
           </Card>
         </motion.div>
@@ -146,7 +139,7 @@ function ReturnsContent() {
                         <div className="text-xs text-muted-foreground font-mono">{c.code}</div>
                       </td>
                       <td className="py-2 px-2 text-end font-mono tabular-nums font-medium">
-                        {ILS_FORMAT.format(Math.round(c.total || 0))}
+                        {formatCurrency(Math.round(c.total || 0))}
                       </td>
                       <td className="py-2 px-2 text-end">
                         <Badge variant={c.count >= 10 ? 'destructive' : 'secondary'} className="text-xs">

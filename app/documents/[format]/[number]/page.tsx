@@ -8,8 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ItemLink } from '@/components/shared/ItemLink'
 import { CustomerLink } from '@/components/shared/CustomerLink'
-import { ILS_FORMAT } from '@/lib/constants'
 import { ArrowRight, FileText, ExternalLink } from 'lucide-react'
+import { formatCurrency } from '@/lib/format'
 
 const DOC_TYPE_NAMES: Record<string, string> = {
   '11': 'חשבונית מס', '12': 'זיכוי', '14': 'חשבונית עסקה',
@@ -40,7 +40,7 @@ interface DocDetail {
   error?: string
 }
 
-const ils = (n?: number) => (n != null ? ILS_FORMAT.format(n) : '—')
+const ils = (n?: number) => (n != null ? formatCurrency(n) : '—')
 
 export default function DocumentDetailPage({
   params,

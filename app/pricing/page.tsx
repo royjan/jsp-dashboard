@@ -12,11 +12,11 @@ import {
   ArrowUpDown,
   Info,
 } from 'lucide-react'
-import { ILS_FORMAT, formatNumber } from '@/lib/constants'
 import { ItemLink } from '@/components/shared/ItemLink'
 import { cn } from '@/lib/utils'
 import { useLocale } from '@/lib/locale-context'
 import type { TranslationKey } from '@/lib/i18n'
+import { formatCurrency, formatNumber } from '@/lib/format'
 
 interface ElasticityTier {
   label: 'low' | 'mid' | 'high'
@@ -320,17 +320,17 @@ export default function PricingPage() {
                         <ItemLink code={row.item_code} showCode className="text-xs" />
                       </td>
                       <td className="py-2 text-end font-mono tabular-nums">
-                        {ILS_FORMAT.format(row.total_revenue)}
+                        {formatCurrency(row.total_revenue)}
                       </td>
                       <td className="py-2 text-end font-mono tabular-nums">
-                        {row.list_price != null ? ILS_FORMAT.format(row.list_price) : '—'}
+                        {row.list_price != null ? formatCurrency(row.list_price) : '—'}
                       </td>
                       <td className="py-2 text-end font-mono tabular-nums text-muted-foreground">
-                        {row.cost_price != null ? ILS_FORMAT.format(row.cost_price) : '—'}
+                        {row.cost_price != null ? formatCurrency(row.cost_price) : '—'}
                       </td>
                       <td className="py-2 text-end">
                         <div className="font-mono tabular-nums">
-                          {ILS_FORMAT.format(row.last_sold_price)}
+                          {formatCurrency(row.last_sold_price)}
                         </div>
                         <div className="text-[10px] text-muted-foreground" dir="ltr">
                           {String(row.last_sold_month).padStart(2, '0')}/{String(row.last_sold_year).slice(2)}

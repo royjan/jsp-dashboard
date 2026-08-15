@@ -18,7 +18,8 @@ import {
   ChevronDown,
   ExternalLink,
 } from 'lucide-react'
-import { ILS_FORMAT, NUMBER_FORMAT } from '@/lib/constants'
+import { formatCurrency, formatNumber } from '@/lib/format'
+import { cardVariants } from '@/lib/motion'
 
 type DocType = 'invoices' | 'quotes' | 'purchases'
 const DOC_LABELS: Record<DocType, { he: string; en: string }> = {
@@ -66,8 +67,8 @@ function ItemDocsPanel({ code, type, isHe, onClose }: { code: string; type: DocT
                     <td className="p-2 whitespace-nowrap tabular-nums">{formatErpDate(r.date)}</td>
                     <td className="p-2 font-mono">{r.doc_number ?? '-'}</td>
                     <td className="p-2 truncate max-w-[200px]" dir="rtl">{r.party || '-'}</td>
-                    <td className="p-2 text-end tabular-nums">{NUMBER_FORMAT.format(r.qty)}</td>
-                    <td className="p-2 text-end tabular-nums">{r.total ? ILS_FORMAT.format(r.total) : '-'}</td>
+                    <td className="p-2 text-end tabular-nums">{formatNumber(r.qty)}</td>
+                    <td className="p-2 text-end tabular-nums">{r.total ? formatCurrency(r.total) : '-'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -79,14 +80,6 @@ function ItemDocsPanel({ code, type, isHe, onClose }: { code: string; type: DocT
   )
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const cardVariants: any = {
-  hidden: { opacity: 0, y: 20, scale: 0.95 },
-  visible: (i: number) => ({
-    opacity: 1, y: 0, scale: 1,
-    transition: { delay: i * 0.08, duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] },
-  }),
-}
 
 function formatErpDate(value: string | number | undefined | null): string {
   if (value == null || value === '' || value === '0') return '-'
@@ -351,7 +344,7 @@ export default function ItemDetailPage({ params }: { params: Promise<{ code: str
                 <Warehouse className="h-3.5 w-3.5 text-blue-500" />
                 {t('stockQty')}
               </div>
-              <div className="text-xl sm:text-2xl font-bold">{NUMBER_FORMAT.format(data.stock_qty || 0)}</div>
+              <div className="text-xl sm:text-2xl font-bold">{formatNumber(data.stock_qty || 0)}</div>
               <div className="text-xs text-muted-foreground flex gap-2 mt-1">
                 {data.ordered_qty > 0 && <span>{isHe ? 'הוזמן' : 'Ordered'}: {data.ordered_qty}</span>}
                 {data.incoming_qty > 0 && <span>{isHe ? 'בדרך' : 'Incoming'}: {data.incoming_qty}</span>}
@@ -367,7 +360,7 @@ export default function ItemDetailPage({ params }: { params: Promise<{ code: str
                 <DollarSign className="h-3.5 w-3.5 text-green-500" />
                 {t('price')}
               </div>
-              <div className="text-xl sm:text-2xl font-bold">{data.price ? ILS_FORMAT.format(data.price) : '-'}</div>
+              <div className="text-xl sm:text-2xl font-bold">{data.price ? formatCurrency(data.price) : '-'}</div>
               {data.import_markup > 0 && (
                 <div className="text-xs text-muted-foreground mt-1">
                   {isHe ? 'מכפיל יבוא' : 'Markup'}: x{data.import_markup}
@@ -388,7 +381,7 @@ export default function ItemDetailPage({ params }: { params: Promise<{ code: str
                 {isHe ? 'נמכר השנה' : 'Sold This Year'}
                 <FileText className="h-3 w-3 ms-auto opacity-60" />
               </div>
-              <div className="text-xl sm:text-2xl font-bold">{NUMBER_FORMAT.format(data.sold_this_year || 0)}</div>
+              <div className="text-xl sm:text-2xl font-bold">{formatNumber(data.sold_this_year || 0)}</div>
               <div className="text-xs text-muted-foreground mt-1">
                 {isHe ? 'סהכ 4 שנים' : 'Total 4Y'}: {totalSales}
               </div>

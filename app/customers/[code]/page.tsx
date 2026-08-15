@@ -19,16 +19,9 @@ import {
   User, DollarSign, Clock, FileText, Receipt, ArrowLeft, AlertTriangle, ShoppingCart, ExternalLink,
   ChevronDown,
 } from 'lucide-react'
-import { ILS_FORMAT, NUMBER_FORMAT, formatNumber } from '@/lib/constants'
+import { formatCurrency, formatNumber } from '@/lib/format'
+import { cardVariants } from '@/lib/motion'
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const cardVariants: any = {
-  hidden: { opacity: 0, y: 20, scale: 0.95 },
-  visible: (i: number) => ({
-    opacity: 1, y: 0, scale: 1,
-    transition: { delay: i * 0.08, duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] },
-  }),
-}
 
 // Severity ramp, CVD-validated on the dark surface (90 vs 90+ were previously
 // two near-identical reds).
@@ -118,11 +111,11 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ code:
       {/* Profile + KPI Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 sm:gap-3">
         {[
-          { label: t('balance'), value: ILS_FORMAT.format(balance), icon: DollarSign, color: balance > 0 ? 'text-red-600' : 'text-green-600' },
-          { label: t('creditLimit'), value: profile?.credit_limit ? ILS_FORMAT.format(profile.credit_limit) : '-', icon: DollarSign, color: 'text-blue-600' },
+          { label: t('balance'), value: formatCurrency(balance), icon: DollarSign, color: balance > 0 ? 'text-red-600' : 'text-green-600' },
+          { label: t('creditLimit'), value: profile?.credit_limit ? formatCurrency(profile.credit_limit) : '-', icon: DollarSign, color: 'text-blue-600' },
           { label: t('paymentTerms'), value: profile?.payment_terms ? `${profile.payment_terms} ${t('daysAgo')}` : '-', icon: Clock, color: 'text-purple-600' },
           { label: t('priceCode'), value: profile?.price_code || '-', icon: FileText, color: 'text-orange-600' },
-          { label: t('invoices'), value: historyLoading ? '…' : NUMBER_FORMAT.format(documents.length), icon: Receipt, color: 'text-teal-600' },
+          { label: t('invoices'), value: historyLoading ? '…' : formatNumber(documents.length), icon: Receipt, color: 'text-teal-600' },
         ].map((kpi, i) => (
           <motion.div key={kpi.label} custom={i} variants={cardVariants} initial="hidden" animate="visible">
             <Card>
@@ -149,7 +142,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ code:
                   key={b.name}
                   className="min-w-1.5 rounded-[3px] first:rounded-s-full last:rounded-e-full"
                   style={{ flexGrow: Math.abs(b.value), backgroundColor: b.color }}
-                  title={`${b.name}: ${ILS_FORMAT.format(b.value)}`}
+                  title={`${b.name}: ${formatCurrency(b.value)}`}
                 />
               ))}
             </div>
@@ -158,7 +151,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ code:
                 <span key={b.name} className="flex items-center gap-1.5">
                   <span className="h-2.5 w-2.5 shrink-0 rounded-[3px]" style={{ backgroundColor: b.color }} />
                   <span className="text-muted-foreground">{b.name}</span>
-                  <span className="font-medium">{ILS_FORMAT.format(b.value)}</span>
+                  <span className="font-medium">{formatCurrency(b.value)}</span>
                   <span className="text-muted-foreground">
                     ({agingTotal > 0 ? Math.max(1, Math.round((Math.abs(b.value) / agingTotal) * 100)) : 0}%)
                   </span>
@@ -249,7 +242,7 @@ function PurchasesTable({
         </div>
         {data && (
           <span className="text-xs text-muted-foreground">
-            {formatNumber(data.item_count ?? 0)} פריטים · {ILS_FORMAT.format(data.total_value ?? 0)} סה״כ
+            {formatNumber(data.item_count ?? 0)} פריטים · {formatCurrency(data.total_value ?? 0)} סה״כ
           </span>
         )}
       </div>
@@ -290,7 +283,7 @@ function PurchasesTable({
                         {formatNumber(item.total_qty)}
                         {item.returned_qty > 0 && <span className="text-red-500 text-[10px] ms-1">(-{formatNumber(item.returned_qty)})</span>}
                       </td>
-                      <td className="p-2 text-end tabular-nums font-medium">{ILS_FORMAT.format(item.total_value)}</td>
+                      <td className="p-2 text-end tabular-nums font-medium">{formatCurrency(item.total_value)}</td>
                       <td className="p-2 text-end tabular-nums text-muted-foreground">{formatNumber(item.line_count)}</td>
                       <td className="p-2 text-end tabular-nums text-muted-foreground">
                         <span className="inline-flex items-center gap-1.5">
@@ -392,9 +385,9 @@ function PurchaseItemInvoices({ customerCode, itemCode, days, expected }: {
               </td>
               <td className="p-1.5 text-muted-foreground">{(r.doc_date || '—').slice(0, 10)}</td>
               <td className="p-1.5 text-end tabular-nums">{formatNumber(r.quantity)}</td>
-              <td className="p-1.5 text-end tabular-nums">{ILS_FORMAT.format(r.unit_price)}</td>
+              <td className="p-1.5 text-end tabular-nums">{formatCurrency(r.unit_price)}</td>
               <td className="p-1.5 text-end tabular-nums text-muted-foreground">{r.discount_percent ? `${r.discount_percent}%` : '—'}</td>
-              <td className="p-1.5 text-end tabular-nums font-medium">{ILS_FORMAT.format(r.line_total)}</td>
+              <td className="p-1.5 text-end tabular-nums font-medium">{formatCurrency(r.line_total)}</td>
             </tr>
           ))}
         </tbody>
@@ -503,7 +496,7 @@ function DocumentTable({ items, t, isReceipt, isLoading, expandable, caption }: 
                       <Badge variant="secondary">{row.docType || '-'}</Badge>
                     </td>
                     <td className="p-2 text-muted-foreground">{(row.date || '-').slice(0, 10)}</td>
-                    <td className="p-2 text-end font-medium">{ILS_FORMAT.format(row.amount)}</td>
+                    <td className="p-2 text-end font-medium">{formatCurrency(row.amount)}</td>
                     {!isReceipt && (
                       <td className="p-2 text-end">
                         <span className="inline-flex items-center gap-1.5">
@@ -608,9 +601,9 @@ function DocumentLinesPanel({ format, number, year, t }: {
                 <ItemLink code={l.item_code} name={l.item_name} />
               </td>
               <td className="p-1.5 text-end tabular-nums">{formatNumber(l.quantity)}</td>
-              <td className="p-1.5 text-end tabular-nums">{ILS_FORMAT.format(l.unit_price)}</td>
+              <td className="p-1.5 text-end tabular-nums">{formatCurrency(l.unit_price)}</td>
               <td className="p-1.5 text-end tabular-nums text-muted-foreground">{l.discount_percent ? `${l.discount_percent}%` : '—'}</td>
-              <td className="p-1.5 text-end tabular-nums font-medium">{ILS_FORMAT.format(l.line_total)}</td>
+              <td className="p-1.5 text-end tabular-nums font-medium">{formatCurrency(l.line_total)}</td>
             </tr>
           ))}
         </tbody>

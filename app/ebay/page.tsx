@@ -11,17 +11,10 @@ import {
   ShoppingCart, Package, CheckCircle, AlertTriangle, Clock,
   XCircle, DollarSign, ArrowRight,
 } from 'lucide-react'
-import { NUMBER_FORMAT, formatNumber } from '@/lib/constants'
 import { ItemLink } from '@/components/shared/ItemLink'
+import { formatNumber } from '@/lib/format'
+import { cardVariants } from '@/lib/motion'
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const cardVariants: any = {
-  hidden: { opacity: 0, y: 20, scale: 0.95 },
-  visible: (i: number) => ({
-    opacity: 1, y: 0, scale: 1,
-    transition: { delay: i * 0.08, duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] },
-  }),
-}
 
 const STATUS_COLORS: Record<string, string> = {
   success: 'bg-green-500/15 text-green-600',
@@ -76,7 +69,7 @@ function EbayContent() {
                 <CheckCircle className="h-3.5 w-3.5 text-green-500" />
                 {t('ebay')} Listed
               </div>
-              <div className="text-xl sm:text-2xl font-bold">{NUMBER_FORMAT.format(items.listed_count || 0)}</div>
+              <div className="text-xl sm:text-2xl font-bold">{formatNumber(items.listed_count || 0)}</div>
               <div className="text-xs text-muted-foreground">${formatNumber(items.total_listed_value || 0)} total value</div>
             </CardContent>
           </Card>
@@ -89,7 +82,7 @@ function EbayContent() {
                 <Clock className="h-3.5 w-3.5 text-amber-500" />
                 Pending
               </div>
-              <div className="text-xl sm:text-2xl font-bold">{NUMBER_FORMAT.format(items.pending_count || 0)}</div>
+              <div className="text-xl sm:text-2xl font-bold">{formatNumber(items.pending_count || 0)}</div>
               <div className="text-xs text-muted-foreground">{formatNumber(items.error_count || 0)} errors</div>
             </CardContent>
           </Card>
@@ -102,7 +95,7 @@ function EbayContent() {
                 <Package className="h-3.5 w-3.5 text-blue-500" />
                 Batches
               </div>
-              <div className="text-xl sm:text-2xl font-bold">{NUMBER_FORMAT.format(batches.total_batches || 0)}</div>
+              <div className="text-xl sm:text-2xl font-bold">{formatNumber(batches.total_batches || 0)}</div>
               <div className="text-xs text-muted-foreground">{formatNumber(batches.completed_batches || 0)} completed</div>
             </CardContent>
           </Card>
@@ -115,7 +108,7 @@ function EbayContent() {
                 <AlertTriangle className="h-3.5 w-3.5 text-red-500" />
                 Alerts
               </div>
-              <div className="text-xl sm:text-2xl font-bold">{NUMBER_FORMAT.format(alerts.zero_stock_alerts || 0)}</div>
+              <div className="text-xl sm:text-2xl font-bold">{formatNumber(alerts.zero_stock_alerts || 0)}</div>
               <div className="text-xs text-muted-foreground">{formatNumber(alerts.price_change_alerts || 0)} price changes</div>
             </CardContent>
           </Card>

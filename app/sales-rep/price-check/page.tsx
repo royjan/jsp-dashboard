@@ -12,8 +12,8 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { SalesRepBottomNav } from '@/components/sales-rep/BottomNav'
 import { LookupCombobox } from '@/components/shared/LookupCombobox'
-import { ILS_FORMAT } from '@/lib/constants'
 import { copyText } from '@/lib/clipboard'
+import { formatCurrency } from '@/lib/format'
 
 interface PriceResult {
   item_code: string
@@ -106,10 +106,10 @@ export default function PriceCheckPage() {
     if (!result) return
     const lines = [
       `${result.item_code} - ${result.name}`,
-      `מחיר מחירון: ${ILS_FORMAT.format(result.retail_price)}`,
+      `מחיר מחירון: ${formatCurrency(result.retail_price)}`,
     ]
     if (result.customer_price != null) {
-      lines.push(`מחיר לקוח: ${ILS_FORMAT.format(result.customer_price)}`)
+      lines.push(`מחיר לקוח: ${formatCurrency(result.customer_price)}`)
       if (result.discount_pct > 0) {
         lines.push(`הנחה: ${result.discount_pct}%`)
       }
@@ -254,7 +254,7 @@ export default function PriceCheckPage() {
                 <div className="flex justify-between items-center">
                   <span className="text-base text-muted-foreground">מחיר מחירון</span>
                   <span className="text-3xl font-bold">
-                    {ILS_FORMAT.format(result.retail_price)}
+                    {formatCurrency(result.retail_price)}
                   </span>
                 </div>
 
@@ -265,7 +265,7 @@ export default function PriceCheckPage() {
                     <div className="flex justify-between items-center">
                       <span className="text-base text-muted-foreground">מחיר לקוח</span>
                       <span className="text-3xl font-bold text-emerald-600 dark:text-emerald-400">
-                        {ILS_FORMAT.format(result.customer_price)}
+                        {formatCurrency(result.customer_price)}
                       </span>
                     </div>
                     {result.discount_pct > 0 && (

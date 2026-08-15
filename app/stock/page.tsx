@@ -27,8 +27,8 @@ import { cn } from '@/lib/utils'
 import { deriveBrand, brandChipClasses } from '@/lib/brand'
 import { ArrowUpDown, Search, Crown, TrendingUp, Layers, AlertTriangle, Sparkles, RefreshCw, TableIcon, LayoutGrid, ChevronDown, ChevronLeft, ChevronRight, Filter, Target, FileText, TrendingDown, Clock, ArrowRightLeft } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from 'recharts'
-import { ILS_FORMAT, formatNumber } from '@/lib/constants'
 import { incrementStreaming, decrementStreaming } from '@/lib/streaming-counter'
+import { formatCurrency, formatNumber } from '@/lib/format'
 
 // ── Types ──
 
@@ -520,7 +520,7 @@ function ConversionSection({ searchQuery }: { searchQuery: string }) {
                 <CartesianGrid strokeDasharray="3 3" horizontal={false} />
                 <XAxis type="number" tick={{ fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}K`} />
                 <YAxis type="category" dataKey="name" tick={{ fontSize: 12 }} width={70} />
-                <Tooltip contentStyle={{ backgroundColor: 'var(--popover)', borderColor: 'var(--border)', borderRadius: '8px', color: 'var(--popover-foreground)' }} formatter={(value: any) => [ILS_FORMAT.format(value), '']} />
+                <Tooltip contentStyle={{ backgroundColor: 'var(--popover)', borderColor: 'var(--border)', borderRadius: '8px', color: 'var(--popover-foreground)' }} formatter={(value: any) => [formatCurrency(value), '']} />
                 <Bar dataKey="value" radius={[0, 6, 6, 0]} animationDuration={800} animationBegin={400}>
                   {funnelData.map((entry, index) => <Cell key={index} fill={entry.fill} />)}
                 </Bar>
@@ -538,7 +538,7 @@ function ConversionSection({ searchQuery }: { searchQuery: string }) {
                   <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={55} outerRadius={85} paddingAngle={3} animationDuration={800} animationBegin={600} label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`} labelLine={false}>
                     {pieData.map((entry, index) => <Cell key={index} fill={entry.fill} />)}
                   </Pie>
-                  <Tooltip contentStyle={{ backgroundColor: 'var(--popover)', borderColor: 'var(--border)', borderRadius: '8px', color: 'var(--popover-foreground)' }} formatter={(value: any) => [ILS_FORMAT.format(value as number), '']} />
+                  <Tooltip contentStyle={{ backgroundColor: 'var(--popover)', borderColor: 'var(--border)', borderRadius: '8px', color: 'var(--popover-foreground)' }} formatter={(value: any) => [formatCurrency(value as number), '']} />
                   <text x="50%" y="48%" textAnchor="middle" fill="var(--foreground)" fontSize={28}>{data.conversion_rate}%</text>
                   <text x="50%" y="60%" textAnchor="middle" fill="var(--muted-foreground)" fontSize={12}>{t('conversionRate')}</text>
                 </PieChart>
@@ -596,7 +596,7 @@ function ConversionSection({ searchQuery }: { searchQuery: string }) {
                           </td>
                           <td className="py-2.5 text-end tabular-nums">{formatNumber(item.timesQuoted)}</td>
                           <td className="py-2.5 text-end tabular-nums">{formatNumber(item.timesSold)}</td>
-                          <td className="py-2.5 text-end font-mono text-destructive">{ILS_FORMAT.format(item.lostValue)}</td>
+                          <td className="py-2.5 text-end font-mono text-destructive">{formatCurrency(item.lostValue)}</td>
                           <td className="py-2.5 text-end text-muted-foreground pe-4 md:pe-0">{item.lastQuoted?.substring(0, 10)}</td>
                         </motion.tr>
                       ))}
@@ -629,7 +629,7 @@ function ConversionSection({ searchQuery }: { searchQuery: string }) {
                           <td className="py-2.5 text-end">
                             <Badge variant={cust.rate >= 70 ? 'success' : cust.rate >= 40 ? 'warning' : 'destructive'}>{cust.rate}%</Badge>
                           </td>
-                          <td className="py-2.5 text-end font-mono text-destructive pe-4 md:pe-0">{ILS_FORMAT.format(cust.lostValue)}</td>
+                          <td className="py-2.5 text-end font-mono text-destructive pe-4 md:pe-0">{formatCurrency(cust.lostValue)}</td>
                         </motion.tr>
                       ))}
                       {customerConversions.length === 0 && <tr><td colSpan={5} className="py-12 text-center text-muted-foreground">{t('noInsights')}</td></tr>}
@@ -1003,11 +1003,11 @@ function StockPageContent() {
                   </Pie>
                   <Tooltip
                     contentStyle={{ backgroundColor: 'var(--popover)', borderColor: 'var(--border)', borderRadius: '8px', color: 'var(--popover-foreground)' }}
-                    formatter={(value: any) => [ILS_FORMAT.format(value as number), '']}
+                    formatter={(value: any) => [formatCurrency(value as number), '']}
                   />
                   <Legend />
                   <text x="50%" y="46%" textAnchor="middle" fill="var(--foreground)" fontSize={16} fontWeight="bold">
-                    {ILS_FORMAT.format(abcCapital.total_capital)}
+                    {formatCurrency(abcCapital.total_capital)}
                   </text>
                   <text x="50%" y="56%" textAnchor="middle" fill="var(--muted-foreground)" fontSize={10}>
                     סה״כ הון כלוא

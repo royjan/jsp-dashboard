@@ -14,7 +14,6 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useSortable, SortableTh } from '@/components/shared/sortable-table'
 import { ActionPlaybook } from '@/components/report/ActionPlaybook'
-import { ILS_FORMAT, NUMBER_FORMAT, formatNumber } from '@/lib/constants'
 import {
   TrendingUp, TrendingDown, AlertTriangle, Package, Users, FileText,
   BarChart3, Calendar, Target, ArrowRight, RefreshCw,
@@ -24,6 +23,8 @@ import {
   LineChart, Line, AreaChart, Area, Cell, PieChart, Pie,
   RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
 } from 'recharts'
+import { formatCurrency, formatNumber } from '@/lib/format'
+import { cardVariants } from '@/lib/motion'
 
 const MONTH_LABELS_HE = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר']
 const MONTH_LABELS_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -37,14 +38,6 @@ const tooltipStyle = {
 
 type Section = 'summary' | 'deadstock' | 'revenue' | 'seasonal' | 'credits' | 'customers' | 'recommendations'
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const cardVariants: any = {
-  hidden: { opacity: 0, y: 20, scale: 0.95 },
-  visible: (i: number) => ({
-    opacity: 1, y: 0, scale: 1,
-    transition: { delay: i * 0.06, duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] },
-  }),
-}
 
 function LoadingSkeleton() {
   return (
@@ -267,7 +260,7 @@ function ReportContent() {
           {/* KPI Cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3">
             <KPICard index={0} icon={TrendingUp} label={isHe ? 'הכנסה חודשית ממוצעת' : 'Avg Monthly Revenue'}
-              value={ILS_FORMAT.format(Math.round(kpis.monthly_revenue))}
+              value={formatCurrency(Math.round(kpis.monthly_revenue))}
               sub={isHe ? 'יעד: 1.5M+' : 'Target: 1.5M+'}
               color={kpis.monthly_revenue >= 1500000 ? 'text-emerald-500' : 'text-destructive'} />
             <KPICard index={1} icon={Package} label={t('inventoryTurnover')}
@@ -276,7 +269,7 @@ function ReportContent() {
               color={kpis.turnover_ratio >= 1 ? 'text-emerald-500' : 'text-destructive'} />
             <KPICard index={2} icon={AlertTriangle} label={isHe ? 'מלאי מת 3+ שנים' : 'Dead Stock 3Y+'}
               value={`${kpis.dead_stock_pct_3y}%`}
-              sub={ILS_FORMAT.format(Math.round(ds?.no_sales_3y || 0))}
+              sub={formatCurrency(Math.round(ds?.no_sales_3y || 0))}
               color={kpis.dead_stock_pct_3y <= 20 ? 'text-emerald-500' : 'text-destructive'} />
             <KPICard index={3} icon={FileText} label={t('creditRate')}
               value={`${kpis.credit_pct}%`}
@@ -297,7 +290,7 @@ function ReportContent() {
                     <XAxis dataKey="year" />
                     <YAxis tickFormatter={(v) => `${(v / 1_000_000).toFixed(1)}M`} />
                     <Tooltip contentStyle={tooltipStyle} formatter={(value, name) => [
-                      ILS_FORMAT.format(Number(value)),
+                      formatCurrency(Number(value)),
                       name === 'revenue' ? (isHe ? 'הכנסות' : 'Revenue') : (isHe ? 'זיכויים' : 'Credits')
                     ]} />
                     <Legend formatter={(v) => v === 'revenue' ? (isHe ? 'הכנסות' : 'Revenue') : (isHe ? 'זיכויים' : 'Credits')} />
@@ -330,7 +323,7 @@ function ReportContent() {
                     {sortedRevenue.map((r: any) => (
                       <tr key={r.year} className="border-b hover:bg-muted/50 transition-colors">
                         <td className="py-2.5 ps-4 md:ps-0 font-medium">{r.year}</td>
-                        <td className="py-2.5 text-end font-mono tabular-nums">{ILS_FORMAT.format(r.revenue)}</td>
+                        <td className="py-2.5 text-end font-mono tabular-nums">{formatCurrency(r.revenue)}</td>
                         <td className="py-2.5 text-end">
                           {r.change !== null && (
                             <Badge variant={r.change > 0 ? 'success' : 'destructive'}>
@@ -338,8 +331,8 @@ function ReportContent() {
                             </Badge>
                           )}
                         </td>
-                        <td className="py-2.5 text-end tabular-nums">{NUMBER_FORMAT.format(r.invoices)}</td>
-                        <td className="py-2.5 text-end font-mono tabular-nums pe-4 md:pe-0">{ILS_FORMAT.format(r.avgValue)}</td>
+                        <td className="py-2.5 text-end tabular-nums">{formatNumber(r.invoices)}</td>
+                        <td className="py-2.5 text-end font-mono tabular-nums pe-4 md:pe-0">{formatCurrency(r.avgValue)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -360,24 +353,24 @@ function ReportContent() {
               <CardContent className="space-y-3 text-sm">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">{isHe ? 'ערך מלאי כולל' : 'Total Inventory'}</span>
-                  <span className="font-mono font-semibold">{ILS_FORMAT.format(Math.round(kpis.inventory_value))}</span>
+                  <span className="font-mono font-semibold">{formatCurrency(Math.round(kpis.inventory_value))}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">{isHe ? 'פריטים עם מלאי' : 'Items in Stock'}</span>
-                  <span className="font-mono">{NUMBER_FORMAT.format(kpis.items_with_stock)}</span>
+                  <span className="font-mono">{formatNumber(kpis.items_with_stock)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">{isHe ? 'פריטים פעילים' : 'Active Items'}</span>
-                  <span className="font-mono">{NUMBER_FORMAT.format(kpis.active_items)}</span>
+                  <span className="font-mono">{formatNumber(kpis.active_items)}</span>
                 </div>
                 <div className="h-px bg-border" />
                 <div className="flex justify-between text-destructive">
                   <span>{isHe ? 'מלאי מת (ללא מכירות שנה)' : 'Dead (no sales 1Y)'}</span>
-                  <span className="font-mono font-semibold">{ILS_FORMAT.format(Math.round(ds?.no_sales_this_year || 0))}</span>
+                  <span className="font-mono font-semibold">{formatCurrency(Math.round(ds?.no_sales_this_year || 0))}</span>
                 </div>
                 <div className="flex justify-between text-destructive">
                   <span>{isHe ? 'מלאי מת (3+ שנים)' : 'Dead (3Y+)'}</span>
-                  <span className="font-mono font-semibold">{ILS_FORMAT.format(Math.round(ds?.no_sales_3y || 0))}</span>
+                  <span className="font-mono font-semibold">{formatCurrency(Math.round(ds?.no_sales_3y || 0))}</span>
                 </div>
               </CardContent>
             </Card>
@@ -402,7 +395,7 @@ function ReportContent() {
                     </div>
                     <div className="flex justify-between text-muted-foreground text-xs">
                       <span>{cls.desc}</span>
-                      <span>{ILS_FORMAT.format(Math.round(cls.data.revenue))}</span>
+                      <span>{formatCurrency(Math.round(cls.data.revenue))}</span>
                     </div>
                   </div>
                 ))}
@@ -419,28 +412,28 @@ function ReportContent() {
               <CardContent className="space-y-3 text-sm">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">{isHe ? 'פריטים בהזמנה' : 'Items on Order'}</span>
-                  <span className="font-mono">{NUMBER_FORMAT.format(data.open_orders?.items_ordered || 0)}</span>
+                  <span className="font-mono">{formatNumber(data.open_orders?.items_ordered || 0)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">{isHe ? 'יחידות בהזמנה' : 'Units Ordered'}</span>
-                  <span className="font-mono">{NUMBER_FORMAT.format(data.open_orders?.total_ordered || 0)}</span>
+                  <span className="font-mono">{formatNumber(data.open_orders?.total_ordered || 0)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">{isHe ? 'פריטים בדרך' : 'Items Incoming'}</span>
-                  <span className="font-mono">{NUMBER_FORMAT.format(data.open_orders?.items_incoming || 0)}</span>
+                  <span className="font-mono">{formatNumber(data.open_orders?.items_incoming || 0)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">{isHe ? 'יחידות בדרך' : 'Units Incoming'}</span>
-                  <span className="font-mono">{NUMBER_FORMAT.format(data.open_orders?.total_incoming || 0)}</span>
+                  <span className="font-mono">{formatNumber(data.open_orders?.total_incoming || 0)}</span>
                 </div>
                 <div className="h-px bg-border" />
                 <div className="flex justify-between text-amber-500">
                   <span>{isHe ? 'מלאי עודף (3x+)' : 'Overstock (3x+)'}</span>
-                  <span className="font-mono font-semibold">{NUMBER_FORMAT.format(data.overstock?.overstock_count || 0)} {isHe ? 'פריטים' : 'items'}</span>
+                  <span className="font-mono font-semibold">{formatNumber(data.overstock?.overstock_count || 0)} {isHe ? 'פריטים' : 'items'}</span>
                 </div>
                 <div className="flex justify-between text-amber-500">
                   <span>{isHe ? 'ערך מלאי עודף' : 'Overstock Value'}</span>
-                  <span className="font-mono font-semibold">{ILS_FORMAT.format(Math.round(data.overstock?.overstock_value || 0))}</span>
+                  <span className="font-mono font-semibold">{formatCurrency(Math.round(data.overstock?.overstock_value || 0))}</span>
                 </div>
               </CardContent>
             </Card>
@@ -453,19 +446,19 @@ function ReportContent() {
         <div className="space-y-4 md:space-y-6">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3">
             <KPICard index={0} icon={Package} label={isHe ? 'ערך מלאי כולל' : 'Total Inventory'}
-              value={ILS_FORMAT.format(Math.round(ds?.total_inventory_value || 0))}
-              sub={`${NUMBER_FORMAT.format(ds?.total_items_with_stock || 0)} ${isHe ? 'פריטים' : 'items'}`}
+              value={formatCurrency(Math.round(ds?.total_inventory_value || 0))}
+              sub={`${formatNumber(ds?.total_items_with_stock || 0)} ${isHe ? 'פריטים' : 'items'}`}
               color="text-primary" />
             <KPICard index={1} icon={AlertTriangle} label={isHe ? 'ללא מכירות שנה' : 'No Sales 1Y'}
-              value={ILS_FORMAT.format(Math.round(ds?.no_sales_this_year || 0))}
+              value={formatCurrency(Math.round(ds?.no_sales_this_year || 0))}
               sub={`${ds?.total_inventory_value > 0 ? Math.round(ds.no_sales_this_year / ds.total_inventory_value * 100) : 0}% ${isHe ? 'מהמלאי' : 'of inventory'}`}
               color="text-amber-500" />
             <KPICard index={2} icon={AlertTriangle} label={isHe ? 'ללא מכירות 2+ שנים' : 'No Sales 2Y+'}
-              value={ILS_FORMAT.format(Math.round(ds?.no_sales_2y || 0))}
+              value={formatCurrency(Math.round(ds?.no_sales_2y || 0))}
               sub={`${ds?.total_inventory_value > 0 ? Math.round(ds.no_sales_2y / ds.total_inventory_value * 100) : 0}%`}
               color="text-destructive" />
             <KPICard index={3} icon={AlertTriangle} label={isHe ? 'ללא מכירות 3+ שנים' : 'No Sales 3Y+'}
-              value={ILS_FORMAT.format(Math.round(ds?.no_sales_3y || 0))}
+              value={formatCurrency(Math.round(ds?.no_sales_3y || 0))}
               sub={`${ds?.total_inventory_value > 0 ? Math.round(ds.no_sales_3y / ds.total_inventory_value * 100) : 0}%`}
               color="text-destructive" />
           </div>
@@ -488,7 +481,7 @@ function ReportContent() {
                     <div key={segment.label}>
                       <div className="flex justify-between text-sm mb-1">
                         <span>{segment.label}</span>
-                        <span className="font-mono tabular-nums">{ILS_FORMAT.format(Math.round(segment.value))} ({pct}%)</span>
+                        <span className="font-mono tabular-nums">{formatCurrency(Math.round(segment.value))} ({pct}%)</span>
                       </div>
                       <div className="h-3 bg-muted rounded-full overflow-hidden">
                         <motion.div className={cn('h-full rounded-full', segment.color)}
@@ -525,10 +518,10 @@ function ReportContent() {
                         <td className="py-2 ps-4 md:ps-0 text-muted-foreground">{i + 1}</td>
                         <td className="py-2 font-mono text-xs">{item.item_code}</td>
                         <td className="py-2 truncate max-w-[200px]">{item.item_name}</td>
-                        <td className="py-2 text-end tabular-nums">{NUMBER_FORMAT.format(item.qty)}</td>
-                        <td className="py-2 text-end font-mono tabular-nums">{ILS_FORMAT.format(Math.round(item.retail_price))}</td>
+                        <td className="py-2 text-end tabular-nums">{formatNumber(item.qty)}</td>
+                        <td className="py-2 text-end font-mono tabular-nums">{formatCurrency(Math.round(item.retail_price))}</td>
                         <td className="py-2 text-end font-mono tabular-nums font-semibold text-destructive pe-4 md:pe-0">
-                          {ILS_FORMAT.format(Math.round(item.capital_tied))}
+                          {formatCurrency(Math.round(item.capital_tied))}
                         </td>
                       </tr>
                     ))}
@@ -538,7 +531,7 @@ function ReportContent() {
                       <tr className="border-t-2 font-semibold">
                         <td colSpan={5} className="py-2 ps-4 md:ps-0">{isHe ? 'סה"כ Top 50' : 'Total Top 50'}</td>
                         <td className="py-2 text-end font-mono tabular-nums text-destructive pe-4 md:pe-0">
-                          {ILS_FORMAT.format(Math.round(data.top_dead_stock.reduce((s: number, i: any) => s + i.capital_tied, 0)))}
+                          {formatCurrency(Math.round(data.top_dead_stock.reduce((s: number, i: any) => s + i.capital_tied, 0)))}
                         </td>
                       </tr>
                     </tfoot>
@@ -595,7 +588,7 @@ function ReportContent() {
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="month" tick={{ fontSize: 11 }} />
                   <YAxis tickFormatter={(v) => `${(v / 1000).toFixed(0)}K`} />
-                  <Tooltip contentStyle={tooltipStyle} formatter={(value: any) => [ILS_FORMAT.format(value), '']} />
+                  <Tooltip contentStyle={tooltipStyle} formatter={(value: any) => [formatCurrency(value), '']} />
                   <Legend />
                   <Line type="monotone" dataKey="2023" stroke="#34d399" strokeWidth={2} dot={{ r: 3 }} animationDuration={800} />
                   <Line type="monotone" dataKey="2024" stroke="#60a5fa" strokeWidth={2} dot={{ r: 3 }} animationDuration={800} />
@@ -627,8 +620,8 @@ function ReportContent() {
                       return (
                         <tr key={i} className="border-b hover:bg-muted/50 transition-colors">
                           <td className="py-2 ps-4 md:ps-0">{m.month}</td>
-                          <td className="py-2 text-end font-mono tabular-nums">{m['2024'] > 0 ? ILS_FORMAT.format(m['2024']) : '—'}</td>
-                          <td className="py-2 text-end font-mono tabular-nums">{m['2025'] > 0 ? ILS_FORMAT.format(m['2025']) : '—'}</td>
+                          <td className="py-2 text-end font-mono tabular-nums">{m['2024'] > 0 ? formatCurrency(m['2024']) : '—'}</td>
+                          <td className="py-2 text-end font-mono tabular-nums">{m['2025'] > 0 ? formatCurrency(m['2025']) : '—'}</td>
                           <td className="py-2 text-end pe-4 md:pe-0">
                             {change !== null && m['2025'] > 0 && (
                               <Badge variant={change > 0 ? 'success' : 'destructive'}>
@@ -689,7 +682,7 @@ function ReportContent() {
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="month" tick={{ fontSize: 11 }} />
                   <YAxis tickFormatter={(v) => `${(v / 1000).toFixed(0)}K`} />
-                  <Tooltip contentStyle={tooltipStyle} formatter={(value: any) => [ILS_FORMAT.format(value), isHe ? 'ממוצע' : 'Average']} />
+                  <Tooltip contentStyle={tooltipStyle} formatter={(value: any) => [formatCurrency(value), isHe ? 'ממוצע' : 'Average']} />
                   <Bar dataKey="avg_revenue" radius={[4, 4, 0, 0]} animationDuration={800}>
                     {seasonalData.map((_: any, i: number) => (
                       <Cell key={i} fill={[10, 11].includes(i) ? '#34d399' : [3].includes(i) ? '#f87171' : '#60a5fa'} />
@@ -711,7 +704,7 @@ function ReportContent() {
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="day" tick={{ fontSize: 11 }} />
                     <YAxis tickFormatter={(v) => `${(v / 1000).toFixed(0)}K`} />
-                    <Tooltip contentStyle={tooltipStyle} formatter={(value: any) => [ILS_FORMAT.format(value), isHe ? 'ממוצע' : 'Average']} />
+                    <Tooltip contentStyle={tooltipStyle} formatter={(value: any) => [formatCurrency(value), isHe ? 'ממוצע' : 'Average']} />
                     <Bar dataKey="avg_revenue" fill="#a78bfa" radius={[4, 4, 0, 0]} animationDuration={800} />
                   </BarChart>
                 </ResponsiveContainer>
@@ -798,8 +791,8 @@ function ReportContent() {
                       return (
                         <tr key={r.year} className="border-b hover:bg-muted/50 transition-colors">
                           <td className="py-2.5 ps-4 md:ps-0 font-medium">{r.year}</td>
-                          <td className="py-2.5 text-end tabular-nums">{NUMBER_FORMAT.format(r.invoice_count)}</td>
-                          <td className="py-2.5 text-end tabular-nums">{NUMBER_FORMAT.format(r.credit_count)}</td>
+                          <td className="py-2.5 text-end tabular-nums">{formatNumber(r.invoice_count)}</td>
+                          <td className="py-2.5 text-end tabular-nums">{formatNumber(r.credit_count)}</td>
                           <td className="py-2.5 text-end">
                             <Badge variant={countPct > 18 ? 'destructive' : countPct > 15 ? 'warning' : 'success'}>{countPct}%</Badge>
                           </td>
@@ -907,7 +900,7 @@ function ReportContent() {
                             <Badge variant={r.retention_pct >= 80 ? 'success' : 'warning'}>{r.retention_pct}%</Badge>
                           ) : '—'}
                         </td>
-                        <td className="py-2.5 text-end font-mono tabular-nums pe-4 md:pe-0">{ILS_FORMAT.format(Math.round(r.total_revenue))}</td>
+                        <td className="py-2.5 text-end font-mono tabular-nums pe-4 md:pe-0">{formatCurrency(Math.round(r.total_revenue))}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1098,7 +1091,7 @@ function ReportContent() {
                     {[
                       {
                         kpi: isHe ? 'הכנסה חודשית' : 'Monthly Revenue',
-                        current: `~${ILS_FORMAT.format(Math.round(kpis.monthly_revenue))}`,
+                        current: `~${formatCurrency(Math.round(kpis.monthly_revenue))}`,
                         target: '1.5M+',
                         met: kpis.monthly_revenue >= 1500000,
                       },

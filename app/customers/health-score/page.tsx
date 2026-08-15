@@ -15,7 +15,6 @@ import { AnimatedCounter } from '@/components/shared/AnimatedCounter'
 import { HealthTransitions } from '@/components/customers/HealthTransitions'
 import { WinBackSuggestions } from '@/components/customers/WinBackSuggestions'
 import { SubTabs } from '@/components/shared/SubTabs'
-import { ILS_FORMAT, formatNumber } from '@/lib/constants'
 import { cn } from '@/lib/utils'
 import {
   HeartPulse,
@@ -30,6 +29,7 @@ import {
   Play,
   Loader2,
 } from 'lucide-react'
+import { formatCurrency, formatNumber } from '@/lib/format'
 
 type Band = 'green' | 'yellow' | 'red' | 'all'
 type SortField = 'score' | 'name' | 'revenue' | 'days' | 'returnRate'
@@ -373,7 +373,7 @@ function HealthScoreContent() {
                 <AnimatedCounter value={dist.red} />
               </div>
               <div className="text-[11px] md:text-xs text-muted-foreground mt-1">
-                {ILS_FORMAT.format(data.atRiskRevenue || 0)}{' '}
+                {formatCurrency(data.atRiskRevenue || 0)}{' '}
                 {t('atRiskRevenue')}
               </div>
             </CardContent>
@@ -458,7 +458,7 @@ function HealthScoreContent() {
                       </div>
                     </td>
                     <td className="py-2.5 text-end font-mono tabular-nums">
-                      {ILS_FORMAT.format(row.total_revenue)}
+                      {formatCurrency(row.total_revenue)}
                     </td>
                     <td className="py-2.5 text-end tabular-nums text-muted-foreground">
                       {row.factors.daysSinceLastPurchase ?? '—'}

@@ -19,6 +19,7 @@ import {
   AreaChart, Area,
 } from 'recharts'
 import { formatNumber } from '@/lib/constants'
+import { cardVariants } from '@/lib/motion'
 
 // ── types (mirror the API) ──
 interface ChatInsights {
@@ -74,14 +75,6 @@ function EmptyState({ label = '— אין נתונים —', className }: { labe
   return <div className={cn('py-10 text-center text-sm text-muted-foreground', className)}>{label}</div>
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const cardVariants: any = {
-  hidden: { opacity: 0, y: 20, scale: 0.95 },
-  visible: (i: number) => ({
-    opacity: 1, y: 0, scale: 1,
-    transition: { delay: i * 0.05, duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] },
-  }),
-}
 
 const TOOLTIP_STYLE = { backgroundColor: 'var(--popover)', borderColor: 'var(--border)', borderRadius: '8px', color: 'var(--popover-foreground)' } as const
 

@@ -10,9 +10,9 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { ItemLink } from '@/components/shared/ItemLink'
 import { EbayRecommendButton } from '@/components/shared/EbayRecommendButton'
-import { ILS_FORMAT, NUMBER_FORMAT, formatNumber } from '@/lib/constants'
 import { Search, Trash2, AlertTriangle, Package, ArrowUpDown, Download, ShoppingCart, Loader2 } from 'lucide-react'
 import * as XLSX from 'xlsx'
+import { formatCurrency, formatNumber } from '@/lib/format'
 
 type SortField = 'scrap_score' | 'capital_tied' | 'price' | 'qty' | 'item_name'
 type SortDir = 'asc' | 'desc'
@@ -234,10 +234,10 @@ function ScrapContent() {
           {/* KPI cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3">
             {[
-              { icon: Package, label: isHe ? 'סה"כ פריטים' : 'Total Items', value: NUMBER_FORMAT.format(summary.total_items), sub: `${NUMBER_FORMAT.format(summary.total_units)} ${isHe ? 'יחידות' : 'units'}`, color: 'text-primary' },
-              { icon: AlertTriangle, label: isHe ? 'הון כלוא' : 'Capital Tied', value: ILS_FORMAT.format(Math.round(summary.total_capital)), color: 'text-destructive' },
-              { icon: Trash2, label: isHe ? 'מלאי מת (ללא מכירות שנה)' : 'Dead Stock (no sales 1Y)', value: formatNumber(summary.dead_items), sub: ILS_FORMAT.format(Math.round(summary.dead_capital)), color: 'text-amber-500' },
-              { icon: Trash2, label: isHe ? 'אף פעם לא נמכרו' : 'Never Sold', value: formatNumber(summary.never_sold_items), sub: ILS_FORMAT.format(Math.round(summary.never_sold_capital)), color: 'text-destructive' },
+              { icon: Package, label: isHe ? 'סה"כ פריטים' : 'Total Items', value: formatNumber(summary.total_items), sub: `${formatNumber(summary.total_units)} ${isHe ? 'יחידות' : 'units'}`, color: 'text-primary' },
+              { icon: AlertTriangle, label: isHe ? 'הון כלוא' : 'Capital Tied', value: formatCurrency(Math.round(summary.total_capital)), color: 'text-destructive' },
+              { icon: Trash2, label: isHe ? 'מלאי מת (ללא מכירות שנה)' : 'Dead Stock (no sales 1Y)', value: formatNumber(summary.dead_items), sub: formatCurrency(Math.round(summary.dead_capital)), color: 'text-amber-500' },
+              { icon: Trash2, label: isHe ? 'אף פעם לא נמכרו' : 'Never Sold', value: formatNumber(summary.never_sold_items), sub: formatCurrency(Math.round(summary.never_sold_capital)), color: 'text-destructive' },
             ].map((kpi, i) => (
               <motion.div key={kpi.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.06 }}>
                 <Card className="overflow-hidden h-full">
@@ -339,9 +339,9 @@ function ScrapContent() {
                           </div>
                         </td>
                         <td className="py-2 truncate max-w-[220px]"><ItemLink code={item.item_code} name={item.item_name} /></td>
-                        <td className="py-2 text-end tabular-nums">{NUMBER_FORMAT.format(item.qty)}</td>
-                        <td className="py-2 text-end font-mono tabular-nums">{ILS_FORMAT.format(Math.round(item.price))}</td>
-                        <td className="py-2 text-end font-mono tabular-nums font-semibold text-destructive">{ILS_FORMAT.format(Math.round(item.capital_tied))}</td>
+                        <td className="py-2 text-end tabular-nums">{formatNumber(item.qty)}</td>
+                        <td className="py-2 text-end font-mono tabular-nums">{formatCurrency(Math.round(item.price))}</td>
+                        <td className="py-2 text-end font-mono tabular-nums font-semibold text-destructive">{formatCurrency(Math.round(item.capital_tied))}</td>
                         <td className="py-2">{getSalesLabel(item, isHe)}</td>
                         <td className="py-2 pe-4 md:pe-0">
                           <div className="flex items-center justify-end gap-2">
@@ -367,10 +367,10 @@ function ScrapContent() {
                         <td colSpan={3} className="py-2 ps-4 md:ps-0">
                           {isHe ? `סה"כ ${formatNumber(sortedItems.length)} פריטים` : `Total ${formatNumber(sortedItems.length)} items`}
                         </td>
-                        <td className="py-2 text-end tabular-nums">{NUMBER_FORMAT.format(sortedItems.reduce((s: number, i: any) => s + i.qty, 0))}</td>
+                        <td className="py-2 text-end tabular-nums">{formatNumber(sortedItems.reduce((s: number, i: any) => s + i.qty, 0))}</td>
                         <td className="py-2" />
                         <td className="py-2 text-end font-mono tabular-nums text-destructive">
-                          {ILS_FORMAT.format(Math.round(sortedItems.reduce((s: number, i: any) => s + i.capital_tied, 0)))}
+                          {formatCurrency(Math.round(sortedItems.reduce((s: number, i: any) => s + i.capital_tied, 0)))}
                         </td>
                         <td colSpan={2} className="py-2" />
                       </tr>

@@ -11,7 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Search, Sparkles, Package, Clock, X, ArrowLeft, ExternalLink } from 'lucide-react'
 import { SubTabs } from '@/components/shared/SubTabs'
 import { brandChipClasses } from '@/lib/brand'
-import { ILS_FORMAT } from '@/lib/constants'
+import { formatCurrency } from '@/lib/format'
 
 interface SemanticResult {
   code: string
@@ -306,7 +306,7 @@ export default function SearchPage() {
                             <div className="flex items-center gap-2 flex-wrap">
                               <StockBadge qty={item.stock_qty} t={t} />
                               {item.price != null && (
-                                <span className="text-sm font-medium">{ILS_FORMAT.format(item.price)}</span>
+                                <span className="text-sm font-medium">{formatCurrency(item.price)}</span>
                               )}
                             </div>
                             <Link
@@ -360,7 +360,7 @@ export default function SearchPage() {
                                 <StockBadge qty={item.stock_qty} t={t} />
                               )}
                               {item.price != null && (
-                                <span className="text-sm font-medium">{ILS_FORMAT.format(item.price)}</span>
+                                <span className="text-sm font-medium">{formatCurrency(item.price)}</span>
                               )}
                             </div>
                             <Link

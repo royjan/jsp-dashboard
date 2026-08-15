@@ -18,19 +18,12 @@ import {
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts'
-import { NUMBER_FORMAT, formatNumber } from '@/lib/constants'
+import { formatCurrency, formatNumber } from '@/lib/format'
+import { cardVariants } from '@/lib/motion'
 
 type SortField = 'name' | 'total_qty' | 'quote_count' | 'last_quoted' | 'stock_qty' | 'incoming_qty' | 'ordered_qty'
 type SortDir = 'asc' | 'desc'
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const cardVariants: any = {
-  hidden: { opacity: 0, y: 20, scale: 0.95 },
-  visible: (i: number) => ({
-    opacity: 1, y: 0, scale: 1,
-    transition: { delay: i * 0.08, duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] },
-  }),
-}
 
 function LoadingSkeleton() {
   return (
@@ -79,14 +72,14 @@ function FollowUpWidget() {
               <Send className="h-3 w-3 text-blue-500" />
               {t('openForFollowUp')}
             </div>
-            <div className="text-base sm:text-lg font-bold">{NUMBER_FORMAT.format(data.open_quotes ?? 0)}</div>
+            <div className="text-base sm:text-lg font-bold">{formatNumber(data.open_quotes ?? 0)}</div>
           </div>
           <div className="space-y-1">
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <TrendingUp className="h-3 w-3 text-green-500" />
               {t('convertedQuotes')}
             </div>
-            <div className="text-lg font-bold">{NUMBER_FORMAT.format(data.converted_quotes ?? 0)}</div>
+            <div className="text-lg font-bold">{formatNumber(data.converted_quotes ?? 0)}</div>
           </div>
           <div className="space-y-1">
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -100,7 +93,7 @@ function FollowUpWidget() {
               <DollarSign className="h-3 w-3 text-red-500" />
               {t('openQuoteValue')}
             </div>
-            <div className="text-lg font-bold">{ILS_FORMAT.format(data.open_value ?? 0)}</div>
+            <div className="text-lg font-bold">{formatCurrency(data.open_value ?? 0)}</div>
           </div>
         </div>
 
@@ -123,7 +116,7 @@ function FollowUpWidget() {
                     <tr key={q.doc_number} className="border-b hover:bg-muted/50">
                       <td className="p-1.5 font-mono">{q.doc_number}</td>
                       <td className="p-1.5 truncate max-w-[200px]">{q.customer_name}</td>
-                      <td className="p-1.5 text-end font-medium">{ILS_FORMAT.format(q.total)}</td>
+                      <td className="p-1.5 text-end font-medium">{formatCurrency(q.total)}</td>
                       <td className="p-1.5 text-end text-muted-foreground">{q.date || '-'}</td>
                     </tr>
                   ))}
@@ -188,9 +181,9 @@ export default function GapAnalysisPage() {
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3">
         {[
-          { label: t('gapItems'), value: NUMBER_FORMAT.format(data?.count ?? 0), icon: SearchX, color: 'text-red-600' },
-          { label: t('lostQty'), value: NUMBER_FORMAT.format(data?.total_lost_qty ?? 0), icon: Package, color: 'text-orange-600' },
-          { label: t('totalQuoted'), value: NUMBER_FORMAT.format(data?.total_quoted_items ?? 0), icon: FileText, color: 'text-blue-600' },
+          { label: t('gapItems'), value: formatNumber(data?.count ?? 0), icon: SearchX, color: 'text-red-600' },
+          { label: t('lostQty'), value: formatNumber(data?.total_lost_qty ?? 0), icon: Package, color: 'text-orange-600' },
+          { label: t('totalQuoted'), value: formatNumber(data?.total_quoted_items ?? 0), icon: FileText, color: 'text-blue-600' },
           { label: t('conversionRate'), value: data?.total_quoted_items ? `${Math.round(((data.total_quoted_items - (data.count ?? 0)) / data.total_quoted_items) * 100)}%` : '-', icon: SearchX, color: 'text-green-600' },
         ].map((kpi, i) => (
           <motion.div key={kpi.label} custom={i} variants={cardVariants} initial="hidden" animate="visible">
@@ -294,7 +287,7 @@ export default function GapAnalysisPage() {
                     </td>
                     <td className="p-2"><ItemLink code={item.item_code} name={item.name} /></td>
                     <td className="p-2 text-end font-medium">{formatNumber(item.quote_count)}</td>
-                    <td className="p-2 text-end">{NUMBER_FORMAT.format(item.total_qty)}</td>
+                    <td className="p-2 text-end">{formatNumber(item.total_qty)}</td>
                     <td className="p-2 text-end text-muted-foreground">{item.last_quoted || '-'}</td>
                     <td className="p-2 text-end">
                       <Badge variant="destructive">0</Badge>

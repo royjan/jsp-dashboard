@@ -16,7 +16,7 @@ import { EbayRecommendButton } from '@/components/shared/EbayRecommendButton'
 import { ItemLink } from '@/components/shared/ItemLink'
 import { SortableTh } from '@/components/shared/sortable-table'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Area, AreaChart } from 'recharts'
-import { ILS_FORMAT, formatNumber } from '@/lib/constants'
+import { formatCurrency, formatNumber } from '@/lib/format'
 
 type UrgencyLevel = 'critical' | 'warning' | 'watch' | 'ok'
 
@@ -336,7 +336,7 @@ export default function StockForecastPage() {
               <span className="text-xs text-muted-foreground">{he ? 'ערך מלאי בסיכון' : 'Value at Risk'}</span>
             </div>
             <div className="text-2xl font-bold">
-              {isLoading ? <Skeleton className="h-8 w-20" /> : ILS_FORMAT.format(totalValueAtRisk)}
+              {isLoading ? <Skeleton className="h-8 w-20" /> : formatCurrency(totalValueAtRisk)}
             </div>
           </CardContent>
         </Card>
