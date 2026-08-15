@@ -1,18 +1,18 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { motion } from 'framer-motion'
 import { useReceivables } from '@/hooks/use-analytics'
 import { useLocale } from '@/lib/locale-context'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Skeleton } from '@/components/ui/skeleton'
 import { ReceivablesPageSkeleton } from '@/components/layout/PageSkeleton'
 import { ErrorState } from '@/components/ui/feedback-state'
-import { cn } from '@/lib/utils'
+import { PageHeader } from '@/components/shared/PageHeader'
+import { StatTile, StatGrid } from '@/components/shared/StatTile'
+import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
 import Link from 'next/link'
 import {
-  Receipt, AlertTriangle, Clock, DollarSign, Search, ArrowUpDown,
+  Receipt, AlertTriangle, Clock, DollarSign, Search,
 } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
@@ -20,19 +20,99 @@ import {
 } from 'recharts'
 import { formatCurrency, formatNumber } from '@/lib/format'
 
-type SortField = 'name' | 'balance' | 'days_30' | 'days_60' | 'days_90' | 'over_90'
-type SortDir = 'asc' | 'desc'
+const AGING_COLORS = ['#22c55e', '#eab308', '#f97316', '#ef4444', '#dc2626']
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const cardVariants: any = {
-  hidden: { opacity: 0, y: 20, scale: 0.95 },
-  visible: (i: number) => ({
-    opacity: 1, y: 0, scale: 1,
-    transition: { delay: i * 0.08, duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] },
-  }),
+/**
+ * An aging bucket: coloured when there is money in it, a dash when there isn't.
+ * Zero renders as '—' rather than '₪0' so the eye only lands on real debt.
+ */
+function AgingCell({ value, className }: { value: number; className: string }) {
+  if (!(value > 0)) return <span className="text-muted-foreground">—</span>
+  return <span className={className}>{formatCurrency(value)}</span>
 }
 
-const AGING_COLORS = ['#22c55e', '#eab308', '#f97316', '#ef4444', '#dc2626']
+/** The translator, with its full key union preserved. */
+type Translate = ReturnType<typeof useLocale>['t']
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+const RECEIVABLES_COLUMNS = (t: Translate): DataTableColumn<any>[] => [
+  {
+    key: 'name',
+    header: t('customer'),
+    sortable: true,
+    truncate: 'max-w-[220px]',
+    title: (c: any) => c.name,
+    cell: (c: any) => (
+      <Link href={`/customers/${c.code}`} className="font-medium text-primary hover:underline">
+        {c.name}
+      </Link>
+    ),
+  },
+  {
+    key: 'agent',
+    header: t('agent'),
+    sortable: true,
+    hideOnMobile: true,
+    cellClassName: 'text-muted-foreground',
+    cell: (c: any) => c.agent || '—',
+  },
+  {
+    key: 'balance',
+    header: t('balance'),
+    align: 'end',
+    sortable: true,
+    cellClassName: 'font-medium',
+    cell: (c: any) => formatCurrency(c.balance),
+  },
+  {
+    key: 'current',
+    header: t('currentDebt'),
+    align: 'end',
+    sortable: true,
+    hideOnMobile: true,
+    // Nested field — the table can't guess `c.aging.current` from the key.
+    sortValue: (c: any) => c.aging?.current ?? 0,
+    cell: (c: any) => (c.aging.current ? formatCurrency(c.aging.current) : '—'),
+  },
+  {
+    key: 'days_30',
+    header: t('overdue30'),
+    align: 'end',
+    sortable: true,
+    sortValue: (c: any) => c.aging?.days_30 ?? 0,
+    cell: (c: any) => <AgingCell value={c.aging.days_30} className="font-medium text-yellow-600 dark:text-yellow-500" />,
+  },
+  {
+    key: 'days_60',
+    header: t('overdue60'),
+    align: 'end',
+    sortable: true,
+    sortValue: (c: any) => c.aging?.days_60 ?? 0,
+    cell: (c: any) => <AgingCell value={c.aging.days_60} className="font-medium text-orange-600 dark:text-orange-500" />,
+  },
+  {
+    key: 'days_90',
+    header: t('overdue90'),
+    align: 'end',
+    sortable: true,
+    sortValue: (c: any) => c.aging?.days_90 ?? 0,
+    cell: (c: any) => <AgingCell value={c.aging.days_90} className="font-medium text-red-500" />,
+  },
+  {
+    key: 'over_90',
+    header: t('overdue90Plus'),
+    align: 'end',
+    sortable: true,
+    sortValue: (c: any) => c.aging?.over_90 ?? 0,
+    cell: (c: any) =>
+      c.aging.over_90 > 0 ? (
+        <Badge variant="destructive">{formatCurrency(c.aging.over_90)}</Badge>
+      ) : (
+        <span className="text-muted-foreground">—</span>
+      ),
+  },
+]
+/* eslint-enable @typescript-eslint/no-explicit-any */
 
 function LoadingSkeleton() {
   return <ReceivablesPageSkeleton />
@@ -42,27 +122,19 @@ export default function ReceivablesPage() {
   const { t } = useLocale()
   const { data, isLoading, error, refetch } = useReceivables(20)
   const [search, setSearch] = useState('')
-  const [sortField, setSortField] = useState<SortField>('balance')
-  const [sortDir, setSortDir] = useState<SortDir>('desc')
 
-  const toggleSort = (field: SortField) => {
-    if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
-    else { setSortField(field); setSortDir('desc') }
-  }
+  // Stable identity: DataTable re-sorts when `columns` changes, so rebuilding
+  // the array every render would re-sort every render.
+  const columns = useMemo(() => RECEIVABLES_COLUMNS(t), [t])
 
+  // Sorting now lives in <DataTable> (uncontrolled) using the shared comparator,
+  // so this only has to filter.
   const customers = useMemo(() => {
     if (!data?.customers) return []
-    let list = data.customers.filter((c: any) =>
+    return data.customers.filter((c: any) =>
       !search || c.name?.toLowerCase().includes(search.toLowerCase()) || c.code?.includes(search)
     )
-    list.sort((a: any, b: any) => {
-      const aVal = sortField === 'name' ? a.name : (sortField === 'balance' ? a.balance : a.aging[sortField])
-      const bVal = sortField === 'name' ? b.name : (sortField === 'balance' ? b.balance : b.aging[sortField])
-      if (typeof aVal === 'string') return sortDir === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal)
-      return sortDir === 'asc' ? aVal - bVal : bVal - aVal
-    })
-    return list
-  }, [data, search, sortField, sortDir])
+  }, [data, search])
 
   const totals = data?.totals
 
@@ -83,30 +155,29 @@ export default function ReceivablesPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-xl sm:text-2xl font-bold">{t('page.receivables')}</h1>
+      <PageHeader title={t('page.receivables')} icon={Receipt} />
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 sm:gap-3">
+      {/* KPI tiles. `higherIsBetter: false` on the overdue metrics — a rise in
+          debt is red even though the arrow points the same way as revenue. */}
+      <StatGrid columns={5}>
         {[
-          { label: t('totalBalance'), value: formatCurrency(totals?.total_balance ?? 0), icon: DollarSign, color: 'text-blue-600' },
-          { label: t('currentDebt'), value: formatCurrency(totals?.total_current ?? 0), icon: Receipt, color: 'text-green-600' },
-          { label: t('overdue30') + '+', value: formatCurrency((totals?.total_30 ?? 0) + (totals?.total_60 ?? 0) + (totals?.total_90 ?? 0) + (totals?.total_over_90 ?? 0)), icon: Clock, color: 'text-yellow-600' },
-          { label: t('overdue90Plus'), value: formatCurrency(totals?.total_over_90 ?? 0), icon: AlertTriangle, color: 'text-red-600' },
-          { label: t('overdueCustomers'), value: formatNumber(overdueCount), icon: AlertTriangle, color: 'text-orange-600' },
+          { label: t('totalBalance'), value: formatCurrency(totals?.total_balance ?? 0), icon: DollarSign, tone: 'info' as const },
+          { label: t('currentDebt'), value: formatCurrency(totals?.total_current ?? 0), icon: Receipt, tone: 'good' as const },
+          { label: t('overdue30') + '+', value: formatCurrency((totals?.total_30 ?? 0) + (totals?.total_60 ?? 0) + (totals?.total_90 ?? 0) + (totals?.total_over_90 ?? 0)), icon: Clock, tone: 'warn' as const },
+          { label: t('overdue90Plus'), value: formatCurrency(totals?.total_over_90 ?? 0), icon: AlertTriangle, tone: 'bad' as const },
+          { label: t('overdueCustomers'), value: formatNumber(overdueCount), icon: AlertTriangle, tone: 'warn' as const },
         ].map((kpi, i) => (
-          <motion.div key={kpi.label} custom={i} variants={cardVariants} initial="hidden" animate="visible">
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-                  <kpi.icon className={cn('h-3.5 w-3.5', kpi.color)} />
-                  {kpi.label}
-                </div>
-                <div className="text-lg font-bold">{kpi.value}</div>
-              </CardContent>
-            </Card>
-          </motion.div>
+          <StatTile
+            key={kpi.label}
+            index={i}
+            label={kpi.label}
+            value={kpi.value}
+            icon={kpi.icon}
+            tone={kpi.tone}
+            higherIsBetter={false}
+          />
         ))}
-      </div>
+      </StatGrid>
 
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -173,63 +244,14 @@ export default function ReceivablesPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0">
-            <table className="w-full text-xs sm:text-sm min-w-[700px]">
-              <thead>
-                <tr className="border-b text-muted-foreground">
-                  <th className="text-start p-2 cursor-pointer" onClick={() => toggleSort('name')}>
-                    <span className="flex items-center gap-1">{t('customer')} <ArrowUpDown className="h-3 w-3" /></span>
-                  </th>
-                  <th className="text-start p-2">{t('agent')}</th>
-                  <th className="text-end p-2 cursor-pointer" onClick={() => toggleSort('balance')}>
-                    <span className="flex items-center justify-end gap-1">{t('balance')} <ArrowUpDown className="h-3 w-3" /></span>
-                  </th>
-                  <th className="text-end p-2">{t('currentDebt')}</th>
-                  <th className="text-end p-2 cursor-pointer" onClick={() => toggleSort('days_30')}>
-                    <span className="flex items-center justify-end gap-1">{t('overdue30')} <ArrowUpDown className="h-3 w-3" /></span>
-                  </th>
-                  <th className="text-end p-2 cursor-pointer" onClick={() => toggleSort('days_60')}>
-                    <span className="flex items-center justify-end gap-1">{t('overdue60')} <ArrowUpDown className="h-3 w-3" /></span>
-                  </th>
-                  <th className="text-end p-2 cursor-pointer" onClick={() => toggleSort('days_90')}>
-                    <span className="flex items-center justify-end gap-1">{t('overdue90')} <ArrowUpDown className="h-3 w-3" /></span>
-                  </th>
-                  <th className="text-end p-2 cursor-pointer" onClick={() => toggleSort('over_90')}>
-                    <span className="flex items-center justify-end gap-1">{t('overdue90Plus')} <ArrowUpDown className="h-3 w-3" /></span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {customers.map((c: any) => (
-                  <tr
-                    key={c.code}
-                    className="border-b hover:bg-muted/50 transition-colors"
-                  >
-                    <td className="p-2">
-                      <Link href={`/customers/${c.code}`} className="text-primary hover:underline font-medium">
-                        {c.name}
-                      </Link>
-                    </td>
-                    <td className="p-2 text-muted-foreground">{c.agent || '-'}</td>
-                    <td className="p-2 text-end font-medium">{formatCurrency(c.balance)}</td>
-                    <td className="p-2 text-end">{c.aging.current ? formatCurrency(c.aging.current) : '-'}</td>
-                    <td className="p-2 text-end">
-                      {c.aging.days_30 > 0 ? <span className="text-yellow-600 font-medium">{formatCurrency(c.aging.days_30)}</span> : '-'}
-                    </td>
-                    <td className="p-2 text-end">
-                      {c.aging.days_60 > 0 ? <span className="text-orange-600 font-medium">{formatCurrency(c.aging.days_60)}</span> : '-'}
-                    </td>
-                    <td className="p-2 text-end">
-                      {c.aging.days_90 > 0 ? <span className="text-red-500 font-medium">{formatCurrency(c.aging.days_90)}</span> : '-'}
-                    </td>
-                    <td className="p-2 text-end">
-                      {c.aging.over_90 > 0 ? <Badge variant="destructive">{formatCurrency(c.aging.over_90)}</Badge> : '-'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            rows={customers}
+            columns={columns}
+            getRowKey={(c: any) => c.code}
+            defaultSort={{ field: 'balance', dir: 'desc' }}
+            maxHeight="70vh"
+            onRetry={() => refetch()}
+          />
         </CardContent>
       </Card>
     </div>

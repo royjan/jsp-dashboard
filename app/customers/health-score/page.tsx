@@ -21,7 +21,6 @@ import {
   AlertCircle,
   ShieldCheck,
   Eye,
-  ArrowUpDown,
   Search,
   TrendingUp,
   TrendingDown,
@@ -29,7 +28,9 @@ import {
   Play,
   Loader2,
 } from 'lucide-react'
-import { formatCurrency, formatNumber } from '@/lib/format'
+import { formatCurrency, formatNumber, formatRatio, formatPercentDelta } from '@/lib/format'
+import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
+import { sortRows } from '@/lib/sort'
 
 type Band = 'green' | 'yellow' | 'red' | 'all'
 type SortField = 'score' | 'name' | 'revenue' | 'days' | 'returnRate'
@@ -55,6 +56,19 @@ const BAND_STYLE: Record<'green' | 'yellow' | 'red', string> = {
   green: 'bg-emerald-500/15 text-emerald-500 border-emerald-500/30',
   yellow: 'bg-amber-500/15 text-amber-500 border-amber-500/30',
   red: 'bg-red-500/15 text-red-500 border-red-500/30',
+}
+
+/**
+ * How each sortable column pulls its comparable value. Nested/derived fields
+ * (`factors.*`) can't be inferred from the column key, so they live here.
+ * A customer who has never purchased sorts as "longest ago", not as blank.
+ */
+const HEALTH_SORT_VALUES: Record<SortField, (r: HealthScore) => unknown> = {
+  score: r => r.score,
+  name: r => r.name,
+  revenue: r => r.total_revenue,
+  days: r => r.factors.daysSinceLastPurchase ?? Number.MAX_SAFE_INTEGER,
+  returnRate: r => r.factors.returnRate,
 }
 
 function TrendIcon({ trend }: { trend: 'up' | 'down' | 'stable' }) {
@@ -142,30 +156,9 @@ function HealthScoreContent() {
           r.name.toLowerCase().includes(q) || r.code.toLowerCase().includes(q),
       )
     }
-    const sorted = [...rows].sort((a, b) => {
-      let cmp = 0
-      switch (sort) {
-        case 'score':
-          cmp = a.score - b.score
-          break
-        case 'name':
-          cmp = a.name.localeCompare(b.name)
-          break
-        case 'revenue':
-          cmp = a.total_revenue - b.total_revenue
-          break
-        case 'days':
-          cmp =
-            (a.factors.daysSinceLastPurchase ?? Infinity) -
-            (b.factors.daysSinceLastPurchase ?? Infinity)
-          break
-        case 'returnRate':
-          cmp = a.factors.returnRate - b.factors.returnRate
-          break
-      }
-      return dir === 'desc' ? -cmp : cmp
-    })
-    return sorted
+    // Ordering uses the shared comparator; `sort`/`dir` stay here so the band
+    // filter and the sort live in one place (DataTable runs controlled).
+    return sortRows(rows, HEALTH_SORT_VALUES[sort], dir)
   }, [data, bandFilter, sort, dir, searchQuery])
 
   const handleRunHealthCheck = async () => {
@@ -203,39 +196,42 @@ function HealthScoreContent() {
   const total = dist.green + dist.yellow + dist.red
   const allScores = (data.scores || []) as HealthScore[]
 
-  const Header = ({
-    field,
-    children,
-    className,
-  }: {
-    field: SortField
-    children: React.ReactNode
-    className?: string
-  }) => (
-    <th
-      className={cn(
-        'pb-2 font-medium cursor-pointer select-none hover:text-foreground transition-colors whitespace-nowrap',
-        className,
-      )}
-      onClick={() => {
-        if (sort === field) setDir(d => (d === 'asc' ? 'desc' : 'asc'))
-        else {
-          setSort(field)
-          setDir(field === 'score' || field === 'days' ? 'desc' : 'desc')
-        }
-      }}
-    >
-      <span className="inline-flex items-center gap-1">
-        {children}
-        <ArrowUpDown
-          className={cn(
-            'h-3 w-3 shrink-0',
-            sort === field ? 'text-foreground' : 'text-muted-foreground/50',
-          )}
-        />
-      </span>
-    </th>
-  )
+  const healthColumns: DataTableColumn<HealthScore, SortField>[] = [
+    { key: 'score', header: t('healthScore'), sortable: true, cell: row => <ScoreBar score={row.score} band={row.band} /> },
+    {
+      key: 'name', header: t('customer') || 'Customer', sortable: true,
+      cell: row => (
+        <>
+          <Link href={`/customers/${row.code}`} className="block max-w-[200px] truncate font-medium text-primary hover:underline">
+            {row.name}
+          </Link>
+          <div className="text-xs text-muted-foreground">{row.code}</div>
+        </>
+      ),
+    },
+    { key: 'revenue', header: t('revenue') || 'Revenue', align: 'end', sortable: true, cellClassName: 'font-mono', cell: row => formatCurrency(row.total_revenue) },
+    { key: 'days', header: t('daysSinceLastOrder'), align: 'end', sortable: true, cellClassName: 'text-muted-foreground', cell: row => row.factors.daysSinceLastPurchase ?? '—' },
+    {
+      key: 'returnRate', header: t('returnRate'), align: 'end', sortable: true,
+      cell: row => (
+        <Badge variant="outline" className={cn('font-mono', row.factors.returnRate > 0.1 && 'text-red-500')}>
+          {formatRatio(row.factors.returnRate)}
+        </Badge>
+      ),
+    },
+    { key: 'trend', header: t('trend') || 'Trend', align: 'center', cell: row => <TrendIcon trend={row.factors.trend} /> },
+    {
+      key: 'yoy', header: t('yoyChange'), align: 'end',
+      cell: row =>
+        row.factors.yoyChangePct !== null ? (
+          <span className={cn('font-mono', row.factors.yoyChangePct > 0 ? 'text-emerald-500' : row.factors.yoyChangePct < 0 ? 'text-red-500' : 'text-muted-foreground')}>
+            {formatPercentDelta(row.factors.yoyChangePct, 0)}
+          </span>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        ),
+    },
+  ]
 
   return (
     <div className="space-y-4 md:space-y-6">
@@ -410,112 +406,19 @@ function HealthScoreContent() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto max-h-[600px] overflow-y-auto -mx-4 md:mx-0">
-            <table className="w-full text-sm min-w-[800px]">
-              <thead className="sticky top-0 bg-background z-10">
-                <tr className="border-b">
-                  <Header field="score" className="text-start ps-4 md:ps-0">
-                    {t('healthScore')}
-                  </Header>
-                  <Header field="name" className="text-start">
-                    {t('customer') || 'Customer'}
-                  </Header>
-                  <Header field="revenue" className="text-end">
-                    {t('revenue') || 'Revenue'}
-                  </Header>
-                  <Header field="days" className="text-end">
-                    {t('daysSinceLastOrder')}
-                  </Header>
-                  <Header field="returnRate" className="text-end">
-                    {t('returnRate')}
-                  </Header>
-                  <th className="text-center pb-2 font-medium">
-                    {t('trend') || 'Trend'}
-                  </th>
-                  <th className="text-end pb-2 font-medium pe-4 md:pe-0">
-                    {t('yoyChange')}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.slice(0, 200).map((row, idx) => (
-                  <tr
-                    key={row.code}
-                    className="border-b hover:bg-muted/50 transition-colors"
-                  >
-                    <td className="py-2.5 ps-4 md:ps-0">
-                      <ScoreBar score={row.score} band={row.band} />
-                    </td>
-                    <td className="py-2.5">
-                      <Link
-                        href={`/customers/${row.code}`}
-                        className="font-medium text-primary hover:underline block truncate max-w-[200px]"
-                      >
-                        {row.name}
-                      </Link>
-                      <div className="text-xs text-muted-foreground">
-                        {row.code}
-                      </div>
-                    </td>
-                    <td className="py-2.5 text-end font-mono tabular-nums">
-                      {formatCurrency(row.total_revenue)}
-                    </td>
-                    <td className="py-2.5 text-end tabular-nums text-muted-foreground">
-                      {row.factors.daysSinceLastPurchase ?? '—'}
-                    </td>
-                    <td className="py-2.5 text-end tabular-nums">
-                      <Badge
-                        variant="outline"
-                        className={cn(
-                          'font-mono',
-                          row.factors.returnRate > 0.1 && 'text-red-500',
-                        )}
-                      >
-                        {(row.factors.returnRate * 100).toFixed(1)}%
-                      </Badge>
-                    </td>
-                    <td className="py-2.5 text-center">
-                      <TrendIcon trend={row.factors.trend} />
-                    </td>
-                    <td className="py-2.5 text-end tabular-nums pe-4 md:pe-0">
-                      {row.factors.yoyChangePct !== null ? (
-                        <span
-                          className={cn(
-                            'font-mono',
-                            row.factors.yoyChangePct > 0
-                              ? 'text-emerald-500'
-                              : row.factors.yoyChangePct < 0
-                                ? 'text-red-500'
-                                : 'text-muted-foreground',
-                          )}
-                        >
-                          {row.factors.yoyChangePct > 0 ? '+' : ''}
-                          {row.factors.yoyChangePct.toFixed(0)}%
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-                {filtered.length === 0 && (
-                  <tr>
-                    <td
-                      colSpan={7}
-                      className="py-12 text-center text-muted-foreground"
-                    >
-                      {t('noInsights') || 'No customers'}
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-          {filtered.length > 200 && (
-            <div className="text-xs text-muted-foreground text-center pt-3 border-t mt-3">
-              Showing first 200 / {formatNumber(filtered.length)}
-            </div>
-          )}
+          <DataTable
+            rows={filtered}
+            columns={healthColumns}
+            getRowKey={row => row.code}
+            sort={{ field: sort, dir }}
+            onSortChange={next => { setSort(next.field); setDir(next.dir) }}
+            minWidth="min-w-[800px]"
+            maxHeight="600px"
+            // Was a hard `.slice(0, 200)` with an English-only "Showing first
+            // 200" note and no way to see the rest.
+            maxRows={200}
+            labels={{ empty: t('noInsights') || 'No customers' }}
+          />
         </CardContent>
       </Card>
     </div>

@@ -18,35 +18,66 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
 import Link from 'next/link'
 import {
-  ArrowUpDown, Search,
-  Users, UserMinus, DollarSign, AlertTriangle, TrendingUp, TrendingDown, Minus, Crown, ShieldAlert,
+  Search,
+  Users, UserMinus, DollarSign, TrendingUp, TrendingDown, Minus, Crown, ShieldAlert,
 } from 'lucide-react'
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend,
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
 } from 'recharts'
-import { formatCurrency, formatNumber } from '@/lib/format'
+import { formatCurrency, formatNumber, formatDate } from '@/lib/format'
+import { StatTile, StatGrid } from '@/components/shared/StatTile'
+import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
 
 type CustomerSortField = 'name' | 'total_revenue' | 'gross_invoices' | 'total_credits' | 'invoice_count' | 'avg_order_value' | 'trend' | 'last_purchase'
 type ChurnSortField = 'name' | 'last_year_revenue' | 'last_purchase'
 type SortDir = 'asc' | 'desc'
 type ViewTab = 'top' | 'churned'
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const cardVariants: any = {
-  hidden: { opacity: 0, y: 20, scale: 0.95 },
-  visible: (i: number) => ({
-    opacity: 1, y: 0, scale: 1,
-    transition: { delay: i * 0.08, duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] },
-  }),
-}
-
-
 function TrendIcon({ trend }: { trend: string }) {
   if (trend === 'up') return <Badge variant="success" className="gap-1"><TrendingUp className="h-3 w-3" /><span className="hidden md:inline">↑</span></Badge>
   if (trend === 'down') return <Badge variant="destructive" className="gap-1"><TrendingDown className="h-3 w-3" /><span className="hidden md:inline">↓</span></Badge>
   return <Badge variant="secondary" className="gap-1"><Minus className="h-3 w-3" /><span className="hidden md:inline">→</span></Badge>
 }
+
+/** The translator, with its full key union preserved. */
+type Translate = ReturnType<typeof useLocale>['t']
+
+/** Customer name + code, the identity cell shared by both tables. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function CustomerCell({ cust, rank }: { cust: any; rank?: number }) {
+  return (
+    <div className="flex items-center gap-2">
+      {rank !== undefined && rank < 3 && (
+        <Crown className={cn('h-3.5 w-3.5 shrink-0', rank === 0 ? 'text-amber-500' : rank === 1 ? 'text-slate-400' : 'text-amber-700')} />
+      )}
+      <div className="min-w-0">
+        <Link href={`/customers/${cust.code}`} className="block truncate font-medium text-primary hover:underline">
+          {cust.name}
+        </Link>
+        <div className="text-xs text-muted-foreground">{cust.code}</div>
+      </div>
+    </div>
+  )
+}
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+const CUSTOMER_COLUMNS = (t: Translate): DataTableColumn<any, CustomerSortField>[] => [
+  { key: 'name', header: t('customer'), sortable: true, cell: (cust: any, idx: number) => <CustomerCell cust={cust} rank={idx} /> },
+  { key: 'gross_invoices', header: t('invoices'), align: 'end', sortable: true, cellClassName: 'font-mono', cell: (c: any) => formatCurrency(c.gross_invoices) },
+  { key: 'total_credits', header: t('credits'), align: 'end', sortable: true, hideOnMobile: true, cellClassName: 'font-mono text-destructive', cell: (c: any) => (c.total_credits > 0 ? `-${formatCurrency(c.total_credits)}` : '—') },
+  { key: 'total_revenue', header: t('netRevenue'), align: 'end', sortable: true, cellClassName: 'font-mono font-semibold', cell: (c: any) => formatCurrency(c.total_revenue) },
+  { key: 'invoice_count', header: t('orders'), align: 'end', sortable: true, cell: (c: any) => formatNumber(c.invoice_count) },
+  { key: 'trend', header: t('trend'), align: 'center', sortable: true, cell: (c: any) => <TrendIcon trend={c.trend} /> },
+  { key: 'last_purchase', header: t('lastPurchase'), align: 'end', sortable: true, cellClassName: 'text-muted-foreground', cell: (c: any) => formatDate(c.last_purchase) },
+]
+
+const CHURN_COLUMNS = (t: Translate): DataTableColumn<any, ChurnSortField>[] => [
+  { key: 'name', header: t('customer'), sortable: true, cell: (cust: any) => <CustomerCell cust={cust} /> },
+  { key: 'last_year_revenue', header: t('lastYearRevenue'), align: 'end', sortable: true, cellClassName: 'font-mono text-destructive', cell: (c: any) => formatCurrency(c.last_year_revenue) },
+  { key: 'last_purchase', header: t('lastPurchase'), align: 'end', sortable: true, cellClassName: 'text-muted-foreground', cell: (c: any) => formatDate(c.last_purchase) },
+]
+/* eslint-enable @typescript-eslint/no-explicit-any */
 
 function LoadingSkeleton() {
   return (
@@ -124,6 +155,11 @@ function CustomersSection({ searchQuery }: { searchQuery: string }) {
     })
   }, [data, searchQuery, custSort, custDir])
 
+  // Sort stays CONTROLLED here — it is persisted to the URL above, so the page
+  // owns it and <DataTable> just reports clicks.
+  const customerColumns = useMemo(() => CUSTOMER_COLUMNS(t), [t])
+  const churnColumns = useMemo(() => CHURN_COLUMNS(t), [t])
+
   const churned = useMemo(() => {
     let ch = data?.churned || []
     if (searchQuery) {
@@ -137,26 +173,6 @@ function CustomersSection({ searchQuery }: { searchQuery: string }) {
       return churnDir === 'desc' ? -cmp : cmp
     })
   }, [data, searchQuery, churnSort, churnDir])
-
-  const CustSortHeader = ({ field, children, className }: { field: CustomerSortField; children: React.ReactNode; className?: string }) => (
-    <th className={cn('pb-2 font-medium cursor-pointer select-none hover:text-foreground transition-colors whitespace-nowrap', className)}
-      onClick={() => { if (custSort === field) setCustDir(d => d === 'asc' ? 'desc' : 'asc'); else { setCustSort(field); setCustDir('desc') } }}>
-      <span className="inline-flex items-center gap-1">
-        {children}
-        <ArrowUpDown className={cn('h-3 w-3 shrink-0', custSort === field ? 'text-foreground' : 'text-muted-foreground/50')} />
-      </span>
-    </th>
-  )
-
-  const ChurnSortHeader = ({ field, children, className }: { field: ChurnSortField; children: React.ReactNode; className?: string }) => (
-    <th className={cn('pb-2 font-medium cursor-pointer select-none hover:text-foreground transition-colors whitespace-nowrap', className)}
-      onClick={() => { if (churnSort === field) setChurnDir(d => d === 'asc' ? 'desc' : 'asc'); else { setChurnSort(field); setChurnDir('desc') } }}>
-      <span className="inline-flex items-center gap-1">
-        {children}
-        <ArrowUpDown className={cn('h-3 w-3 shrink-0', churnSort === field ? 'text-foreground' : 'text-muted-foreground/50')} />
-      </span>
-    </th>
-  )
 
   if (isLoading) return <LoadingSkeleton />
   if (error) return <ErrorState onRetry={() => refetch()} className="mt-6" />
@@ -188,29 +204,26 @@ function CustomersSection({ searchQuery }: { searchQuery: string }) {
         <DateRangePicker dateFrom={dateFrom} dateTo={dateTo} onChange={(from, to) => { setDateFrom(from); setDateTo(to) }} />
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3 md:gap-4">
+      {/* The value stays an <AnimatedCounter> — StatTile takes a node, so the
+          count-up survives the move onto the shared tile. */}
+      <StatGrid columns={4}>
         {[
-          { icon: Users, label: t('activeCustomers'), value: data.summary.active_this_year, sub: `${data.summary.total_customers} ${t('total').toLowerCase()}`, color: 'text-primary' },
-          { icon: UserMinus, label: t('churnedCustomers'), value: data.summary.churned_count, color: data.summary.churned_count > 0 ? 'text-destructive' : 'text-muted-foreground' },
-          { icon: DollarSign, label: t('avgOrderValue'), value: data.summary.avg_order_value, format: 'currency' as const, color: 'text-primary' },
-          { icon: ShieldAlert, label: t('concentrationRisk'), value: data.concentration.top5_pct, format: 'percent' as const, sub: `${t('top10')}: ${data.concentration.top10_pct}%`, color: concentrationLevel === 'destructive' ? 'text-destructive' : concentrationLevel === 'warning' ? 'text-amber-500' : 'text-emerald-500' },
+          { icon: Users, label: t('activeCustomers'), value: data.summary.active_this_year, sub: `${data.summary.total_customers} ${t('total').toLowerCase()}`, tone: 'info' as const },
+          { icon: UserMinus, label: t('churnedCustomers'), value: data.summary.churned_count, tone: data.summary.churned_count > 0 ? ('bad' as const) : ('default' as const) },
+          { icon: DollarSign, label: t('avgOrderValue'), value: data.summary.avg_order_value, format: 'currency' as const, tone: 'info' as const },
+          { icon: ShieldAlert, label: t('concentrationRisk'), value: data.concentration.top5_pct, format: 'percent' as const, sub: `${t('top10')}: ${data.concentration.top10_pct}%`, tone: concentrationLevel === 'destructive' ? ('bad' as const) : concentrationLevel === 'warning' ? ('warn' as const) : ('good' as const) },
         ].map((kpi, i) => (
-          <motion.div key={kpi.label} custom={i} variants={cardVariants} initial="hidden" animate="visible">
-            <Card className="overflow-hidden h-full">
-              <CardContent className="p-3 md:p-4">
-                <div className="flex items-center gap-2 text-muted-foreground text-xs md:text-sm mb-2">
-                  <kpi.icon className="h-4 w-4 shrink-0" />
-                  <span className="truncate">{kpi.label}</span>
-                </div>
-                <div className={cn('text-xl md:text-2xl font-bold', kpi.color)}>
-                  <AnimatedCounter value={kpi.value} format={kpi.format || 'number'} />
-                </div>
-                {kpi.sub && <div className="text-[11px] md:text-xs text-muted-foreground mt-1">{kpi.sub}</div>}
-              </CardContent>
-            </Card>
-          </motion.div>
+          <StatTile
+            key={kpi.label}
+            index={i}
+            icon={kpi.icon}
+            label={kpi.label}
+            tone={kpi.tone}
+            hint={kpi.sub}
+            value={<AnimatedCounter value={kpi.value} format={kpi.format || 'number'} />}
+          />
         ))}
-      </div>
+      </StatGrid>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 md:gap-6">
         <motion.div className="xl:col-span-2" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3, duration: 0.5 }}>
@@ -243,76 +256,30 @@ function CustomersSection({ searchQuery }: { searchQuery: string }) {
               <AnimatePresence mode="wait">
                 {viewTab === 'top' ? (
                   <motion.div key="top" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} transition={{ duration: 0.2 }}>
-                    <div className="overflow-x-auto max-h-[500px] overflow-y-auto -mx-4 md:mx-0">
-                      <table className="w-full text-sm min-w-[700px]">
-                        <thead className="sticky top-0 bg-background z-10">
-                          <tr className="border-b">
-                            <CustSortHeader field="name" className="text-start ps-4 md:ps-0">{t('customer')}</CustSortHeader>
-                            <CustSortHeader field="gross_invoices" className="text-end">{t('invoices')}</CustSortHeader>
-                            <CustSortHeader field="total_credits" className="text-end">{t('credits')}</CustSortHeader>
-                            <CustSortHeader field="total_revenue" className="text-end">{t('netRevenue')}</CustSortHeader>
-                            <CustSortHeader field="invoice_count" className="text-end">{t('orders')}</CustSortHeader>
-                            <CustSortHeader field="trend" className="text-center">{t('trend')}</CustSortHeader>
-                            <CustSortHeader field="last_purchase" className="text-end pe-4 md:pe-0">{t('lastPurchase')}</CustSortHeader>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {customers.slice(0, 100).map((cust: any, idx: number) => (
-                            <tr key={cust.code || idx} className="border-b hover:bg-muted/50 transition-colors">
-                              <td className="py-2.5 ps-4 md:ps-0">
-                                <div className="flex items-center gap-2">
-                                  {idx < 3 && <Crown className={cn('h-3.5 w-3.5 shrink-0', idx === 0 ? 'text-amber-500' : idx === 1 ? 'text-slate-400' : 'text-amber-700')} />}
-                                  <div>
-                                    <Link href={`/customers/${cust.code}`} className="font-medium truncate max-w-[180px] md:max-w-none text-primary hover:underline block">{cust.name}</Link>
-                                    <div className="text-xs text-muted-foreground">{cust.code}</div>
-                                  </div>
-                                </div>
-                              </td>
-                              <td className="py-2.5 text-end font-mono tabular-nums">{formatCurrency(cust.gross_invoices)}</td>
-                              <td className="py-2.5 text-end font-mono tabular-nums text-destructive">{cust.total_credits > 0 ? `-${formatCurrency(cust.total_credits)}` : '—'}</td>
-                              <td className="py-2.5 text-end font-mono tabular-nums font-semibold">{formatCurrency(cust.total_revenue)}</td>
-                              <td className="py-2.5 text-end tabular-nums">{formatNumber(cust.invoice_count)}</td>
-                              <td className="py-2.5 text-center"><TrendIcon trend={cust.trend} /></td>
-                              <td className="py-2.5 text-end text-muted-foreground pe-4 md:pe-0">{cust.last_purchase?.substring(0, 10)}</td>
-                            </tr>
-                          ))}
-                          {customers.length === 0 && <tr><td colSpan={7} className="py-12 text-center text-muted-foreground">{t('noInsights')}</td></tr>}
-                        </tbody>
-                      </table>
-                    </div>
+                    <DataTable
+                      rows={customers}
+                      columns={customerColumns}
+                      getRowKey={(c: any, i: number) => c.code || i}
+                      sort={{ field: custSort, dir: custDir }}
+                      onSortChange={({ field, dir }) => { setCustSort(field); setCustDir(dir) }}
+                      maxHeight="500px"
+                      // Was `.slice(0, 100)` applied silently before render.
+                      maxRows={100}
+                      labels={{ empty: t('noInsights') }}
+                    />
                   </motion.div>
                 ) : (
                   <motion.div key="churned" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}>
-                    {churned.length === 0 ? (
-                      <div className="py-12 text-center text-muted-foreground">
-                        <UserMinus className="h-12 w-12 mx-auto mb-3 opacity-30" />
-                        <p>{t('noInsights')}</p>
-                      </div>
-                    ) : (
-                      <div className="overflow-x-auto max-h-[500px] overflow-y-auto -mx-4 md:mx-0">
-                        <table className="w-full text-sm min-w-[500px]">
-                          <thead className="sticky top-0 bg-background z-10">
-                            <tr className="border-b">
-                              <ChurnSortHeader field="name" className="text-start ps-4 md:ps-0">{t('customer')}</ChurnSortHeader>
-                              <ChurnSortHeader field="last_year_revenue" className="text-end">{t('lastYearRevenue')}</ChurnSortHeader>
-                              <ChurnSortHeader field="last_purchase" className="text-end pe-4 md:pe-0">{t('lastPurchase')}</ChurnSortHeader>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {churned.map((cust: any, idx: number) => (
-                              <tr key={cust.code || idx} className="border-b hover:bg-muted/50 transition-colors">
-                                <td className="py-2.5 ps-4 md:ps-0">
-                                  <Link href={`/customers/${cust.code}`} className="font-medium truncate max-w-[200px] md:max-w-none text-primary hover:underline block">{cust.name}</Link>
-                                  <div className="text-xs text-muted-foreground">{cust.code}</div>
-                                </td>
-                                <td className="py-2.5 text-end font-mono text-destructive tabular-nums">{formatCurrency(cust.last_year_revenue)}</td>
-                                <td className="py-2.5 text-end text-muted-foreground pe-4 md:pe-0">{cust.last_purchase?.substring(0, 10)}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
+                    <DataTable
+                      rows={churned}
+                      columns={churnColumns}
+                      getRowKey={(c: any, i: number) => c.code || i}
+                      sort={{ field: churnSort, dir: churnDir }}
+                      onSortChange={({ field, dir }) => { setChurnSort(field); setChurnDir(dir) }}
+                      minWidth="min-w-[500px]"
+                      maxHeight="500px"
+                      labels={{ empty: t('noInsights') }}
+                    />
                   </motion.div>
                 )}
               </AnimatePresence>
