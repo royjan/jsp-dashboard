@@ -12,13 +12,15 @@ import { ItemLink } from '@/components/shared/ItemLink'
 import { SubTabs } from '@/components/shared/SubTabs'
 import { EbayRecommendButton } from '@/components/shared/EbayRecommendButton'
 import {
-  SearchX, Package, FileText, Search, ArrowUpDown,
+  SearchX, Package, FileText, Search,
   MessageCircle, TrendingUp, DollarSign, Send,
 } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts'
-import { formatCurrency, formatNumber } from '@/lib/format'
+import { formatCurrency, formatNumber, formatDate } from '@/lib/format'
+import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
+import { sortRows } from '@/lib/sort'
 import { cardVariants } from '@/lib/motion'
 
 type SortField = 'name' | 'total_qty' | 'quote_count' | 'last_quoted' | 'stock_qty' | 'incoming_qty' | 'ordered_qty'
@@ -38,7 +40,6 @@ function LoadingSkeleton() {
   )
 }
 
-const ILS_FORMAT = new Intl.NumberFormat('he-IL', { style: 'currency', currency: 'ILS', minimumFractionDigits: 0, maximumFractionDigits: 0 })
 
 function FollowUpWidget() {
   const { t } = useLocale()
@@ -101,34 +102,63 @@ function FollowUpWidget() {
         {data.top_open && data.top_open.length > 0 && (
           <div className="mt-4">
             <div className="text-xs font-medium text-muted-foreground mb-2">{t('topOpenQuotes')}</div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="border-b text-muted-foreground">
-                    <th className="text-start p-1.5">#</th>
-                    <th className="text-start p-1.5">{t('customer')}</th>
-                    <th className="text-end p-1.5">{t('amount')}</th>
-                    <th className="text-end p-1.5">{t('date')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.top_open.slice(0, 5).map((q: any) => (
-                    <tr key={q.doc_number} className="border-b hover:bg-muted/50">
-                      <td className="p-1.5 font-mono">{q.doc_number}</td>
-                      <td className="p-1.5 truncate max-w-[200px]">{q.customer_name}</td>
-                      <td className="p-1.5 text-end font-medium">{formatCurrency(q.total)}</td>
-                      <td className="p-1.5 text-end text-muted-foreground">{q.date || '-'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <DataTable
+              rows={data.top_open.slice(0, 5)}
+              columns={TOP_OPEN_COLUMNS(t)}
+              getRowKey={(q: any) => q.doc_number}
+              minWidth="min-w-0"
+            />
           </div>
         )}
       </CardContent>
     </Card>
   )
 }
+
+/** The translator, with its full key union preserved. */
+type Translate = ReturnType<typeof useLocale>['t']
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+const TOP_OPEN_COLUMNS = (t: Translate): DataTableColumn<any>[] => [
+  { key: 'doc_number', header: '#', cellClassName: 'font-mono', cell: (q: any) => q.doc_number },
+  { key: 'customer_name', header: t('customer'), truncate: 'max-w-[200px]', title: (q: any) => q.customer_name, cell: (q: any) => q.customer_name },
+  { key: 'total', header: t('amount'), align: 'end', cellClassName: 'font-medium', cell: (q: any) => formatCurrency(q.total) },
+  { key: 'date', header: t('date'), align: 'end', cellClassName: 'text-muted-foreground', cell: (q: any) => formatDate(q.date) },
+]
+
+const GAP_COLUMNS = (t: Translate): DataTableColumn<any, SortField>[] => [
+  {
+    key: 'item_code', header: t('code'), cellClassName: 'font-mono text-xs',
+    cell: (item: any) => (
+      <div className="flex items-center gap-1.5">
+        <EbayRecommendButton itemCode={item.item_code} itemName={item.name} />
+        <ItemLink code={item.item_code} showCode />
+      </div>
+    ),
+  },
+  { key: 'name', header: t('item'), sortable: true, cell: (item: any) => <ItemLink code={item.item_code} name={item.name} /> },
+  { key: 'quote_count', header: t('quotesCount'), align: 'end', sortable: true, cellClassName: 'font-medium', cell: (i: any) => formatNumber(i.quote_count) },
+  { key: 'total_qty', header: t('quantity'), align: 'end', sortable: true, cell: (i: any) => formatNumber(i.total_qty) },
+  { key: 'last_quoted', header: t('lastQuoted'), align: 'end', sortable: true, cellClassName: 'text-muted-foreground', cell: (i: any) => formatDate(i.last_quoted) },
+  {
+    key: 'stock_qty', header: t('stockQty'), align: 'end', sortable: true,
+    // Every row on this page is out of stock by definition — that is what a gap IS.
+    cell: () => <Badge variant="destructive">0</Badge>,
+  },
+  {
+    key: 'incoming_qty', header: t('incoming'), align: 'end', sortable: true,
+    cell: (i: any) => i.incoming_qty > 0
+      ? <Badge variant="secondary">{formatNumber(i.incoming_qty)}</Badge>
+      : <span className="text-muted-foreground">0</span>,
+  },
+  {
+    key: 'ordered_qty', header: t('orderedQty'), align: 'end', sortable: true,
+    cell: (i: any) => i.ordered_qty > 0
+      ? <Badge variant="outline">{formatNumber(i.ordered_qty)}</Badge>
+      : <span className="text-muted-foreground">0</span>,
+  },
+]
+/* eslint-enable @typescript-eslint/no-explicit-any */
 
 export default function GapAnalysisPage() {
   const { t } = useLocale()
@@ -137,24 +167,16 @@ export default function GapAnalysisPage() {
   const [sortField, setSortField] = useState<SortField>('quote_count')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
 
-  const toggleSort = (field: SortField) => {
-    if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
-    else { setSortField(field); setSortDir('desc') }
-  }
-
   const items = useMemo(() => {
     if (!data?.items) return []
-    let list = data.items.filter((item: any) =>
+    const list = data.items.filter((item: any) =>
       !search || item.name?.toLowerCase().includes(search.toLowerCase()) || item.item_code?.toUpperCase().includes(search.toUpperCase())
     )
-    list.sort((a: any, b: any) => {
-      const aVal = a[sortField]
-      const bVal = b[sortField]
-      if (typeof aVal === 'string') return sortDir === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal)
-      return sortDir === 'asc' ? aVal - bVal : bVal - aVal
-    })
-    return list
+    // Shared comparator: Hebrew-aware, ISO dates chronological, blanks last.
+    return sortRows(list, (row: any) => row[sortField], sortDir)
   }, [data, search, sortField, sortDir])
+
+  const gapColumns = useMemo(() => GAP_COLUMNS(t), [t])
 
   const topItems = items.slice(0, 15)
 
@@ -242,73 +264,15 @@ export default function GapAnalysisPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0">
-            <table className="w-full text-xs sm:text-sm min-w-[650px]">
-              <thead>
-                <tr className="border-b text-muted-foreground">
-                  <th className="text-start p-2">{t('code')}</th>
-                  <th className="text-start p-2 cursor-pointer" onClick={() => toggleSort('name')}>
-                    <span className="flex items-center gap-1">{t('item')} <ArrowUpDown className="h-3 w-3" /></span>
-                  </th>
-                  <th className="text-end p-2 cursor-pointer" onClick={() => toggleSort('quote_count')}>
-                    <span className="flex items-center justify-end gap-1">{t('quotesCount')} <ArrowUpDown className="h-3 w-3" /></span>
-                  </th>
-                  <th className="text-end p-2 cursor-pointer" onClick={() => toggleSort('total_qty')}>
-                    <span className="flex items-center justify-end gap-1">{t('quantity')} <ArrowUpDown className="h-3 w-3" /></span>
-                  </th>
-                  <th className="text-end p-2 cursor-pointer" onClick={() => toggleSort('last_quoted')}>
-                    <span className="flex items-center justify-end gap-1">{t('lastQuoted')} <ArrowUpDown className="h-3 w-3" /></span>
-                  </th>
-                  <th className="text-end p-2 cursor-pointer" onClick={() => toggleSort('stock_qty')}>
-                    <span className="flex items-center justify-end gap-1">{t('stockQty')} <ArrowUpDown className="h-3 w-3" /></span>
-                  </th>
-                  <th className="text-end p-2 cursor-pointer" onClick={() => toggleSort('incoming_qty')}>
-                    <span className="flex items-center justify-end gap-1">{t('incoming')} <ArrowUpDown className="h-3 w-3" /></span>
-                  </th>
-                  <th className="text-end p-2 cursor-pointer" onClick={() => toggleSort('ordered_qty')}>
-                    <span className="flex items-center justify-end gap-1">{t('orderedQty')} <ArrowUpDown className="h-3 w-3" /></span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((item: any, i: number) => (
-                  <motion.tr
-                    key={item.item_code}
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: Math.min(i * 0.015, 0.5), duration: 0.2 }}
-                    className="border-b hover:bg-muted/50 transition-colors"
-                  >
-                    <td className="p-2 font-mono text-xs">
-                      <div className="flex items-center gap-1.5">
-                        <EbayRecommendButton itemCode={item.item_code} itemName={item.name} />
-                        <ItemLink code={item.item_code} showCode />
-                      </div>
-                    </td>
-                    <td className="p-2"><ItemLink code={item.item_code} name={item.name} /></td>
-                    <td className="p-2 text-end font-medium">{formatNumber(item.quote_count)}</td>
-                    <td className="p-2 text-end">{formatNumber(item.total_qty)}</td>
-                    <td className="p-2 text-end text-muted-foreground">{item.last_quoted || '-'}</td>
-                    <td className="p-2 text-end">
-                      <Badge variant="destructive">0</Badge>
-                    </td>
-                    <td className="p-2 text-end">
-                      {item.incoming_qty > 0
-                        ? <Badge variant="secondary">{formatNumber(item.incoming_qty)}</Badge>
-                        : <span className="text-muted-foreground">0</span>
-                      }
-                    </td>
-                    <td className="p-2 text-end">
-                      {item.ordered_qty > 0
-                        ? <Badge variant="outline">{formatNumber(item.ordered_qty)}</Badge>
-                        : <span className="text-muted-foreground">0</span>
-                      }
-                    </td>
-                  </motion.tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            rows={items}
+            columns={gapColumns}
+            getRowKey={(item: any) => item.item_code}
+            sort={{ field: sortField, dir: sortDir }}
+            onSortChange={({ field, dir }) => { setSortField(field); setSortDir(dir) }}
+            minWidth="min-w-[650px]"
+            maxHeight="70vh"
+          />
         </CardContent>
       </Card>
 
