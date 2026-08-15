@@ -3,46 +3,12 @@
 import { useMemo, useState } from 'react'
 import { ChevronUp, ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { compareValues, sortRows, type SortDir } from '@/lib/sort'
 
-export type SortDir = 'asc' | 'desc'
-
-// ISO date detection: 2024-01-31, 2024-01-31T12:00:00Z, etc.
-const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2})?/
-
-function compareValues(a: unknown, b: unknown): number {
-  // Null/undefined sort last (regardless of direction — applied before dir flip).
-  const aNil = a === null || a === undefined || a === ''
-  const bNil = b === null || b === undefined || b === ''
-  if (aNil && bNil) return 0
-  if (aNil) return 1
-  if (bNil) return -1
-
-  // Numbers
-  if (typeof a === 'number' && typeof b === 'number') {
-    return a - b
-  }
-
-  // Strings
-  if (typeof a === 'string' && typeof b === 'string') {
-    // ISO date strings → chronological
-    if (ISO_DATE_RE.test(a) && ISO_DATE_RE.test(b)) {
-      const ta = Date.parse(a)
-      const tb = Date.parse(b)
-      if (!Number.isNaN(ta) && !Number.isNaN(tb)) return ta - tb
-    }
-    // numeric-looking strings → numeric
-    const na = Number(a)
-    const nb = Number(b)
-    if (a.trim() !== '' && b.trim() !== '' && !Number.isNaN(na) && !Number.isNaN(nb)) {
-      return na - nb
-    }
-    // Hebrew/English aware string compare
-    return a.localeCompare(b, 'he')
-  }
-
-  // Mixed / fallback
-  return String(a).localeCompare(String(b), 'he')
-}
+// The comparator moved to `@/lib/sort` so <DataTable> and this hook order rows
+// identically. Re-exported here for existing importers.
+export { compareValues }
+export type { SortDir }
 
 export interface UseSortableResult<T> {
   sorted: T[]
@@ -70,12 +36,9 @@ export function useSortable<T>(
 
   const sorted = useMemo(() => {
     if (!sortKey) return rows
-    const copy = [...rows]
-    copy.sort((ra, rb) => {
-      const base = compareValues(ra[sortKey], rb[sortKey])
-      return sortDir === 'asc' ? base : -base
-    })
-    return copy
+    // sortRows keeps blank cells pinned last in BOTH directions; the previous
+    // inline sort flipped them to the top on `desc`.
+    return sortRows(rows, (row) => row[sortKey], sortDir)
   }, [rows, sortKey, sortDir])
 
   return { sorted, sortKey, sortDir, toggleSort }

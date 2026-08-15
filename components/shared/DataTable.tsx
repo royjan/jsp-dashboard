@@ -21,10 +21,13 @@
  */
 
 import * as React from 'react'
-import { ArrowUpDown, AlertTriangle, RefreshCw, Inbox, Loader2 } from 'lucide-react'
+import { ArrowUpDown, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { ErrorState, EmptyState } from '@/components/ui/feedback-state'
+import { sortRows, type SortDir } from '@/lib/sort'
+import { formatNumber } from '@/lib/format'
 
-export type SortDir = 'asc' | 'desc'
+export type { SortDir }
 
 export interface DataTableSort<TSortKey extends string = string> {
   field: TSortKey
@@ -51,6 +54,13 @@ export interface DataTableColumn<TRow, TSortKey extends string = string> {
   sortable?: boolean
   /** Sort field emitted to onSortChange; defaults to `key`. */
   sortKey?: TSortKey
+  /**
+   * Value to sort this column by when the table sorts ITSELF (uncontrolled
+   * mode — see `defaultSort`). Without it an uncontrolled table falls back to
+   * `row[sortKey ?? key]`, which is right for plain field columns and wrong
+   * for computed ones — give those an explicit `sortValue`.
+   */
+  sortValue?: (row: TRow) => unknown
   /**
    * Truncate the cell to a single line with ellipsis and attach a title= tooltip.
    * Pass a Tailwind max-width (e.g. 'max-w-[200px]') or `true` for a sensible default.
@@ -81,9 +91,20 @@ export interface DataTableProps<TRow, TSortKey extends string = string> {
   error?: unknown
   onRetry?: () => void
 
-  // --- sorting (controlled) ---
+  // --- sorting ---
+  /**
+   * CONTROLLED sorting: the caller owns the state (typically in URL params)
+   * and re-fetches or re-sorts itself. Pass both `sort` and `onSortChange`.
+   */
   sort?: DataTableSort<TSortKey> | null
   onSortChange?: (sort: DataTableSort<TSortKey>) => void
+  /**
+   * UNCONTROLLED sorting: pass `defaultSort` and omit `sort`/`onSortChange`.
+   * The table keeps its own sort state and orders `rows` in-memory with the
+   * shared comparator (Hebrew-aware, ISO dates chronological, blanks last).
+   * This is what lets a hand-rolled table move over without rewiring state.
+   */
+  defaultSort?: DataTableSort<TSortKey> | null
 
   // --- row interaction ---
   onRowClick?: (row: TRow, index: number) => void
@@ -102,6 +123,18 @@ export interface DataTableProps<TRow, TSortKey extends string = string> {
   maxHeight?: string
   /** Number of skeleton rows while loading. Default 8. */
   loadingRows?: number
+  /**
+   * Render at most this many rows, with a footer saying how many are hidden and
+   * a button to reveal the rest.
+   *
+   * This replaces the `rows.slice(0, 100)` idiom that pages used to apply
+   * *before* handing rows over — that silently dropped data with nothing on
+   * screen to say so, which on an inventory/AR table reads as "these are all
+   * the customers" when it isn't. Truncating here keeps the cap (rows are not
+   * virtualised, so a few thousand <tr> do cost) but makes it visible and
+   * dismissible.
+   */
+  maxRows?: number
   className?: string
   /** Localized strings (Hebrew-first by default). */
   labels?: Partial<DataTableLabels>
@@ -112,6 +145,9 @@ export interface DataTableLabels {
   empty: string
   error: string
   retry: string
+  /** `(shown, total)` → e.g. "מוצגות 100 שורות מתוך 1,240" */
+  truncated: (shown: number, total: number) => string
+  showAll: string
 }
 
 const DEFAULT_LABELS: DataTableLabels = {
@@ -119,6 +155,9 @@ const DEFAULT_LABELS: DataTableLabels = {
   empty: 'אין נתונים להצגה',
   error: 'אירעה שגיאה בטעינת הנתונים',
   retry: 'נסה שוב',
+  truncated: (shown, total) =>
+    `מוצגות ${formatNumber(shown)} שורות מתוך ${formatNumber(total)}`,
+  showAll: 'הצג הכל',
 }
 
 const alignClass = (align: DataTableColumn<unknown>['align']) =>
@@ -136,13 +175,14 @@ function defaultTitle(value: React.ReactNode): string | undefined {
 
 export function DataTable<TRow, TSortKey extends string = string>({
   columns,
-  rows,
+  rows: rowsProp,
   getRowKey,
   loading,
   error,
   onRetry,
-  sort,
+  sort: sortProp,
   onSortChange,
+  defaultSort,
   onRowClick,
   rowClassName,
   selectable,
@@ -151,43 +191,62 @@ export function DataTable<TRow, TSortKey extends string = string>({
   minWidth = 'min-w-[700px]',
   maxHeight,
   loadingRows = 8,
+  maxRows,
   className,
   labels,
 }: DataTableProps<TRow, TSortKey>) {
   const L = { ...DEFAULT_LABELS, ...labels }
   const colCount = columns.length + (selectable ? 1 : 0)
 
+  // Controlled when the caller passes `sort`; otherwise the table owns it.
+  const isControlled = sortProp !== undefined
+  const [internalSort, setInternalSort] = React.useState<DataTableSort<TSortKey> | null>(
+    defaultSort ?? null,
+  )
+  const sort = isControlled ? sortProp : internalSort
+
   const toggleSort = (col: DataTableColumn<TRow, TSortKey>) => {
-    if (!col.sortable || !onSortChange) return
+    if (!col.sortable) return
     const field = (col.sortKey ?? col.key) as TSortKey
-    const nextDir: SortDir = sort?.field === field && sort.dir === 'asc' ? 'desc' : sort?.field === field ? 'asc' : 'desc'
-    onSortChange({ field, dir: nextDir })
+    // First click on a new column → 'desc' (biggest first, what you want on a
+    // money/qty column); clicking the active column flips it.
+    const nextDir: SortDir =
+      sort?.field === field ? (sort.dir === 'asc' ? 'desc' : 'asc') : 'desc'
+    const next: DataTableSort<TSortKey> = { field, dir: nextDir }
+
+    if (isControlled) onSortChange?.(next)
+    else setInternalSort(next)
   }
 
-  // ----- non-data states: never render a blank table -----
-  if (error) {
-    return (
-      <StatePanel
-        icon={<AlertTriangle className="h-6 w-6 text-destructive" />}
-        title={L.error}
-        message={errorMessage(error)}
-        action={
-          onRetry ? (
-            <button
-              type="button"
-              onClick={onRetry}
-              className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-muted transition-colors cursor-pointer"
-            >
-              <RefreshCw className="h-3.5 w-3.5" />
-              {L.retry}
-            </button>
-          ) : undefined
-        }
-      />
-    )
-  }
+  // In uncontrolled mode the table does the ordering itself. Controlled callers
+  // hand us rows already sorted, so leave them alone.
+  const columnsByField = React.useMemo(() => {
+    const map = new Map<string, DataTableColumn<TRow, TSortKey>>()
+    for (const col of columns) map.set(String(col.sortKey ?? col.key), col)
+    return map
+  }, [columns])
+
+  const sortedRows = React.useMemo(() => {
+    if (isControlled || !sort) return rowsProp
+    const col = columnsByField.get(String(sort.field))
+    const getValue =
+      col?.sortValue ??
+      ((row: TRow) => (row as Record<string, unknown>)?.[String(sort.field)])
+    return sortRows(rowsProp, getValue, sort.dir)
+  }, [isControlled, sort, rowsProp, columnsByField])
+
+  // Truncation is applied AFTER sorting, so "top 100" means the top 100 of the
+  // current sort rather than of whatever order the API happened to return.
+  const [showAll, setShowAll] = React.useState(false)
+  const truncating = maxRows !== undefined && !showAll && sortedRows.length > maxRows
+  const rows = truncating ? sortedRows.slice(0, maxRows) : sortedRows
+  const hiddenCount = sortedRows.length - rows.length
 
   // ----- selection helpers -----
+  // NOTE: every hook must run before the `error` early-return below. This
+  // useMemo used to sit AFTER it, so the first render that errored called one
+  // hook fewer and React threw "rendered fewer hooks than expected" — the
+  // error state could never actually paint.
   const allKeys = React.useMemo(() => rows.map((r, i) => getRowKey(r, i)), [rows, getRowKey])
   const allSelected = selectable && allKeys.length > 0 && allKeys.every(k => selectedKeys?.has(k))
   const someSelected = selectable && !allSelected && allKeys.some(k => selectedKeys?.has(k))
@@ -201,6 +260,19 @@ export function DataTable<TRow, TSortKey extends string = string>({
     const next = new Set(selectedKeys)
     next.has(key) ? next.delete(key) : next.add(key)
     onSelectionChange(next)
+  }
+
+  // ----- non-data states: never render a blank table -----
+  if (error) {
+    return (
+      <ErrorState
+        variant="inline"
+        title={L.error}
+        description={errorMessage(error)}
+        onRetry={onRetry}
+        retryLabel={L.retry}
+      />
+    )
   }
 
   return (
@@ -268,7 +340,7 @@ export function DataTable<TRow, TSortKey extends string = string>({
           ) : rows.length === 0 ? (
             <tr>
               <td colSpan={colCount} className="py-0">
-                <StatePanel icon={<Inbox className="h-6 w-6 text-muted-foreground/60" />} title={L.empty} />
+                <EmptyState variant="inline" title={L.empty} />
               </td>
             </tr>
           ) : (
@@ -332,17 +404,18 @@ export function DataTable<TRow, TSortKey extends string = string>({
           {L.loading}
         </div>
       )}
-    </div>
-  )
-}
-
-function StatePanel({ icon, title, message, action }: { icon: React.ReactNode; title: string; message?: string; action?: React.ReactNode }) {
-  return (
-    <div className="flex flex-col items-center justify-center gap-2 px-4 py-10 text-center">
-      {icon}
-      <div className="text-sm font-medium text-foreground">{title}</div>
-      {message && <div className="max-w-md text-xs text-muted-foreground">{message}</div>}
-      {action && <div className="mt-1">{action}</div>}
+      {hiddenCount > 0 && !loading && (
+        <div className="flex flex-wrap items-center justify-center gap-2 border-t py-2.5 text-xs text-muted-foreground">
+          <span>{L.truncated(rows.length, sortedRows.length)}</span>
+          <button
+            type="button"
+            onClick={() => setShowAll(true)}
+            className="cursor-pointer rounded-md border px-2 py-1 font-medium text-foreground transition-colors hover:bg-muted"
+          >
+            {L.showAll}
+          </button>
+        </div>
+      )}
     </div>
   )
 }

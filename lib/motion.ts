@@ -30,3 +30,22 @@ export function staggerContainer(stagger: number = STAGGER): Variants {
     visible: { transition: { staggerChildren: stagger } },
   }
 }
+
+/**
+ * Index-staggered card entrance — the variant 10 pages each redefined locally
+ * (as `const cardVariants: any`, with an eslint-disable each time). Drive it
+ * with the row index:
+ *
+ *   <motion.div custom={i} variants={cardVariants} initial="hidden" animate="visible">
+ *
+ * Typed as Variants; the `custom` callback form is what needs the index.
+ */
+export const cardVariants: Variants = {
+  hidden: { opacity: 0, y: 12, scale: 0.98 },
+  visible: (i: number = 0) => ({
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    transition: { delay: i * STAGGER, duration: DURATION.base, ease: EASE },
+  }),
+}

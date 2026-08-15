@@ -10,11 +10,20 @@ import { cn } from '@/lib/utils'
  * `isError` branch and EmptyState when a successful query returns nothing.
  */
 
+/**
+ * `variant` controls the chrome, not the content:
+ *  - 'card'   → bordered surface. Use when the state REPLACES a card/section.
+ *  - 'inline' → no border or background. Use when it already sits inside a
+ *               card or a <td>, where a second border reads as a nested box.
+ */
+export type FeedbackVariant = 'card' | 'inline'
+
 interface ErrorStateProps {
   title?: string
   description?: string
   onRetry?: () => void
   retryLabel?: string
+  variant?: FeedbackVariant
   className?: string
 }
 
@@ -23,13 +32,17 @@ export function ErrorState({
   description = 'לא הצלחנו לטעון את הנתונים. נסה שוב.',
   onRetry,
   retryLabel = 'נסה שוב',
+  variant = 'card',
   className,
 }: ErrorStateProps) {
   return (
     <div
       role="alert"
       className={cn(
-        'flex flex-col items-center justify-center gap-3 rounded-xl border border-border bg-card px-6 py-12 text-center',
+        'flex flex-col items-center justify-center gap-3 text-center',
+        variant === 'card'
+          ? 'rounded-xl border border-border bg-card px-6 py-12'
+          : 'px-4 py-10',
         className,
       )}
     >
@@ -55,6 +68,7 @@ interface EmptyStateProps {
   description?: string
   icon?: React.ReactNode
   action?: React.ReactNode
+  variant?: FeedbackVariant
   className?: string
 }
 
@@ -63,12 +77,16 @@ export function EmptyState({
   description,
   icon,
   action,
+  variant = 'card',
   className,
 }: EmptyStateProps) {
   return (
     <div
       className={cn(
-        'flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border bg-card/50 px-6 py-12 text-center',
+        'flex flex-col items-center justify-center gap-3 text-center',
+        variant === 'card'
+          ? 'rounded-xl border border-dashed border-border bg-card/50 px-6 py-12'
+          : 'px-4 py-10',
         className,
       )}
     >
