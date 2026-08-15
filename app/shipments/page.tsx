@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useQuery, keepPreviousData } from '@tanstack/react-query'
@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useLocale } from '@/lib/locale-context'
 import { formatNumber } from '@/lib/constants'
-import { useSortable, SortableTh } from '@/components/shared/sortable-table'
+import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
 import { Container, PackageCheck, AlertTriangle, Truck, ChevronLeft, ChevronRight} from 'lucide-react'
 import { formatDate } from '@/lib/format'
 
@@ -61,7 +61,10 @@ export default function ShipmentsPage() {
   const router = useRouter()
   const { locale } = useLocale()
   const isHe = locale === 'he'
-  const t = (he: string, en: string) => (isHe ? he : en)
+  // Stable identity: the column memo below depends on `t`, and DataTable
+  // re-sorts whenever `columns` changes — an inline arrow here would rebuild
+  // the columns and re-sort on every render.
+  const t = useCallback((he: string, en: string) => (isHe ? he : en), [isHe])
   const [offset, setOffset] = useState(0)
   // '' = everything, 'internal' = Lubinski deliveries, otherwise a supplier code.
   const [filter, setFilter] = useState('')
@@ -95,7 +98,40 @@ export default function ShipmentsPage() {
   // their labels and counts while a filter is active.
   const supplierOptions = data?.suppliers ?? []
   const internalSources = data?.internalSources ?? []
-  const { sorted, sortKey, sortDir, toggleSort } = useSortable<Shipment>(data?.shipments ?? [])
+  // Sorting moved into <DataTable> (uncontrolled, shared comparator). No
+  // defaultSort: rows keep the API's order until a header is clicked, which is
+  // what useSortable did with no initial key.
+  const rows = data?.shipments ?? []
+
+  const columns = useMemo<DataTableColumn<Shipment>[]>(() => [
+    { key: 'shipmentDate', header: t('תאריך', 'Date'), sortable: true, cellClassName: 'whitespace-nowrap', cell: (s: Shipment) => fmtDate(s.shipmentDate) },
+    {
+      key: 'supplier', header: t('ספק', 'Supplier'), sortable: true,
+      cell: (s: Shipment) => s.isInternal ? (
+        // Not a supplier at all — an internal delivery.
+        <Badge variant="secondary" className="max-w-[200px] truncate">
+          {t('פנימי', 'Internal')}{s.internalSource ? ` · ${s.internalSource}` : ''}
+        </Badge>
+      ) : s.matchedSupplier ? (
+        <Link href={`/suppliers/${encodeURIComponent(s.matchedSupplier.code)}`} onClick={(e) => e.stopPropagation()}>
+          <Badge variant="outline" className="max-w-[200px] cursor-pointer truncate hover:bg-accent">
+            {s.supplier ? `${s.supplier} · ` : ''}{s.matchedSupplier.name} ↗
+          </Badge>
+        </Link>
+      ) : (
+        <Badge variant="outline">{s.supplier || '—'}</Badge>
+      ),
+    },
+    { key: 'name', header: t('משלוח', 'Shipment'), sortable: true, truncate: 'max-w-[260px]', title: (s: Shipment) => s.name, cell: (s: Shipment) => s.name },
+    { key: 'totalScanned', header: t('נסרק', 'Scanned'), align: 'end', sortable: true, cell: (s: Shipment) => `${formatNumber(s.totalScanned)} / ${formatNumber(s.totalExpected)}` },
+    {
+      key: 'missing', header: t('חוסר', 'Missing'), align: 'end', sortable: true,
+      cell: (s: Shipment) => s.missing > 0
+        ? <span className="font-semibold text-amber-500">{formatNumber(s.missing)}</span>
+        : <span className="text-muted-foreground">0</span>,
+    },
+    { key: 'uniqueProducts', header: t('פריטים', 'Products'), align: 'end', sortable: true, cell: (s: Shipment) => formatNumber(s.uniqueProducts) },
+  ], [t])
 
   return (
     <div className="space-y-4">
@@ -187,62 +223,22 @@ export default function ShipmentsPage() {
             <div className="py-10 text-center text-sm text-destructive">
               {t('שגיאה בטעינת המשלוחים', 'Failed to load shipments')}{data?.error ? ` — ${data.error}` : ''}
             </div>
-          ) : sorted.length === 0 ? (
-            <div className="py-10 text-center text-sm text-muted-foreground">{t('אין משלוחים', 'No shipments')}</div>
           ) : (
+            /* No empty branch here: DataTable renders its own empty state, and
+               short-circuiting on it hid the pagination controls — leaving an
+               empty page with no way back. */
             <>
               {/* Bounded height so this is the scroll container the sticky
                   header can latch onto (see stock-forecast for the rationale). */}
-              <div className="overflow-auto max-h-[calc(100vh-20rem)] -mx-3 sm:mx-0 px-3 sm:px-0">
-                <table className="w-full text-xs sm:text-sm min-w-[680px]">
-                  <thead className="sticky top-0 z-20 bg-card">
-                    <tr className="border-b text-muted-foreground">
-                      <SortableTh<Shipment> label={t('תאריך', 'Date')} sortKey="shipmentDate" align="start" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                      <SortableTh<Shipment> label={t('ספק', 'Supplier')} sortKey="supplier" align="start" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                      <SortableTh<Shipment> label={t('משלוח', 'Shipment')} sortKey="name" align="start" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                      <SortableTh<Shipment> label={t('נסרק', 'Scanned')} sortKey="totalScanned" align="end" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                      <SortableTh<Shipment> label={t('חוסר', 'Missing')} sortKey="missing" align="end" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                      <SortableTh<Shipment> label={t('פריטים', 'Products')} sortKey="uniqueProducts" align="end" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sorted.map((s) => (
-                      <tr
-                        key={s.id}
-                        onClick={() => router.push(`/shipments/${s.id}`)}
-                        className="border-b last:border-0 hover:bg-accent/50 cursor-pointer"
-                      >
-                        <td className="p-2 tabular-nums whitespace-nowrap">{fmtDate(s.shipmentDate)}</td>
-                        <td className="p-2">
-                          {s.isInternal ? (
-                            // Not a supplier at all — an internal delivery.
-                            <Badge variant="secondary" className="max-w-[200px] truncate">
-                              {t('פנימי', 'Internal')}{s.internalSource ? ` · ${s.internalSource}` : ''}
-                            </Badge>
-                          ) : s.matchedSupplier ? (
-                            <Link
-                              href={`/suppliers/${encodeURIComponent(s.matchedSupplier.code)}`}
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <Badge variant="outline" className="cursor-pointer hover:bg-accent max-w-[200px] truncate">
-                                {s.supplier ? `${s.supplier} · ` : ''}{s.matchedSupplier.name} ↗
-                              </Badge>
-                            </Link>
-                          ) : (
-                            <Badge variant="outline">{s.supplier || '—'}</Badge>
-                          )}
-                        </td>
-                        <td className="p-2 truncate max-w-[260px]">{s.name}</td>
-                        <td className="p-2 text-end tabular-nums">{formatNumber(s.totalScanned)} / {formatNumber(s.totalExpected)}</td>
-                        <td className="p-2 text-end tabular-nums">
-                          {s.missing > 0 ? <span className="text-amber-500 font-semibold">{formatNumber(s.missing)}</span> : <span className="text-muted-foreground">0</span>}
-                        </td>
-                        <td className="p-2 text-end tabular-nums">{formatNumber(s.uniqueProducts)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <DataTable
+                rows={rows}
+                columns={columns}
+                getRowKey={(s: Shipment) => s.id}
+                onRowClick={(s: Shipment) => router.push(`/shipments/${s.id}`)}
+                minWidth="min-w-[680px]"
+                maxHeight="calc(100vh - 20rem)"
+                labels={{ empty: t('אין משלוחים', 'No shipments') }}
+              />
               {/* Pagination */}
               <div className="mt-3 flex items-center justify-between">
                 <Button variant="outline" size="sm" disabled={offset === 0 || isFetching} onClick={() => setOffset((o) => Math.max(0, o - PAGE))}>
