@@ -29,6 +29,7 @@ import { ArrowUpDown, Search, Crown, TrendingUp, Layers, AlertTriangle, Sparkles
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from 'recharts'
 import { incrementStreaming, decrementStreaming } from '@/lib/streaming-counter'
 import { formatCurrency, formatDate, formatNumber } from '@/lib/format'
+import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
 
 // ── Types ──
 
@@ -36,6 +37,47 @@ const PAGE_SIZE = 10
 
 type CardTab = 'analysis' | 'conversion'
 type ConvTab = 'items' | 'customers'
+/** The translator, with its full key union preserved. */
+type Translate = ReturnType<typeof useLocale>['t']
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+const UNCONVERTED_ITEM_COLUMNS = (t: Translate): DataTableColumn<any, 'name' | 'timesQuoted' | 'timesSold' | 'lostValue' | 'lastQuoted'>[] => [
+  {
+    key: 'name', header: t('item'), sortable: true,
+    cell: (item: any) => (
+      <>
+        <div className="max-w-[200px] truncate font-medium md:max-w-none">
+          <ItemLink code={item.code} name={item.name} />
+        </div>
+        {item.code && (
+          <div className="font-mono text-xs text-muted-foreground">
+            <ItemLink code={item.code} showCode className="text-muted-foreground hover:text-primary" />
+          </div>
+        )}
+      </>
+    ),
+  },
+  { key: 'timesQuoted', header: t('timesQuoted'), align: 'end', sortable: true, cell: (i: any) => formatNumber(i.timesQuoted) },
+  { key: 'timesSold', header: t('timesSold'), align: 'end', sortable: true, cell: (i: any) => formatNumber(i.timesSold) },
+  { key: 'lostValue', header: t('lostRevenue'), align: 'end', sortable: true, cellClassName: 'font-mono text-destructive', cell: (i: any) => formatCurrency(i.lostValue) },
+  { key: 'lastQuoted', header: t('lastQuoted'), align: 'end', sortable: true, cellClassName: 'text-muted-foreground', cell: (i: any) => formatDate(i.lastQuoted) },
+]
+
+const CONV_CUSTOMER_COLUMNS = (t: Translate): DataTableColumn<any, 'name' | 'quotesCount' | 'convertedCount' | 'rate' | 'lostValue'>[] => [
+  {
+    key: 'name', header: t('customer'), sortable: true,
+    cell: (c: any) => <div className="max-w-[200px] truncate font-medium md:max-w-none">{c.name}</div>,
+  },
+  { key: 'quotesCount', header: t('quotesCount'), align: 'end', sortable: true, cell: (c: any) => formatNumber(c.quotesCount) },
+  { key: 'convertedCount', header: t('convertedCount'), align: 'end', sortable: true, cell: (c: any) => formatNumber(c.convertedCount) },
+  {
+    key: 'rate', header: t('rate'), align: 'end', sortable: true,
+    cell: (c: any) => <Badge variant={c.rate >= 70 ? 'success' : c.rate >= 40 ? 'warning' : 'destructive'}>{c.rate}%</Badge>,
+  },
+  { key: 'lostValue', header: t('lostRevenue'), align: 'end', sortable: true, cellClassName: 'font-mono text-destructive', cell: (c: any) => formatCurrency(c.lostValue) },
+]
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
 type ItemSortField = 'name' | 'timesQuoted' | 'timesSold' | 'lostValue' | 'lastQuoted'
 type ConvCustSortField = 'name' | 'quotesCount' | 'convertedCount' | 'rate' | 'lostValue'
 type QuickView = 'all' | 'at_risk' | 'urgent' | 'dead' | 'excess'
@@ -396,6 +438,10 @@ function ConversionSection({ searchQuery }: { searchQuery: string }) {
   const [ccSort, setCcSort] = useState<ConvCustSortField>((get('ccsort') as ConvCustSortField) || 'lostValue')
   const [ccDir, setCcDir] = useState<SortDir>((get('ccdir') as SortDir) || 'desc')
 
+  // Stable identity — DataTable re-sorts when `columns` changes.
+  const itemColumns = useMemo(() => UNCONVERTED_ITEM_COLUMNS(t), [t])
+  const ccColumns = useMemo(() => CONV_CUSTOMER_COLUMNS(t), [t])
+
   const { data, isLoading } = useConversionAnalysis(dateFrom, dateTo)
 
   useEffect(() => {
@@ -433,20 +479,6 @@ function ConversionSection({ searchQuery }: { searchQuery: string }) {
       return ccDir === 'desc' ? -cmp : cmp
     })
   }, [data, searchQuery, ccSort, ccDir])
-
-  const ItemSortHeader = ({ field, children, className }: { field: ItemSortField; children: React.ReactNode; className?: string }) => (
-    <th className={cn('pb-2 font-medium cursor-pointer select-none hover:text-foreground transition-colors whitespace-nowrap', className)}
-      onClick={() => { if (itemSort === field) setItemDir(d => d === 'asc' ? 'desc' : 'asc'); else { setItemSort(field); setItemDir('desc') } }}>
-      <span className="inline-flex items-center gap-1">{children}<ArrowUpDown className={cn('h-3 w-3 shrink-0', itemSort === field ? 'text-foreground' : 'text-muted-foreground/50')} /></span>
-    </th>
-  )
-
-  const CcSortHeader = ({ field, children, className }: { field: ConvCustSortField; children: React.ReactNode; className?: string }) => (
-    <th className={cn('pb-2 font-medium cursor-pointer select-none hover:text-foreground transition-colors whitespace-nowrap', className)}
-      onClick={() => { if (ccSort === field) setCcDir(d => d === 'asc' ? 'desc' : 'asc'); else { setCcSort(field); setCcDir('desc') } }}>
-      <span className="inline-flex items-center gap-1">{children}<ArrowUpDown className={cn('h-3 w-3 shrink-0', ccSort === field ? 'text-foreground' : 'text-muted-foreground/50')} /></span>
-    </th>
-  )
 
   if (isLoading) return (
     <div className="space-y-6">
@@ -576,66 +608,29 @@ function ConversionSection({ searchQuery }: { searchQuery: string }) {
           <AnimatePresence mode="wait">
             {convTab === 'items' ? (
               <motion.div key="items" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} transition={{ duration: 0.2 }}>
-                <div className="overflow-x-auto max-h-[500px] overflow-y-auto -mx-4 md:mx-0">
-                  <table className="w-full text-sm min-w-[600px]">
-                    <thead className="sticky top-0 bg-background z-10">
-                      <tr className="border-b">
-                        <ItemSortHeader field="name" className="text-start ps-4 md:ps-0">{t('item')}</ItemSortHeader>
-                        <ItemSortHeader field="timesQuoted" className="text-end">{t('timesQuoted')}</ItemSortHeader>
-                        <ItemSortHeader field="timesSold" className="text-end">{t('timesSold')}</ItemSortHeader>
-                        <ItemSortHeader field="lostValue" className="text-end">{t('lostRevenue')}</ItemSortHeader>
-                        <ItemSortHeader field="lastQuoted" className="text-end pe-4 md:pe-0">{t('lastQuoted')}</ItemSortHeader>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {unconvertedItems.map((item: any, idx: number) => (
-                        <motion.tr key={idx} custom={idx} variants={convRowVariants} initial="hidden" animate="visible" className="border-b hover:bg-muted/50 transition-colors">
-                          <td className="py-2.5 ps-4 md:ps-0">
-                            <div className="font-medium truncate max-w-[200px] md:max-w-none"><ItemLink code={item.code} name={item.name} /></div>
-                            {item.code && <div className="text-xs text-muted-foreground font-mono"><ItemLink code={item.code} showCode className="text-muted-foreground hover:text-primary" /></div>}
-                          </td>
-                          <td className="py-2.5 text-end tabular-nums">{formatNumber(item.timesQuoted)}</td>
-                          <td className="py-2.5 text-end tabular-nums">{formatNumber(item.timesSold)}</td>
-                          <td className="py-2.5 text-end font-mono text-destructive">{formatCurrency(item.lostValue)}</td>
-                          <td className="py-2.5 text-end text-muted-foreground pe-4 md:pe-0">{formatDate(item.lastQuoted)}</td>
-                        </motion.tr>
-                      ))}
-                      {unconvertedItems.length === 0 && <tr><td colSpan={5} className="py-12 text-center text-muted-foreground">{t('noInsights')}</td></tr>}
-                    </tbody>
-                  </table>
-                </div>
+                <DataTable
+                  rows={unconvertedItems}
+                  columns={itemColumns}
+                  getRowKey={(_r: any, idx: number) => idx}
+                  sort={{ field: itemSort, dir: itemDir }}
+                  onSortChange={({ field, dir }) => { setItemSort(field); setItemDir(dir) }}
+                  minWidth="min-w-[600px]"
+                  maxHeight="500px"
+                  labels={{ empty: t('noInsights') }}
+                />
               </motion.div>
             ) : (
               <motion.div key="customers" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}>
-                <div className="overflow-x-auto max-h-[500px] overflow-y-auto -mx-4 md:mx-0">
-                  <table className="w-full text-sm min-w-[600px]">
-                    <thead className="sticky top-0 bg-background z-10">
-                      <tr className="border-b">
-                        <CcSortHeader field="name" className="text-start ps-4 md:ps-0">{t('customer')}</CcSortHeader>
-                        <CcSortHeader field="quotesCount" className="text-end">{t('quotesCount')}</CcSortHeader>
-                        <CcSortHeader field="convertedCount" className="text-end">{t('convertedCount')}</CcSortHeader>
-                        <CcSortHeader field="rate" className="text-end">{t('rate')}</CcSortHeader>
-                        <CcSortHeader field="lostValue" className="text-end pe-4 md:pe-0">{t('lostRevenue')}</CcSortHeader>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {customerConversions.map((cust: any, idx: number) => (
-                        <motion.tr key={idx} custom={idx} variants={convRowVariants} initial="hidden" animate="visible" className="border-b hover:bg-muted/50 transition-colors">
-                          <td className="py-2.5 ps-4 md:ps-0">
-                            <div className="font-medium truncate max-w-[200px] md:max-w-none">{cust.name}</div>
-                          </td>
-                          <td className="py-2.5 text-end tabular-nums">{formatNumber(cust.quotesCount)}</td>
-                          <td className="py-2.5 text-end tabular-nums">{formatNumber(cust.convertedCount)}</td>
-                          <td className="py-2.5 text-end">
-                            <Badge variant={cust.rate >= 70 ? 'success' : cust.rate >= 40 ? 'warning' : 'destructive'}>{cust.rate}%</Badge>
-                          </td>
-                          <td className="py-2.5 text-end font-mono text-destructive pe-4 md:pe-0">{formatCurrency(cust.lostValue)}</td>
-                        </motion.tr>
-                      ))}
-                      {customerConversions.length === 0 && <tr><td colSpan={5} className="py-12 text-center text-muted-foreground">{t('noInsights')}</td></tr>}
-                    </tbody>
-                  </table>
-                </div>
+                <DataTable
+                  rows={customerConversions}
+                  columns={ccColumns}
+                  getRowKey={(_r: any, idx: number) => idx}
+                  sort={{ field: ccSort, dir: ccDir }}
+                  onSortChange={({ field, dir }) => { setCcSort(field); setCcDir(dir) }}
+                  minWidth="min-w-[600px]"
+                  maxHeight="500px"
+                  labels={{ empty: t('noInsights') }}
+                />
               </motion.div>
             )}
           </AnimatePresence>
