@@ -22,7 +22,8 @@ import {
   ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Cell, ZAxis,
 } from 'recharts'
-import { formatCurrency } from '@/lib/format'
+import { formatCurrency, formatNumber } from '@/lib/format'
+import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
 
 function getPreviousPeriodRange(period: Period): { dateFrom: string; dateTo: string } {
   const now = new Date()
@@ -197,6 +198,8 @@ function HomePageContent() {
     setMany({ dmode: demandMode, dfrom: demandDateFrom, dto: demandDateTo })
   }, [demandMode, demandDateFrom, demandDateTo, setMany])
 
+  const topItemColumns = useMemo(() => TOP_ITEM_COLUMNS(t), [t])
+
   const demandItems = demandData?.items || []
   const enrichedItems = itemsData?.items || []
   const stockMap = useMemo(() => new Map<string, any>(enrichedItems.map((i: any) => [i.code, i])), [enrichedItems])
@@ -305,44 +308,18 @@ function HomePageContent() {
       <Card>
         <CardHeader><CardTitle>{t('topSellingItems')}</CardTitle></CardHeader>
         <CardContent>
-          {(isLoading || topLoading) ? (
-            <Skeleton className="w-full h-[200px]" />
-          ) : topItems.length === 0 ? (
-            <div className="text-sm text-muted-foreground text-center py-8">{t('topItemsPlaceholder')}</div>
-          ) : (
-            <div className="overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-              <table className="w-full text-xs sm:text-sm min-w-[600px]">
-                <thead>
-                  <tr className="border-b text-muted-foreground">
-                    <th className="text-start py-2 pe-2 sm:pe-4">#</th>
-                    <th className="text-start py-2 pe-2 sm:pe-4">{t('code')}</th>
-                    <th className="text-start py-2 pe-2 sm:pe-4">{t('item')}</th>
-                    <th className="text-end py-2 pe-2 sm:pe-4">{t('quantity')}</th>
-                    <th className="text-end py-2 pe-2 sm:pe-4">{t('revenue')}</th>
-                    <th className="text-end py-2 pe-2 sm:pe-4">{t('price')}</th>
-                    <th className="text-end py-2">{t('stockQty')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {topItems.map((item, idx) => (
-                    <tr key={`${item.code}-${idx}`} className="border-b last:border-0 hover:bg-muted/50">
-                      <td className="py-2 pe-4 text-muted-foreground">{idx + 1}</td>
-                      <td className="py-2 pe-4 font-mono text-xs"><ItemLink code={item.code} showCode /></td>
-                      <td className="py-2 pe-4"><ItemLink code={item.code} name={item.name} /></td>
-                      <td className="py-2 pe-4 text-end">{item.total_qty_sold.toLocaleString()}</td>
-                      <td className="py-2 pe-4 text-end font-medium">{formatCurrency(item.total_revenue)}</td>
-                      <td className="py-2 pe-4 text-end">{formatCurrency(item.avg_price)}</td>
-                      <td className="py-2 text-end">
-                        <span className={item.stock_qty <= 0 ? 'text-destructive font-medium' : ''}>
-                          {item.stock_qty.toLocaleString()}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          {/* DataTable owns loading/empty, so this no longer needs a ternary
+              per state — the skeleton keeps the column layout instead of
+              collapsing to one grey block. */}
+          <DataTable
+            rows={topItems}
+            columns={topItemColumns}
+            getRowKey={(item, idx) => `${item.code}-${idx}`}
+            loading={isLoading || topLoading}
+            defaultSort={{ field: 'total_revenue', dir: 'desc' }}
+            minWidth="min-w-[600px]"
+            labels={{ empty: t('topItemsPlaceholder') }}
+          />
         </CardContent>
       </Card>
 
@@ -503,6 +480,47 @@ function CrossPlatformKPIs() {
     </Card>
   )
 }
+
+/** Top-selling items, sorted client-side by whichever column you click. */
+/* eslint-disable @typescript-eslint/no-explicit-any */
+const TOP_ITEM_COLUMNS = (t: (k: any) => string): DataTableColumn<any>[] => [
+  {
+    key: 'rank',
+    header: '#',
+    cellClassName: 'text-muted-foreground',
+    // Rank follows the CURRENT sort, so it renumbers when you re-sort rather
+    // than carrying a stale position from the original order.
+    cell: (_row: any, idx: number) => idx + 1,
+  },
+  {
+    key: 'code',
+    header: t('code'),
+    sortable: true,
+    cellClassName: 'font-mono text-xs',
+    cell: (item: any) => <ItemLink code={item.code} showCode />,
+  },
+  {
+    key: 'name',
+    header: t('item'),
+    sortable: true,
+    truncate: 'max-w-[260px]',
+    title: (item: any) => item.name,
+    cell: (item: any) => <ItemLink code={item.code} name={item.name} />,
+  },
+  { key: 'total_qty_sold', header: t('quantity'), align: 'end', sortable: true, cell: (i: any) => formatNumber(i.total_qty_sold) },
+  { key: 'total_revenue', header: t('revenue'), align: 'end', sortable: true, cellClassName: 'font-medium', cell: (i: any) => formatCurrency(i.total_revenue) },
+  { key: 'avg_price', header: t('price'), align: 'end', sortable: true, cell: (i: any) => formatCurrency(i.avg_price) },
+  {
+    key: 'stock_qty',
+    header: t('stockQty'),
+    align: 'end',
+    sortable: true,
+    cell: (i: any) => (
+      <span className={i.stock_qty <= 0 ? 'text-destructive font-medium' : ''}>{formatNumber(i.stock_qty)}</span>
+    ),
+  },
+]
+/* eslint-enable @typescript-eslint/no-explicit-any */
 
 export default function HomePage() {
   return (
