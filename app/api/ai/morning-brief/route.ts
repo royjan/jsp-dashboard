@@ -284,7 +284,7 @@ ${stockAlerts.length > 0
         // Hebrew tokenizes densely; 500 truncated the JSON mid-string, which then
         // leaked raw `{"summary": ...` into the UI. Give it room to close the JSON.
         maxOutputTokens: 1000,
-        // gemini-3.6-flash is a thinking model that once emitted its REASONING as
+        // gemini-3.7-flash is a thinking model that once emitted its REASONING as
         // syntactically-valid JSON ("JSON wrapper or markdown? Yes...** Final Output
         // Construction**") which sailed through parsing straight into the group chat.
         // Force JSON output mode and turn thinking off for this structured call.

@@ -4,7 +4,7 @@ import { getSecret } from './aws-secrets'
 
 // Primary/fallback for ALL Gemini usage (user decision 2026-07-22): 3.6-flash first,
 // 3.5-flash when the primary errors. Env-overridable for instant rollback.
-const GEMINI_PRIMARY = process.env.GEMINI_MODEL || 'gemini-3.6-flash'
+const GEMINI_PRIMARY = process.env.GEMINI_MODEL || 'gemini-3.7-flash'
 const GEMINI_FALLBACK = process.env.GEMINI_MODEL_FALLBACK || 'gemini-3.5-flash'
 
 function google() {
