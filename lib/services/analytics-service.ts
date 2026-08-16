@@ -52,6 +52,35 @@ export function looksLikeCodeNotName(name: string | null | undefined, code?: str
   return !/[A-Za-z֐-׿]{2}/.test(n)
 }
 
+export const NO_CATEGORY = 'ללא קטגוריה'
+
+/**
+ * The item's category — which, for this catalogue, is almost always "we don't have one".
+ *
+ * Measured against the live FINAPI on 2026-08-16 over a 500-item sample: `categories` was
+ * null on every single item, and `group` — the only other candidate — was the placeholder
+ * '0000' on 317, empty on 163, and 'NNNN'/'PPPP'/'0001'/'0002' on the remaining 20. So the
+ * ERP does not carry a meaningful per-item category at all.
+ *
+ * That matters because three analytics routes group their entire output by this field. They
+ * used to read it from dashboard.item_snapshots, where it is the EMPTY STRING on 2,664 of
+ * 2,668 rows — and since COALESCE only replaces NULL, every one of those charts was really a
+ * single unnamed bucket. Pointing them at the live catalogue does NOT fix that; it would just
+ * relabel the bucket '0000', which is worse, because a placeholder that looks like data gets
+ * believed.
+ *
+ * So placeholders are named honestly here, in one place, and the charts show one truthful
+ * category instead of a fabricated breakdown. Giving those pages a real dimension needs
+ * category data that does not exist yet — a data decision, not a code change.
+ */
+export function itemCategory(item: { category?: string; group?: string } | undefined | null): string {
+  const raw = (item?.category || item?.group || '').trim()
+  if (!raw) return NO_CATEGORY
+  // Placeholder group codes: all-zero, or a repeated single letter ('NNNN', 'PPPP').
+  if (/^0+$/.test(raw) || /^([A-Za-z])\1+$/.test(raw)) return NO_CATEGORY
+  return raw
+}
+
 function mapRawItem(raw: any): FinansitItem | null {
   if (!raw || !raw.code) return null
   return {

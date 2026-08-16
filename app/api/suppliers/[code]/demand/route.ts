@@ -3,6 +3,7 @@ export const maxDuration = 60
 import { NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { initializeSecrets } from '@/lib/aws-secrets'
+import { getItems } from '@/lib/services/analytics-service'
 
 /**
  * What we actually buy from this supplier, and how fast it sells.
@@ -48,23 +49,34 @@ export async function GET(
            FROM dashboard.yearly_item_sales
           WHERE year >= EXTRACT(YEAR FROM CURRENT_DATE) - 1
           GROUP BY item_code
-       ),
-       stock AS (
-         SELECT DISTINCT ON (item_code) item_code, stock_qty, price
-           FROM dashboard.item_snapshots
-          ORDER BY item_code, snapshot_date DESC
        )
+       -- Stock and price used to come from a third CTE over dashboard.item_snapshots.
+       -- They cannot: that table stopped being written on 2026-03-21, and its price
+       -- column is 0/NULL on every row after 2026-03-15. So "cover months" was computed
+       -- from five-month-old stock, and the value of what this supplier's stock ties up
+       -- was always zero. Both now come from the live catalogue below.
        SELECT b.item_code, b.item_name, b.qty, b.orders, b.last_order::text AS last_order,
-              b.spend, COALESCE(s.units, 0) AS units_sold, st.stock_qty, st.price
+              b.spend, COALESCE(s.units, 0) AS units_sold
          FROM bought b
          LEFT JOIN sales s ON s.item_code = b.item_code
-         LEFT JOIN stock st ON st.item_code = b.item_code
         ORDER BY b.qty DESC
         LIMIT 200`,
       [code],
     )
 
-    const items = res.rows.map((r: Record<string, unknown>) => {
+    const liveByCode = new Map<string, any>()
+    for (const it of await getItems()) {
+      const c = String(it.code ?? '').toUpperCase()
+      if (c) liveByCode.set(c, it)
+    }
+
+    const items = res.rows.map((r0: Record<string, unknown>) => {
+      const live = liveByCode.get(String(r0.item_code || '').toUpperCase())
+      const r = {
+        ...r0,
+        stock_qty: live?.stock_qty ?? null,
+        price: live?.price ?? null,
+      } as Record<string, unknown>
       // Two calendar years of sales → per month.
       const avgMonthlySales = (Number(r.units_sold) || 0) / 24
       const stockQty = r.stock_qty == null ? null : Number(r.stock_qty)

@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server'
 import { initializeSecrets } from '@/lib/aws-secrets'
 import { query } from '@/lib/db'
 import { fetchBatchCost } from '@/lib/finansit-client'
+import { getItems, itemCategory } from '@/lib/services/analytics-service'
 import { getCached, setCache } from '@/lib/redis-client'
 import { CACHE_TTL } from '@/lib/constants'
 
@@ -47,56 +48,74 @@ export async function GET() {
     const cached = await getCached<any>(CACHE_KEY)
     if (cached) return NextResponse.json(cached)
 
-    // Latest snapshot date — used to attach current category / price / name.
-    // Group sales by item across all years, join the most recent snapshot.
-    const byItemResult = await query(`
-      WITH latest_snap AS (
-        SELECT DISTINCT ON (item_code)
-          item_code, item_name, category, price
-        FROM dashboard.item_snapshots
-        ORDER BY item_code, snapshot_date DESC
-      ),
-      sales AS (
-        SELECT
-          item_code,
-          MAX(item_name) AS sales_name,
-          SUM(revenue::numeric)  AS revenue,
-          SUM(quantity::numeric) AS quantity
-        FROM dashboard.monthly_sales
-        GROUP BY item_code
-      )
+    // Sales come from Neon; category / name / price come from the LIVE catalogue.
+    //
+    // Both of these used to LEFT JOIN a `latest_snap` CTE over dashboard.item_snapshots,
+    // and that join could not do its job. Measured 2026-08-16: the table holds 909
+    // distinct items against monthly_sales' 4,266 (71 of the top-100 by revenue), its
+    // newest row is 2026-03-21, its `price` is 0/NULL on every row after 2026-03-15 —
+    // and its `category` is the EMPTY STRING on 2,664 of 2,668 rows ('0000' on the other
+    // four). COALESCE only replaces NULL, so '' passed straight through and the whole
+    // category breakdown collapsed into one unnamed bucket beside 'ללא קטגוריה'.
+    //
+    // getItems() (live FINAPI + Redis) fixes the name and the price. It does NOT fix the
+    // category, because nothing can: the ERP has no per-item category to give — `categories`
+    // is null on every item sampled and `group` is the placeholder '0000' on most of them.
+    // See itemCategory(), which names that honestly instead of plotting a '0000' bucket. The
+    // byCategory block below is therefore near-single-bucket by DATA, not by bug, and giving
+    // this page a real dimension needs category data that does not exist yet.
+    const itemsByCode = new Map<string, any>()
+    for (const it of await getItems()) {
+      const code = String(it.code ?? '').toUpperCase()
+      if (code) itemsByCode.set(code, it)
+    }
+    const catOf = (code: string) =>
+      itemCategory(itemsByCode.get(String(code || '').toUpperCase()))
+
+    const salesByItem = await query(`
       SELECT
-        s.item_code,
-        COALESCE(ls.item_name, s.sales_name) AS item_name,
-        COALESCE(ls.category, 'ללא קטגוריה') AS category,
-        s.revenue,
-        s.quantity,
-        ls.price AS snapshot_price
-      FROM sales s
-      LEFT JOIN latest_snap ls ON ls.item_code = s.item_code
-      WHERE s.revenue > 0
-      ORDER BY s.revenue DESC
-      LIMIT 100
+        item_code,
+        MAX(item_name) AS sales_name,
+        SUM(revenue::numeric)  AS revenue,
+        SUM(quantity::numeric) AS quantity
+      FROM dashboard.monthly_sales
+      GROUP BY item_code
+      HAVING SUM(revenue::numeric) > 0
+      ORDER BY revenue DESC
     `)
 
-    const byCategoryResult = await query(`
-      WITH latest_snap AS (
-        SELECT DISTINCT ON (item_code) item_code, category
-        FROM dashboard.item_snapshots
-        ORDER BY item_code, snapshot_date DESC
-      )
-      SELECT
-        COALESCE(ls.category, 'ללא קטגוריה') AS category,
-        SUM(ms.revenue::numeric)  AS revenue,
-        SUM(ms.quantity::numeric) AS quantity,
-        COUNT(DISTINCT ms.item_code) AS item_count
-      FROM dashboard.monthly_sales ms
-      LEFT JOIN latest_snap ls ON ls.item_code = ms.item_code
-      GROUP BY COALESCE(ls.category, 'ללא קטגוריה')
-      HAVING SUM(ms.revenue::numeric) > 0
-      ORDER BY revenue DESC
-      LIMIT 30
-    `)
+    const byItemResult = {
+      rows: salesByItem.rows.slice(0, 100).map((r: any) => {
+        const it = itemsByCode.get(String(r.item_code || '').toUpperCase())
+        return {
+          item_code: r.item_code,
+          item_name: it?.name || r.sales_name,
+          category: catOf(r.item_code),
+          revenue: r.revenue,
+          quantity: r.quantity,
+          // The live retail price, where the snapshot's was 0 on every recent row.
+          snapshot_price: it?.price ?? null,
+        }
+      }),
+    }
+
+    // Category totals over EVERY selling item, not just the top 100 — same scope the
+    // SQL GROUP BY had.
+    const catAgg = new Map<string, { revenue: number; quantity: number; item_count: number }>()
+    for (const r of salesByItem.rows as any[]) {
+      const k = catOf(r.item_code)
+      const b = catAgg.get(k) || { revenue: 0, quantity: 0, item_count: 0 }
+      b.revenue += Number(r.revenue) || 0
+      b.quantity += Number(r.quantity) || 0
+      b.item_count += 1
+      catAgg.set(k, b)
+    }
+    const byCategoryResult = {
+      rows: [...catAgg.entries()]
+        .map(([category, v]) => ({ category, ...v }))
+        .sort((a, b) => b.revenue - a.revenue)
+        .slice(0, 30),
+    }
 
     const summaryResult = await query(`
       SELECT

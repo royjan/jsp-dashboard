@@ -2,6 +2,7 @@ export const maxDuration = 30
 
 import { NextResponse } from 'next/server'
 import { initializeSecrets } from '@/lib/aws-secrets'
+import { getItems, itemCategory, NO_CATEGORY } from '@/lib/services/analytics-service'
 import { query } from '@/lib/db'
 import { getCached, setCache } from '@/lib/redis-client'
 
@@ -66,25 +67,53 @@ export async function GET(request: Request) {
     `, vehicleParams)
     const vehicleCount = Number(vehicleCountResult.rows[0]?.count || 0)
 
-    // Get top parts categories from monthly sales (dashboard schema)
-    // These represent what parts sell most, grouped by category
-    const categorySalesResult = await query(`
-      SELECT
-        COALESCE(category, 'ללא קטגוריה') as category,
-        SUM(quantity::numeric) as total_qty,
-        SUM(revenue::numeric) as total_revenue,
-        COUNT(DISTINCT ms.item_code) as unique_items,
-        AVG(quantity::numeric) as avg_monthly_qty
-      FROM dashboard.monthly_sales ms
-      LEFT JOIN dashboard.item_snapshots snap
-        ON ms.item_code = snap.item_code
-        AND snap.snapshot_date = (SELECT MAX(snapshot_date) FROM dashboard.item_snapshots)
-      WHERE ms.year >= $1
-      GROUP BY COALESCE(category, 'ללא קטגוריה')
-      HAVING SUM(quantity::numeric) > 10
-      ORDER BY total_qty DESC
-      LIMIT 20
+    // Top parts categories from monthly sales, categorised from the LIVE catalogue.
+    //
+    // This used to LEFT JOIN dashboard.item_snapshots for the category, and the join
+    // could not work: that table's newest row is 2026-03-21 (811 rows against 4,266
+    // selling items) and its `category` column is the EMPTY STRING on 2,664 of its
+    // 2,668 rows. COALESCE only replaces NULL, so '' survived and every category here
+    // collapsed into one unnamed bucket — on a page whose entire output is a per-
+    // category demand forecast. It failed silently: an empty category name renders as
+    // a blank label, not an error.
+    const catByCode = new Map<string, string>()
+    for (const it of await getItems()) {
+      const code = String(it.code ?? '').toUpperCase()
+      if (code) catByCode.set(code, itemCategory(it))
+    }
+    const salesRows = await query(`
+      SELECT item_code,
+             SUM(quantity::numeric) as qty,
+             SUM(revenue::numeric)  as revenue,
+             COUNT(*)               as months
+      FROM dashboard.monthly_sales
+      WHERE year >= $1
+      GROUP BY item_code
     `, [currentYear - 2])
+    const catAgg = new Map<string, { qty: number; revenue: number; items: number; months: number }>()
+    for (const r of salesRows.rows as any[]) {
+      const k = catByCode.get(String(r.item_code || '').toUpperCase()) || NO_CATEGORY
+      const b = catAgg.get(k) || { qty: 0, revenue: 0, items: 0, months: 0 }
+      b.qty += Number(r.qty) || 0
+      b.revenue += Number(r.revenue) || 0
+      b.items += 1
+      b.months += Number(r.months) || 0
+      catAgg.set(k, b)
+    }
+    const categorySalesResult = {
+      rows: [...catAgg.entries()]
+        .filter(([, v]) => v.qty > 10)              // same HAVING as the SQL
+        .map(([category, v]) => ({
+          category,
+          total_qty: v.qty,
+          total_revenue: v.revenue,
+          unique_items: v.items,
+          // AVG(quantity) per monthly_sales ROW, matching the old aggregate.
+          avg_monthly_qty: v.months > 0 ? v.qty / v.months : 0,
+        }))
+        .sort((a, b) => b.total_qty - a.total_qty)
+        .slice(0, 20),
+    }
 
     // Lifecycle-based demand multipliers
     // Vehicles 0-3y: mostly filters, oils

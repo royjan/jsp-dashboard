@@ -2,6 +2,7 @@ export const maxDuration = 30
 
 import { NextResponse } from 'next/server'
 import { initializeSecrets } from '@/lib/aws-secrets'
+import { getItems, itemCategory } from '@/lib/services/analytics-service'
 import { query } from '@/lib/db'
 import { getCached, setCache } from '@/lib/redis-client'
 
@@ -23,23 +24,40 @@ export async function GET() {
 
     const currentYear = new Date().getFullYear()
 
-    // Get parts categories with their sales volumes
-    const categorySalesResult = await query(`
-      SELECT
-        COALESCE(snap.category, 'אחר') as category,
-        ms.year,
-        ms.month,
-        SUM(ms.quantity::numeric) as qty,
-        SUM(ms.revenue::numeric) as rev
-      FROM dashboard.monthly_sales ms
-      LEFT JOIN dashboard.item_snapshots snap
-        ON ms.item_code = snap.item_code
-        AND snap.snapshot_date = (SELECT MAX(snapshot_date) FROM dashboard.item_snapshots)
-      WHERE ms.year >= $1
-      GROUP BY COALESCE(snap.category, 'אחר'), ms.year, ms.month
-      HAVING SUM(ms.quantity::numeric) > 0
-      ORDER BY category, ms.year, ms.month
+    // Parts categories with their sales volumes, categorised from the LIVE catalogue.
+    //
+    // The category used to come from a LEFT JOIN on dashboard.item_snapshots, which
+    // cannot supply one: its newest rows are from 2026-03-21 (811 of 4,266 selling
+    // items) and its `category` is the EMPTY STRING on 2,664 of 2,668 rows. COALESCE
+    // replaces NULL, not '', so every series on this chart was the same blank category.
+    const catByCode = new Map<string, string>()
+    for (const it of await getItems()) {
+      const code = String(it.code ?? '').toUpperCase()
+      if (code) catByCode.set(code, itemCategory(it))
+    }
+    const monthlyRows = await query(`
+      SELECT item_code, year, month,
+             SUM(quantity::numeric) as qty,
+             SUM(revenue::numeric)  as rev
+      FROM dashboard.monthly_sales
+      WHERE year >= $1
+      GROUP BY item_code, year, month
     `, [currentYear - 3])
+    const cells = new Map<string, any>()
+    for (const r of monthlyRows.rows as any[]) {
+      const cat = catByCode.get(String(r.item_code || '').toUpperCase()) || 'אחר'
+      const key = `${cat}|${r.year}|${r.month}`
+      const c = cells.get(key) || { category: cat, year: r.year, month: r.month, qty: 0, rev: 0 }
+      c.qty += Number(r.qty) || 0
+      c.rev += Number(r.rev) || 0
+      cells.set(key, c)
+    }
+    const categorySalesResult = {
+      rows: [...cells.values()]
+        .filter(c => c.qty > 0)
+        .sort((a, b) => String(a.category).localeCompare(String(b.category))
+          || a.year - b.year || a.month - b.month),
+    }
 
     // Aggregate by category
     const categoryTotals = new Map<string, number>()
