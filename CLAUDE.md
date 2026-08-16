@@ -116,6 +116,32 @@ Credentials from AWS Secrets Manager (`FINANSIT_API_CREDENTIALS`).
 - **SQLite is gone.** Reads go straight to Neon via `readQueryAsync` (`lib/neon-read.ts`), which runs a `toPg()` shim over legacy SQLite-flavoured SQL. **The shim is partial** — it rewrites `strftime('%Y'|'%m')`, `?` params and a fixed list of bare table names, and nothing else. Anything it misses (`strftime('%w')`, two-argument `MIN()`/`MAX()`, SQLite's lax `GROUP BY`, an unlisted table) throws at runtime, and routes that wrap queries in a `safeQuery`-style catch turn that into **zeros on screen instead of an error**. Prefer plain Postgres or Drizzle in new code; when touching an old query, convert it rather than extending the shim.
 - **Two snapshot tables exist**: `dashboard.item_snapshots` (2.6k rows, the synced one) and `dashboard.item_snapshot` (singular, **0 rows** — an empty SQLite-era leftover whose columns `qty`/`retail_price`/`ordered_qty` several old queries still reference). Neither is complete; `getItems()` (live FINAPI + Redis) is the authoritative item source.
 
+### ⚠️ YEAR-END ACTION — archive the closing fiscal year (do this every January)
+
+**Run the document sync for the whole closing year before Btrieve rolls over.** Once Finansit
+advances to `j2027`, fiscal 2026 is queryable ONLY if it was archived into
+`dashboard.documents` / `dashboard.document_lines` first.
+
+This is the one thing the stalled sync actually costs. Jan Parts runs a deliberate split
+(benchmarked 2026-08-16): **active year live from Finansit/Btrieve, closed years from
+Postgres** — so the loader stopping mid-year is harmless day to day, because the active year
+should never be served from Postgres anyway. It is only fatal at the boundary.
+
+State as of 2026-08-16: the loader is **stopped**. `dashboard.documents` ends 2026-05-12 and
+`dashboard.etl_watermarks.daily_documents_2026` has not moved since 2026-05-13, so 2026 is
+half-archived (Jan–May). **The year-end run must cover the WHOLE year, not resume from the
+watermark.**
+
+- **Do NOT delete these tables.** They are the historical archive FINAPI reads for every
+  closed year — 741,613 documents back to 2001-10-12. `/api/documents/lines?year=2025`
+  answers 200 because of them.
+- **They are verified accurate.** Cross-checked against Btrieve over five items on
+  2026-08-16: 40 lines matched on (format, doc_number) with **zero** quantity and **zero**
+  line-total mismatches, and nothing present in Postgres that Btrieve lacked.
+- **Fix while you are in there:** `document_lines.doc_date` is NULL on all 541,366 rows, so
+  every PG-served line returns `doc_date`/`customer_code`/`customer_name` as empty strings.
+  Only the money columns are populated.
+
 ```bash
 npm run db:push        # Push schema changes to DB
 npm run db:generate    # Generate migrations
