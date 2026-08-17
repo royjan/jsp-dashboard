@@ -38,6 +38,7 @@ import {
   ReceiptText,
   Swords,
   PackageX,
+  FlaskConical,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
@@ -96,6 +97,7 @@ const navSections: Array<{ id: string; labelKey: TranslationKey; items: NavItem[
       { href: '/chat/parts-analytics', labelKey: 'chatPartsAnalytics', icon: Bot },
       { href: '/chat/diego', labelKey: 'chatDiego', icon: BotMessageSquare },
       { href: '/chat/feedback', labelKey: 'chatFeedback', icon: ThumbsUp },
+      { href: '/chat/simulator', labelKey: 'chatSimulator', icon: FlaskConical },
       // merged into /chat/diego (Dora view); direct entry kept for muscle memory
       { href: '/chat/diego?view=dora', labelKey: 'chatCredits', icon: ReceiptText },
     ],

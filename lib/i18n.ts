@@ -28,6 +28,7 @@ export const translations = {
     chatLearnedPins: 'חלקים מוצמדים',
     chatDiego: 'שיחות דייגו',
     chatFeedback: 'משוב לקוחות',
+    chatSimulator: 'סימולטור דיאגו',
     chatCredits: 'זיכויים והחזרות',
 
     // Page titles
@@ -753,6 +754,7 @@ export const translations = {
     chatLearnedPins: 'Learned Pins',
     chatDiego: 'Diego Sessions',
     chatFeedback: 'Bot Feedback',
+    chatSimulator: 'Diego Simulator',
     chatCredits: 'Supplier Credits',
 
     'page.overview': 'Dashboard Overview',
