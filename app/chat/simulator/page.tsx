@@ -11,16 +11,21 @@
  * click away — a score with no explanation is not actionable.
  */
 import { useCallback, useEffect, useState } from 'react'
-import { AlertTriangle, CheckCircle2, ChevronDown, RefreshCw, Swords } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, ChevronDown, RefreshCw, Swords, Timer } from 'lucide-react'
 import { Panel } from '@/components/chat-admin/Panel'
 import { AdminPageHeader } from '@/components/chat-admin/shared'
 import { fmtDateTime, relTime } from '@/lib/chat-admin/format'
 
 interface Run {
-  id: string; startedAt: string; cases: number; avgScore: number
+  id: string; startedAt: string; finishedAt: string | null; cases: number; avgScore: number
   hardPass: number; hardTotal: number; v3Better: number; v2Better: number; abEqual: number
 }
 interface DomainScore { domain: string; n: number; avgScore: number; hardFailures: number }
+interface Latency {
+  v3Median: number | null; v3P90: number | null; v3Max: number | null; v3N: number
+  v2Median: number | null; v2P90: number | null; v2Max: number | null; v2N: number
+  v2Dead: number
+}
 interface Case {
   id: number; caseId: string; domain: string; kind: string; source: string
   question: string; vehicle: string | null; expectCode: string | null; expectMiss: boolean
@@ -55,12 +60,24 @@ export default function SimulatorPage() {
   const [runs, setRuns] = useState<Run[]>([])
   const [latest, setLatest] = useState<Run | null>(null)
   const [byDomain, setByDomain] = useState<DomainScore[]>([])
+  const [latency, setLatency] = useState<Latency | null>(null)
   const [failingChecks, setFailingChecks] = useState<Array<{ check: string; n: number }>>([])
   const [cases, setCases] = useState<Case[]>([])
   const [selected, setSelected] = useState<string>('')
   const [open, setOpen] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [notRunYet, setNotRunYet] = useState(false)
+
+  // The run lives in the URL, so a run can be linked to — "look at this one" was previously
+  // impossible to say. history.replaceState rather than router.push: this is the same page
+  // showing different data, so it should not stack a back-button entry per click.
+  const syncUrl = (runId?: string) => {
+    if (typeof window === 'undefined') return
+    const u = new URL(window.location.href)
+    if (runId) u.searchParams.set('run', runId)
+    else u.searchParams.delete('run')
+    window.history.replaceState(null, '', u.toString())
+  }
 
   const load = useCallback(async (runId?: string) => {
     setLoading(true)
@@ -73,18 +90,38 @@ export default function SimulatorPage() {
       if (o.success) {
         setRuns(o.runs ?? []); setLatest(o.latest ?? null)
         setByDomain(o.byDomain ?? []); setFailingChecks(o.failingChecks ?? [])
+        setLatency(o.latency ?? null)
         setNotRunYet(Boolean(o.notRunYet))
       }
       if (c.success) {
         setCases(c.cases ?? [])
         setSelected(c.run?.id ?? '')
+        syncUrl(c.run?.id)
       }
     } finally {
       setLoading(false)
     }
   }, [])
 
-  useEffect(() => { void load() }, [load])
+  // A deep link (?run=<id>, or the /chat/simulator/run_id=<id> path that redirects here)
+  // selects that run instead of the newest one.
+  useEffect(() => {
+    const fromUrl = typeof window !== 'undefined'
+      ? new URLSearchParams(window.location.search).get('run') || undefined
+      : undefined
+    void load(fromUrl)
+  }, [load])
+
+  const selectedRun = runs.find((r) => r.id === selected) ?? latest
+  // While a run is in progress its cases land one at a time, so follow it. 15s rather than
+  // something snappier because a parts case takes 10-60s — polling faster would just re-fetch
+  // the same rows. Stops on its own the moment finished_at is stamped.
+  const running = Boolean(selectedRun && !selectedRun.finishedAt)
+  useEffect(() => {
+    if (!running) return
+    const t = setInterval(() => { void load(selected || undefined) }, 15000)
+    return () => clearInterval(t)
+  }, [running, selected, load])
 
   const hardRate = latest && latest.hardTotal
     ? Math.round((latest.hardPass / latest.hardTotal) * 100) : 0
@@ -166,6 +203,38 @@ export default function SimulatorPage() {
         </Panel>
       )}
 
+      {latency && latency.v3N > 0 && (
+        <Panel title="Response time">
+          <div className="grid gap-3 md:grid-cols-2">
+            {([
+              ['v3', latency.v3Median, latency.v3P90, latency.v3Max, latency.v3N],
+              ['v2', latency.v2Median, latency.v2P90, latency.v2Max, latency.v2N],
+            ] as const).filter(([, med]) => med !== null).map(([label, med, p90, max, n]) => (
+              <div key={label} className="rounded-lg border p-3">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Timer className="h-3.5 w-3.5" />{label} · {n} answers
+                </div>
+                <div className="mt-1 flex items-baseline gap-3">
+                  <span className="text-2xl font-semibold">{med!.toFixed(1)}s</span>
+                  <span className="text-xs text-muted-foreground">median</span>
+                </div>
+                <div className="mt-1 text-xs text-muted-foreground">
+                  p90 {p90!.toFixed(1)}s · slowest {max!.toFixed(1)}s
+                </div>
+              </div>
+            ))}
+          </div>
+          {/* Both numbers are real wall clock, but they are not a controlled experiment:
+              v3 is asked first and both versions walk the same catalogs behind one dealer
+              login, so v2 can be answering into state v3 just warmed. */}
+          <p className="mt-2 text-xs text-muted-foreground">
+            Median of the wait a customer would see. v3 is asked first and both versions share
+            one catalog login, so read the medians, not a single question.
+            {latency.v2Dead > 0 && ` ${latency.v2Dead} v2 call(s) never answered and are excluded — a timeout is a missing measurement, not a slow one.`}
+          </p>
+        </Panel>
+      )}
+
       {runs.length > 1 && (
         <Panel title="Runs">
           <div className="flex flex-wrap gap-2">
@@ -173,6 +242,10 @@ export default function SimulatorPage() {
               <button key={r.id} onClick={() => void load(r.id)}
                       className={`rounded-lg border px-3 py-1.5 text-xs ${
                         r.id === selected ? 'border-blue-400 bg-blue-50 dark:bg-blue-500/10 font-semibold' : 'hover:bg-accent'}`}>
+                {!r.finishedAt && (
+                  <span className="mr-1.5 inline-block h-2 w-2 animate-pulse rounded-full bg-emerald-500"
+                        title="running now" />
+                )}
                 {fmtDateTime(r.startedAt)} · {r.avgScore.toFixed(2)}/5 · {r.cases}
               </button>
             ))}
@@ -180,7 +253,8 @@ export default function SimulatorPage() {
         </Panel>
       )}
 
-      <Panel title={`Questions (${cases.length}) — failures first`}>
+      <Panel title={`Questions (${cases.length}) — failures first${
+        selectedRun && !selectedRun.finishedAt ? ' · running, updating every 15s' : ''}`}>
         <div className="space-y-2">
           {cases.map((c) => {
             const failed = Object.entries(c.checks).filter(([, v]) => v === false).map(([k]) => k)
@@ -252,7 +326,11 @@ export default function SimulatorPage() {
                       </div>
                       <div>
                         <div className="mb-1 text-xs font-semibold text-muted-foreground">
-                          v2 {c.v2Seconds !== null && `· ${c.v2Seconds.toFixed(1)}s`}
+                          {/* Runs before 2026-08-17 stored the 180s timeout in v2Seconds, so
+                              the time is shown only when v2 actually replied. */}
+                          v2 {c.v2Answer?.startsWith('__v2_error__')
+                                ? '· never answered'
+                                : c.v2Seconds !== null && `· ${c.v2Seconds.toFixed(1)}s`}
                         </div>
                         <pre className="max-h-72 overflow-auto whitespace-pre-wrap rounded bg-muted p-2 text-xs" dir="auto">
                           {c.v2Answer ?? '(not asked)'}

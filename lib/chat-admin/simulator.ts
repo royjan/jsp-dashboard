@@ -57,10 +57,18 @@ export interface DomainScore {
   hardFailures: number
 }
 
+/** How long each version made the customer wait, over one run. */
+export interface SimLatency {
+  v3Median: number | null; v3P90: number | null; v3Max: number | null; v3N: number
+  v2Median: number | null; v2P90: number | null; v2Max: number | null; v2N: number
+  v2Dead: number                 // v2 calls that never answered — timed out, not slow
+}
+
 export interface SimOverview {
   runs: SimRun[]
   latest: SimRun | null
   byDomain: DomainScore[]
+  latency: SimLatency | null
   trend: Array<{ runId: string; startedAt: string; domain: string; avgScore: number }>
   failingChecks: Array<{ check: string; n: number }>
 }
@@ -87,6 +95,9 @@ export async function getSimOverview(limit = 20): Promise<SimOverview> {
   const runsRes = await query(
     `SELECT * FROM sim_runs ORDER BY started_at DESC LIMIT $1`, [limit])
   const runs = (runsRes.rows as Record<string, unknown>[]).map(toRun)
+  // `runs` is newest-first, so runs[0] is the live one while a run is in progress — which is
+  // what someone watching wants the tiles to describe. sim_run.py opens the row before the
+  // first case and stamps finished_at at the end, so `finishedAt === null` IS "still running".
   const latest = runs[0] ?? null
 
   let byDomain: DomainScore[] = []
@@ -102,6 +113,42 @@ export async function getSimOverview(limit = 20): Promise<SimOverview> {
       avgScore: Number(r.avg_score ?? 0),
       hardFailures: n(r.hard_failures),
     }))
+  }
+
+  // Response time for the latest run. Medians and p90, never means: one 200s catalog walk
+  // moves a mean by seconds across a whole run and tells you nothing about a typical wait.
+  //
+  // A v2 call that never came back is EXCLUDED, not counted as a slow answer. Runs before
+  // 2026-08-17 stored the 180s timeout in `v2_seconds` as if it were a response time, which
+  // pulled v2's mean from 30s up to 40s — close enough to v3's to hide that v2 was in fact
+  // finishing in half v3's median. Newer runs write NULL; the `__v2_error__` guard covers
+  // the rows already on disk.
+  let latency: SimLatency | null = null
+  if (latest) {
+    const lat = await query(
+      `SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY v3_seconds)
+                FILTER (WHERE v3_seconds > 0)                                  AS v3_med,
+              percentile_cont(0.9) WITHIN GROUP (ORDER BY v3_seconds)
+                FILTER (WHERE v3_seconds > 0)                                  AS v3_p90,
+              MAX(v3_seconds) FILTER (WHERE v3_seconds > 0)                    AS v3_max,
+              COUNT(*)        FILTER (WHERE v3_seconds > 0)                    AS v3_n,
+              percentile_cont(0.5) WITHIN GROUP (ORDER BY v2_seconds)
+                FILTER (WHERE v2_seconds > 0 AND left(v2_answer, 12) <> '__v2_error__') AS v2_med,
+              percentile_cont(0.9) WITHIN GROUP (ORDER BY v2_seconds)
+                FILTER (WHERE v2_seconds > 0 AND left(v2_answer, 12) <> '__v2_error__') AS v2_p90,
+              MAX(v2_seconds) FILTER (WHERE v2_seconds > 0
+                                        AND left(v2_answer, 12) <> '__v2_error__')      AS v2_max,
+              COUNT(*)        FILTER (WHERE v2_seconds > 0
+                                        AND left(v2_answer, 12) <> '__v2_error__')      AS v2_n,
+              COUNT(*)        FILTER (WHERE left(v2_answer, 12) = '__v2_error__')       AS v2_dead
+         FROM sim_cases WHERE run_id = $1`, [latest.id])
+    const r = (lat.rows as Record<string, unknown>[])[0] ?? {}
+    const num = (v: unknown) => (v === null || v === undefined ? null : Number(v))
+    latency = {
+      v3Median: num(r.v3_med), v3P90: num(r.v3_p90), v3Max: num(r.v3_max), v3N: n(r.v3_n),
+      v2Median: num(r.v2_med), v2P90: num(r.v2_p90), v2Max: num(r.v2_max), v2N: n(r.v2_n),
+      v2Dead: n(r.v2_dead),
+    }
   }
 
   // Trend across runs, per domain — a regression shows up as one domain sagging while the
@@ -132,7 +179,7 @@ export async function getSimOverview(limit = 20): Promise<SimOverview> {
     check: String(r.check), n: n(r.n),
   }))
 
-  return { runs, latest, byDomain, trend, failingChecks }
+  return { runs, latest, byDomain, latency, trend, failingChecks }
 }
 
 /** Every case of one run — newest run when no id is given. Worst first: the failures are
