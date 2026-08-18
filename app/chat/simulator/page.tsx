@@ -113,6 +113,26 @@ export default function SimulatorPage() {
   }, [load])
 
   const selectedRun = runs.find((r) => r.id === selected) ?? latest
+
+  // Split the list by DOMAIN. 82 rows of mixed parts/deliveries/business is a wall — and the
+  // domains fail for completely different reasons, so they are read one at a time. Domains are
+  // ordered worst-average FIRST, for the same reason failures sort to the top within one: the
+  // point of the page is what is broken. Order inside a domain is left exactly as the API sent
+  // it (failures first), so grouping never hides a failure behind a passing row.
+  const groups = (() => {
+    const by = new Map<string, Case[]>()
+    for (const c of cases) {
+      const g = by.get(c.domain); if (g) g.push(c); else by.set(c.domain, [c])
+    }
+    return [...by.entries()]
+      .map(([domain, list]) => ({
+        domain,
+        list,
+        avg: list.reduce((a, c) => a + c.score, 0) / (list.length || 1),
+        failures: list.filter((c) => Object.values(c.checks).some((v) => v === false)).length,
+      }))
+      .sort((a, b) => a.avg - b.avg)
+  })()
   // While a run is in progress its cases land one at a time, so follow it. 15s rather than
   // something snappier because a parts case takes 10-60s — polling faster would just re-fetch
   // the same rows. Stops on its own the moment finished_at is stamped.
@@ -253,10 +273,25 @@ export default function SimulatorPage() {
         </Panel>
       )}
 
-      <Panel title={`Questions (${cases.length}) — failures first${
+      <Panel title={`Questions (${cases.length}) — by domain, worst first${
         selectedRun && !selectedRun.finishedAt ? ' · running, updating every 15s' : ''}`}>
         <div className="space-y-2">
-          {cases.map((c) => {
+          {groups.map((g) => (
+            <section key={g.domain} className="space-y-2">
+              <header className="flex items-center gap-2 pt-2 text-xs">
+                <span className="font-semibold">{DOMAIN_LABEL[g.domain] ?? g.domain}</span>
+                <span className="text-muted-foreground">{g.list.length} question{g.list.length === 1 ? '' : 's'}</span>
+                <span className={`rounded border px-1.5 py-0.5 font-semibold ${scoreTone(Math.round(g.avg))}`}>
+                  {g.avg.toFixed(2)}
+                </span>
+                {g.failures > 0 && (
+                  <span className="inline-flex items-center gap-1 text-red-600 dark:text-red-400">
+                    <AlertTriangle className="h-3 w-3" />{g.failures} failing
+                  </span>
+                )}
+                <span className="h-px flex-1 bg-border" />
+              </header>
+          {g.list.map((c) => {
             const failed = Object.entries(c.checks).filter(([, v]) => v === false).map(([k]) => k)
             const isOpen = open === c.id
             return (
@@ -345,6 +380,8 @@ export default function SimulatorPage() {
               </div>
             )
           })}
+            </section>
+          ))}
           {cases.length === 0 && !loading && (
             <p className="py-8 text-center text-sm text-muted-foreground">Nothing to show</p>
           )}
