@@ -6,7 +6,7 @@ import { getItems, getChainMap, looksLikeCodeNotName, isPlaceholderCode } from '
 import { getCached, setCache } from '@/lib/redis-client'
 import { CACHE_TTL } from '@/lib/constants'
 import { fixRtlItemName } from '@/lib/rtl-fix'
-import { client } from '@/lib/finansit-client'
+import { fetchItemsBatch } from '@/lib/finansit-client'
 
 type UrgencyLevel = 'critical' | 'warning' | 'watch' | 'ok'
 
@@ -283,38 +283,35 @@ export async function GET(request: Request) {
     // too, but only for the first N candidates catalogue-wide, so rows further
     // down still surface a barcode instead of a description (e.g. 1623180680 →
     // "0857428661"). Here the set is just this page, so the few stragglers can
-    // be resolved directly — typically a handful of calls.
+    // be resolved directly.
     //
     // The same pass fills a missing price. The bulk price feed carries an
     // item's OWN price; when it has none, the per-item endpoint resolves the
     // ERP's `price_source_code` chain and returns the price it inherits from
     // the source part (e.g. 1683121580 inherits 699.94 from 1611608580). So:
     // own price wins, inherited price is the fallback, 0 only if neither
-    // exists. One fetch per row serves both repairs.
+    // exists. One batch call (per 100 rows) serves both repairs — a full page
+    // of 200 rows used to cost 200 lookups through a 4-seat transport.
     const needsRepair = items.filter(
       i => looksLikeCodeNotName(i.item_name, i.item_code) || !i.price,
     )
     let repaired = 0
     if (needsRepair.length > 0) {
-      const queue = [...needsRepair]
-      const worker = async () => {
-        for (let row = queue.shift(); row; row = queue.shift()) {
-          try {
-            const full = await client.items.get(row.item_code.toUpperCase())
-            if (full?.name && !looksLikeCodeNotName(full.name, row.item_code)) {
-              row.item_name = fixRtlItemName(full.name)
-              repaired++
-            }
-            if (!row.price) {
-              const inherited = Number(full?.price ?? full?.price_list_price) || 0
-              if (inherited > 0) { row.price = inherited; repaired++ }
-            }
-          } catch {
-            // Leave the code/zero showing rather than fail the page.
-          }
+      const full = await fetchItemsBatch(needsRepair.map(i => i.item_code))
+      for (const row of needsRepair) {
+        // Absent = the lookup failed or FINAPI has no such item: leave the
+        // code/zero showing rather than fail the page.
+        const item = full.get(row.item_code.toUpperCase())
+        if (!item) continue
+        if (item.name && !looksLikeCodeNotName(item.name, row.item_code)) {
+          row.item_name = fixRtlItemName(item.name)
+          repaired++
+        }
+        if (!row.price) {
+          const inherited = Number(item.price ?? item.price_list_price) || 0
+          if (inherited > 0) { row.price = inherited; repaired++ }
         }
       }
-      await Promise.allSettled(Array.from({ length: 6 }, worker))
       // The sliced rows share object identity with the full cached set, so the
       // repairs above already live in `allRows` — persist them so no later
       // request (any param combo) re-pays these FINAPI lookups.

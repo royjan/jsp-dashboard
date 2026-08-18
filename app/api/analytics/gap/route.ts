@@ -3,7 +3,7 @@ export const maxDuration = 600
 import { NextResponse } from 'next/server'
 import { initializeSecrets } from '@/lib/aws-secrets'
 import { query } from '@/lib/db'
-import { client, fetchBatchStockGet } from '@/lib/finansit-client'
+import { fetchBatchStockGet, fetchItemsBatch } from '@/lib/finansit-client'
 import { getCached, setCache } from '@/lib/redis-client'
 
 /**
@@ -122,32 +122,25 @@ export async function GET(request: Request) {
       .slice(0, limit)
 
     // 4) The batch stock feed sometimes reports 0 for items that ARE in stock
-    //    or DO have incoming/ordered qty (FINAPI quirk — items.get is the
-    //    authoritative source, matches hover). Verify every claimed-0 candidate
-    //    per-item: drop false gaps, and take all quantities from the truth.
-    const verified: typeof candidates = []
-    const CONCURRENCY = 10
-    for (let i = 0; i < candidates.length; i += CONCURRENCY) {
-      const batch = await Promise.all(
-        candidates.slice(i, i + CONCURRENCY).map(async (c: any) => {
-          try {
-            const item: any = await client.items.get(c.item_code)
-            const realQty = Number(item?.stock_qty ?? 0)
-            if (realQty > 0) return null // false gap — actually in stock
-            return {
-              ...c,
-              stock_qty: realQty,
-              incoming_qty: Number(item?.incoming_qty ?? 0),
-              ordered_qty: Number(item?.ordered_qty ?? 0),
-            }
-          } catch {
-            return c // FINAPI hiccup → keep the candidate rather than hide it
-          }
-        }),
-      )
-      verified.push(...(batch.filter(Boolean) as typeof candidates))
-    }
-    const items = verified
+    //    or DO have incoming/ordered qty (FINAPI quirk — the item endpoint is
+    //    the authoritative source, matches hover). Verify every claimed-0
+    //    candidate: drop false gaps, and take all quantities from the truth.
+    //    One batch call per 100 candidates instead of one lookup each.
+    const truth = await fetchItemsBatch(candidates.map((c: any) => c.item_code))
+    const items = candidates
+      .map((c: any) => {
+        const item = truth.get(String(c.item_code).toUpperCase())
+        if (!item) return c // unknown to the item endpoint → keep the candidate rather than hide it
+        const realQty = Number(item.stock_qty ?? 0)
+        if (realQty > 0) return null // false gap — actually in stock
+        return {
+          ...c,
+          stock_qty: realQty,
+          incoming_qty: Number(item.incoming_qty ?? 0),
+          ordered_qty: Number(item.ordered_qty ?? 0),
+        }
+      })
+      .filter(Boolean) as typeof candidates
 
     const payload = {
       items,

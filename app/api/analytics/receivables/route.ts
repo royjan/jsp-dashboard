@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server'
 import { initializeSecrets } from '@/lib/aws-secrets'
 import { query } from '@/lib/db'
 import { getCached, setCache, tryAcquireLock } from '@/lib/redis-client'
-import { fetchAllCustomers, fetchCustomerBalanceFallback, fetchCustomerAgingFallback } from '@/lib/finansit-client'
+import { fetchAllCustomers, fetchCustomerBalanceFallback, fetchCustomerAgingFallback, fetchDebtorBalances } from '@/lib/finansit-client'
 
 /**
  * Accounts-receivable (AR) overview.
@@ -76,22 +76,37 @@ async function mapWithConcurrency<T, R>(items: T[], conc: number, fn: (item: T) 
   return out
 }
 
-async function fromLiveSdk(limit: number) {
+// Every debtor + exact balance in ONE call. The per-customer sweep below is the
+// same figure asked 4,708 times over — it stays only as the fallback for when the
+// bulk read is unavailable. See fetchDebtorBalances().
+async function debtorsFromBulk(limit: number) {
+  const rows = await fetchDebtorBalances(0)
+  if (rows.length === 0) return null
+  return rows.sort((a, b) => b.balance - a.balance).slice(0, limit)
+}
+
+// Fallback: ask every customer for its balance, one call each (~4,708 calls,
+// ~216s cold). Only runs when the bulk read above returns nothing.
+async function debtorsFromPerCustomerSweep(limit: number) {
   const all = await fetchAllCustomers()
   const candidates = all
     .map((c: any) => ({ code: c.code || c.customer_code || '', name: c.name || c.customer_name || c.code || '' }))
     .filter((c) => c.code)
 
-  // net_balance per customer from the healthy fallback box (small payloads).
+  console.warn(`[receivables] bulk balance read unavailable — falling back to ${candidates.length} per-customer calls`)
   const balances = await mapWithConcurrency(candidates, 8, async (c) => {
     const b = await fetchCustomerBalanceFallback(c.code).catch(() => null)
     return { ...c, balance: netBalanceOf(b) }
   })
 
-  const debtors = balances
+  return balances
     .filter((c) => c.balance > 0)
     .sort((a, b) => b.balance - a.balance)
     .slice(0, limit)
+}
+
+async function fromLiveSdk(limit: number) {
+  const debtors = (await debtorsFromBulk(limit)) ?? (await debtorsFromPerCustomerSweep(limit))
 
   if (debtors.length === 0) return null
 

@@ -101,6 +101,59 @@ export async function fetchCustomerBalanceFallback(code: string): Promise<any> {
   return fallbackClient.customers.getBalance(code)
 }
 
+// One-call bulk balance source, pinned to the same healthy .109 box. It walks
+// 7UPD for every customer server-side, so it needs far more than the 15s the
+// AR client allows (measured: 8-14s, but a loaded box is slower).
+const fallbackBulkClient = createClient({
+  baseUrl: fallbackBase,
+  baseUrls: [fallbackBase],
+  credentials: async () => {
+    await initializeSecrets()
+    return getSecret('FINANSIT_API_CREDENTIALS', '')
+  },
+  credentialsByUrl: async () => {
+    await initializeSecrets()
+    return getSecret('FINANSIT_API_CREDENTIALS_FALLBACK', '') || undefined
+  },
+  concurrency: 1,
+  timeout: 120000,
+})
+
+export interface DebtorBalance { code: string; name: string; balance: number }
+
+/**
+ * Every customer who owes money, with their exact net balance — in ONE call.
+ *
+ * `/api/customers/{code}/balance` has no batch form, so /api/analytics/receivables
+ * used to ask all ~4,708 customers one at a time (0.62s each): that is the whole
+ * 216s of that route. `POST /api/ledger/bulk/preview` computes the same figure
+ * (Σ 7UPD debit − Σ credit) for every customer in a single server-side pass and
+ * returns the ones above `min_balance`. Verified against the per-customer path on
+ * 2026-08-18: identical debtor set, identical balances to the shekel, 8.3s.
+ *
+ * **It sends nothing.** `preview` only RESOLVES the audience for a bulk ledger
+ * run — the sending endpoint is the separate `/api/ledger/bulk/send`, which this
+ * app never calls. We use it purely as the bulk read of balances FINAPI lacks.
+ *
+ * Returns [] on any failure so the caller can fall back to the per-customer sweep.
+ */
+export async function fetchDebtorBalances(minBalance = 0): Promise<DebtorBalance[]> {
+  try {
+    const data: any = await fallbackBulkClient.post('/api/ledger/bulk/preview', { min_balance: minBalance })
+    const rows: any[] = data?.recipients || []
+    return rows
+      .map((r) => ({
+        code: String(r?.code || '').trim(),
+        name: String(r?.name || '').trim(),
+        balance: Number(r?.balance) || 0,
+      }))
+      .filter((r) => r.code && r.balance > 0)
+  } catch (e: any) {
+    console.warn('[FINAPI] fetchDebtorBalances failed:', e?.message?.substring(0, 160))
+    return []
+  }
+}
+
 // Customer order/receipt/document history: FINAPI walks a whole Btrieve file per
 // call (40-60s for busy customers; its own gateway 504s at 60s), so the default
 // 15s client aborts these and the customer page silently loses its tabs. History
@@ -223,6 +276,77 @@ export async function fetchItemDetail(code: string): Promise<any> {
   return client.items.get(code)
 }
 
+// FINAPI's batch endpoints reject >100 item_codes (HTTP 422). Chunk at 100.
+const BATCH_LIMIT = 100
+
+/**
+ * Run one of FINAPI's batch endpoints over an arbitrary number of codes.
+ *
+ * Chunks at 100 (the server's hard limit) and keeps a few chunks in flight: the
+ * transport allows 4 concurrent calls, so 3 gives most of the speed-up while
+ * leaving a seat for whatever else the container is doing. A chunk that fails is
+ * logged and dropped — batch callers all degrade to "keep what we have" rather
+ * than failing a page, which is why every one of them swallowed errors already.
+ */
+const BATCH_IN_FLIGHT = 3
+
+async function runChunked<T>(codes: string[], label: string, call: (chunk: string[]) => Promise<T>): Promise<T[]> {
+  const chunks: string[][] = []
+  for (let i = 0; i < codes.length; i += BATCH_LIMIT) chunks.push(codes.slice(i, i + BATCH_LIMIT))
+  const out: T[] = []
+  for (let i = 0; i < chunks.length; i += BATCH_IN_FLIGHT) {
+    const results = await Promise.all(
+      chunks.slice(i, i + BATCH_IN_FLIGHT).map(async (cs) => {
+        try {
+          return await call(cs)
+        } catch (e: any) {
+          console.warn(`[FINAPI] ${label} chunk failed:`, e?.message?.substring(0, 120))
+          return null
+        }
+      }),
+    )
+    for (const r of results) if (r != null) out.push(r)
+  }
+  return out
+}
+
+/**
+ * Fetch many items in one shot — the batch form of `fetchItemDetail`.
+ *
+ * Returns a Map keyed by the REQUESTED code (uppercased); the value is the exact
+ * payload `GET /api/items/{code}` returns (name, price, stock/ordered/incoming,
+ * sales history, chain, categories). Codes FINAPI doesn't know are simply absent
+ * from the map — same shape as a failed single lookup, so callers keep their
+ * "leave the old value" behaviour without special-casing.
+ *
+ * Why: every per-item fan-out in this app used to pay one HTTP round trip per
+ * code through a transport capped at 4 in-flight requests. 100 codes cost ~53s
+ * that way and ~1.8s as one batch call.
+ */
+export async function fetchItemsBatch(codes: string[]): Promise<Map<string, any>> {
+  const out = new Map<string, any>()
+  const unique = [...new Set((codes || []).map(c => String(c || '').trim().toUpperCase()).filter(Boolean))]
+  if (!unique.length) return out
+
+  // A dropped chunk costs 100 codes at once (a dropped single lookup cost one),
+  // so retry it once before letting runChunked give up on it.
+  const parts = await runChunked(unique, 'fetchItemsBatch', async (cs) => {
+    try {
+      return (await client.items.batch(cs)) as any
+    } catch {
+      await new Promise(r => setTimeout(r, 300))
+      return (await client.items.batch(cs)) as any
+    }
+  })
+  for (const data of parts) {
+    for (const item of data?.items || []) {
+      const code = String(item?.code || item?.item_code || '').trim().toUpperCase()
+      if (code) out.set(code, item)
+    }
+  }
+  return out
+}
+
 export async function searchItems(query: string): Promise<any[]> {
   const data = await client.items.search(query)
   return data.items || []
@@ -250,36 +374,17 @@ export async function fetchStock(code: string, year?: string): Promise<any> {
   return client.stock.get(code, year ? { year } : undefined)
 }
 
-// FINAPI's batch endpoints reject >100 item_codes (HTTP 422). Chunk at 100.
-const BATCH_LIMIT = 100
-
 export async function fetchBatchStock(codes: string[]): Promise<any[]> {
   if (!codes.length) return []
-  const out: any[] = []
-  for (let i = 0; i < codes.length; i += BATCH_LIMIT) {
-    try {
-      const data = await client.stock.batch(codes.slice(i, i + BATCH_LIMIT))
-      out.push(...((data as any).items || data || []))
-    } catch (e: any) {
-      console.warn('[FINAPI] fetchBatchStock chunk failed:', e?.message?.substring(0, 120))
-    }
-  }
-  return out
+  const parts = await runChunked(codes, 'fetchBatchStock', (cs) => client.stock.batch(cs))
+  return parts.flatMap((data: any) => (data as any).items || data || [])
 }
 
 export async function fetchBatchStockGet(codes: string[]): Promise<any[]> {
   if (!codes.length) return []
-  const out: any[] = []
-  for (let i = 0; i < codes.length; i += BATCH_LIMIT) {
-    try {
-      const chunk = codes.slice(i, i + BATCH_LIMIT).map(c => c.toUpperCase()).join(',')
-      const data = await client.stock.batchGet(chunk)
-      out.push(...((data as any).items || data || []))
-    } catch (e: any) {
-      console.warn('[FINAPI] fetchBatchStockGet chunk failed:', e?.message?.substring(0, 120))
-    }
-  }
-  return out
+  const parts = await runChunked(codes, 'fetchBatchStockGet', (cs) =>
+    client.stock.batchGet(cs.map(c => c.toUpperCase()).join(',')))
+  return parts.flatMap((data: any) => (data as any).items || data || [])
 }
 
 export async function refreshCache(table?: string): Promise<void> {
@@ -552,20 +657,13 @@ export async function createCustomer(params: Record<string, any>): Promise<any> 
 
 export async function fetchBatchPrices(codes: string[]): Promise<Record<string, number>> {
   if (!codes.length) return {}
-  const CHUNK = 100 // FINAPI /api/prices/batch rejects >100 item_codes (422)
   const result: Record<string, number> = {}
-  for (let i = 0; i < codes.length; i += CHUNK) {
-    const chunk = codes.slice(i, i + CHUNK)
-    try {
-      const data = await client.prices.batch({ item_codes: chunk })
-      const items: any[] = data.items || data || []
-      for (const item of items) {
-        const code = item.item_code || item.code
-        const price = item.price_list_price || item.price || 0
-        if (code && price > 0) result[code.toUpperCase()] = price
-      }
-    } catch (e) {
-      console.warn('[FINAPI] fetchBatchPrices chunk failed:', e)
+  const parts = await runChunked(codes, 'fetchBatchPrices', (cs) => client.prices.batch({ item_codes: cs }))
+  for (const data of parts) {
+    for (const item of (data.items || data || []) as any[]) {
+      const code = item.item_code || item.code
+      const price = item.price_list_price || item.price || 0
+      if (code && price > 0) result[String(code).toUpperCase()] = price
     }
   }
   return result
@@ -582,20 +680,14 @@ export const COST_PRICE_CODE = '06'
  */
 export async function fetchBatchCost(codes: string[]): Promise<Record<string, number>> {
   if (!codes.length) return {}
-  const CHUNK = 100
   const result: Record<string, number> = {}
-  for (let i = 0; i < codes.length; i += CHUNK) {
-    const chunk = codes.slice(i, i + CHUNK)
-    try {
-      const data = await client.prices.batch({ item_codes: chunk, price_code: COST_PRICE_CODE } as any)
-      const items: any[] = data.items || data || []
-      for (const item of items) {
-        const code = item.item_code || item.code
-        const cost = Number(item.price ?? item.price_list_price ?? 0)
-        if (code && cost > 0) result[String(code).toUpperCase()] = cost
-      }
-    } catch (e) {
-      console.warn('[FINAPI] fetchBatchCost chunk failed:', e)
+  const parts = await runChunked(codes, 'fetchBatchCost', (cs) =>
+    client.prices.batch({ item_codes: cs, price_code: COST_PRICE_CODE } as any))
+  for (const data of parts) {
+    for (const item of (data.items || data || []) as any[]) {
+      const code = item.item_code || item.code
+      const cost = Number(item.price ?? item.price_list_price ?? 0)
+      if (code && cost > 0) result[String(code).toUpperCase()] = cost
     }
   }
   return result

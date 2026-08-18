@@ -1,4 +1,4 @@
-import { client, fetchItems, fetchDocuments, fetchDocumentDetail, fetchBatchStock, searchDocuments, fetchAllStockItems, fetchAllItemChainLinks, fetchBatchPrices, fetchAllCustomers, refreshCache, fetchRecommendationReport } from '../finansit-client'
+import { client, fetchItems, fetchItemsBatch, fetchDocuments, fetchDocumentDetail, fetchBatchStock, searchDocuments, fetchAllStockItems, fetchAllItemChainLinks, fetchBatchPrices, fetchAllCustomers, refreshCache, fetchRecommendationReport } from '../finansit-client'
 import { getCached, setCache, deleteCache } from '../redis-client'
 import { query as dbQuery } from '../db'
 import { readQueryAsync } from '../neon-read'
@@ -50,6 +50,79 @@ export function looksLikeCodeNotName(name: string | null | undefined, code?: str
   if (!n) return true
   if (code && n === code) return true
   return !/[A-Za-z֐-׿]{2}/.test(n)
+}
+
+/**
+ * Resolve real, human-readable names for many item codes in as few FINAPI calls
+ * as possible.
+ *
+ * Returns a Map of code → name for the codes it could name; a code it could not
+ * name is simply absent, so callers keep whatever they were showing.
+ *
+ * Three tiers, each one batch wider than the last:
+ *   1. `POST /api/items/batch` — the authoritative short name, the same field
+ *      the /items/[code] page renders. One call per 100 codes.
+ *   2. For codes whose own name still looks like a code, one more batch over
+ *      their `item_id_history` siblings: the ERP re-codes a part repeatedly and
+ *      usually only one code in the chain carries the real description. This
+ *      replaces the per-item `getHistory().canonical_name` call that used to run
+ *      here — same intent (name from the chain), 1 call instead of N.
+ *   3. Codes the item endpoint doesn't know AT ALL (aliases, quote-only codes)
+ *      have no batch form — `/history` is the only thing that can name them, so
+ *      those stay one call each, bounded and capped.
+ */
+const MAX_HISTORY_FALLBACK = 100
+
+export async function resolveItemNames(codes: string[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>()
+  const wanted = [...new Set((codes || []).map(c => String(c || '').trim().toUpperCase()).filter(Boolean))]
+  if (!wanted.length) return out
+
+  const primary = await fetchItemsBatch(wanted)
+  const chainCandidates = new Map<string, string[]>() // code → sibling codes worth trying
+  const unknown: string[] = [] // FINAPI has no item at all for these
+
+  for (const code of wanted) {
+    const item = primary.get(code)
+    if (!item) { unknown.push(code); continue }
+    const name = item.name
+    if (name && !looksLikeCodeNotName(name, code)) { out.set(code, fixRtlItemName(name)); continue }
+    const siblings: string[] = (item.item_id_history || [])
+      .map((c: any) => String(c || '').trim().toUpperCase())
+      .filter((c: string) => c && c !== code)
+    if (siblings.length) chainCandidates.set(code, siblings)
+  }
+
+  if (chainCandidates.size > 0) {
+    const siblingItems = await fetchItemsBatch([...new Set([...chainCandidates.values()].flat())])
+    for (const [code, siblings] of chainCandidates) {
+      for (const sib of siblings) {
+        const n = siblingItems.get(sib)?.name
+        if (n && !looksLikeCodeNotName(n, code) && !looksLikeCodeNotName(n, sib)) {
+          out.set(code, fixRtlItemName(n))
+          break
+        }
+      }
+    }
+  }
+
+  if (unknown.length > 0) {
+    const queue = unknown.slice(0, MAX_HISTORY_FALLBACK)
+    if (unknown.length > queue.length) {
+      console.log(`[Analytics] resolveItemNames: ${unknown.length - queue.length} unknown codes left unnamed (history fallback capped at ${MAX_HISTORY_FALLBACK})`)
+    }
+    const worker = async () => {
+      for (let code = queue.shift(); code; code = queue.shift()) {
+        try {
+          const canonical = (await client.items.getHistory(code))?.canonical_name
+          if (canonical && !looksLikeCodeNotName(canonical, code)) out.set(code, fixRtlItemName(canonical))
+        } catch { /* leave it unnamed */ }
+      }
+    }
+    await Promise.allSettled(Array.from({ length: 4 }, worker))
+  }
+
+  return out
 }
 
 export const NO_CATEGORY = 'ללא קטגוריה'
@@ -543,61 +616,25 @@ async function _getItemsImpl(cacheKey: string, staleCacheKey?: string): Promise<
     // These fall through the `stock.item_name || catalog?.name || code` chain to the raw
     // code when the bulk stock summary has no name AND the item is past fetchItems()'s
     // 10k-item catalog window. The authoritative name lives in the per-item endpoint
-    // (client.items.get(code).name) — the exact field the /items/[code] page renders —
-    // so we point-resolve it here. getHistory().canonical_name is only a secondary
-    // fallback (often empty). The REST transport throttles these calls internally
-    // (finapi-rest concurrency cap), so a plain Promise.allSettled is safe.
+    // — the exact field the /items/[code] page renders — so we point-resolve it here
+    // via resolveItemNames(), which reads it through POST /api/items/batch.
     // Blocking — must complete before buildChainMap so inMemoryItemsCache is always correct.
     // Cap bounds the worst-case COLD-START latency (this path only blocks when no cache
     // exists at all; the 6h refresh is stale-while-revalidate and never blocks a request).
-    // 500 covers the forecast's max page size with headroom; the transport's concurrency
-    // cap keeps this to a bounded background cost.
+    // 500 covers the forecast's max page size with headroom, and now costs ~5 FINAPI
+    // calls instead of 500 — this used to be the app's single biggest call fan-out.
     const MAX_NAME_RESOLVE = 500
     const numericNameItems = items
       .filter(i => looksLikeCodeNotName(i.name, i.code))
       .slice(0, MAX_NAME_RESOLVE)
     if (numericNameItems.length > 0) {
-      console.log(`[Analytics] Resolving ${numericNameItems.length} items with numeric/alias names via item endpoint`)
+      console.log(`[Analytics] Resolving ${numericNameItems.length} items with numeric/alias names via batch item endpoint`)
+      const nameMap = await resolveItemNames(numericNameItems.map(i => i.code))
       let resolved = 0
-      // Firing all 500 at once resolved only ~6% of them: the burst swamps the
-      // REST transport and every failure is swallowed by the catch blocks
-      // below. A bounded pool with one retry lands the same lookups reliably
-      // (measured: they succeed when paced) and still finishes in seconds.
-      const NAME_RESOLVE_CONCURRENCY = 8
-      const queue = [...numericNameItems]
-      const resolveOne = async (item: typeof items[number]) => {
-        const upper = item.code.toUpperCase()
-        // Primary: authoritative short name from the per-item endpoint.
-        for (let attempt = 0; attempt < 2; attempt++) {
-          try {
-            const full = await client.items.get(upper)
-            const name = full?.name
-            if (name && !looksLikeCodeNotName(name, item.code)) {
-              item.name = fixRtlItemName(name)
-              resolved++
-              return
-            }
-            break // answered, just without a usable name — don't retry
-          } catch {
-            if (attempt === 0) await new Promise(r => setTimeout(r, 250))
-          }
-        }
-        // Secondary: chain canonical_name (covers superseded/aliased codes).
-        try {
-          const history = await client.items.getHistory(upper)
-          const canonical = history?.canonical_name
-          if (canonical && !looksLikeCodeNotName(canonical, item.code)) {
-            item.name = fixRtlItemName(canonical)
-            resolved++
-          }
-        } catch {}
+      for (const item of numericNameItems) {
+        const name = nameMap.get(item.code.toUpperCase())
+        if (name) { item.name = name; resolved++ }
       }
-      const workers = Array.from({ length: NAME_RESOLVE_CONCURRENCY }, async () => {
-        for (let next = queue.shift(); next; next = queue.shift()) {
-          await resolveOne(next)
-        }
-      })
-      await Promise.allSettled(workers)
       console.log(`[Analytics] Name resolution: ${resolved}/${numericNameItems.length} items got a real name`)
     }
 
@@ -717,18 +754,11 @@ async function _getItemsImpl(cacheKey: string, staleCacheKey?: string): Promise<
   }
 
   const items: FinansitItem[] = []
-  const activeCodes = [...activeItemCodes]
-  for (let i = 0; i < activeCodes.length; i += 10) {
-    const batch = activeCodes.slice(i, i + 10)
-    const results = await Promise.all(
-      batch.map(async (code) => {
-        try { return await client.items.get(code) } catch { return null }
-      })
-    )
-    for (const raw of results) {
-      const item = mapRawItem(raw)
-      if (item) items.push(item)
-    }
+  // One call per 100 codes instead of one per code — same payload per item.
+  const enriched = await fetchItemsBatch([...activeItemCodes])
+  for (const raw of enriched.values()) {
+    const item = mapRawItem(raw)
+    if (item) items.push(item)
   }
   console.log(`[Analytics] Enriched ${items.length} items with stock/sales data`)
 
@@ -829,32 +859,18 @@ export async function getDemandAnalysis(dateFrom?: string, dateTo?: string, forc
   const unresolvedCodes = Array.from(demandMap.keys()).filter(code => code.length > 1 && !itemMap.has(code))
   const resolvedNameMap = new Map<string, string>()
   if (unresolvedCodes.length > 0) {
-    // Same resolution strategy as the enriched-items backfill above: prefer the
-    // authoritative per-item name (client.items.get(code).name), fall back to the
-    // chain canonical_name only when that's missing. Cap raised from 50 so demand/
-    // gap rows for quote-only items stop rendering their raw code.
+    // Same resolution strategy as the enriched-items backfill above, through the
+    // same shared helper: batch item endpoint first, chain siblings second.
+    // (It also applies looksLikeCodeNotName instead of the old /^\d+$/ test, which
+    // let names like "0829193289    #####" through as if they were real.)
+    // Cap raised from 50 so demand/gap rows for quote-only items stop rendering
+    // their raw code — at 300 codes that is ~3 FINAPI calls, not 300.
     const MAX_NAME_RESOLVE = 300
     const codesToResolve = unresolvedCodes.slice(0, MAX_NAME_RESOLVE)
-    console.log(`[Analytics] Resolving ${codesToResolve.length} demand item names via item endpoint`)
-    await Promise.allSettled(
-      codesToResolve.map(async (code) => {
-        try {
-          const full = await client.items.get(code)
-          const name = full?.name
-          if (name && !/^\d+$/.test(name) && name !== code) {
-            resolvedNameMap.set(code, fixRtlItemName(name))
-            return
-          }
-        } catch {}
-        try {
-          const history = await client.items.getHistory(code)
-          const canonical = history?.canonical_name
-          if (canonical && !/^\d+$/.test(canonical) && canonical !== code) {
-            resolvedNameMap.set(code, fixRtlItemName(canonical))
-          }
-        } catch {}
-      })
-    )
+    console.log(`[Analytics] Resolving ${codesToResolve.length} demand item names via batch item endpoint`)
+    for (const [code, name] of await resolveItemNames(codesToResolve)) {
+      resolvedNameMap.set(code, name)
+    }
   }
 
   const result: DemandItem[] = Array.from(demandMap.entries())
@@ -1617,13 +1633,14 @@ export async function getReorderRecommendations(dateFrom?: string, dateTo?: stri
  * failed lookup keeps the existing value.
  */
 async function reconcileStockFromItemApi(rows: TopSellingItem[]): Promise<void> {
-  await Promise.all(rows.map(async (r) => {
-    try {
-      const live = await client.items.get(r.code)
-      const qty = Number((live as any)?.stock_qty)
-      if (Number.isFinite(qty)) r.stock_qty = qty
-    } catch { /* keep existing value */ }
-  }))
+  if (!rows.length) return
+  // Runs on EVERY request, cache hit included, so it is worth the single call:
+  // ≤20 rows = 1 batch call rather than 20 lookups queued behind a 4-seat transport.
+  const live = await fetchItemsBatch(rows.map(r => r.code))
+  for (const r of rows) {
+    const qty = Number(live.get(r.code.toUpperCase())?.stock_qty)
+    if (Number.isFinite(qty)) r.stock_qty = qty // a missing item keeps the existing value
+  }
 }
 
 export async function getTopSellingItems(period: string = '30d', forceRefresh = false): Promise<TopSellingItem[]> {
