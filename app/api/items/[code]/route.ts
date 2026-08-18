@@ -248,6 +248,29 @@ export async function GET(
        computed only on the catalog-only fallback, so an item we sell showed
        no vehicles at all. */
     const fits = await vehiclesFor(item.code).catch(() => [])
+
+    /* The catalog fallback above is gated on the item being ABSENT from the ERP,
+       which misses the commoner case: the ERP has the part but never got a name
+       for it. 1623199180 comes back from FINAPI as {"name":"", price:7986.06} —
+       a part we price at ~8k that renders as a blank line. Partly's catalog is
+       the manufacturer's and knows it as "ראש צילינדר חדש קומפלט"; Lubinski's
+       price list knows it as "ראש מנוע". Prefer either over showing nothing.
+       Name-driven, not existence-driven — an ERP name always wins when present. */
+    if (!String(item.name ?? '').trim()) {
+      const fb = await query(
+        `SELECT coalesce(nullif(gp.hebrew_description, '-'), '') AS heb,
+                gp.description AS eng,
+                l.description AS lubinski
+           FROM partly.global_parts gp
+           LEFT JOIN xpart.lubinski_price_list l ON l.item_id = gp.item_number
+          WHERE gp.item_number = $1
+          LIMIT 1`,
+        [item.code]
+      ).catch(() => null)
+      const f = fb?.rows?.[0] as any
+      if (f) item = { ...item, name: f.heb || f.lubinski || f.eng || item.name }
+    }
+
     return NextResponse.json({
       ...item,
       fits,
