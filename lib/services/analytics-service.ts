@@ -1,4 +1,4 @@
-import { client, fetchItems, fetchItemsBatch, fetchDocuments, fetchDocumentDetail, fetchBatchStock, searchDocuments, fetchAllStockItems, fetchAllItemChainLinks, fetchBatchPrices, fetchAllCustomers, refreshCache, fetchRecommendationReport } from '../finansit-client'
+import { client, fetchItems, fetchItemsBatch, fetchDocuments, fetchRecentDocumentDetails, fetchDocumentDetailsByNumber, fetchBatchStock, searchDocuments, fetchAllStockItems, fetchAllItemChainLinks, fetchBatchPrices, fetchAllCustomers, refreshCache, fetchRecommendationReport } from '../finansit-client'
 import { getCached, setCache, deleteCache } from '../redis-client'
 import { query as dbQuery } from '../db'
 import { readQueryAsync } from '../neon-read'
@@ -734,13 +734,12 @@ async function _getItemsImpl(cacheKey: string, staleCacheKey?: string): Promise<
       ...invoices.map((d: any) => ({ format: 11, doc_number: d.doc_number })),
       ...quotes.map((d: any) => ({ format: 31, doc_number: d.doc_number })),
     ]
-    for (let i = 0; i < allDocs.length; i += 10) {
-      const batch = allDocs.slice(i, i + 10)
-      const details = await Promise.all(
-        batch.map(async (doc) => {
-          try { return await fetchDocumentDetail(doc.format, doc.doc_number) } catch { return null }
-        })
-      )
+    // Both formats in two bulk reads instead of one call per document.
+    const detailsByFormat = await Promise.all([11, 31].map((fmt) =>
+      fetchDocumentDetailsByNumber(fmt, allDocs.filter((d) => d.format === fmt).map((d) => d.doc_number)),
+    ))
+    {
+      const details = detailsByFormat.flat()
       for (const detail of details) {
         if (!detail?.lines) continue
         for (const line of detail.lines) {
@@ -825,20 +824,11 @@ export async function getDemandAnalysis(dateFrom?: string, dateTo?: string, forc
     }
     console.log(`[Analytics] Demand: ${allQuotes.length} total quotes from HTTP for ${effDateFrom} to ${effDateTo}`)
 
-    // Fetch line items from quotes (up to 100, all batches concurrent)
+    // Line items for the selected quotes — one feed call covering their number
+    // range where possible, per-document reads for the rest. The quote SET is
+    // unchanged: these are exactly the quotes the date filtering above picked.
     const recentQuotes = allQuotes.slice(0, 100)
-    const BATCH_SIZE = 10
-    const batches: any[][] = []
-    for (let i = 0; i < recentQuotes.length; i += BATCH_SIZE) {
-      batches.push(recentQuotes.slice(i, i + BATCH_SIZE))
-    }
-    const allDetails = await Promise.all(
-      batches.map(batch =>
-        Promise.all(batch.map(async (q: any) => {
-          try { return await fetchDocumentDetail(31, q.doc_number) } catch { return null }
-        }))
-      )
-    )
+    const allDetails = [await fetchDocumentDetailsByNumber(31, recentQuotes.map((q: any) => q.doc_number))]
     for (const batchDetails of allDetails) {
       for (const detail of batchDetails) {
         if (!detail?.lines) continue
@@ -1734,21 +1724,19 @@ export async function getTopSellingItems(period: string = '30d', forceRefresh = 
   // Fallback: fetch recent invoices via HTTP (capped at 200 to avoid timeout)
   try {
     const chainMap = await getChainMap()
-    const allInvoices = await fetchDocuments(DOC_FORMATS.TAX_INVOICE, 200)
+    // One feed call for the whole window when the box supports it (falls back to
+    // per-document reads otherwise). Date filtering moves AFTER the fetch: it used
+    // to run first purely to cut the number of round trips, which is no longer the cost.
+    const allInvoices = await fetchRecentDocumentDetails(DOC_FORMATS.TAX_INVOICE, 200)
+    const today = now.toISOString().split('T')[0]
     const invoices = allInvoices.filter((inv: any) => {
       const d = inv.doc_date
-      return d && d >= dateFrom && d <= now.toISOString().split('T')[0]
+      return d && d >= dateFrom && d <= today
     })
 
     const itemSales = new Map<string, { name: string; qty: number; revenue: number; count: number }>()
-    for (let i = 0; i < invoices.length; i += 20) {
-      const batch = invoices.slice(i, i + 20)
-      const details = await Promise.all(
-        batch.map(async (doc: any) => {
-          try { return await fetchDocumentDetail(11, doc.doc_number) } catch { return null }
-        })
-      )
-      for (const detail of details) {
+    {
+      for (const detail of invoices) {
         if (!detail?.lines) continue
         for (const line of detail.lines) {
           if (!line.item_code || line.item_code.length <= 1) continue
@@ -1890,19 +1878,11 @@ export async function getConversionAnalysis(dateFrom?: string, dateTo?: string, 
 
     if (!fetchLines) return docs  // invoices: skip line items entirely
 
-    // Quotes: fetch line details for up to 30 docs, all batches concurrent
+    // Quotes: line details for up to 30 docs — one bulk read over their number
+    // range, per-document reads for anything it misses. Same 30 documents.
     const toFetch = docs.slice(0, 30)
-    const batchCount = Math.ceil(toFetch.length / 10)
-    const allDetails = await Promise.all(
-      Array.from({ length: batchCount }, (_, i) =>
-        Promise.all(
-          toFetch.slice(i * 10, (i + 1) * 10).map(async (d: any) => {
-            try { return await fetchDocumentDetail(format, d.doc_number) } catch { return null }
-          })
-        )
-      )
-    )
-    for (const detail of allDetails.flat()) {
+    const allDetails = await fetchDocumentDetailsByNumber(format, toFetch.map((d: any) => d.doc_number))
+    for (const detail of allDetails) {
       if (!detail?.lines) continue
       const doc = docs.find((d: any) => d.doc_number === detail.doc_number)
       if (doc) doc.lines = detail.lines

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { initializeSecrets, getSecret } from '@/lib/aws-secrets'
-import { searchDocuments, fetchDocumentDetail, fetchDocuments } from '@/lib/finansit-client'
+import { searchDocuments, fetchDocumentDetail, fetchDocuments, fetchDocumentDetailsByNumber } from '@/lib/finansit-client'
 import { deleteCache } from '@/lib/redis-client'
 import { query, getDb } from '@/lib/db'
 import { monthlySales, dailySales } from '@/lib/db/schema'
@@ -128,13 +128,9 @@ async function runWarmCache(mode: string, from?: number, to?: number) {
 
           // monthly_sales from line items via Drizzle
           const monthlyData = new Map<string, { qty: number; revenue: number; count: number; itemName: string }>()
-          for (let i = 0; i < invoices.length; i += 20) {
-            const batch = invoices.slice(i, i + 20)
-            const details = await Promise.all(
-              batch.map(async (doc: any) => {
-                try { return await fetchDocumentDetail(11, doc.doc_number) } catch { return null }
-              })
-            )
+          {
+            // One bulk read of the same invoices, instead of one call each.
+            const details = await fetchDocumentDetailsByNumber(11, invoices.map((d: any) => d.doc_number))
             for (const detail of details) {
               if (!detail?.lines || !detail.doc_date) continue
               const year = parseInt(detail.doc_date.substring(0, 4), 10)
@@ -244,13 +240,9 @@ async function runWarmCache(mode: string, from?: number, to?: number) {
 
         // monthly_sales from line items via Drizzle
         const monthlyData = new Map<string, { qty: number; revenue: number; count: number; itemName: string }>()
-        for (let i = 0; i < invoices.length; i += 20) {
-          const batch = invoices.slice(i, i + 20)
-          const details = await Promise.all(
-            batch.map(async (doc: any) => {
-              try { return await fetchDocumentDetail(11, doc.doc_number) } catch { return null }
-            })
-          )
+        {
+          // Full mode: 1,000 invoices in one bulk read rather than 1,000 calls.
+          const details = await fetchDocumentDetailsByNumber(11, invoices.map((d: any) => d.doc_number))
           for (const detail of details) {
             if (!detail?.lines || !detail.doc_date) continue
             const year = parseInt(detail.doc_date.substring(0, 4), 10)

@@ -522,6 +522,200 @@ export async function fetchDocuments(format: number, limit?: number, year?: stri
   return data.documents || data || []
 }
 
+export interface BulkDocumentLine {
+  item_code: string
+  item_name: string
+  quantity: number
+  unit_price: number
+  discount_percent: number
+  line_total: number
+}
+
+export interface BulkDocument {
+  doc_format: string
+  doc_number: string
+  doc_date: string
+  customer_code: string
+  customer_name: string
+  total: number
+  lines: BulkDocumentLine[]
+}
+
+/**
+ * The newest `count` documents of one format, WITH their line items, in ONE call.
+ *
+ * The aggregation loops in this app used to fetch one document at a time — the
+ * warm-cache monthly-sales sync alone paid 1,000 round trips. FINAPI's change
+ * feed returns the same documents with complete lines in a single request
+ * (measured: 971 docs in 5.8s; per-doc line counts match GET /api/documents/{f}/{n}
+ * exactly on every sampled doc, including 10-line ones).
+ *
+ * **Returns null — meaning "use the per-document path" — rather than degrading.**
+ * The one field the feed historically omitted is `line_total`, and a caller doing
+ * `revenue += line.line_total || 0` against a feed without it gets a confident
+ * ZERO. It cannot be recomputed either: qty * unit_price * (1 - disc/100)
+ * disagrees with the ERP on ~9% of real lines (14,204 ILS of drift across 25
+ * documents). So we verify the field is actually there and bail out if it is not
+ * — which is exactly what happens against a FINAPI older than the change that
+ * added it, and against the .109 fallback box until it is updated too.
+ *
+ * Also returns null for: a non-active year (the feed serves the active year
+ * only), a failed call, or an empty feed.
+ *
+ * NOT for format 61 (supplier orders): those carry ~159 lines each, and the feed
+ * took 65s for 137 of them versus 2.4s for 200 invoices. Bounded per-document
+ * fetches win there.
+ */
+export async function fetchRecentDocumentsWithLines(
+  format: number | string,
+  count: number,
+  year?: string,
+): Promise<BulkDocument[] | null> {
+  const fmt = String(format)
+  // The feed reads the active year only; anything else must take the old path.
+  if (year && year !== String(new Date().getFullYear())) return null
+
+  try {
+    const head = await client.documents.list(fmt, { limit: 1, direction: 'desc' })
+    const newest = (head?.documents || head || [])[0]
+    const maxNum = parseInt(String(newest?.doc_number ?? newest?.number ?? '').trim(), 10)
+    if (!Number.isFinite(maxNum) || maxNum <= 0) return null
+
+    // The feed returns documents numbered ABOVE the cursor, so a cursor of
+    // (newest - count) asks for the most recent `count` — the same window
+    // fetchDocuments(fmt, count) walks. Gaps in numbering just mean fewer rows.
+    const cursor = `${fmt}:${Math.max(0, maxNum - count)}`
+    const data: any = await bulkClient.get('/api/documents/changes', {
+      formats: fmt,
+      cursor,
+      limit: Math.min(2000, Math.max(1, count)),
+      include_lines: true,
+      resync_days: 0,
+    })
+
+    const rows: any[] = (data?.documents || []).filter((r: any) => Array.isArray(r?.lines) && r.lines.length)
+    if (rows.length === 0) return null
+
+    // The guard. One line without a usable line_total invalidates the whole feed
+    // for revenue purposes — do not partially trust it.
+    for (const r of rows) {
+      for (const l of r.lines) {
+        if (typeof l?.line_total !== 'number' || Number.isNaN(l.line_total)) {
+          console.warn(
+            `[FINAPI] changes feed for format ${fmt} has no line_total — falling back to per-document reads. ` +
+            'Update FINAPI on this box to get the one-call path.',
+          )
+          return null
+        }
+      }
+    }
+
+    return rows.map((r) => ({
+      doc_format: String(r.doc_format ?? fmt),
+      doc_number: String(r.doc_number ?? '').trim(),
+      doc_date: String(r.doc_date ?? ''),
+      customer_code: String(r.customer_code ?? ''),
+      customer_name: String(r.customer_name ?? ''),
+      total: Number(r.total) || 0,
+      lines: r.lines.map((l: any) => ({
+        item_code: String(l.item_code ?? '').trim(),
+        item_name: String(l.item_name ?? ''),
+        quantity: Number(l.quantity) || 0,
+        unit_price: Number(l.unit_price) || 0,
+        discount_percent: Number(l.discount_percent) || 0,
+        line_total: Number(l.line_total) || 0,
+      })),
+    }))
+  } catch (e: any) {
+    console.warn('[FINAPI] fetchRecentDocumentsWithLines failed, using per-document path:', e?.message?.substring(0, 140))
+    return null
+  }
+}
+
+/**
+ * Recent documents of one format WITH their lines — one feed call when the box
+ * can serve it, the per-document walk otherwise. Callers consume the same shape
+ * either way (`doc_date`, `doc_number`, `lines[]`), so nothing downstream cares
+ * which path ran.
+ *
+ * This exists because six separate places had hand-rolled the same
+ * "chunk the doc list, Promise.all a fetchDocumentDetail per doc" loop.
+ */
+export async function fetchRecentDocumentDetails(
+  format: number | string,
+  count: number,
+  year?: string,
+): Promise<any[]> {
+  const bulk = await fetchRecentDocumentsWithLines(format, count, year)
+  if (bulk) return bulk
+
+  // Fallback: the old path — list, then one detail call per document, paced.
+  const docs = await fetchDocuments(Number(format), count, year)
+  const out: any[] = []
+  const CHUNK = 20
+  for (let i = 0; i < docs.length; i += CHUNK) {
+    const details = await Promise.all(
+      docs.slice(i, i + CHUNK).map(async (d: any) => {
+        try { return await fetchDocumentDetail(format, d.doc_number, year) } catch { return null }
+      }),
+    )
+    for (const d of details) if (d) out.push(d)
+  }
+  return out
+}
+
+/**
+ * Details (with lines) for a SPECIFIC set of document numbers — the feed where it
+ * covers them, per-document reads for whatever it misses.
+ *
+ * Unlike fetchRecentDocumentDetails this changes nothing about WHICH documents a
+ * caller ends up with: callers that pick their documents by date, status or a
+ * cached list keep exactly their own selection. The feed is only used as a bulk
+ * READ of documents already chosen, and anything it does not return is fetched
+ * individually, so the result is the same set either way.
+ */
+export async function fetchDocumentDetailsByNumber(
+  format: number | string,
+  docNumbers: Array<string | number>,
+  year?: string,
+): Promise<any[]> {
+  const wanted = [...new Set(docNumbers.map((n) => String(n ?? '').trim()).filter(Boolean))]
+  if (wanted.length === 0) return []
+
+  const byNumber = new Map<string, any>()
+  const nums = wanted.map((n) => parseInt(n, 10)).filter((n) => Number.isFinite(n))
+  if (nums.length > 0) {
+    // The feed is a contiguous window above a cursor, so it can only serve this
+    // set if the set's own span fits in one call.
+    const span = Math.max(...nums) - Math.min(...nums) + 1
+    if (span <= 2000) {
+      const bulk = await fetchRecentDocumentsWithLines(format, span, year)
+      if (bulk) {
+        const want = new Set(wanted.map((n) => String(parseInt(n, 10))))
+        for (const d of bulk) {
+          if (want.has(String(parseInt(d.doc_number, 10)))) byNumber.set(String(parseInt(d.doc_number, 10)), d)
+        }
+      }
+    }
+  }
+
+  // Gap-fill: documents the feed didn't cover (older than the window, a format it
+  // can't serve, or the feed being unusable entirely).
+  const missing = wanted.filter((n) => !byNumber.has(String(parseInt(n, 10))))
+  const CHUNK = 20
+  for (let i = 0; i < missing.length; i += CHUNK) {
+    const details = await Promise.all(
+      missing.slice(i, i + CHUNK).map(async (n) => {
+        try { return await fetchDocumentDetail(format, n, year) } catch { return null }
+      }),
+    )
+    for (const d of details) if (d) byNumber.set(String(parseInt(String(d.doc_number ?? ''), 10)), d)
+  }
+
+  // Preserve the caller's order.
+  return wanted.map((n) => byNumber.get(String(parseInt(n, 10)))).filter(Boolean)
+}
+
 export async function fetchDocumentDetail(format: number | string, number: number | string, year?: string): Promise<any> {
   return client.documents.get(String(format), String(number), year ? { year } : undefined)
 }

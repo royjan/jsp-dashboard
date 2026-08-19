@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { initializeSecrets } from '@/lib/aws-secrets'
-import { fetchDocuments, fetchDocumentDetail, searchDocuments, refreshCache, waitForStockCache, fetchAllStockItemsBlocking } from '@/lib/finansit-client'
+import { fetchDocuments, fetchDocumentDetail, fetchDocumentDetailsByNumber, searchDocuments, refreshCache, waitForStockCache, fetchAllStockItemsBlocking } from '@/lib/finansit-client'
 import { query, getDb } from '@/lib/db'
 import { monthlySales, dailySales, itemSnapshots, documents } from '@/lib/db/schema'
 import { sql } from 'drizzle-orm'
@@ -222,13 +222,10 @@ export async function GET(request: Request) {
     const monthlyData = new Map<string, { qty: number; revenue: number; count: number; itemName: string }>()
     let processedDocs = 0
 
-    for (let i = 0; i < lineItemInvoices.length; i += 20) {
-      const batch = lineItemInvoices.slice(i, i + 20)
-      const details = await Promise.all(
-        batch.map(async (doc: any) => {
-          try { return await fetchDocumentDetail(11, doc.doc_number, detailYear) } catch { return null }
-        })
-      )
+    {
+      // Bulk read where the box + year allow it; the helper falls back to
+      // per-document reads for a historical year (the feed is active-year only).
+      const details = await fetchDocumentDetailsByNumber(11, lineItemInvoices.map((d: any) => d.doc_number), detailYear)
 
       for (const detail of details) {
         if (!detail?.lines || !detail.doc_date) continue
