@@ -26,6 +26,7 @@ import { cn } from '@/lib/utils'
 import { ErrorState, EmptyState } from '@/components/ui/feedback-state'
 import { sortRows, type SortDir } from '@/lib/sort'
 import { formatNumber } from '@/lib/format'
+import { useMoneyHidden } from '@/lib/use-money-hidden'
 
 export type { SortDir }
 
@@ -195,6 +196,10 @@ export function DataTable<TRow, TSortKey extends string = string>({
   className,
   labels,
 }: DataTableProps<TRow, TSortKey>) {
+  // Column `cell` renderers call formatCurrency() from here, and that reads the
+  // demo-mode mask from a module store React cannot see. Subscribing once in
+  // the table re-renders every money cell in the app when the eye is toggled.
+  useMoneyHidden()
   const L = { ...DEFAULT_LABELS, ...labels }
   const colCount = columns.length + (selectable ? 1 : 0)
 

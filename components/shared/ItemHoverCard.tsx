@@ -5,6 +5,8 @@ import Link from 'next/link'
 import { HoverCard, HoverCardTrigger, HoverCardContent } from '@/components/ui/hover-card'
 import { Package, TrendingUp, MapPin, Loader2 } from 'lucide-react'
 import { useLocale } from '@/lib/locale-context'
+import { formatCurrency } from '@/lib/format'
+import { useMoneyHidden } from '@/lib/use-money-hidden'
 
 interface ItemData {
   code: string
@@ -65,6 +67,10 @@ function StockIndicator({ value, label }: { value: number | null; label: string 
 }
 
 function ItemPopoverContent({ item }: { item: ItemData }) {
+  // Subscribe to the demo-mode eye: formatCurrency() masks from a module
+  // store, so without this the amounts here would not re-render on toggle.
+  useMoneyHidden()
+
   const { locale } = useLocale()
   const isHe = locale === 'he'
   const displayName = item.canonical_name || item.name
@@ -92,7 +98,7 @@ function ItemPopoverContent({ item }: { item: ItemData }) {
 
       <div className="flex justify-between items-end">
         {itemPrice != null && itemPrice > 0 && (
-          <div className="text-lg font-bold">₪{itemPrice.toLocaleString()}</div>
+          <div className="text-lg font-bold">{formatCurrency(itemPrice)}</div>
         )}
         <div className="flex items-center gap-1">
           <TrendingUp className="h-3 w-3 text-muted-foreground" />

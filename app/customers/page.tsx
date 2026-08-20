@@ -25,9 +25,10 @@ import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend,
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
 } from 'recharts'
-import { formatCurrency, formatNumber, formatDate } from '@/lib/format'
+import { formatCurrency, formatNumber, formatDate, formatCurrencyAxis } from '@/lib/format'
 import { StatTile, StatGrid } from '@/components/shared/StatTile'
 import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
+import { useMoneyHidden } from '@/lib/use-money-hidden'
 
 type CustomerSortField = 'name' | 'total_revenue' | 'gross_invoices' | 'total_credits' | 'invoice_count' | 'avg_order_value' | 'trend' | 'last_purchase'
 type ChurnSortField = 'name' | 'last_year_revenue' | 'last_purchase'
@@ -114,6 +115,10 @@ function LoadingSkeleton() {
 // ── Customers section ──
 
 function CustomersSection({ searchQuery }: { searchQuery: string }) {
+  // Subscribe to the demo-mode eye: formatCurrency() masks from a module
+  // store, so without this the amounts here would not re-render on toggle.
+  useMoneyHidden()
+
   const { t } = useLocale()
   const { get, setMany } = useUrlParams()
   const currentYear = new Date().getFullYear()
@@ -314,7 +319,7 @@ function CustomersSection({ searchQuery }: { searchQuery: string }) {
               <ResponsiveContainer width="100%" height={250}>
                 <BarChart data={top10Data} layout="vertical" margin={{ left: 5, right: 15, top: 5, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                  <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}K`} />
+                  <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={(v) => formatCurrencyAxis(v)} />
                   <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={80} />
                   <Tooltip contentStyle={{ backgroundColor: 'var(--popover)', borderColor: 'var(--border)', borderRadius: '8px', color: 'var(--popover-foreground)' }} formatter={(value: any) => [formatCurrency(value), t('revenue')]} />
                   <Bar dataKey="revenue" fill="#60a5fa" radius={[0, 4, 4, 0]} animationDuration={800} animationBegin={600} />

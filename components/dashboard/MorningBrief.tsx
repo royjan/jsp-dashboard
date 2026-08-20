@@ -6,6 +6,8 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ChevronDown, RefreshCw, Sparkles } from 'lucide-react'
+import { maskMoneyInText } from '@/lib/format'
+import { useMoneyHidden } from '@/lib/use-money-hidden'
 
 const STORAGE_KEY = 'morning-brief-collapsed'
 
@@ -46,6 +48,8 @@ function extractText(value: unknown): string {
 }
 
 export function MorningBrief() {
+  // The brief is LLM prose with the amounts already inside it — masked as text.
+  useMoneyHidden()
   const [collapsed, setCollapsed] = useState(false)
 
   // Restore collapsed state from localStorage
@@ -143,13 +147,13 @@ export function MorningBrief() {
               ) : data ? (
                 <div className="space-y-2.5" dir="rtl">
                   {data.summary && (
-                    <p className="text-sm font-medium text-foreground">{extractText(data.summary)}</p>
+                    <p className="text-sm font-medium text-foreground">{maskMoneyInText(extractText(data.summary))}</p>
                   )}
                   <ul className="space-y-1.5">
                     {data.bullets.map((bullet, i) => (
                       <li key={i} className="flex gap-2 text-sm text-muted-foreground">
                         <span className="text-primary/60 mt-0.5 shrink-0">&#x2022;</span>
-                        <span>{extractText(bullet)}</span>
+                        <span>{maskMoneyInText(extractText(bullet))}</span>
                       </li>
                     ))}
                   </ul>

@@ -5,6 +5,8 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useUrlParams } from '@/hooks/use-url-params'
 import { ItemLink } from '@/components/shared/ItemLink'
 import { LiquidationMap } from '../LiquidationMap'
+import { formatCurrency } from '@/lib/format'
+import { useMoneyHidden } from '@/lib/use-money-hidden'
 
 type Row = {
   code: string; name: string; size: 'small' | 'medium'
@@ -50,6 +52,10 @@ const SORT_TO_PARAM = new Map<SortKey, string>(SORT_PARAMS.map(s => [s.key, s.pa
 const DEFAULT_SORT: SortKey = 'match'
 
 function EbayRecoContent() {
+  // Subscribe to the demo-mode eye: formatCurrency() masks from a module
+  // store, so without this the amounts here would not re-render on toggle.
+  useMoneyHidden()
+
   // view is driven by the URL (/ebay-reco/table · /ebay-reco/map) so it is
   // bookmarkable and shareable. This is an optional-catch-all route, so switching
   // between table and map is a param-only change — the page does NOT remount, the
@@ -220,8 +226,8 @@ function EbayRecoContent() {
         {[
           ['מועמדים', nf(data.count)],
           ['קטנים · בינוניים', `${nf(data.small)} · ${nf(data.medium)}`],
-          ['מחיר ממוצע', `₪${nf(data.avg_price)}`],
-          ['הון תקוע', `₪${nf(data.capital_tied)}`],
+          ['מחיר ממוצע', formatCurrency(data.avg_price)],
+          ['הון תקוע', formatCurrency(data.capital_tied)],
         ].map(([l, v]) => (
           <div key={l} className="rounded-xl border bg-card p-3.5">
             <div className="text-xs text-muted-foreground mb-1">{l}</div>
@@ -378,14 +384,14 @@ function EbayRecoContent() {
                     {r.size === 'small' ? 'קטן' : 'בינוני'}
                   </span>
                 </td>
-                <td className="px-3 py-2 font-bold tabular-nums whitespace-nowrap" dir="ltr" style={{ textAlign: 'right' }}>₪{nf(r.price)}</td>
+                <td className="px-3 py-2 font-bold tabular-nums whitespace-nowrap" dir="ltr" style={{ textAlign: 'right' }}>{formatCurrency(r.price)}</td>
                 <td className="px-3 py-2 whitespace-nowrap" dir="ltr" style={{ textAlign: 'right' }}>
                   {r.ebay_ils == null ? (
                     <span className="text-muted-foreground/40" title="טרם נבדק ב-eBay, או אין התאמה חדשה">—</span>
                   ) : (() => {
                     const inner = (
                       <>
-                        <span className="font-bold tabular-nums">₪{nf(r.ebay_ils)}</span>
+                        <span className="font-bold tabular-nums">{formatCurrency(r.ebay_ils)}</span>
                         <span className="ms-1">{r.ebay_flag}</span>
                         {r.ebay_oem && <span className="ms-1 text-[10px] font-bold text-sky-500" title="השוואה מול חלק מקורי/OEM">OEM</span>}
                         {r.ebay_spread_pct != null && (

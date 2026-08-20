@@ -24,6 +24,7 @@ import {
 } from 'recharts'
 import { formatCurrency, formatDate, formatNumber } from '@/lib/format'
 import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
+import { useMoneyHidden } from '@/lib/use-money-hidden'
 
 function getPreviousPeriodRange(period: Period): { dateFrom: string; dateTo: string } {
   const now = new Date()
@@ -81,6 +82,10 @@ function sundayAlignOffset(currentFrom: string, prevFrom: string): number {
 }
 
 function HomePageContent() {
+  // Subscribe to the demo-mode eye: formatCurrency() masks from a module
+  // store, so without this the amounts here would not re-render on toggle.
+  useMoneyHidden()
+
   const { t } = useLocale()
   const { get, setMany } = useUrlParams()
   const queryClient = useQueryClient()
@@ -266,11 +271,11 @@ function HomePageContent() {
         <div className="flex flex-wrap gap-x-3 sm:gap-x-4 gap-y-1 text-xs sm:text-sm">
           <div>
             <span className="text-muted-foreground">{t('total')}: </span>
-            <span className="font-semibold">{totalRevenue.toLocaleString('he-IL', { style: 'currency', currency: 'ILS', maximumFractionDigits: 0 })}</span>
+            <span className="font-semibold">{formatCurrency(totalRevenue)}</span>
           </div>
           <div>
             <span className="text-muted-foreground">{t('avgDay')}: </span>
-            <span className="font-semibold">{avgDaily.toLocaleString('he-IL', { style: 'currency', currency: 'ILS', maximumFractionDigits: 0 })}</span>
+            <span className="font-semibold">{formatCurrency(avgDaily)}</span>
           </div>
           <div>
             <span className="text-muted-foreground">{t('transactions')}: </span>
@@ -438,6 +443,10 @@ function HomePageContent() {
 }
 
 function CrossPlatformKPIs() {
+  // Subscribe to the demo-mode eye: formatCurrency() masks from a module
+  // store, so without this the amounts here would not re-render on toggle.
+  useMoneyHidden()
+
   const { t } = useLocale()
   const { data } = useCrossPlatformKpis()
   if (!data) return null

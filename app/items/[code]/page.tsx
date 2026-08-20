@@ -20,6 +20,7 @@ import {
 } from 'lucide-react'
 import { formatCurrency, formatNumber } from '@/lib/format'
 import { cardVariants } from '@/lib/motion'
+import { useMoneyHidden } from '@/lib/use-money-hidden'
 
 type DocType = 'invoices' | 'quotes' | 'purchases'
 const DOC_LABELS: Record<DocType, { he: string; en: string }> = {
@@ -29,6 +30,10 @@ const DOC_LABELS: Record<DocType, { he: string; en: string }> = {
 }
 
 function ItemDocsPanel({ code, type, isHe, onClose }: { code: string; type: DocType; isHe: boolean; onClose: () => void }) {
+  // Subscribe to the demo-mode eye: formatCurrency() masks from a module
+  // store, so without this the amounts here would not re-render on toggle.
+  useMoneyHidden()
+
   const { data, isLoading } = useItemDocuments(code, type)
   const rows: any[] = data?.rows || []
   const label = DOC_LABELS[type]
@@ -188,6 +193,10 @@ function FitsCard({ fits, isHe, open, setOpen }: {
 }
 
 export default function ItemDetailPage({ params }: { params: Promise<{ code: string }> }) {
+  // Subscribe to the demo-mode eye: formatCurrency() masks from a module
+  // store, so without this the amounts here would not re-render on toggle.
+  useMoneyHidden()
+
   const { code } = use(params)
   const decodedCode = decodeURIComponent(code)
   const { t, locale } = useLocale()

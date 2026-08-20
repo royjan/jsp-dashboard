@@ -10,6 +10,7 @@ import { ItemLink } from '@/components/shared/ItemLink'
 import { CustomerLink } from '@/components/shared/CustomerLink'
 import { ArrowRight, FileText, ExternalLink } from 'lucide-react'
 import { formatCurrency, formatDate } from '@/lib/format'
+import { useMoneyHidden } from '@/lib/use-money-hidden'
 
 const DOC_TYPE_NAMES: Record<string, string> = {
   '11': 'חשבונית מס', '12': 'זיכוי', '14': 'חשבונית עסקה',
@@ -47,6 +48,10 @@ export default function DocumentDetailPage({
 }: {
   params: Promise<{ format: string; number: string }>
 }) {
+  // Subscribe to the demo-mode eye: formatCurrency() masks from a module
+  // store, so without this the amounts here would not re-render on toggle.
+  useMoneyHidden()
+
   const { format, number } = use(params)
   const searchParams = useSearchParams()
   const year = searchParams.get('year') || ''

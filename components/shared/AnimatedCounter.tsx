@@ -1,6 +1,8 @@
 'use client'
 
 import NumberFlow from '@number-flow/react'
+import { MONEY_MASK } from '@/lib/privacy'
+import { useMoneyHidden } from '@/lib/use-money-hidden'
 
 interface AnimatedCounterProps {
   value: number
@@ -9,7 +11,12 @@ interface AnimatedCounterProps {
 }
 
 export function AnimatedCounter({ value, format = 'number', className }: AnimatedCounterProps) {
+  const moneyHidden = useMoneyHidden()
+
   if (format === 'currency') {
+    // NumberFlow animates digits, so it never passes through lib/format — the
+    // headline KPI numbers would stay in the clear without this branch.
+    if (moneyHidden) return <span className={className}>{MONEY_MASK}</span>
     return (
       <NumberFlow
         value={value}

@@ -23,8 +23,9 @@ import {
   LineChart, Line, AreaChart, Area, Cell, PieChart, Pie,
   RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
 } from 'recharts'
-import { formatCurrency, formatNumber } from '@/lib/format'
+import { formatCurrency, formatNumber, formatCurrencyAxis, maskMoneyInText } from '@/lib/format'
 import { cardVariants } from '@/lib/motion'
+import { useMoneyHidden } from '@/lib/use-money-hidden'
 
 const MONTH_LABELS_HE = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר']
 const MONTH_LABELS_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -72,6 +73,10 @@ function KPICard({ icon: Icon, label, value, sub, color, index }: {
 }
 
 function ReportContent() {
+  // Subscribe to the demo-mode eye: formatCurrency() masks from a module
+  // store, so without this the amounts here would not re-render on toggle.
+  useMoneyHidden()
+
   const { t, locale } = useLocale()
   const isHe = locale === 'he'
   const monthLabels = isHe ? MONTH_LABELS_HE : MONTH_LABELS_EN
@@ -288,7 +293,7 @@ function ReportContent() {
                   <BarChart data={revenueChartData}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="year" />
-                    <YAxis tickFormatter={(v) => `${(v / 1_000_000).toFixed(1)}M`} />
+                    <YAxis tickFormatter={(v) => formatCurrencyAxis(v, 'M')} />
                     <Tooltip contentStyle={tooltipStyle} formatter={(value, name) => [
                       formatCurrency(Number(value)),
                       name === 'revenue' ? (isHe ? 'הכנסות' : 'Revenue') : (isHe ? 'זיכויים' : 'Credits')
@@ -566,7 +571,7 @@ function ReportContent() {
                 ]).map((rec, i) => (
                   <li key={i} className="flex items-start gap-2">
                     <ArrowRight className="h-4 w-4 shrink-0 mt-0.5 text-destructive" />
-                    <span>{rec}</span>
+                    <span>{maskMoneyInText(rec)}</span>
                   </li>
                 ))}
               </ul>
@@ -587,7 +592,7 @@ function ReportContent() {
                 <LineChart data={monthlyCompare}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-                  <YAxis tickFormatter={(v) => `${(v / 1000).toFixed(0)}K`} />
+                  <YAxis tickFormatter={(v) => formatCurrencyAxis(v)} />
                   <Tooltip contentStyle={tooltipStyle} formatter={(value: any) => [formatCurrency(value), '']} />
                   <Legend />
                   <Line type="monotone" dataKey="2023" stroke="#34d399" strokeWidth={2} dot={{ r: 3 }} animationDuration={800} />
@@ -681,7 +686,7 @@ function ReportContent() {
                 <BarChart data={seasonalData}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-                  <YAxis tickFormatter={(v) => `${(v / 1000).toFixed(0)}K`} />
+                  <YAxis tickFormatter={(v) => formatCurrencyAxis(v)} />
                   <Tooltip contentStyle={tooltipStyle} formatter={(value: any) => [formatCurrency(value), isHe ? 'ממוצע' : 'Average']} />
                   <Bar dataKey="avg_revenue" radius={[4, 4, 0, 0]} animationDuration={800}>
                     {seasonalData.map((_: any, i: number) => (
@@ -703,7 +708,7 @@ function ReportContent() {
                   <BarChart data={dayOfWeekData}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="day" tick={{ fontSize: 11 }} />
-                    <YAxis tickFormatter={(v) => `${(v / 1000).toFixed(0)}K`} />
+                    <YAxis tickFormatter={(v) => formatCurrencyAxis(v)} />
                     <Tooltip contentStyle={tooltipStyle} formatter={(value: any) => [formatCurrency(value), isHe ? 'ממוצע' : 'Average']} />
                     <Bar dataKey="avg_revenue" fill="#a78bfa" radius={[4, 4, 0, 0]} animationDuration={800} />
                   </BarChart>
@@ -1015,7 +1020,7 @@ function ReportContent() {
                         <td className="py-2.5">
                           <ActionPlaybook action={r.action} impact={r.impact} isHe={isHe}>{r.action}</ActionPlaybook>
                         </td>
-                        <td className="py-2.5 text-end font-semibold pe-4 md:pe-0 align-top">{r.impact}</td>
+                        <td className="py-2.5 text-end font-semibold pe-4 md:pe-0 align-top">{maskMoneyInText(r.impact)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1059,7 +1064,7 @@ function ReportContent() {
                         <td className="py-2.5">
                           <ActionPlaybook action={r.action} impact={r.impact} isHe={isHe}>{r.action}</ActionPlaybook>
                         </td>
-                        <td className="py-2.5 text-end font-semibold pe-4 md:pe-0 align-top">{r.impact}</td>
+                        <td className="py-2.5 text-end font-semibold pe-4 md:pe-0 align-top">{maskMoneyInText(r.impact)}</td>
                       </tr>
                     ))}
                   </tbody>

@@ -9,6 +9,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { AppSwitcher } from '@/components/layout/AppSwitcher'
 import { CommandPalette } from '@/components/layout/CommandPalette'
+import { MoneyToggle } from '@/components/layout/MoneyToggle'
 import type { TranslationKey } from '@/lib/i18n'
 
 const pageTitleKeys: Record<string, TranslationKey> = {
@@ -86,6 +87,8 @@ export function TopBar() {
   // than the bare icon the top bar uses, so the mobile overflow menu is readable.
   const actions = (labelled: boolean) => (
     <>
+      <MoneyToggle labelled={labelled} />
+
       <Button
         variant="ghost"
         size={labelled ? 'sm' : 'sm'}

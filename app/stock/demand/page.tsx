@@ -16,8 +16,9 @@ import { SubTabs } from '@/components/shared/SubTabs'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts'
-import { formatNumber } from '@/lib/format'
+import { formatNumber, formatCurrency } from '@/lib/format'
 import { cardVariants } from '@/lib/motion'
+import { useMoneyHidden } from '@/lib/use-money-hidden'
 
 
 function LoadingSkeleton() {
@@ -34,6 +35,10 @@ function LoadingSkeleton() {
 }
 
 export default function DemandPage() {
+  // Subscribe to the demo-mode eye: formatCurrency() masks from a module
+  // store, so without this the amounts here would not re-render on toggle.
+  useMoneyHidden()
+
   const { t } = useLocale()
   const [days, setDays] = useState(30)
   const { data, isLoading, error } = useDemandOverview(days)
@@ -307,7 +312,7 @@ export default function DemandPage() {
                           {formatNumber(item.stock_qty)}
                         </span>
                       </td>
-                      <td className="py-2 px-2 text-end">{item.price > 0 ? `₪${formatNumber(item.price)}` : '-'}</td>
+                      <td className="py-2 px-2 text-end">{item.price > 0 ? formatCurrency(item.price) : '-'}</td>
                     </tr>
                   ))}
                 </tbody>

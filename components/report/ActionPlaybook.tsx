@@ -9,6 +9,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Loader2, Clock, UserCircle, AlertTriangle, ArrowLeft, Lightbulb, RefreshCw } from 'lucide-react'
+import { maskMoneyInText } from '@/lib/format'
 
 interface Playbook {
   summary: string
@@ -105,7 +106,7 @@ export function ActionPlaybook({
 
           {pb && !loading && (
             <div className="space-y-4 text-sm">
-              <p className="text-muted-foreground">{pb.summary}</p>
+              <p className="text-muted-foreground">{maskMoneyInText(pb.summary)}</p>
 
               <div>
                 <h3 className="font-semibold mb-2">{isHe ? 'שלבי ביצוע' : 'Steps'}</h3>
@@ -115,7 +116,7 @@ export function ActionPlaybook({
                       <span className="shrink-0 h-5 w-5 rounded-full bg-primary/10 text-primary text-xs font-bold flex items-center justify-center mt-0.5">
                         {i + 1}
                       </span>
-                      <span>{s}</span>
+                      <span>{maskMoneyInText(s)}</span>
                     </li>
                   ))}
                 </ol>

@@ -12,13 +12,18 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { SeasonalPageSkeleton } from '@/components/layout/PageSkeleton'
 import { Badge } from '@/components/ui/badge'
 import { ItemLink } from '@/components/shared/ItemLink'
-import { MONTH_NAMES } from '@/lib/constants'
+import { MONTH_NAMES, formatCurrency } from '@/lib/constants'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import { Snowflake, Sun, Sparkles, Loader2 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { useQueryClient } from '@tanstack/react-query'
+import { useMoneyHidden } from '@/lib/use-money-hidden'
 
 function SeasonalItemsSection({ dateFrom, dateTo }: { dateFrom: string; dateTo: string }) {
+  // Subscribe to the demo-mode eye: formatCurrency() masks from a module
+  // store, so without this the amounts here would not re-render on toggle.
+  useMoneyHidden()
+
   const [aiEnabled, setAiEnabled] = useState(false)
   const [aiRequested, setAiRequested] = useState(false)
   const [refreshTick, setRefreshTick] = useState(0)
@@ -138,7 +143,7 @@ function SeasonalItemsSection({ dateFrom, dateTo }: { dateFrom: string; dateTo: 
                           </div>
                         </td>
                         <td className="px-3 py-2 text-right text-muted-foreground">
-                          ₪{Math.round(item.total_revenue).toLocaleString()}
+                          {formatCurrency(item.total_revenue)}
                         </td>
                       </tr>
                     ))}
@@ -220,7 +225,7 @@ function SeasonalItemsSection({ dateFrom, dateTo }: { dateFrom: string; dateTo: 
                           </div>
                         </td>
                         <td className="px-3 py-2 text-right text-muted-foreground">
-                          ₪{Math.round(item.total_revenue).toLocaleString()}
+                          {formatCurrency(item.total_revenue)}
                         </td>
                       </tr>
                     ))}
@@ -286,6 +291,10 @@ function SeasonalItemsSection({ dateFrom, dateTo }: { dateFrom: string; dateTo: 
 }
 
 function PerMonthItemsSection({ dateFrom, dateTo }: { dateFrom: string; dateTo: string }) {
+  // Subscribe to the demo-mode eye: formatCurrency() masks from a module
+  // store, so without this the amounts here would not re-render on toggle.
+  useMoneyHidden()
+
   const { data, isLoading } = useSeasonalItemsByMonth(dateFrom, dateTo)
   const months: { month: number; items: any[] }[] = data?.months || []
   const hasAny = months.some((m) => m.items.length > 0)
@@ -326,7 +335,7 @@ function PerMonthItemsSection({ dateFrom, dateTo }: { dateFrom: string; dateTo: 
                             <ItemLink code={it.item_code} showCode className="text-[10px]" />
                           </td>
                           <td className="px-2 py-1.5 text-right text-muted-foreground whitespace-nowrap">
-                            ₪{it.revenue.toLocaleString()}
+                            {formatCurrency(it.revenue)}
                           </td>
                         </tr>
                       ))}

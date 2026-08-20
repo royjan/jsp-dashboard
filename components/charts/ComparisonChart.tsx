@@ -5,6 +5,8 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useLocale } from '@/lib/locale-context'
+import { formatCurrency, formatCurrencyAxis } from '@/lib/format'
+import { useMoneyHidden } from '@/lib/use-money-hidden'
 
 interface ComparisonChartProps {
   data: Array<{ date: string; current: number; previous: number; previousDate?: string }>
@@ -14,6 +16,10 @@ interface ComparisonChartProps {
 }
 
 export function ComparisonChart({ data, title, isLoading, headerActions }: ComparisonChartProps) {
+  // Subscribe to the demo-mode eye: formatCurrency() masks from a module
+  // store, so without this the amounts here would not re-render on toggle.
+  useMoneyHidden()
+
   const { t } = useLocale()
   const displayTitle = title || t('periodComparison')
 
@@ -52,11 +58,11 @@ export function ComparisonChart({ data, title, isLoading, headerActions }: Compa
             </defs>
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="date" tick={{ fontSize: 12 }} />
-            <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}K`} />
+            <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => formatCurrencyAxis(v)} />
             <Tooltip
               contentStyle={{ backgroundColor: 'var(--popover)', borderColor: 'var(--border)', borderRadius: '8px', color: 'var(--popover-foreground)' }}
               formatter={(value: any, name: any, props: any) => {
-                const formatted = `₪${Number(value).toLocaleString()}`
+                const formatted = formatCurrency(Number(value))
                 if (name === t('previous') && props?.payload?.previousDate) {
                   return [formatted, `${name} (${props.payload.previousDate})`]
                 }

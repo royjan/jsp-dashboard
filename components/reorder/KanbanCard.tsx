@@ -9,8 +9,9 @@ import { Button } from '@/components/ui/button'
 import type { ReorderQueueItem } from '@/lib/db/schema'
 import type { ReorderStage } from '@/hooks/use-reorder-queue'
 import { useUpdateItem, useDeleteItem } from '@/hooks/use-reorder-queue'
-import { formatNumber, urgencyBand } from '@/lib/constants'
+import { formatNumber, urgencyBand, formatCurrency } from '@/lib/constants'
 import { format } from 'date-fns'
+import { useMoneyHidden } from '@/lib/use-money-hidden'
 
 interface KanbanCardProps {
   item: ReorderQueueItem
@@ -18,6 +19,10 @@ interface KanbanCardProps {
 }
 
 export function KanbanCard({ item, stage }: KanbanCardProps) {
+  // Subscribe to the demo-mode eye: formatCurrency() masks from a module
+  // store, so without this the amounts here would not re-render on toggle.
+  useMoneyHidden()
+
   const [expanded, setExpanded] = useState(false)
   const [editQty, setEditQty] = useState(item.approvedQty ?? item.suggestedQty)
   const [editNotes, setEditNotes] = useState(item.notes ?? '')
@@ -113,7 +118,7 @@ export function KanbanCard({ item, stage }: KanbanCardProps) {
           {item.avgMonthlySales ? `${formatNumber(Number(item.avgMonthlySales), 1)}/חודש` : '—'}
         </span>
         {item.price && Number(item.price) > 0 && (
-          <span className="mr-auto">₪{formatNumber(Number(item.price))}</span>
+          <span className="mr-auto">{formatCurrency(Number(item.price))}</span>
         )}
       </div>
 

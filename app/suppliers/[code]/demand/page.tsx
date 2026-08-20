@@ -4,13 +4,14 @@ import { useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
 import { useLocale } from '@/lib/locale-context'
-import { formatNumber } from '@/lib/constants'
+import { formatNumber, formatCurrency } from '@/lib/constants'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { ItemLink } from '@/components/shared/ItemLink'
 import { useSortable, SortableTh } from '@/components/shared/sortable-table'
 import { Loader2, TrendingDown, Search } from 'lucide-react'
 import { formatDate } from '@/lib/format'
+import { useMoneyHidden } from '@/lib/use-money-hidden'
 
 interface DemandItem {
   itemCode: string
@@ -38,6 +39,10 @@ interface DemandResponse {
 type Quick = 'all' | 'low' | 'nosales'
 
 export default function SupplierDemandPage() {
+  // Subscribe to the demo-mode eye: formatCurrency() masks from a module
+  // store, so without this the amounts here would not re-render on toggle.
+  useMoneyHidden()
+
   const { t } = useLocale()
   const { code } = useParams<{ code: string }>()
   const [q, setQ] = useState('')
@@ -100,7 +105,7 @@ export default function SupplierDemandPage() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
             { label: t('suppliers.itemsBought'), value: formatNumber(summary.items) },
-            { label: t('suppliers.totalSpend'), value: `₪${formatNumber(Math.round(summary.totalSpend))}` },
+            { label: t('suppliers.totalSpend'), value: formatCurrency(summary.totalSpend) },
             { label: t('suppliers.lowCover'), value: formatNumber(summary.lowCover), warn: summary.lowCover > 0 },
             { label: t('suppliers.noSales'), value: formatNumber(summary.noSales), warn: summary.noSales > 0 },
           ].map((k, i) => (

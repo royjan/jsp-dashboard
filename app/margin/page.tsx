@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ItemLink } from '@/components/shared/ItemLink'
-import { formatNumber, formatCurrency } from '@/lib/constants'
+import { formatNumber, formatCurrency, formatCurrencyAxis } from '@/lib/constants'
 import {
   ScatterChart, Scatter, BarChart, Bar, XAxis, YAxis, ZAxis,
   CartesianGrid, Tooltip, ResponsiveContainer, Cell,
@@ -16,10 +16,15 @@ import {
 import {
   TrendingUp, Package, Percent, Hourglass, BarChart3, AlertTriangle,
 } from 'lucide-react'
+import { useMoneyHidden } from '@/lib/use-money-hidden'
 
 const CHART_COLORS = ['#6366f1', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6']
 
 function MarginContent() {
+  // Subscribe to the demo-mode eye: formatCurrency() masks from a module
+  // store, so without this the amounts here would not re-render on toggle.
+  useMoneyHidden()
+
   const { locale } = useLocale()
   const isHe = locale === 'he'
   const { data, isLoading, isError } = useMargin()
@@ -162,7 +167,7 @@ function MarginContent() {
                 <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                 <XAxis
                   type="number" dataKey="x" name={isHe ? 'הכנסה' : 'Revenue'}
-                  tick={{ fontSize: 11 }} tickFormatter={(v) => formatNumber(v)}
+                  tick={{ fontSize: 11 }} tickFormatter={(v) => formatCurrencyAxis(v)}
                 />
                 <YAxis
                   type="number" dataKey="y" name={isHe ? 'כמות' : 'Quantity'}

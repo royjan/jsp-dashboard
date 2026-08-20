@@ -19,6 +19,7 @@ import { deriveBrand, brandChipClasses, BRAND_RANK } from '@/lib/brand'
 import { Swords, Upload, PackageX, TrendingDown, SearchX, Search, ChevronLeft, ChevronRight, AlertTriangle, X } from 'lucide-react'
 import type { CompareRow, CompetitorCell } from '@/app/api/analytics/competitors/route'
 import type { TranslationKey } from '@/lib/i18n'
+import { useMoneyHidden } from '@/lib/use-money-hidden'
 
 type SortField = 'code' | 'ourPrice' | 'ourStock' | 'minNet' | 'spread' | 'sold'
 type T = (k: TranslationKey) => string
@@ -62,6 +63,10 @@ function PriceStockCell({
   alternates?: Array<{ rawCode: string; netPrice: number | null }>
   t: T
 }) {
+  // Subscribe to the demo-mode eye: formatCurrency() masks from a module
+  // store, so without this the amounts here would not re-render on toggle.
+  useMoneyHidden()
+
   // They list this part under a different number (our supersession chain, or an
   // OEM cross-reference) — show it, so every price on screen is traceable.
   const otherCode = rawCode && janCode && looseCode(rawCode) !== looseCode(janCode) ? rawCode : null
@@ -162,6 +167,10 @@ function Segmented<V extends string>({
 }
 
 function CompetitorsPageInner() {
+  // Subscribe to the demo-mode eye: formatCurrency() masks from a module
+  // store, so without this the amounts here would not re-render on toggle.
+  useMoneyHidden()
+
   const { t } = useLocale()
   const router = useRouter()
   const pathname = usePathname()

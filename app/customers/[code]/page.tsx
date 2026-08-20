@@ -21,6 +21,7 @@ import {
 } from 'lucide-react'
 import { formatCurrency, formatDate, formatNumber } from '@/lib/format'
 import { cardVariants } from '@/lib/motion'
+import { useMoneyHidden } from '@/lib/use-money-hidden'
 
 
 // Severity ramp, CVD-validated on the dark surface (90 vs 90+ were previously
@@ -50,6 +51,10 @@ function LoadingSkeleton() {
 }
 
 export default function CustomerDetailPage({ params }: { params: Promise<{ code: string }> }) {
+  // Subscribe to the demo-mode eye: formatCurrency() masks from a module
+  // store, so without this the amounts here would not re-render on toggle.
+  useMoneyHidden()
+
   const { code } = use(params)
   const { t } = useLocale()
   const { data, isLoading, error } = useCustomerDetail(code)
@@ -216,6 +221,10 @@ function PurchasesTable({
 }: {
   customerCode: string; data: any; isLoading: boolean; days: number; onDaysChange: (d: number) => void
 }) {
+  // Subscribe to the demo-mode eye: formatCurrency() masks from a module
+  // store, so without this the amounts here would not re-render on toggle.
+  useMoneyHidden()
+
   const { t } = useLocale()
   const items: PurchaseItem[] = data?.items ?? []
   const { sorted, sortKey, sortDir, toggleSort } = useSortable<PurchaseItem>(items, { key: 'last_purchased', dir: 'desc' })
@@ -322,6 +331,10 @@ function PurchasesTable({
 function PurchaseItemInvoices({ customerCode, itemCode, days, expected }: {
   customerCode: string; itemCode: string; days: number; expected: number
 }) {
+  // Subscribe to the demo-mode eye: formatCurrency() masks from a module
+  // store, so without this the amounts here would not re-render on toggle.
+  useMoneyHidden()
+
   const { t } = useLocale()
   const { data, isLoading, error } = useCustomerItemInvoices(customerCode, itemCode, days, expected)
   const rows: {
@@ -415,6 +428,10 @@ function DocumentTable({ items, t, isReceipt, isLoading, expandable, caption }: 
   items: any[]; t: (k: any) => string; isReceipt?: boolean; isLoading?: boolean
   expandable?: boolean; caption?: string
 }) {
+  // Subscribe to the demo-mode eye: formatCurrency() masks from a module
+  // store, so without this the amounts here would not re-render on toggle.
+  useMoneyHidden()
+
   const [page, setPage] = useState(0)
   const [openKey, setOpenKey] = useState<string | null>(null)
   const rows: DocRow[] = useMemo(
@@ -563,6 +580,10 @@ interface DocLine {
 function DocumentLinesPanel({ format, number, year, t }: {
   format: string; number: string; year: string; t: (k: string) => string
 }) {
+  // Subscribe to the demo-mode eye: formatCurrency() masks from a module
+  // store, so without this the amounts here would not re-render on toggle.
+  useMoneyHidden()
+
   const { data, isLoading, error } = useDocumentDetail(format, number, year || undefined)
   const lines: DocLine[] = data?.lines ?? []
 

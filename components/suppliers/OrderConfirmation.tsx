@@ -5,9 +5,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { useLocale } from '@/lib/locale-context'
-import { formatNumber } from '@/lib/constants'
+import { formatNumber, formatCurrency } from '@/lib/constants'
 import { useConfirmOrder } from '@/hooks/use-suppliers'
 import { CheckCircle2, Truck, Package, Clock, Loader2 } from 'lucide-react'
+import { useMoneyHidden } from '@/lib/use-money-hidden'
 
 const statusColors: Record<string, 'default' | 'warning' | 'success' | 'secondary' | 'destructive'> = {
   pending: 'warning',
@@ -43,6 +44,10 @@ interface OrderConfirmationProps {
 }
 
 export function OrderConfirmation({ supplierCode, order }: OrderConfirmationProps) {
+  // Subscribe to the demo-mode eye: formatCurrency() masks from a module
+  // store, so without this the amounts here would not re-render on toggle.
+  useMoneyHidden()
+
   const { t } = useLocale()
   const [eta, setEta] = useState(order.confirmation?.estimatedDelivery || '')
   const [notes, setNotes] = useState(order.confirmation?.notes || '')
@@ -82,7 +87,7 @@ export function OrderConfirmation({ supplierCode, order }: OrderConfirmationProp
         <div className="flex items-center justify-between text-sm">
           <span className="text-muted-foreground">{t('suppliers.total')}</span>
           <span className="font-medium">
-            {(order.grand_total || order.total || 0).toLocaleString('he-IL', { style: 'currency', currency: 'ILS' })}
+            {formatCurrency(order.grand_total || order.total || 0, 2)}
           </span>
         </div>
 
@@ -114,7 +119,7 @@ export function OrderConfirmation({ supplierCode, order }: OrderConfirmationProp
                         <td className="px-2 py-1">{line.item_name}</td>
                         <td className="px-2 py-1 text-end">{formatNumber(line.quantity)}</td>
                         <td className="px-2 py-1 text-end">
-                          {(line.total || 0).toLocaleString('he-IL', { style: 'currency', currency: 'ILS' })}
+                          {formatCurrency(line.total || 0, 2)}
                         </td>
                       </tr>
                     ))}

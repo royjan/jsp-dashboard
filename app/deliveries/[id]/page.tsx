@@ -27,6 +27,8 @@ import { PhotoCapture } from '@/components/deliveries/PhotoCapture'
 import { statusConfig } from '@/components/deliveries/DeliveryCard'
 import { ItemLink } from '@/components/shared/ItemLink'
 import type { Delivery, DeliveryPhoto, DeliveryStatusLog } from '@/lib/db/schema'
+import { formatCurrency } from '@/lib/format'
+import { useMoneyHidden } from '@/lib/use-money-hidden'
 
 interface DeliveryLine {
   lineNumber: number | null
@@ -57,6 +59,10 @@ export default function DeliveryDetailPage({
 }: {
   params: Promise<{ id: string }>
 }) {
+  // Subscribe to the demo-mode eye: formatCurrency() masks from a module
+  // store, so without this the amounts here would not re-render on toggle.
+  useMoneyHidden()
+
   const { id } = use(params)
   const queryClient = useQueryClient()
   const [lightbox, setLightbox] = useState<string | null>(null)
@@ -260,11 +266,11 @@ export default function DeliveryDetailPage({
                           <td className="p-2 truncate max-w-[260px]">{l.itemName || '—'}</td>
                           <td className="p-2 text-end tabular-nums">{l.quantity ?? '—'}</td>
                           <td className="p-2 text-end tabular-nums">
-                            {l.unitPrice != null ? l.unitPrice.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}
+                            {l.unitPrice != null ? formatCurrency(l.unitPrice, 2) : '—'}
                             {l.discountPercent ? <span className="text-muted-foreground"> (-{l.discountPercent}%)</span> : null}
                           </td>
                           <td className="p-2 text-end tabular-nums font-medium">
-                            {l.lineTotal != null ? l.lineTotal.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}
+                            {l.lineTotal != null ? formatCurrency(l.lineTotal, 2) : '—'}
                           </td>
                         </tr>
                       ))}
@@ -274,7 +280,7 @@ export default function DeliveryDetailPage({
                         <tr className="font-bold">
                           <td className="p-2" colSpan={4}>סה״כ מסמך</td>
                           <td className="p-2 text-end tabular-nums">
-                            {doc.documentTotal.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            {formatCurrency(doc.documentTotal, 2)}
                           </td>
                         </tr>
                       </tfoot>

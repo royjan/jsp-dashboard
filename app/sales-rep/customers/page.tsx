@@ -14,6 +14,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { SalesRepBottomNav } from '@/components/sales-rep/BottomNav'
 import { VisitLogger } from '@/components/sales-rep/VisitLogger'
 import { formatCurrency, formatNumber } from '@/lib/format'
+import { useMoneyHidden } from '@/lib/use-money-hidden'
 
 interface Customer {
   code: string
@@ -44,6 +45,10 @@ const BAND_LABELS: Record<string, string> = {
 }
 
 export default function SalesRepCustomersPage() {
+  // Subscribe to the demo-mode eye: formatCurrency() masks from a module
+  // store, so without this the amounts here would not re-render on toggle.
+  useMoneyHidden()
+
   const [search, setSearch] = useState('')
   const [expandedCode, setExpandedCode] = useState<string | null>(null)
   const [visitCustomer, setVisitCustomer] = useState<{ code: string; name: string } | null>(null)

@@ -18,6 +18,8 @@
  * components alike.
  */
 
+import { isMoneyHidden, MONEY_MASK } from './privacy'
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Tunables — edit here to change the look everywhere.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -49,8 +51,14 @@ export type DateStyle =
  * Format as ILS currency with thousands separators (`₪1,234,567`).
  * Non-finite input renders `₪0` rather than `NaN` — dashboards should degrade
  * to a zero, never to garbage.
+ *
+ * Renders `₪•••` while demo mode is on (see lib/privacy.ts). Masking here
+ * rather than at each call site is the whole reason this file exists: it also
+ * covers the money that never passes through JSX — chart tick formatters,
+ * tooltip strings, `title` attributes.
  */
 export function formatCurrency(value: number | null | undefined, decimals = 0): string {
+  if (isMoneyHidden()) return MONEY_MASK
   const n = Number(value)
   if (!Number.isFinite(n)) return '₪0'
   return n.toLocaleString(CURRENCY_LOCALE, {
@@ -66,6 +74,7 @@ export function formatCurrency(value: number | null | undefined, decimals = 0): 
  * Falls back to the full form under 1000 so small numbers stay exact.
  */
 export function formatCurrencyCompact(value: number | null | undefined): string {
+  if (isMoneyHidden()) return MONEY_MASK
   const n = Number(value)
   if (!Number.isFinite(n)) return '₪0'
   const abs = Math.abs(n)
@@ -73,6 +82,49 @@ export function formatCurrencyCompact(value: number | null | undefined): string 
   if (abs < 1_000_000) return `₪${trimZero(n / 1_000)}K`
   if (abs < 1_000_000_000) return `₪${trimZero(n / 1_000_000)}M`
   return `₪${trimZero(n / 1_000_000_000)}B`
+}
+
+/**
+ * Money for a chart axis tick (`340K`, `1.2M`).
+ *
+ * Demo mode blanks the tick rather than masking it: `₪•••` repeated down every
+ * gridline is noise, and the series shape is the part worth showing. The eye in
+ * the top bar is what tells the viewer the numbers are hidden.
+ */
+export function formatCurrencyAxis(value: number, unit: 'K' | 'M' = 'K'): string {
+  if (isMoneyHidden()) return ''
+  return unit === 'M'
+    ? `${(value / 1_000_000).toFixed(1)}M`
+    : `${(value / 1_000).toFixed(0)}K`
+}
+
+/**
+ * Mask the money amounts inside a block of free text.
+ *
+ * For prose we do not compose — LLM-written briefs, ABC insights and action
+ * playbooks arrive from the server as finished Hebrew/English sentences with
+ * `₪70,457` already baked in, so there is no call site to intercept. Everything
+ * that is not money (counts, percentages, dates) is left alone.
+ *
+ * Handles both orders (`₪70,457` and `70,457 ₪`) and the magnitude words the
+ * model likes to use (`₪41 אלף`, `1.5M ₪`).
+ */
+// Built from parts so the two symbol orders and the range form stay readable.
+// NUM refuses to end on a separator, or `₪775,900,` would eat the comma that
+// belongs to the sentence.
+const NUM = String.raw`\d(?:[\d,.]*\d)?`
+const MAG = String.raw`(?:\s?(?:אלף|מיליון|מיליארד|[kKmMbB]))?`
+const RANGE = String.raw`(?:${NUM}${MAG}\s?[-–]\s?)?`
+/** The report page writes `ILS` in its English copy, the rest of the app `₪`. */
+const SYM = String.raw`(?:₪|ILS|NIS)`
+const MONEY_IN_TEXT = new RegExp(
+  String.raw`${SYM}\s?${RANGE}${NUM}${MAG}` + '|' + String.raw`${RANGE}${NUM}${MAG}\s?${SYM}`,
+  'g',
+)
+
+export function maskMoneyInText(text: string): string {
+  if (!isMoneyHidden()) return text
+  return text.replace(MONEY_IN_TEXT, MONEY_MASK)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -230,12 +282,21 @@ function trimZero(n: number): string {
 // Preconfigured Intl instances (kept for callers that pass them to charts)
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const ILS_FORMAT = new Intl.NumberFormat(CURRENCY_LOCALE, {
+const ILS_INTL = new Intl.NumberFormat(CURRENCY_LOCALE, {
   style: 'currency',
   currency: CURRENCY_CODE,
   minimumFractionDigits: 0,
   maximumFractionDigits: 0,
 })
+
+/**
+ * Duck-typed `Intl.NumberFormat` — callers pass it straight to charts as a
+ * `.format` fn, so it has to honour demo mode too. Not the real Intl instance,
+ * because that one cannot be made to lie.
+ */
+export const ILS_FORMAT = {
+  format: (value: number) => (isMoneyHidden() ? MONEY_MASK : ILS_INTL.format(value)),
+}
 
 export const NUMBER_FORMAT = new Intl.NumberFormat('en-IL', {
   minimumFractionDigits: 0,

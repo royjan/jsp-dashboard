@@ -14,6 +14,7 @@ import { SalesRepBottomNav } from '@/components/sales-rep/BottomNav'
 import { LookupCombobox } from '@/components/shared/LookupCombobox'
 import { copyText } from '@/lib/clipboard'
 import { formatCurrency } from '@/lib/format'
+import { useMoneyHidden } from '@/lib/use-money-hidden'
 
 interface PriceResult {
   item_code: string
@@ -39,6 +40,10 @@ interface Warehouse {
 type SearchState = 'idle' | 'loading' | 'result' | 'not_found' | 'error'
 
 export default function PriceCheckPage() {
+  // Subscribe to the demo-mode eye: formatCurrency() masks from a module
+  // store, so without this the amounts here would not re-render on toggle.
+  useMoneyHidden()
+
   const [itemCode, setItemCode] = useState('')
   const [customerCode, setCustomerCode] = useState('')
   const [customerName, setCustomerName] = useState('')

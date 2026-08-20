@@ -31,6 +31,7 @@ import {
 import { formatCurrency, formatNumber, formatRatio, formatPercentDelta } from '@/lib/format'
 import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
 import { sortRows } from '@/lib/sort'
+import { useMoneyHidden } from '@/lib/use-money-hidden'
 
 type Band = 'green' | 'yellow' | 'red' | 'all'
 type SortField = 'score' | 'name' | 'revenue' | 'days' | 'returnRate'
@@ -131,6 +132,10 @@ function LoadingSkeleton() {
 }
 
 function HealthScoreContent() {
+  // Subscribe to the demo-mode eye: formatCurrency() masks from a module
+  // store, so without this the amounts here would not re-render on toggle.
+  useMoneyHidden()
+
   const { t } = useLocale()
   const currentYear = new Date().getFullYear()
   const today = new Date().toISOString().split('T')[0]

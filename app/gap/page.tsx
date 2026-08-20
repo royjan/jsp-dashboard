@@ -22,6 +22,7 @@ import { formatCurrency, formatNumber, formatDate } from '@/lib/format'
 import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
 import { sortRows } from '@/lib/sort'
 import { cardVariants } from '@/lib/motion'
+import { useMoneyHidden } from '@/lib/use-money-hidden'
 
 type SortField = 'name' | 'total_qty' | 'quote_count' | 'last_quoted' | 'stock_qty' | 'incoming_qty' | 'ordered_qty'
 type SortDir = 'asc' | 'desc'
@@ -42,6 +43,10 @@ function LoadingSkeleton() {
 
 
 function FollowUpWidget() {
+  // Subscribe to the demo-mode eye: formatCurrency() masks from a module
+  // store, so without this the amounts here would not re-render on toggle.
+  useMoneyHidden()
+
   const { t } = useLocale()
   const { data, isLoading } = useFollowUpStats(3)
 

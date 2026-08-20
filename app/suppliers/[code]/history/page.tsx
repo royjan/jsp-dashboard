@@ -3,11 +3,12 @@
 import { useParams } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
 import { useLocale } from '@/lib/locale-context'
-import { formatNumber } from '@/lib/constants'
+import { formatNumber, formatCurrency } from '@/lib/constants'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Loader2, Truck, Download, Eye } from 'lucide-react'
 import { formatDate } from '@/lib/format'
+import { useMoneyHidden } from '@/lib/use-money-hidden'
 
 interface HistoryDoc {
   year: number
@@ -31,6 +32,10 @@ interface HistoryResponse {
  * actually bought.
  */
 export default function SupplierHistoryPage() {
+  // Subscribe to the demo-mode eye: formatCurrency() masks from a module
+  // store, so without this the amounts here would not re-render on toggle.
+  useMoneyHidden()
+
   const { t, locale } = useLocale()
   const { code } = useParams<{ code: string }>()
   const isHe = locale === 'he'
@@ -75,7 +80,7 @@ export default function SupplierHistoryPage() {
             { label: t('suppliers.documents'), value: formatNumber(summary.documents) },
             { label: t('suppliers.deliveryNotes'), value: formatNumber(summary.deliveryNotes) },
             { label: t('suppliers.invoices'), value: formatNumber(summary.invoices) },
-            { label: t('suppliers.totalValue'), value: `₪${formatNumber(Math.round(summary.totalValue))}` },
+            { label: t('suppliers.totalValue'), value: formatCurrency(summary.totalValue) },
           ].map((k, i) => (
             <Card key={i}>
               <CardContent className="p-3 space-y-0.5">
@@ -114,7 +119,7 @@ export default function SupplierHistoryPage() {
                     </Badge>
                   </td>
                   <td className="px-3 py-2 font-mono text-xs">{d.docNumber}</td>
-                  <td className="px-3 py-2 text-end tabular-nums">₪{formatNumber(Math.round(d.grandTotal))}</td>
+                  <td className="px-3 py-2 text-end tabular-nums">{formatCurrency(d.grandTotal)}</td>
                   <td className="px-3 py-2">
                     <div className="flex items-center justify-center gap-1">
                       {/* View opens the ERP's own rendering; download saves it. */}

@@ -19,6 +19,7 @@ import {
   PieChart, Pie,
 } from 'recharts'
 import { formatCurrency, formatNumber } from '@/lib/format'
+import { useMoneyHidden } from '@/lib/use-money-hidden'
 
 const AGING_COLORS = ['#22c55e', '#eab308', '#f97316', '#ef4444', '#dc2626']
 
@@ -27,6 +28,10 @@ const AGING_COLORS = ['#22c55e', '#eab308', '#f97316', '#ef4444', '#dc2626']
  * Zero renders as '—' rather than '₪0' so the eye only lands on real debt.
  */
 function AgingCell({ value, className }: { value: number; className: string }) {
+  // Subscribe to the demo-mode eye: formatCurrency() masks from a module
+  // store, so without this the amounts here would not re-render on toggle.
+  useMoneyHidden()
+
   if (!(value > 0)) return <span className="text-muted-foreground">—</span>
   return <span className={className}>{formatCurrency(value)}</span>
 }
@@ -119,6 +124,10 @@ function LoadingSkeleton() {
 }
 
 export default function ReceivablesPage() {
+  // Subscribe to the demo-mode eye: formatCurrency() masks from a module
+  // store, so without this the amounts here would not re-render on toggle.
+  useMoneyHidden()
+
   const { t } = useLocale()
   const { data, isLoading, error, refetch } = useReceivables(20)
   const [search, setSearch] = useState('')

@@ -3,6 +3,8 @@
 import React from 'react'
 import { Handle, Position } from '@xyflow/react'
 import { Check, X, Minus, Trophy, Cpu, Package, AlertTriangle } from 'lucide-react'
+import { formatCurrency } from '@/lib/format'
+import { useMoneyHidden } from '@/lib/use-money-hidden'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -50,6 +52,10 @@ function filterState(reasons: string[], value: any, label: string, veh: any, key
 }
 
 export function RuleNode({ data }: { data: any }) {
+  // Subscribe to the demo-mode eye: formatCurrency() masks from a module
+  // store, so without this the amounts here would not re-render on toggle.
+  useMoneyHidden()
+
   if (data.kind === 'category' || data.kind === 'subcategory') {
     const isCat = data.kind === 'category'
     return (
@@ -102,7 +108,7 @@ export function RuleNode({ data }: { data: any }) {
             <div className="flex items-center gap-1 font-medium"><Package size={11} /> {dp.name}</div>
             <div className="text-slate-400">מק״ט {dp.partId}</div>
             <div className="mt-1 flex items-center justify-between">
-              <span>{dp.price ? `₪${dp.price}` : '—'}</span>
+              <span>{dp.price ? formatCurrency(dp.price) : '—'}</span>
               <span className={dp.inStock ? 'text-emerald-400' : 'text-rose-400'}>{dp.inStock ? 'במלאי' : 'אין'}</span>
             </div>
           </div>

@@ -12,6 +12,7 @@ import { Search, Sparkles, Package, Clock, X, ArrowLeft, ExternalLink } from 'lu
 import { SubTabs } from '@/components/shared/SubTabs'
 import { brandChipClasses } from '@/lib/brand'
 import { formatCurrency } from '@/lib/format'
+import { useMoneyHidden } from '@/lib/use-money-hidden'
 
 interface SemanticResult {
   code: string
@@ -106,6 +107,10 @@ function ResultSkeleton() {
 }
 
 export default function SearchPage() {
+  // Subscribe to the demo-mode eye: formatCurrency() masks from a module
+  // store, so without this the amounts here would not re-render on toggle.
+  useMoneyHidden()
+
   const { t } = useLocale()
   const [query, setQuery] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')

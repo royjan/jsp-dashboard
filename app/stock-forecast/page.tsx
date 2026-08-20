@@ -17,6 +17,7 @@ import { ItemLink } from '@/components/shared/ItemLink'
 import { SortableTh } from '@/components/shared/sortable-table'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Area, AreaChart } from 'recharts'
 import { formatCurrency, formatNumber } from '@/lib/format'
+import { useMoneyHidden } from '@/lib/use-money-hidden'
 
 type UrgencyLevel = 'critical' | 'warning' | 'watch' | 'ok'
 
@@ -132,6 +133,10 @@ function ForecastChart({ itemCode }: { itemCode: string }) {
 }
 
 export default function StockForecastPage() {
+  // Subscribe to the demo-mode eye: formatCurrency() masks from a module
+  // store, so without this the amounts here would not re-render on toggle.
+  useMoneyHidden()
+
   const { t, locale, dir } = useLocale()
   const isRTL = dir === 'rtl'
   const [urgencyFilter, setUrgencyFilter] = useState<string | undefined>(undefined)

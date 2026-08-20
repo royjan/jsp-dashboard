@@ -17,6 +17,7 @@ import { cn } from '@/lib/utils'
 import { useLocale } from '@/lib/locale-context'
 import type { TranslationKey } from '@/lib/i18n'
 import { formatCurrency, formatNumber } from '@/lib/format'
+import { useMoneyHidden } from '@/lib/use-money-hidden'
 
 interface ElasticityTier {
   label: 'low' | 'mid' | 'high'
@@ -58,6 +59,10 @@ type SortField = 'revenue' | 'variance' | 'signal' | 'name'
 
 /** Render a single tier cell with background color reflecting demand intensity */
 function TierCell({ tier, maxQty }: { tier: ElasticityTier; maxQty: number }) {
+  // Subscribe to the demo-mode eye: formatCurrency() masks from a module
+  // store, so without this the amounts here would not re-render on toggle.
+  useMoneyHidden()
+
   const intensity = maxQty > 0 ? tier.avg_qty / maxQty : 0
   const bgAlpha = Math.max(0.05, Math.min(0.85, intensity))
   return (
@@ -73,8 +78,8 @@ function TierCell({ tier, maxQty }: { tier: ElasticityTier; maxQty: number }) {
           {tier.avg_qty > 0 ? formatNumber(tier.avg_qty, 1) : '—'}
         </div>
         <div className="text-[10px] text-muted-foreground mt-0.5">
-          {tier.months}mo · ₪{formatNumber(tier.price_range[0])}-
-          ₪{formatNumber(tier.price_range[1])}
+          {tier.months}mo · {formatCurrency(tier.price_range[0])}-
+          {formatCurrency(tier.price_range[1])}
         </div>
       </div>
     </td>
@@ -88,6 +93,10 @@ function SignalIcon({ signal }: { signal: number }) {
 }
 
 export default function PricingPage() {
+  // Subscribe to the demo-mode eye: formatCurrency() masks from a module
+  // store, so without this the amounts here would not re-render on toggle.
+  useMoneyHidden()
+
   const { t } = useLocale()
   const [data, setData] = useState<ElasticityReport | null>(null)
   const [loading, setLoading] = useState(true)
@@ -361,8 +370,8 @@ export default function PricingPage() {
                         </Badge>
                         {row.recommendation === 'raise' && row.headroom_pct >= 1 && (
                           <div className="text-[10px] text-emerald-500 mt-0.5" dir="ltr">
-                            +{row.headroom_pct.toFixed(0)}% {t('headroomTo')} ₪
-                            {formatNumber(row.tiers.find(x => x.label === 'high')?.price_range[1] ?? 0)}
+                            +{row.headroom_pct.toFixed(0)}% {t('headroomTo')}{' '}
+                            {formatCurrency(row.tiers.find(x => x.label === 'high')?.price_range[1] ?? 0)}
                           </div>
                         )}
                       </td>

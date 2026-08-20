@@ -5,12 +5,18 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { useGenerateSuggestions, useClearReceived } from '@/hooks/use-reorder-queue'
 import type { ReorderQueueData } from '@/hooks/use-reorder-queue'
+import { formatCurrency } from '@/lib/format'
+import { useMoneyHidden } from '@/lib/use-money-hidden'
 
 interface ReorderToolbarProps {
   data: ReorderQueueData | undefined
 }
 
 export function ReorderToolbar({ data }: ReorderToolbarProps) {
+  // Subscribe to the demo-mode eye: formatCurrency() masks from a module
+  // store, so without this the amounts here would not re-render on toggle.
+  useMoneyHidden()
+
   const generate = useGenerateSuggestions()
   const clearReceived = useClearReceived()
 
@@ -62,7 +68,7 @@ export function ReorderToolbar({ data }: ReorderToolbarProps) {
 
         {estimatedCost > 0 && (
           <span className="text-xs text-muted-foreground">
-            עלות משוערת: ₪{estimatedCost.toLocaleString('he-IL', { maximumFractionDigits: 0 })}
+            עלות משוערת: {formatCurrency(estimatedCost)}
           </span>
         )}
       </div>

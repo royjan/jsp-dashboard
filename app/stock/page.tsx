@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useDeadStock, useABCClassification, useReorderRecommendations, useConversionAnalysis } from '@/hooks/use-analytics'
 import { useItems } from '@/hooks/use-dashboard'
 import { useLocale } from '@/lib/locale-context'
-import { isUrgent } from '@/lib/constants'
+import { isUrgent, formatCurrencyAxis, maskMoneyInText } from '@/lib/constants'
 import { useUrlParams } from '@/hooks/use-url-params'
 import { DateRangePicker } from '@/components/shared/DateRangePicker'
 import { DateRangePresets } from '@/components/shared/DateRangePresets'
@@ -30,6 +30,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { incrementStreaming, decrementStreaming } from '@/lib/streaming-counter'
 import { formatCurrency, formatDate, formatNumber } from '@/lib/format'
 import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
+import { useMoneyHidden } from '@/lib/use-money-hidden'
 
 // ── Types ──
 
@@ -261,6 +262,7 @@ function timeAgoHe(date: Date): string {
 // ── ABCInsights ──
 
 function ABCInsights({ data }: { data: any }) {
+  useMoneyHidden()
   const [text, setText] = useState('')
   const [loading, setLoading] = useState(false)
   const [done, setDone] = useState(false)
@@ -385,7 +387,7 @@ function ABCInsights({ data }: { data: any }) {
           </div>
         ) : text ? (
           <p className="text-sm leading-relaxed whitespace-pre-wrap text-foreground/90 dir-rtl">
-            {text}
+            {maskMoneyInText(text)}
             {!done && <span className="inline-block w-1 h-4 bg-primary ms-0.5 animate-pulse align-text-bottom" />}
           </p>
         ) : null}
@@ -425,6 +427,10 @@ const convRowVariants: any = {
 }
 
 function ConversionSection({ searchQuery }: { searchQuery: string }) {
+  // Subscribe to the demo-mode eye: formatCurrency() masks from a module
+  // store, so without this the amounts here would not re-render on toggle.
+  useMoneyHidden()
+
   const { t } = useLocale()
   const { get, setMany } = useUrlParams()
   const today = new Date().toISOString().split('T')[0]
@@ -550,7 +556,7 @@ function ConversionSection({ searchQuery }: { searchQuery: string }) {
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={funnelData} layout="vertical" margin={{ left: 10, right: 20, top: 5, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                <XAxis type="number" tick={{ fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}K`} />
+                <XAxis type="number" tick={{ fontSize: 11 }} tickFormatter={(v) => formatCurrencyAxis(v)} />
                 <YAxis type="category" dataKey="name" tick={{ fontSize: 12 }} width={70} />
                 <Tooltip contentStyle={{ backgroundColor: 'var(--popover)', borderColor: 'var(--border)', borderRadius: '8px', color: 'var(--popover-foreground)' }} formatter={(value: any) => [formatCurrency(value), '']} />
                 <Bar dataKey="value" radius={[0, 6, 6, 0]} animationDuration={800} animationBegin={400}>
@@ -643,6 +649,10 @@ function ConversionSection({ searchQuery }: { searchQuery: string }) {
 // ── StockPageContent ──
 
 function StockPageContent() {
+  // Subscribe to the demo-mode eye: formatCurrency() masks from a module
+  // store, so without this the amounts here would not re-render on toggle.
+  useMoneyHidden()
+
   const { t } = useLocale()
   const { get, setMany } = useUrlParams()
 
@@ -1305,10 +1315,10 @@ function StockPageContent() {
                             )}
                           </td>
                           <td className="py-2 text-end font-mono tabular-nums px-2">
-                            {item.price > 0 ? `₪${item.price.toLocaleString()}` : <span className="text-muted-foreground/40">—</span>}
+                            {item.price > 0 ? formatCurrency(item.price) : <span className="text-muted-foreground/40">—</span>}
                           </td>
                           <td className="py-2 text-end font-mono tabular-nums px-2">
-                            {item.capital_tied > 0 ? `₪${item.capital_tied.toLocaleString()}` : <span className="text-muted-foreground/40">—</span>}
+                            {item.capital_tied > 0 ? formatCurrency(item.capital_tied) : <span className="text-muted-foreground/40">—</span>}
                           </td>
 
                           {/* ABC */}
@@ -1499,8 +1509,8 @@ function StockPageContent() {
                                 )}
                               </td>
                               <td className="py-2 text-end">{formatNumber(item.stock_qty)}</td>
-                              <td className="py-2 text-end font-mono">&#8362;{item.price.toLocaleString()}</td>
-                              <td className="py-2 text-end font-mono font-semibold">&#8362;{item.capital_tied.toLocaleString()}</td>
+                              <td className="py-2 text-end font-mono">{formatCurrency(item.price)}</td>
+                              <td className="py-2 text-end font-mono font-semibold">{formatCurrency(item.capital_tied)}</td>
                               <td className="py-2 text-end text-xs text-muted-foreground">{item.sale_date ? formatDate(item.sale_date) : t('neverSold')}</td>
                               <td className="py-2 text-end text-xs text-muted-foreground">{item.count_date ? formatDate(item.count_date) : t('neverCounted')}</td>
                               <td className="py-2 text-end">

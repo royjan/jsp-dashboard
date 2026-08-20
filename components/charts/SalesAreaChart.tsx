@@ -5,6 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useLocale } from '@/lib/locale-context'
 import type { SalesDataPoint } from '@/lib/types'
+import { formatCurrency, formatCurrencyAxis } from '@/lib/format'
+import { useMoneyHidden } from '@/lib/use-money-hidden'
 
 const CHART_COLOR = 'var(--primary)'
 
@@ -16,6 +18,10 @@ interface SalesAreaChartProps {
 }
 
 export function SalesAreaChart({ data, isLoading, title, height = 300 }: SalesAreaChartProps) {
+  // Subscribe to the demo-mode eye: formatCurrency() masks from a module
+  // store, so without this the amounts here would not re-render on toggle.
+  useMoneyHidden()
+
   const { t, locale } = useLocale()
   const displayTitle = title || t('salesTrend')
   const dateLocale = locale === 'he' ? 'he-IL' : 'en-IL'
@@ -49,11 +55,11 @@ export function SalesAreaChart({ data, isLoading, title, height = 300 }: SalesAr
             />
             <YAxis
               tick={{ fontSize: 12 }}
-              tickFormatter={(v) => `${(v / 1000).toFixed(0)}K`}
+              tickFormatter={(v) => formatCurrencyAxis(v)}
             />
             <Tooltip
               contentStyle={{ backgroundColor: 'var(--popover)', borderColor: 'var(--border)', borderRadius: '8px', color: 'var(--popover-foreground)' }}
-              formatter={(value) => [`₪${Number(value).toLocaleString()}`, t('revenue')]}
+              formatter={(value) => [formatCurrency(Number(value)), t('revenue')]}
               labelFormatter={(label) => new Date(label).toLocaleDateString(dateLocale, { weekday: 'short', month: 'short', day: 'numeric' })}
               labelStyle={{ color: 'var(--muted-foreground)' }}
             />

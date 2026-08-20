@@ -17,6 +17,7 @@ import {
 } from 'recharts'
 import { formatCurrency, formatNumber } from '@/lib/format'
 import { cardVariants } from '@/lib/motion'
+import { useMoneyHidden } from '@/lib/use-money-hidden'
 
 
 function LoadingSkeleton() {
@@ -41,6 +42,10 @@ export default function ReturnsPage() {
 }
 
 function ReturnsContent() {
+  // Subscribe to the demo-mode eye: formatCurrency() masks from a module
+  // store, so without this the amounts here would not re-render on toggle.
+  useMoneyHidden()
+
   const { locale } = useLocale()
   const isHe = locale === 'he'
   const { data, isLoading, error } = useReturnsAnalysis()

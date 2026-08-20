@@ -17,7 +17,8 @@ import {
   FileSpreadsheet,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { formatNumber } from '@/lib/constants'
+import { formatNumber, formatCurrency } from '@/lib/constants'
+import { useMoneyHidden } from '@/lib/use-money-hidden'
 
 interface CatalogPart {
   globalPartId: string
@@ -66,6 +67,10 @@ export function PartsGrid({
   searchQuery,
   onSearchChange,
 }: PartsGridProps) {
+  // Subscribe to the demo-mode eye: formatCurrency() masks from a module
+  // store, so without this the amounts here would not re-render on toggle.
+  useMoneyHidden()
+
   const [sortKey, setSortKey] = useState<SortKey>('itemNumber')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
   const [localFilter, setLocalFilter] = useState('')
@@ -296,7 +301,7 @@ export function PartsGrid({
                       <td className="px-3 py-2">
                         {part.price !== null ? (
                           <span className="text-xs font-medium" dir="ltr">
-                            {new Intl.NumberFormat('he-IL', { style: 'currency', currency: 'ILS' }).format(part.price)}
+                            {formatCurrency(part.price, 2)}
                           </span>
                         ) : (
                           <span className="text-xs text-muted-foreground">-</span>

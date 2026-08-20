@@ -8,6 +8,8 @@ import AutocompleteInput from './AutocompleteInput'
 import { VinDecodeSection } from './VinDecodeSection'
 import { logger } from '@/lib/logger'
 import { toast } from '@/lib/toast'
+import { formatCurrency } from '@/lib/format'
+import { useMoneyHidden } from '@/lib/use-money-hidden'
 
 const LAMBDAS = ['partslink', 'psa', 'vin17', 'qipei']
 const STATUSES = ['suggestion', 'approved', 'rejected'] as const
@@ -38,6 +40,10 @@ const EMPTY_AUTOCOMPLETE: AutocompleteData = {
 }
 
 export function RuleEditorPanel({ rule, isCreating, seedDescription, onClose, onSaved, onDeleted }: Props) {
+  // Subscribe to the demo-mode eye: formatCurrency() masks from a module
+  // store, so without this the amounts here would not re-render on toggle.
+  useMoneyHidden()
+
   const [tab, setTab] = useState<Tab>('match')
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -280,7 +286,7 @@ export function RuleEditorPanel({ rule, isCreating, seedDescription, onClose, on
               </div>
               {rule?.directPart && rule.directPart.partId === form.directPartId.trim() && (
                 <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                  {rule.directPart.price != null && `₪${rule.directPart.price} · `}
+                  {rule.directPart.price != null && `${formatCurrency(rule.directPart.price)} · `}
                   {rule.directPart.inStock ? 'in stock' : 'out of stock'}
                 </p>
               )}

@@ -15,6 +15,9 @@
 // surface ring on every mark, the legend, tooltips, and the adjacent table view.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { isMoneyHidden, MONEY_MASK } from '@/lib/privacy'
+import { formatCurrency } from '@/lib/format'
+import { useMoneyHidden } from '@/lib/use-money-hidden'
 
 export type MapRow = {
   code: string; name: string; size: 'small' | 'medium'
@@ -28,7 +31,12 @@ type Rect = { x: number; y: number; w: number; h: number; row: MapRow | null; va
 type Dot = { x: number; y: number; r: number; row: MapRow }
 
 const nf = (n: number) => Math.round(n).toLocaleString('en-US')
-const shekAbbr = (n: number) => n >= 1000 ? `₪${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : `₪${Math.round(n)}`
+// Canvas labels, so they cannot go through the React formatters — but demo mode
+// still has to reach them, hence the direct store read.
+const shekAbbr = (n: number) =>
+  isMoneyHidden() ? MONEY_MASK
+    : n >= 1000 ? `₪${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k`
+    : `₪${Math.round(n)}`
 // DEAD capital = capital × deadness. This is what the treemap sizes by, so a
 // still-selling item (low deadness) shrinks toward nothing while dead expensive
 // stock dominates — the map becomes "the money to liquidate", not just "the money".
@@ -215,6 +223,10 @@ function render(ctx: CanvasRenderingContext2D, W: number, H: number, mode: Mode,
 
 // ── component ────────────────────────────────────────────────────────────────
 export function LiquidationMap({ rows }: { rows: MapRow[] }) {
+  // Subscribe to the demo-mode eye: formatCurrency() masks from a module
+  // store, so without this the amounts here would not re-render on toggle.
+  const moneyHidden = useMoneyHidden()
+
   const wrapRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [mode, setMode] = useState<Mode>('treemap')
@@ -265,7 +277,9 @@ export function LiquidationMap({ rows }: { rows: MapRow[] }) {
     const ctx = cv.getContext('2d'); if (!ctx) return
     ctx.scale(dpr, dpr)
     render(ctx, dims.w, dims.h, mode, t, rects, dots, maxPrice, hover?.row?.code ?? null)
-  }, [dims, mode, t, rects, dots, maxPrice, hover])
+    // `moneyHidden` is not read in this effect, but the canvas labels it draws
+    // are — toggling the eye has to repaint them.
+  }, [dims, mode, t, rects, dots, maxPrice, hover, moneyHidden])
 
   // hit-test returns either a real row, or the "אחר" block (row:null + its tail info)
   const hitTest = useCallback((mx: number, my: number): { row: MapRow | null; other: { count: number; value: number } | null } | null => {
@@ -331,7 +345,7 @@ export function LiquidationMap({ rows }: { rows: MapRow[] }) {
     ctx.font = '600 22px -apple-system, "Segoe UI", sans-serif'
     ctx.fillText(mode === 'treemap' ? 'מפת כסף — מלאי מת למכירה ב-eBay' : 'מפת פיזור — מלאי מת למכירה ב-eBay', W - PAD, 38)
     ctx.font = '13px -apple-system, "Segoe UI", sans-serif'; ctx.fillStyle = t.dim
-    ctx.fillText(`${nf(rows.length)} פריטים · ₪${nf(capital)} תקוע במלאי · ${new Date().toLocaleDateString('he-IL')}`, W - PAD, 62)
+    ctx.fillText(`${nf(rows.length)} פריטים · ${shekAbbr(capital)} תקוע במלאי · ${new Date().toLocaleDateString('he-IL')}`, W - PAD, 62)
     ctx.fillText(mode === 'treemap' ? 'שטח = כסף מת (מחיר × מלאי × מדד-מת) · אדום = מת, ירוק = נמכר' : 'ימינה = מת יותר · למעלה = יקר יותר · גודל עיגול = מלאי · ירוק = קטן, כתום = בינוני', W - PAD, 80)
     ctx.direction = 'ltr'
     ctx.save(); ctx.translate(PAD, HEAD)
@@ -401,10 +415,10 @@ export function LiquidationMap({ rows }: { rows: MapRow[] }) {
               <div className="font-bold text-sm mb-0.5">{h.name}</div>
               <div className="font-mono text-muted-foreground mb-1.5" dir="ltr" style={{ textAlign: 'right' }}>{h.code}</div>
               <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 tabular-nums">
-                <span className="text-muted-foreground">מחיר</span><span>₪{nf(h.price)}</span>
+                <span className="text-muted-foreground">מחיר</span><span>{formatCurrency(h.price)}</span>
                 <span className="text-muted-foreground">מלאי</span><span>{h.stock}</span>
-                <span className="text-muted-foreground">כסף תקוע</span><span className="font-bold">₪{nf(h.price * h.stock)}</span>
-                <span className="text-muted-foreground">מתוכו מלאי-מת</span><span className="font-bold" style={{ color: deadColor(t, h.deadness) }}>₪{nf(h.price * h.stock * h.deadness / 100)}</span>
+                <span className="text-muted-foreground">כסף תקוע</span><span className="font-bold">{formatCurrency(h.price * h.stock)}</span>
+                <span className="text-muted-foreground">מתוכו מלאי-מת</span><span className="font-bold" style={{ color: deadColor(t, h.deadness) }}>{formatCurrency(h.price * h.stock * h.deadness / 100)}</span>
                 <span className="text-muted-foreground">נמכר 26/25/24</span><span>{h.sold_this_year} / {h.sold_2025} / {h.sold_2024}</span>
                 <span className="text-muted-foreground">שנות מלאי</span><span>{h.years_of_stock >= 100 ? '∞' : h.years_of_stock}</span>
                 <span className="text-muted-foreground">מדד מלאי-מת</span><span>{h.deadness}</span>
@@ -415,7 +429,7 @@ export function LiquidationMap({ rows }: { rows: MapRow[] }) {
               <div className="font-bold text-sm mb-0.5">שאר הפריטים הקטנים</div>
               <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 tabular-nums mt-1">
                 <span className="text-muted-foreground">כמות פריטים</span><span>{nf(hover!.other!.count)}</span>
-                <span className="text-muted-foreground">כסף מת</span><span className="font-bold">₪{nf(hover!.other!.value)}</span>
+                <span className="text-muted-foreground">כסף מת</span><span className="font-bold">{formatCurrency(hover!.other!.value)}</span>
               </div>
               <div className="mt-1.5 text-muted-foreground">לחיצה/הקשה — כניסה וצפייה בפריטים ↵</div>
             </>)}

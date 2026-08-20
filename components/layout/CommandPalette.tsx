@@ -31,7 +31,11 @@ import {
   User,
   Sparkles,
   Swords,
+  Eye,
+  EyeOff,
 } from 'lucide-react'
+import { useMoneyHidden } from '@/lib/use-money-hidden'
+import { toggleMoneyHidden } from '@/lib/privacy'
 
 const navItems: Array<{ href: string; labelKey: TranslationKey; icon: typeof LayoutDashboard }> = [
   { href: '/', labelKey: 'overview', icon: LayoutDashboard },
@@ -88,6 +92,7 @@ export function CommandPalette() {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const router = useRouter()
   const { theme, setTheme } = useTheme()
+  const moneyHidden = useMoneyHidden()
   const queryClient = useQueryClient()
   const { t } = useLocale()
 
@@ -370,6 +375,18 @@ export function CommandPalette() {
                       <Moon className="h-4 w-4 shrink-0 text-muted-foreground" />
                     )}
                     <span>{t('cmd.toggleTheme')}</span>
+                  </Command.Item>
+                  <Command.Item
+                    value="hide show money amounts demo הסתר הצג סכומים כסף הדגמה"
+                    onSelect={() => runAction(toggleMoneyHidden)}
+                    className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm cursor-pointer aria-selected:bg-accent aria-selected:text-accent-foreground"
+                  >
+                    {moneyHidden ? (
+                      <Eye className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    ) : (
+                      <EyeOff className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    )}
+                    <span>{t('cmd.toggleMoney')}</span>
                   </Command.Item>
                 </Command.Group>
               </Command.List>

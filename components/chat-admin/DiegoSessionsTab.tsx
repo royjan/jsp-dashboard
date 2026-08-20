@@ -23,6 +23,8 @@ import { NODE_COLORS, TURN_STATUS_BAR, TURN_STATUS_DOT, type TurnStatus } from '
 import { dayKey, fmtDateTime, fmtDayLabel, fmtTimeShort, relTime } from '@/lib/chat-admin/format'
 import { copyText } from '@/lib/clipboard'
 import { toast } from '@/lib/toast'
+import { formatCurrency } from '@/lib/format'
+import { useMoneyHidden } from '@/lib/use-money-hidden'
 
 const ADK_WEB = process.env.NEXT_PUBLIC_ADK_WEB_BASE ?? 'http://192.168.0.230:8000'
 
@@ -504,6 +506,10 @@ interface EnrichedPart {
 }
 
 function PartCardFromState({ p, idx }: { p: EnrichedPart; idx: number }) {
+  // Subscribe to the demo-mode eye: formatCurrency() masks from a module
+  // store, so without this the amounts here would not re-render on toggle.
+  useMoneyHidden()
+
   let stock: { text: string; cls?: string }
   if (p.stock_ok === false) stock = { text: 'לא ניתן לבדוק כרגע', cls: 'text-amber-400' }
   else if ((p.total || 0) > 0) stock = { text: `${p.total}${p.wh ? ` (מחסן ${p.wh})` : ''}` }
@@ -526,7 +532,7 @@ function PartCardFromState({ p, idx }: { p: EnrichedPart; idx: number }) {
         )}
         <li className={stock.cls}>במלאי: {stock.text}</li>
         {typeof p.price === 'number' && (
-          <li>מחיר: <span className="font-mono text-gray-200">₪{p.price.toFixed(2)}</span></li>
+          <li>מחיר: <span className="font-mono text-gray-200">{formatCurrency(p.price, 2)}</span></li>
         )}
       </ul>
     </div>

@@ -13,6 +13,7 @@ import { EbayRecommendButton } from '@/components/shared/EbayRecommendButton'
 import { Search, Trash2, AlertTriangle, Package, ArrowUpDown, Download, ShoppingCart, Loader2 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { formatCurrency, formatNumber } from '@/lib/format'
+import { useMoneyHidden } from '@/lib/use-money-hidden'
 
 type SortField = 'scrap_score' | 'capital_tied' | 'price' | 'qty' | 'item_name'
 type SortDir = 'asc' | 'desc'
@@ -49,6 +50,10 @@ function getSalesLabel(item: any, isHe: boolean) {
 }
 
 function ScrapContent() {
+  // Subscribe to the demo-mode eye: formatCurrency() masks from a module
+  // store, so without this the amounts here would not re-render on toggle.
+  useMoneyHidden()
+
   const { locale } = useLocale()
   const isHe = locale === 'he'
   const [inputValue, setInputValue] = useState('')
