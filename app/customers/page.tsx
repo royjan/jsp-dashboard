@@ -29,6 +29,7 @@ import { formatCurrency, formatNumber, formatDate, formatCurrencyAxis } from '@/
 import { StatTile, StatGrid } from '@/components/shared/StatTile'
 import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
+import { isDeclineHidden } from '@/lib/privacy'
 
 type CustomerSortField = 'name' | 'total_revenue' | 'gross_invoices' | 'total_credits' | 'invoice_count' | 'avg_order_value' | 'trend' | 'last_purchase'
 type ChurnSortField = 'name' | 'last_year_revenue' | 'last_purchase'
@@ -36,8 +37,9 @@ type SortDir = 'asc' | 'desc'
 type ViewTab = 'top' | 'churned'
 
 function TrendIcon({ trend }: { trend: string }) {
+  useMoneyHidden()
   if (trend === 'up') return <Badge variant="success" className="gap-1"><TrendingUp className="h-3 w-3" /><span className="hidden md:inline">↑</span></Badge>
-  if (trend === 'down') return <Badge variant="destructive" className="gap-1"><TrendingDown className="h-3 w-3" /><span className="hidden md:inline">↓</span></Badge>
+  if (trend === 'down') return isDeclineHidden(true) ? null : <Badge variant="destructive" className="gap-1"><TrendingDown className="h-3 w-3" /><span className="hidden md:inline">↓</span></Badge>
   return <Badge variant="secondary" className="gap-1"><Minus className="h-3 w-3" /><span className="hidden md:inline">→</span></Badge>
 }
 

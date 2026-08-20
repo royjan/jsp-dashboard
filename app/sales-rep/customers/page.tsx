@@ -15,6 +15,7 @@ import { SalesRepBottomNav } from '@/components/sales-rep/BottomNav'
 import { VisitLogger } from '@/components/sales-rep/VisitLogger'
 import { formatCurrency, formatNumber } from '@/lib/format'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
+import { isDeclineHidden } from '@/lib/privacy'
 
 interface Customer {
   code: string
@@ -264,6 +265,7 @@ export default function SalesRepCustomersPage() {
                         <p className="text-muted-foreground">שינוי שנתי</p>
                         <p className="font-medium">
                           {customer.factors.yoyChangePct != null
+                            && !isDeclineHidden(customer.factors.yoyChangePct < 0)
                             ? `${customer.factors.yoyChangePct > 0 ? '+' : ''}${Math.round(customer.factors.yoyChangePct)}%`
                             : '—'}
                         </p>

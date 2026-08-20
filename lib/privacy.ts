@@ -25,6 +25,20 @@ export function isMoneyHidden(): boolean {
   return hidden
 }
 
+/**
+ * Should this trend indicator be suppressed?
+ *
+ * Demo mode hides bad news only — growth still renders, a decline renders as
+ * nothing at all. Callers pass the JUDGEMENT, not the sign, because the two are
+ * not the same: an overdue balance falling is a negative delta and good news.
+ *
+ * Suppress the whole cluster (arrow + colour + text) at the call site, never
+ * just the number — a red arrow next to a blank is louder than the number was.
+ */
+export function isDeclineHidden(isBadNews: boolean): boolean {
+  return hidden && isBadNews
+}
+
 export function setMoneyHidden(next: boolean): void {
   if (hidden === next) return
   hidden = next

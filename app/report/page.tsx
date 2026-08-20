@@ -26,6 +26,7 @@ import {
 import { formatCurrency, formatNumber, formatCurrencyAxis, maskMoneyInText } from '@/lib/format'
 import { cardVariants } from '@/lib/motion'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
+import { isDeclineHidden } from '@/lib/privacy'
 
 const MONTH_LABELS_HE = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר']
 const MONTH_LABELS_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -91,6 +92,12 @@ function ReportContent() {
   const [section, setSection] = useState<Section>(
     urlSection && SECTIONS.includes(urlSection) ? urlSection : 'summary'
   )
+
+  // The 'revenue' tab is literally titled "ירידה בהכנסות" — demo mode drops the
+  // tab AND its body, and falls back to summary so a bookmarked
+  // `?section=revenue` doesn't land on an empty page.
+  const hideDecline = isDeclineHidden(true)
+  const activeSection = hideDecline && section === 'revenue' ? 'summary' : section
 
   // Keep the active tab in the URL so each section is deep-linkable / bookmarkable.
   const changeSection = (v: Section) => {
@@ -207,7 +214,7 @@ function ReportContent() {
     <div className="space-y-4 md:space-y-6">
       {/* Section tabs + refresh */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-      <Tabs value={section} onValueChange={(v) => changeSection(v as Section)}>
+      <Tabs value={activeSection} onValueChange={(v) => changeSection(v as Section)}>
         <TabsList className="flex-wrap h-auto gap-1 p-1">
           <TabsTrigger value="summary" className="gap-1.5 text-xs">
             <BarChart3 className="h-3.5 w-3.5" />
@@ -219,11 +226,13 @@ function ReportContent() {
             <span className="hidden sm:inline">{t('deadStock')}</span>
             <span className="sm:hidden">{isHe ? 'מלאי' : 'Stock'}</span>
           </TabsTrigger>
-          <TabsTrigger value="revenue" className="gap-1.5 text-xs">
-            <TrendingDown className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">{t('revenueDecline')}</span>
-            <span className="sm:hidden">{isHe ? 'הכנסות' : 'Revenue'}</span>
-          </TabsTrigger>
+          {!hideDecline && (
+            <TabsTrigger value="revenue" className="gap-1.5 text-xs">
+              <TrendingDown className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">{t('revenueDecline')}</span>
+              <span className="sm:hidden">{isHe ? 'הכנסות' : 'Revenue'}</span>
+            </TabsTrigger>
+          )}
           <TabsTrigger value="seasonal" className="gap-1.5 text-xs">
             <Calendar className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">{t('seasonalAnalysis')}</span>
@@ -260,7 +269,7 @@ function ReportContent() {
       </div>
 
       {/* ── Executive Summary ── */}
-      {section === 'summary' && (
+      {activeSection === 'summary' && (
         <div className="space-y-4 md:space-y-6">
           {/* KPI Cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3">
@@ -447,7 +456,7 @@ function ReportContent() {
       )}
 
       {/* ── Dead Stock ── */}
-      {section === 'deadstock' && (
+      {activeSection === 'deadstock' && (
         <div className="space-y-4 md:space-y-6">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3">
             <KPICard index={0} icon={Package} label={isHe ? 'ערך מלאי כולל' : 'Total Inventory'}
@@ -581,7 +590,7 @@ function ReportContent() {
       )}
 
       {/* ── Revenue Decline ── */}
-      {section === 'revenue' && (
+      {activeSection === 'revenue' && (
         <div className="space-y-4 md:space-y-6">
           <Card>
             <CardHeader className="pb-2">
@@ -675,7 +684,7 @@ function ReportContent() {
       )}
 
       {/* ── Seasonal ── */}
-      {section === 'seasonal' && (
+      {activeSection === 'seasonal' && (
         <div className="space-y-4 md:space-y-6">
           <Card>
             <CardHeader className="pb-2">
@@ -749,7 +758,7 @@ function ReportContent() {
       )}
 
       {/* ── Credit Notes ── */}
-      {section === 'credits' && (
+      {activeSection === 'credits' && (
         <div className="space-y-4 md:space-y-6">
           <Card>
             <CardHeader className="pb-2">
@@ -845,7 +854,7 @@ function ReportContent() {
       )}
 
       {/* ── Customer Analysis ── */}
-      {section === 'customers' && (
+      {activeSection === 'customers' && (
         <div className="space-y-4 md:space-y-6">
           {/* Retention chart */}
           <Card>
@@ -983,7 +992,7 @@ function ReportContent() {
       )}
 
       {/* ── Recommendations ── */}
-      {section === 'recommendations' && (
+      {activeSection === 'recommendations' && (
         <div className="space-y-4 md:space-y-6">
           {/* Urgent */}
           <Card className="border-destructive/30">

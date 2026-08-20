@@ -22,6 +22,8 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cardVariants } from '@/lib/motion'
 import { formatPercentDelta } from '@/lib/format'
+import { useMoneyHidden } from '@/lib/use-money-hidden'
+import { isDeclineHidden } from '@/lib/privacy'
 import { cn } from '@/lib/utils'
 
 /** Semantic tone. Drives the icon tint — never the value colour, which stays
@@ -72,6 +74,7 @@ export function StatTile({
   onClick,
   className,
 }: StatTileProps) {
+  useMoneyHidden()
   const toneClasses = TONE_CLASSES[tone]
 
   // A rise is only "good" when the metric says so — overdue balance going up
@@ -85,6 +88,9 @@ export function StatTile({
           ? 'down'
           : 'flat'
   const isPositive = direction === 'flat' ? null : direction === 'up' ? higherIsBetter : !higherIsBetter
+  // `isPositive` already accounts for higherIsBetter — overdue balance falling
+  // is a negative delta and GOOD news, so it stays on screen in demo mode.
+  const hideDelta = isDeclineHidden(isPositive === false)
 
   return (
     <motion.div custom={index} variants={cardVariants} initial="hidden" animate="visible">
@@ -110,9 +116,9 @@ export function StatTile({
             {loading ? <Skeleton className="h-6 w-24" /> : value}
           </div>
 
-          {(direction || hint) && !loading && (
+          {((direction && !hideDelta) || hint) && !loading && (
             <div className="mt-1 flex items-center gap-1.5 text-xs">
-              {direction && (
+              {direction && !hideDelta && (
                 <span
                   className={cn(
                     'inline-flex items-center gap-0.5 font-medium tabular-nums',

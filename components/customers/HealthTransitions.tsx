@@ -22,6 +22,8 @@ import {
   Clock,
   RotateCcw,
 } from 'lucide-react'
+import { isDeclineHidden } from '@/lib/privacy'
+import { useMoneyHidden } from '@/lib/use-money-hidden'
 
 type FilterTab = 'all' | 'deteriorating' | 'improving' | 'unacknowledged'
 
@@ -64,6 +66,7 @@ interface Transition {
 }
 
 function TransitionCard({ t: transition, onAcknowledge }: { t: Transition; onAcknowledge: (id: string, notes: string) => void }) {
+  useMoneyHidden()
   const { t } = useLocale()
   const [showNotes, setShowNotes] = useState(false)
   const [notes, setNotes] = useState('')
@@ -123,7 +126,7 @@ function TransitionCard({ t: transition, onAcknowledge }: { t: Transition; onAck
                 {(factors.returnRate * 100).toFixed(1)}% {t('returnRate')}
               </span>
             )}
-            {factors.yoyChangePct != null && (
+            {factors.yoyChangePct != null && !isDeclineHidden(factors.yoyChangePct < 0) && (
               <span
                 className={cn(
                   'inline-flex items-center gap-1',

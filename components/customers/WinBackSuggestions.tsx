@@ -17,6 +17,8 @@ import {
   X,
   Lightbulb,
 } from 'lucide-react'
+import { isDeclineHidden } from '@/lib/privacy'
+import { useMoneyHidden } from '@/lib/use-money-hidden'
 
 interface HealthScore {
   code: string
@@ -63,8 +65,9 @@ function generateSuggestions(customer: HealthScore, t: (key: any) => string): Su
     })
   }
 
-  // Revenue declining YoY
-  if (factors.yoyChangePct !== null && factors.yoyChangePct < -15) {
+  // Revenue declining YoY — the one suggestion that states the decline out
+  // loud, so demo mode drops it rather than masking its number.
+  if (factors.yoyChangePct !== null && factors.yoyChangePct < -15 && !isDeclineHidden(true)) {
     suggestions.push({
       type: 'revenue_decline',
       icon: TrendingDown,
@@ -166,6 +169,7 @@ interface WinBackSuggestionsProps {
 }
 
 export function WinBackSuggestions({ scores, maxItems = 10 }: WinBackSuggestionsProps) {
+  useMoneyHidden()
   const { t } = useLocale()
   const [dismissed, setDismissed] = useState<Set<string>>(new Set())
 

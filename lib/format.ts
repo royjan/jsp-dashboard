@@ -18,7 +18,7 @@
  * components alike.
  */
 
-import { isMoneyHidden, MONEY_MASK } from './privacy'
+import { isMoneyHidden, isDeclineHidden, MONEY_MASK } from './privacy'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Tunables — edit here to change the look everywhere.
@@ -173,10 +173,18 @@ export function formatPercent(value: number | null | undefined, decimals = 1): s
   return `${n.toFixed(decimals)}%`
 }
 
-/** `+12.5%` / `-3.0%` — for deltas, where the sign carries meaning. */
+/**
+ * `+12.5%` / `-3.0%` — for deltas, where the sign carries meaning.
+ *
+ * Backstop for demo mode: a negative delta renders empty, so a call site added
+ * later cannot quietly put a decline back on screen. It is only a backstop —
+ * the arrow and colour beside it live in the component, so hide the whole
+ * cluster there (see `isDeclineHidden`) rather than relying on this.
+ */
 export function formatPercentDelta(value: number | null | undefined, decimals = 1): string {
   const n = Number(value)
   if (!Number.isFinite(n)) return '—'
+  if (isDeclineHidden(n < 0)) return ''
   return `${n > 0 ? '+' : ''}${n.toFixed(decimals)}%`
 }
 

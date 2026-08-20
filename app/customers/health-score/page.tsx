@@ -32,6 +32,7 @@ import { formatCurrency, formatNumber, formatRatio, formatPercentDelta } from '@
 import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
 import { sortRows } from '@/lib/sort'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
+import { isDeclineHidden } from '@/lib/privacy'
 
 type Band = 'green' | 'yellow' | 'red' | 'all'
 type SortField = 'score' | 'name' | 'revenue' | 'days' | 'returnRate'
@@ -73,10 +74,11 @@ const HEALTH_SORT_VALUES: Record<SortField, (r: HealthScore) => unknown> = {
 }
 
 function TrendIcon({ trend }: { trend: 'up' | 'down' | 'stable' }) {
+  useMoneyHidden()
   if (trend === 'up')
     return <TrendingUp className="h-3.5 w-3.5 text-emerald-500" />
   if (trend === 'down')
-    return <TrendingDown className="h-3.5 w-3.5 text-red-500" />
+    return isDeclineHidden(true) ? null : <TrendingDown className="h-3.5 w-3.5 text-red-500" />
   return <Minus className="h-3.5 w-3.5 text-muted-foreground" />
 }
 
@@ -228,7 +230,7 @@ function HealthScoreContent() {
     {
       key: 'yoy', header: t('yoyChange'), align: 'end',
       cell: row =>
-        row.factors.yoyChangePct !== null ? (
+        row.factors.yoyChangePct !== null && !isDeclineHidden(row.factors.yoyChangePct < 0) ? (
           <span className={cn('font-mono', row.factors.yoyChangePct > 0 ? 'text-emerald-500' : row.factors.yoyChangePct < 0 ? 'text-red-500' : 'text-muted-foreground')}>
             {formatPercentDelta(row.factors.yoyChangePct, 0)}
           </span>

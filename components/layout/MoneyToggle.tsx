@@ -7,8 +7,12 @@ import { toggleMoneyHidden } from '@/lib/privacy'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
 
 /**
- * The demo-mode eye. Closed eye = money is masked (the default), open eye =
- * real figures on screen.
+ * The demo-mode eye. Closed eye (the default) = money is masked AND declines
+ * are suppressed; open eye = the real dashboard.
+ *
+ * Declines are hidden, growth is not — Roy's call for demos. That asymmetry is
+ * deliberate and worth knowing: with the eye closed, every trend still on
+ * screen is a positive one.
  *
  * Deliberately styled louder than its neighbours when revealed: showing real
  * revenue on a shared screen is the dangerous state, so it is the one that

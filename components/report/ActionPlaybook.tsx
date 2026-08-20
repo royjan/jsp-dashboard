@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/dialog'
 import { Loader2, Clock, UserCircle, AlertTriangle, ArrowLeft, Lightbulb, RefreshCw } from 'lucide-react'
 import { maskMoneyInText } from '@/lib/format'
+import { useMoneyHidden } from '@/lib/use-money-hidden'
 
 interface Playbook {
   summary: string
@@ -31,6 +32,7 @@ export function ActionPlaybook({
   isHe: boolean
   children: ReactNode
 }) {
+  const moneyHidden = useMoneyHidden()
   const [open, setOpen] = useState(false)
   const [pb, setPb] = useState<Playbook | null>(null)
   const [loading, setLoading] = useState(false)
@@ -55,6 +57,10 @@ export function ActionPlaybook({
       setLoading(false)
     }
   }
+
+  // Demo mode: the playbook body is LLM prose full of amounts and decline
+  // wording, so the trigger goes away and the action stays as plain text.
+  if (moneyHidden) return <>{children}</>
 
   return (
     <>

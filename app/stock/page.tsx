@@ -31,6 +31,7 @@ import { incrementStreaming, decrementStreaming } from '@/lib/streaming-counter'
 import { formatCurrency, formatDate, formatNumber } from '@/lib/format'
 import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
+import { isMoneyHidden } from '@/lib/privacy'
 
 // ── Types ──
 
@@ -1025,7 +1026,7 @@ function StockPageContent() {
       )}
 
       {/* ── 5. AI Insights ── */}
-      {abcData && <ABCInsights data={abcData} />}
+      {abcData && !isMoneyHidden() && <ABCInsights data={abcData} />}
 
       {/* ── 7. Unified table ── */}
       <Card>

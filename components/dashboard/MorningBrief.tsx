@@ -49,7 +49,7 @@ function extractText(value: unknown): string {
 
 export function MorningBrief() {
   // The brief is LLM prose with the amounts already inside it — masked as text.
-  useMoneyHidden()
+  const moneyHidden = useMoneyHidden()
   const [collapsed, setCollapsed] = useState(false)
 
   // Restore collapsed state from localStorage
@@ -76,7 +76,13 @@ export function MorningBrief() {
     staleTime: 4 * 60 * 60 * 1000, // 4 hours
     retry: 1,
     refetchOnWindowFocus: false,
+    // No point fetching a brief we will not show — and it keeps yesterday's
+    // revenue out of the network tab during a screen-share.
+    enabled: !moneyHidden,
   })
+
+  // After every hook, so the hook order stays stable when the eye is toggled.
+  if (moneyHidden) return null
 
   return (
     <Card className="overflow-hidden border-primary/20 bg-primary/5">

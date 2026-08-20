@@ -6,6 +6,8 @@ import { AnimatedCounter } from '@/components/shared/AnimatedCounter'
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useLocale } from '@/lib/locale-context'
+import { useMoneyHidden } from '@/lib/use-money-hidden'
+import { isDeclineHidden } from '@/lib/privacy'
 import type { LucideIcon } from 'lucide-react'
 
 interface KPICardProps {
@@ -22,6 +24,10 @@ interface KPICardProps {
 
 export function KPICard({ label, value, format, icon: Icon, trend, changePercent, iconColor = 'text-primary', iconBg = 'bg-primary/10' }: KPICardProps) {
   const { t } = useLocale()
+  useMoneyHidden()
+  // Demo mode drops the whole row rather than the number alone — a red
+  // TrendingDown beside a blank still reads as "we are down".
+  const hideTrend = isDeclineHidden(trend === 'down' || (changePercent ?? 0) < 0)
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -39,7 +45,7 @@ export function KPICard({ label, value, format, icon: Icon, trend, changePercent
               <Icon className={cn('h-5 w-5', iconColor)} />
             </div>
           </div>
-          {changePercent !== undefined && (
+          {changePercent !== undefined && !hideTrend && (
             <div className="mt-2 flex items-center gap-1 text-xs">
               {trend === 'up' && <TrendingUp className="h-3 w-3 text-emerald-500" />}
               {trend === 'down' && <TrendingDown className="h-3 w-3 text-red-500" />}
