@@ -212,6 +212,10 @@ export default function DoraCreditsView() {
   const [q, setQ] = useState('')
   const [openOnly, setOpenOnly] = useState(true)
   const [expanded, setExpanded] = useState<string | null>(null)
+  // The mirror refreshes once a day and used to fail silently — five weeks of stale cases were
+  // shown as current with nothing indicating it. Never render this list without saying how old
+  // it is when the daily run has been missed.
+  const [staleHours, setStaleHours] = useState<number | null>(null)
 
   const load = async () => {
     try {
@@ -219,6 +223,7 @@ export default function DoraCreditsView() {
       const j = await r.json()
       if (!j.success) throw new Error(j.error)
       setCases(j.cases)
+      setStaleHours(j.mirror_stale ? (j.mirror_age_hours ?? null) : null)
       setError(null)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -272,6 +277,14 @@ export default function DoraCreditsView() {
       </div>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
+
+      {staleHours !== null && (
+        <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-400">
+          ⚠️ הנתונים כאן מסונכרנים אחת ליום, והסנכרון האחרון היה לפני{' '}
+          {staleHours >= 48 ? `${Math.floor(staleHours / 24)} ימים` : `${Math.round(staleHours)} שעות`}.
+          ייתכן שלדורה יש תיקים עדכניים יותר — שאלו אותה ישירות.
+        </p>
+      )}
 
       {loading ? (
         <div className="space-y-2">{[...Array(6)].map((_, i) => <Skeleton key={i} className="h-20 w-full" />)}</div>

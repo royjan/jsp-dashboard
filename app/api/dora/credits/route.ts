@@ -159,8 +159,16 @@ async function matchSuppliers(
 /**
  * GET /api/dora/credits — Dora's supplier-credit cases (זיכויים והחזרות).
  *
- * Source: Neon schema `dora` — a real-time trigger mirror of Dora's local
- * brain DB (LXC 104), so this reflects her case tracking within seconds.
+ * Source: Neon schema `dora`, at the end of this chain:
+ *
+ *   credits DB (Postgres, VM 102) --daily 08:10 hermes cron--> dora_brain (LXC 104 :5433)
+ *     --postgres_fdw trigger mirror_neon--> here
+ *
+ * NOT a real-time mirror of a "local brain DB on LXC 104" as this comment used to claim: the
+ * store is on VM 102, LXC 104 reaches it over an SSH tunnel, and the refresh is once a day.
+ * The last hop failed silently from 2026-07-18 to 2026-08-20 — five weeks of stale data served
+ * as current, because mirror_to_neon() swallowed every error. Hence `mirror_age_hours` below.
+ *
  * Each case is enriched with its best-matching Finansit supplier card.
  */
 export async function GET() {
@@ -171,7 +179,10 @@ export async function GET() {
               created_at, updated_at, follow_up_at, closed_at
          FROM dora.brain_tasks
         WHERE category = 'supplier_credit'
-        ORDER BY updated_at DESC
+        -- NOT updated_at: that is the mirror's write time, and one sync stamps every row it
+        -- touches with the same value (21 of 24 rows once shared 2026-07-18 05:12:15.970402),
+        -- so "newest first" was arbitrary. metadata.updated_at is the case's own timestamp.
+        ORDER BY (metadata->>'updated_at') DESC NULLS LAST, updated_at DESC
         LIMIT 500`
     )
 
@@ -201,7 +212,18 @@ export async function GET() {
       ...c,
       supplier_match: matches[keyOf(c.metadata)] ?? null,
     }))
-    return NextResponse.json({ success: true, cases })
+    // How long since the mirror last wrote anything. The sync runs daily at 08:10, so anything
+    // past ~26h means a run was missed and these cases are not what Dora actually knows. The UI
+    // banners on this rather than presenting stale rows as current.
+    const lastWrite = res.rows.reduce(
+      (max: number, c: any) => Math.max(max, new Date(c.updated_at).getTime() || 0), 0)
+    const mirrorAgeHours = lastWrite ? (Date.now() - lastWrite) / 3_600_000 : null
+    return NextResponse.json({
+      success: true,
+      cases,
+      mirror_age_hours: mirrorAgeHours === null ? null : Number(mirrorAgeHours.toFixed(1)),
+      mirror_stale: mirrorAgeHours !== null && mirrorAgeHours > 26,
+    })
   } catch (e) {
     console.error('[dora/credits]', e)
     return NextResponse.json(
