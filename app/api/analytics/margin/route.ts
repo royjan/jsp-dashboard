@@ -8,7 +8,10 @@ import { getItems, getCanonicalizer, getCategorizer, foldByChain } from '@/lib/s
 import { getCached, setCache } from '@/lib/redis-client'
 import { CACHE_TTL } from '@/lib/constants'
 
-const CACHE_KEY = 'analytics:margin:v2'
+// v3: byCategory now comes from erp.item_categories rather than the item's '0000' group
+// field, so every cached v2 payload is the two-bucket chart this replaced. The key is the
+// invalidation — a TTL would have served the old shape for hours after the deploy.
+const CACHE_KEY = 'analytics:margin:v3'
 
 /**
  * Margin (מרווח) analytics.

@@ -6,7 +6,8 @@ import { getItems, getCanonicalizer, getCategorizer } from '@/lib/services/analy
 import { query } from '@/lib/db'
 import { getCached, setCache } from '@/lib/redis-client'
 
-const CACHE_KEY = 'vehicle-population:lifecycle:v1'
+// v2: real part-type categories (erp.item_categories) instead of one ⁧ללא קטגוריה⁩ series.
+const CACHE_KEY = 'vehicle-population:lifecycle:v2'
 const CACHE_TTL = 86400 // 24h
 
 /**
