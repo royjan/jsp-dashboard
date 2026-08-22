@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server'
 import { initializeSecrets } from '@/lib/aws-secrets'
 import { query } from '@/lib/db'
 import { fetchBatchCost } from '@/lib/finansit-client'
-import { getItems, itemCategory, getCanonicalizer, foldByChain } from '@/lib/services/analytics-service'
+import { getItems, getCanonicalizer, getCategorizer, foldByChain } from '@/lib/services/analytics-service'
 import { getCached, setCache } from '@/lib/redis-client'
 import { CACHE_TTL } from '@/lib/constants'
 
@@ -58,19 +58,19 @@ export async function GET() {
     // four). COALESCE only replaces NULL, so '' passed straight through and the whole
     // category breakdown collapsed into one unnamed bucket beside 'ללא קטגוריה'.
     //
-    // getItems() (live FINAPI + Redis) fixes the name and the price. It does NOT fix the
-    // category, because nothing can: the ERP has no per-item category to give — `categories`
-    // is null on every item sampled and `group` is the placeholder '0000' on most of them.
-    // See itemCategory(), which names that honestly instead of plotting a '0000' bucket. The
-    // byCategory block below is therefore near-single-bucket by DATA, not by bug, and giving
-    // this page a real dimension needs category data that does not exist yet.
+    // getItems() (live FINAPI + Redis) fixes the name and the price. It does not carry a
+    // usable category — `categories` is null on every item sampled and `group` is the
+    // placeholder '0000' on most — which is why byCategory was two buckets on a catalogue of
+    // 33,587 classified parts. The classification lives in erp.item_categories and is what
+    // getCategorizer() reads; itemCategory() remains the fallback for the unclassified.
     const itemsByCode = new Map<string, any>()
     for (const it of await getItems()) {
       const code = String(it.code ?? '').toUpperCase()
       if (code) itemsByCode.set(code, it)
     }
+    const categoryOf = await getCategorizer()
     const catOf = (code: string) =>
-      itemCategory(itemsByCode.get(String(code || '').toUpperCase()))
+      categoryOf(String(code || ''), itemsByCode.get(String(code || '').toUpperCase()))
 
     const salesByItem = await query(`
       SELECT

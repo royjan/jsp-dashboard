@@ -2,7 +2,7 @@ export const maxDuration = 30
 
 import { NextResponse } from 'next/server'
 import { initializeSecrets } from '@/lib/aws-secrets'
-import { getItems, itemCategory, NO_CATEGORY, getCanonicalizer } from '@/lib/services/analytics-service'
+import { getItems, NO_CATEGORY, getCanonicalizer, getCategorizer } from '@/lib/services/analytics-service'
 import { query } from '@/lib/db'
 import { getCached, setCache } from '@/lib/redis-client'
 
@@ -76,18 +76,21 @@ export async function GET(request: Request) {
     // collapsed into one unnamed bucket — on a page whose entire output is a per-
     // category demand forecast. It failed silently: an empty category name renders as
     // a blank label, not an error.
-    const catByCode = new Map<string, string>()
+    // THE CATEGORY COMES FROM erp.item_categories NOW. Reading it off the item's `group`
+    // field put all 4,345 selling items into one ⁧ללא קטגוריה⁩ bucket — 6.3M of revenue under
+    // a single unnamed row, on a page whose entire output is a per-category forecast. The
+    // ERP's own classification table answers for 3,764 of them, in 95 real categories.
+    const itemsByCode = new Map<string, any>()
     for (const it of await getItems()) {
       const code = String(it.code ?? '').toUpperCase()
-      if (code) catByCode.set(code, itemCategory(it))
+      if (code) itemsByCode.set(code, it)
     }
-    // catByCode is keyed by CANONICAL code, monthly_sales by the raw code on the
-    // document. Without this fold every superseded code missed the map and its
-    // revenue landed in the no-category bucket, while also counting as a second
-    // "unique item".
+    // Both lookups are chain-aware: monthly_sales is keyed by the raw code on the document,
+    // the catalogue and the classification by whichever chain member carries them.
     const canon = await getCanonicalizer()
+    const categoryOf = await getCategorizer()
     const catFor = (code: string) =>
-      catByCode.get(canon(String(code || '')).toUpperCase())
+      categoryOf(String(code || ''), itemsByCode.get(canon(String(code || '')).toUpperCase()))
     const salesRows = await query(`
       SELECT item_code,
              SUM(quantity::numeric) as qty,

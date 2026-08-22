@@ -143,8 +143,16 @@ export const NO_CATEGORY = 'ללא קטגוריה'
  * believed.
  *
  * So placeholders are named honestly here, in one place, and the charts show one truthful
- * category instead of a fabricated breakdown. Giving those pages a real dimension needs
- * category data that does not exist yet — a data decision, not a code change.
+ * category instead of a fabricated breakdown.
+ *
+ * THIS IS THE FALLBACK NOW, NOT THE ANSWER. The note that used to end here said a real
+ * dimension "needs category data that does not exist yet". It does exist, and it always did —
+ * in `erp.item_categories`, the ERP mirror's own classification table, which nothing in this
+ * app had ever read. 139,380 rows; group 2 is ⁧סוג החלק⁩ (part type) over 33,587 catalogue
+ * items in 95 categories — ⁧מגן ק+. אביזרים⁩, ⁧חלקי מזגן - חימום - מגבים⁩, ⁧מערכת דלק⁩ — and it
+ * covers 3,764 of the 4,346 items that actually sold. The earlier search looked at FINAPI's
+ * item payload and at dashboard.item_snapshots and concluded from two empty sources that the
+ * data was absent. See `getCategorizer()`; this function is what answers for the rest.
  */
 export function itemCategory(item: { category?: string; group?: string } | undefined | null): string {
   const raw = (item?.category || item?.group || '').trim()
@@ -152,6 +160,69 @@ export function itemCategory(item: { category?: string; group?: string } | undef
   // Placeholder group codes: all-zero, or a repeated single letter ('NNNN', 'PPPP').
   if (/^0+$/.test(raw) || /^([A-Za-z])\1+$/.test(raw)) return NO_CATEGORY
   return raw
+}
+
+
+// ── the ERP's own classification ─────────────────────────────────────────────────────
+//
+// `erp.item_categories` is keyed by item_code and carries several classification GROUPS:
+//   1 ⁧סוג הרכב⁩   vehicle type   47,727 items
+//   2 ⁧סוג החלק⁩   part type      33,587 items   ← what a parts chart means by "category"
+//   3 ⁧שם הספק⁩    supplier        33,850 items
+//   8 ⁧רכבים⁩       vehicles        15,283 items
+// Group 2 is the one used here. The others are real dimensions too and are left alone
+// deliberately: a chart that mixed part type with supplier name would be a worse lie than
+// the single bucket this replaces.
+const CATEGORY_GROUP = '2'
+const CATEGORY_TTL_MS = 6 * 60 * 60 * 1000
+let cachedCategories: { map: Map<string, string>; at: number } | null = null
+
+export async function getItemCategories(): Promise<Map<string, string>> {
+  if (cachedCategories && Date.now() - cachedCategories.at < CATEGORY_TTL_MS) {
+    return cachedCategories.map
+  }
+  const map = new Map<string, string>()
+  try {
+    const { rows } = await dbQuery(
+      `SELECT upper(item_code) AS code, category_value
+         FROM erp.item_categories
+        WHERE group_num = $1 AND COALESCE(trim(category_value), '') <> ''`,
+      [CATEGORY_GROUP],
+    )
+    for (const r of rows as any[]) {
+      const code = String(r.code || '').trim()
+      const value = String(r.category_value || '').trim()
+      if (code && value) map.set(code, value)
+    }
+  } catch (e: any) {
+    // A missing mirror table must not empty every category chart — the item's own group
+    // field still answers, exactly as it did before this existed.
+    console.warn('[Analytics] erp.item_categories unavailable:', e?.message?.slice(0, 120))
+    return cachedCategories?.map ?? new Map()
+  }
+  cachedCategories = { map, at: Date.now() }
+  return map
+}
+
+/**
+ * Category for a RAW code off a document, chain-aware.
+ *
+ * Order matters: the classification table first, then the same lookup on the canonical code
+ * (a superseded number is often classified only under one member of its chain), then the
+ * item's own group field, which is a placeholder for most of the catalogue.
+ */
+export async function getCategorizer(): Promise<
+  (code: string, item?: { category?: string; group?: string } | null) => string
+> {
+  const [cats, canon] = await Promise.all([getItemCategories(), getCanonicalizer()])
+  return (code, item) => {
+    const raw = String(code || '').toUpperCase()
+    const direct = cats.get(raw)
+    if (direct) return direct
+    const viaChain = cats.get(String(canon(raw) || '').toUpperCase())
+    if (viaChain) return viaChain
+    return itemCategory(item)
+  }
 }
 
 function mapRawItem(raw: any): FinansitItem | null {

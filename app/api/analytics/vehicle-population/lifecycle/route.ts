@@ -2,7 +2,7 @@ export const maxDuration = 30
 
 import { NextResponse } from 'next/server'
 import { initializeSecrets } from '@/lib/aws-secrets'
-import { getItems, itemCategory, getCanonicalizer } from '@/lib/services/analytics-service'
+import { getItems, getCanonicalizer, getCategorizer } from '@/lib/services/analytics-service'
 import { query } from '@/lib/db'
 import { getCached, setCache } from '@/lib/redis-client'
 
@@ -30,10 +30,14 @@ export async function GET() {
     // cannot supply one: its newest rows are from 2026-03-21 (811 of 4,266 selling
     // items) and its `category` is the EMPTY STRING on 2,664 of 2,668 rows. COALESCE
     // replaces NULL, not '', so every series on this chart was the same blank category.
+    // The ERP's own classification (erp.item_categories, group 2 = ⁧סוג החלק⁩) answers first;
+    // the item's `group` field is a '0000' placeholder for most of the catalogue and only
+    // ever produced one unnamed series here.
+    const categoryOf = await getCategorizer()
     const catByCode = new Map<string, string>()
     for (const it of await getItems()) {
       const code = String(it.code ?? '').toUpperCase()
-      if (code) catByCode.set(code, itemCategory(it))
+      if (code) catByCode.set(code, categoryOf(code, it))
     }
     // catByCode is keyed by CANONICAL code, monthly_sales by the raw code on the
     // document. Without this fold every superseded code missed the map and its
