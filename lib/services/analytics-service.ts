@@ -516,6 +516,45 @@ export async function itemChainCodes(code: string): Promise<string[]> {
   return [...out].map((c) => String(c).trim()).filter(Boolean)
 }
 
+export type StockedVariant = { code: string; name: string; stock_qty: number }
+
+/**
+ * Jan's own suffixed variants that are IN STOCK, indexed by the code they
+ * substitute for. The shelf answer the supersession chain cannot give.
+ *
+ * `9812071480J` ("מכסה שסתומים חליפי") holds 23 units while `9812071480`, the
+ * OEM code it substitutes for, is the #2 entry on /gap with 61 quotes. They are
+ * NOT linked in the ERP — `old_item_id`/`new_item_id` are empty on the J row —
+ * so no amount of chain folding will ever connect them, and it should not: an
+ * aftermarket part is a different SKU at a different price and the customer may
+ * refuse it. This SURFACES the substitute; merging it would quietly report a
+ * gap as closed.
+ *
+ * The match is `<whole code> + letters`, never a shared stem. 1920LL and 1920GN
+ * share the stem "1920" and are unrelated parts; a suffix appended to a COMPLETE
+ * code is Jan's variant convention. The base must itself be a real catalogue
+ * item, so a code that merely happens to end in letters indexes nothing.
+ */
+export function buildStockedVariantIndex(
+  items: { code: string; name?: string; stock_qty?: number }[],
+): Map<string, StockedVariant[]> {
+  const known = new Set(items.map((i) => String(i.code ?? '').trim().toUpperCase()))
+  const out = new Map<string, StockedVariant[]>()
+  for (const it of items) {
+    if ((it.stock_qty || 0) <= 0) continue
+    const code = String(it.code ?? '').trim().toUpperCase()
+    const m = /^(.*[0-9])([A-Z]+)$/.exec(code)
+    if (!m) continue
+    const base = m[1]
+    if (!known.has(base)) continue
+    const list = out.get(base) || []
+    list.push({ code: it.code, name: it.name ?? '', stock_qty: it.stock_qty || 0 })
+    out.set(base, list)
+  }
+  for (const list of out.values()) list.sort((a, b) => b.stock_qty - a.stock_qty)
+  return out
+}
+
 export type ChainFoldSpec = {
   /** Field holding the raw ERP code; it is rewritten to the canonical code. */
   codeField: string

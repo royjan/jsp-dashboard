@@ -8,7 +8,7 @@
  * 1675941280, and 9833964280 → 9863013680, the pair that made /top-items
  * understate its #1 item by ₪25,648).
  */
-import { foldByChain, chainCodesOf } from '../lib/services/analytics-service'
+import { foldByChain, chainCodesOf, buildStockedVariantIndex } from '../lib/services/analytics-service'
 
 let failures = 0
 const check = (name: string, cond: boolean, extra?: unknown) => {
@@ -82,6 +82,34 @@ const codes = chainCodesOf({
 check('chainCodesOf de-duplicates across all sources', codes.length === 3, codes)
 check('chainCodesOf drops blanks',
   chainCodesOf({ code: 'X', alias_codes: ['', '  ', 'Y'] }).length === 2)
+
+// ── buildStockedVariantIndex ─────────────────────────────────────────────────
+// Real shapes from the catalogue: 9812071480J is the aftermarket substitute for
+// 9812071480 (23 on the shelf against 61 unfilled quotes), while 1920LL/1920GN
+// merely share a stem and are unrelated parts.
+const catalogue = [
+  { code: '9812071480',  name: 'מכסה שסתומים',        stock_qty: 0 },
+  { code: '9812071480J', name: 'מכסה שסתומים חליפי',  stock_qty: 23 },
+  { code: '9812071480D', name: 'דיאפרגמה',            stock_qty: 4 },
+  { code: '1920LL',      name: 'מש לחץ גבוהה',        stock_qty: 0 },
+  { code: '1920GN',      name: 'other part',          stock_qty: 9 },
+  { code: '9809162280',  name: 'תושבת מנוע',          stock_qty: 0 },
+  { code: '9809162280J', name: 'תושבת חליפי',         stock_qty: 0 },   // no stock
+  { code: 'ORPHANJ',     name: 'no such base',        stock_qty: 5 },
+]
+const vidx = buildStockedVariantIndex(catalogue)
+
+check('indexes a stocked variant under the code it substitutes for',
+  vidx.get('9812071480')?.map(v => v.code).sort().join(',') === '9812071480D,9812071480J',
+  vidx.get('9812071480'))
+check('orders variants by stock, biggest first',
+  vidx.get('9812071480')?.[0].code === '9812071480J', vidx.get('9812071480'))
+check('a shared STEM is not a variant (1920GN is not 1920LL\'s substitute)',
+  !vidx.has('1920') && !vidx.has('1920LL'), [...vidx.keys()])
+check('a variant with no stock is not offered', !vidx.has('9809162280'), vidx.get('9809162280'))
+check('a suffixed code whose base does not exist indexes nothing',
+  !vidx.has('ORPHAN'), [...vidx.keys()])
+check('an unsuffixed code never indexes itself', !vidx.has('9812071480J'))
 
 console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILED`)
 process.exit(failures === 0 ? 0 : 1)

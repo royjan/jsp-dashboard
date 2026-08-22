@@ -141,7 +141,28 @@ const GAP_COLUMNS = (t: Translate): DataTableColumn<any, SortField>[] => [
       </div>
     ),
   },
-  { key: 'name', header: t('item'), sortable: true, cell: (item: any) => <ItemLink code={item.item_code} name={item.name} /> },
+  {
+    key: 'name', header: t('item'), sortable: true,
+    // A gap row with an aftermarket substitute on the shelf is a different
+    // decision from one with nothing behind it — the page used to show them
+    // identically. Still counted as a gap: a חליפי is a different SKU at a
+    // different price and the customer may refuse it.
+    cell: (item: any) => (
+      <div className="flex items-center gap-1.5">
+        <ItemLink code={item.item_code} name={item.name} />
+        {(item.variants_in_stock?.length ?? 0) > 0 && (
+          <span
+            className="shrink-0 rounded bg-amber-500/15 px-1 text-[10px] leading-4 text-amber-700 dark:text-amber-400"
+            title={item.variants_in_stock
+              .map((v: any) => `${v.code} — ${v.name} (${v.stock_qty})`)
+              .join('\n')}
+          >
+            {item.variants_in_stock.reduce((s: number, v: any) => s + (v.stock_qty || 0), 0)} חליפי
+          </span>
+        )}
+      </div>
+    ),
+  },
   { key: 'quote_count', header: t('quotesCount'), align: 'end', sortable: true, cellClassName: 'font-medium', cell: (i: any) => formatNumber(i.quote_count) },
   { key: 'total_qty', header: t('quantity'), align: 'end', sortable: true, cell: (i: any) => formatNumber(i.total_qty) },
   { key: 'last_quoted', header: t('lastQuoted'), align: 'end', sortable: true, cellClassName: 'text-muted-foreground', cell: (i: any) => formatDate(i.last_quoted) },

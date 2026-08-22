@@ -5,7 +5,7 @@ import { initializeSecrets } from '@/lib/aws-secrets'
 import { query } from '@/lib/db'
 import { fetchBatchStockGet, fetchItemsBatch } from '@/lib/finansit-client'
 import { getCached, setCache } from '@/lib/redis-client'
-import { getCanonicalizer, getItems, chainCodesOf } from '@/lib/services/analytics-service'
+import { getCanonicalizer, getItems, chainCodesOf, buildStockedVariantIndex } from '@/lib/services/analytics-service'
 
 /**
  * Gap analysis — items quoted (format 31) in the last 12 months that we cannot
@@ -131,6 +131,10 @@ export async function GET(request: Request) {
     //    quoted, and checking one code alone invents gaps that don't exist.
     const chainItems = await getItems().catch(() => [])
     const chainByCanonical = new Map(chainItems.map((it) => [it.code, it]))
+
+    // Substitutes on the shelf that the chain cannot reach — see
+    // buildStockedVariantIndex for why these are SURFACED, not merged.
+    const variantsByBase = buildStockedVariantIndex(chainItems)
     const codesFor = (canonicalCode: string, aliases: string[]): string[] => {
       const it = chainByCanonical.get(canonicalCode)
       const codes = new Set<string>(it ? chainCodesOf(it) : [canonicalCode])
@@ -183,6 +187,8 @@ export async function GET(request: Request) {
           stock_qty: q.stock_qty,
           incoming_qty: q.incoming_qty,
           ordered_qty: q.ordered_qty,
+          // Substitutes on the shelf. Still a gap — but not a blind one.
+          variants_in_stock: variantsByBase.get(String(r.item_code).toUpperCase()) || [],
         }
       })
       .filter((i) => i.stock_qty <= 0)
