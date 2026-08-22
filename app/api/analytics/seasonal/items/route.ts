@@ -45,6 +45,27 @@ function countSeasonMonths(dateFrom?: string, dateTo?: string) {
   return { winterCount: Math.max(winterCount, 1), summerCount: Math.max(summerCount, 1) }
 }
 
+/**
+ * THE FLOOR AND THE CAP BELONG AFTER THE FOLD, NOT IN THE SQL.
+ *
+ * `monthly_sales` is keyed by the code that was on the document, so a re-coded part
+ * arrives as two rows. A ₪500 floor applied to each of them separately drops a part
+ * that sold ₪300 under the old number and ₪300 under the new one — the chain is over
+ * the floor and the item is simply absent from the seasonal analysis, with nothing to
+ * show that it was excluded. Measured 2026-08-22 over dashboard.monthly_sales: 47 split
+ * chains, 5 of them invisible this way (₪3,487) and 10 more counted short by ₪2,707
+ * because only their above-floor members survived the HAVING.
+ *
+ * So the SQL keeps a much lower floor — enough to drop the long tail of one-line
+ * curiosities that would make this query scan the whole table — and SEASONAL_FLOOR is
+ * applied to the folded chain totals below. Same reasoning as the LIMIT: 1,000 raw
+ * codes could fold into fewer than 1,000 parts, so the cut also moves after the fold.
+ */
+const RAW_CODE_FLOOR = 50
+const RAW_CODE_ROWS = 4000
+const SEASONAL_FLOOR = 500
+const SEASONAL_ROWS = 1000
+
 export async function GET(request: Request) {
   try {
     await initializeSecrets()
@@ -97,13 +118,13 @@ export async function GET(request: Request) {
              SUM(CASE WHEN month IN (11,12,1,2,3,4) THEN quantity ELSE 0 END) AS winter_qty,
              SUM(CASE WHEN month IN (5,6,7,8,9,10) THEN quantity ELSE 0 END) AS summer_qty,
              SUM(quantity) AS total_qty,
-             COUNT(DISTINCT year) AS year_count
+             array_agg(DISTINCT year) AS years
            FROM monthly_sales
            ${whereClause}
            GROUP BY item_code
-           HAVING SUM(revenue) > 500
+           HAVING SUM(revenue) > ${RAW_CODE_FLOOR}
            ORDER BY total_revenue DESC
-           LIMIT 1000`,
+           LIMIT ${RAW_CODE_ROWS}`,
           params
         )
       : { rows: [] as any[] }
@@ -137,13 +158,13 @@ export async function GET(request: Request) {
             SUM(CASE WHEN month IN (11,12,1,2,3,4) THEN quantity ELSE 0 END) AS winter_qty,
             SUM(CASE WHEN month IN (5,6,7,8,9,10) THEN quantity ELSE 0 END) AS summer_qty,
             SUM(quantity) AS total_qty,
-            COUNT(DISTINCT year) AS year_count
+            array_agg(DISTINCT year) AS years
           FROM dashboard.monthly_sales
           ${pgWhere}
           GROUP BY item_code
-          HAVING SUM(revenue) > 500
+          HAVING SUM(revenue) > ${RAW_CODE_FLOOR}
           ORDER BY total_revenue DESC
-          LIMIT 1000
+          LIMIT ${RAW_CODE_ROWS}
         `, pgParams)
         if (pgResult.rows.length > 0) {
           sqliteResult = pgResult
@@ -181,7 +202,10 @@ export async function GET(request: Request) {
     }
 
     // Aggregate rows by canonical code
-    type Agg = { item_name: string; winter_revenue: number; summer_revenue: number; total_revenue: number; winter_qty: number; summer_qty: number; total_qty: number; year_count: number }
+    // YEARS AS A SET, not a count per code. Folding two codes with COUNT(DISTINCT year)
+    // can only take the max, so a chain that sold in 2024 under the old number and in
+    // 2025 under the new one reported one year of history instead of two.
+    type Agg = { item_name: string; winter_revenue: number; summer_revenue: number; total_revenue: number; winter_qty: number; summer_qty: number; total_qty: number; years: Set<number> }
     const aggMap = new Map<string, Agg>()
     for (const r of result.rows) {
       const rawCode: string = r.item_code
@@ -195,7 +219,7 @@ export async function GET(request: Request) {
         existing.winter_qty += parseFloat(r.winter_qty) || 0
         existing.summer_qty += parseFloat(r.summer_qty) || 0
         existing.total_qty += parseFloat(r.total_qty) || 0
-        existing.year_count = Math.max(existing.year_count, Number(r.year_count))
+        for (const y of (r.years ?? [])) existing.years.add(Number(y))
       } else {
         aggMap.set(canonical, {
           item_name: name,
@@ -205,13 +229,18 @@ export async function GET(request: Request) {
           winter_qty: parseFloat(r.winter_qty) || 0,
           summer_qty: parseFloat(r.summer_qty) || 0,
           total_qty: parseFloat(r.total_qty) || 0,
-          year_count: Number(r.year_count),
+          years: new Set<number>((r.years ?? []).map(Number)),
         })
       }
     }
 
     // Normalize shares by months-in-range so a uniform item always gets 0.5/0.5
-    const items: SeasonalItem[] = Array.from(aggMap.entries()).map(([code, agg]) => {
+    const items: SeasonalItem[] = Array.from(aggMap.entries())
+      // The floor the page actually means, on the number the page actually shows.
+      .filter(([, agg]) => agg.total_revenue > SEASONAL_FLOOR)
+      .sort((a, b) => b[1].total_revenue - a[1].total_revenue)
+      .slice(0, SEASONAL_ROWS)
+      .map(([code, agg]) => {
       const winterAvg = agg.winter_revenue / winterCount
       const summerAvg = agg.summer_revenue / summerCount
       const avgTotal = winterAvg + summerAvg
@@ -229,7 +258,7 @@ export async function GET(request: Request) {
         winter_share: winterShare,
         summer_share: summerShare,
         seasonality_score: Math.abs(winterShare - 0.5) * 2,
-        year_count: agg.year_count,
+        year_count: agg.years.size,
       }
     })
 

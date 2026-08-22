@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { readQueryAsync } from '@/lib/neon-read'
 import { initializeSecrets } from '@/lib/aws-secrets'
-import { getItems } from '@/lib/services/analytics-service'
+import { getItems, getCanonicalizer, foldByChain } from '@/lib/services/analytics-service'
 
 export const dynamic = 'force-dynamic'
 
@@ -153,6 +153,11 @@ export async function GET() {
         .filter(no3y)
         .map((it: any) => ({
           item_code: it.code,
+          // The codes folded into this row. getItems() already merges a chain's stock
+          // and sales, so a merged row is indistinguishable from a plain one unless it
+          // says so — and the reader who goes looking for the old code in the ERP needs
+          // to know which numbers this line is the sum of.
+          alias_codes: it.alias_codes || [],
           item_name: it.name,
           qty: it.stock_qty || 0,
           retail_price: it.price || 0,
@@ -304,7 +309,17 @@ export async function GET() {
     // node-postgres returns NUMERIC as a string, so these must be coerced —
     // otherwise `+` concatenates, every cumulative share stays <= 0.8 and the
     // whole catalogue is classified as A with a nonsense revenue figure.
-    const abcRows = abcData.map((r: any) => ({ ...r, total_revenue: Number(r.total_revenue) || 0 }))
+    // FOLD THE CHAIN BEFORE CLASSIFYING. `monthly_sales` is keyed by the code that
+    // was on the document, so a superseded part ranks as two items with a share
+    // each — measured 2026-08-22: 4,300 ranked rows over 4,252 real parts, 47 of
+    // them split. Both halves then sit lower in the cumulative curve than the part
+    // belongs, which is exactly what ABC is supposed to decide.
+    const abcCanon = await getCanonicalizer().catch(() => (c: string) => c)
+    const abcRows = foldByChain(
+      abcData.map((r: any) => ({ ...r, total_revenue: Number(r.total_revenue) || 0 })),
+      abcCanon,
+      { codeField: 'item_code', sum: ['total_revenue'], longest: ['item_name'] },
+    ).sort((a: any, b: any) => b.total_revenue - a.total_revenue)
     const totalABCRevenue = abcRows.reduce((s: number, r: any) => s + r.total_revenue, 0)
     let cumulative = 0
     let classACount = 0, classBCount = 0, classCCount = 0
@@ -344,11 +359,11 @@ export async function GET() {
     }))
 
     // 15. KPIs summary
-    const activeItems = await safeQueryOne(`
-      SELECT COUNT(DISTINCT item_code) as count
-      FROM monthly_sales
-      WHERE year >= 2024 AND revenue > 0
-    `)
+    // COUNT(DISTINCT item_code) counts CODES; a part that was re-coded counts twice.
+    // The ABC fold above already resolved every code in this same window to its
+    // chain, so the number of parts is the number of folded rows — 4,252 against
+    // the 4,300 this used to report.
+    const activeItems = { count: abcRows.length }
 
     // Same missing `item_snapshot` table as above — the dead-stock summary
     // already counted stocked items from the live cache, so reuse that rather

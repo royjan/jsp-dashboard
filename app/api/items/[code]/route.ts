@@ -7,7 +7,11 @@ import { itemChainCodes } from '@/lib/services/analytics-service'
 
 /** Must match slugify() in partly's vehicle route so deep links resolve. */
 const slug = (t: string) => t.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_-]/g, '')
-const partlyBase = (process.env.PARTLY_URL || 'http://192.168.0.112:3001').replace(/\/$/, '')
+// The origin a person actually browses partly on. :3001 is the container port and it
+// answers, but the deep links in an answer get copied into chats and tickets, so they
+// should be the address staff already have open — https://192.168.0.112/vehicle/… .
+// PARTLY_URL still overrides for a different host.
+const partlyBase = (process.env.PARTLY_URL || 'https://192.168.0.112').replace(/\/$/, '')
 
 /**
  * The scanned vehicles a part appears on, deep-linked to the exact diagram.

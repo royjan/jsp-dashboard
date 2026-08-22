@@ -51,6 +51,29 @@ check('lone code gets an empty alias list', (by.get('LONELY')!.aliases as string
 check('unknown codes map to themselves (degraded chain map is safe)',
   foldByChain([{ c: 'A', v: 1 }, { c: 'B', v: 2 }], (x) => x, { codeField: 'c', sum: ['v'] }).length === 2)
 
+// ── the two orderings that keep going wrong ─────────────────────────────────────────
+// A THRESHOLD BELONGS AFTER THE FOLD. /seasonal asked the SQL for `HAVING SUM(revenue) >
+// 500` per raw code, so a chain that sold 300 under the old number and 300 under the new
+// one was dropped before anything could add them up — the part is simply missing from the
+// page, with nothing to say it was excluded. Measured 2026-08-22 on dashboard.monthly_sales:
+// 5 chains invisible that way and 10 more counted short.
+const splitLow = [
+  { item_code: '1920LL', revenue: 300 },
+  { item_code: '9819938480', revenue: 300 },
+  { item_code: 'LONELY', revenue: 400 },
+]
+const foldedLow = foldByChain(splitLow, canon, { codeField: 'item_code', sum: ['revenue'] })
+check('a floor applied AFTER the fold keeps a chain no single code passes',
+  foldedLow.filter((r) => (r.revenue as number) > 500).map((r) => r.item_code).join() === '1675941280',
+  foldedLow)
+check('...and the same floor applied BEFORE the fold would have dropped it',
+  splitLow.filter((r) => r.revenue > 500).length === 0)
+
+// COUNTING PARTS MEANS COUNTING FOLDED ROWS. /report's "active items" KPI counted
+// DISTINCT item_code straight out of monthly_sales: 4,300 codes for 4,252 real parts.
+check('a chain counts once, not once per code',
+  foldByChain(rows, canon, { codeField: 'item_code', sum: ['revenue'] }).length === 3, rows.length)
+
 // chainCodesOf unions all four sources and de-duplicates
 const codes = chainCodesOf({
   code: '1675941280', alias_codes: ['1920LL', '9819938480'],
