@@ -2,7 +2,7 @@ export const maxDuration = 30
 
 import { NextResponse } from 'next/server'
 import { initializeSecrets } from '@/lib/aws-secrets'
-import { getItems, itemCategory } from '@/lib/services/analytics-service'
+import { getItems, itemCategory, getCanonicalizer } from '@/lib/services/analytics-service'
 import { query } from '@/lib/db'
 import { getCached, setCache } from '@/lib/redis-client'
 
@@ -35,6 +35,13 @@ export async function GET() {
       const code = String(it.code ?? '').toUpperCase()
       if (code) catByCode.set(code, itemCategory(it))
     }
+    // catByCode is keyed by CANONICAL code, monthly_sales by the raw code on the
+    // document. Without this fold every superseded code missed the map and its
+    // revenue landed in the no-category bucket, while also counting as a second
+    // "unique item".
+    const canon = await getCanonicalizer()
+    const catFor = (code: string) =>
+      catByCode.get(canon(String(code || '')).toUpperCase())
     const monthlyRows = await query(`
       SELECT item_code, year, month,
              SUM(quantity::numeric) as qty,
@@ -45,7 +52,7 @@ export async function GET() {
     `, [currentYear - 3])
     const cells = new Map<string, any>()
     for (const r of monthlyRows.rows as any[]) {
-      const cat = catByCode.get(String(r.item_code || '').toUpperCase()) || 'אחר'
+      const cat = catFor(r.item_code) || 'אחר'
       const key = `${cat}|${r.year}|${r.month}`
       const c = cells.get(key) || { category: cat, year: r.year, month: r.month, qty: 0, rev: 0 }
       c.qty += Number(r.qty) || 0

@@ -4,11 +4,11 @@ import { NextResponse } from 'next/server'
 import { initializeSecrets } from '@/lib/aws-secrets'
 import { query } from '@/lib/db'
 import { fetchBatchCost } from '@/lib/finansit-client'
-import { getItems, itemCategory } from '@/lib/services/analytics-service'
+import { getItems, itemCategory, getCanonicalizer, foldByChain } from '@/lib/services/analytics-service'
 import { getCached, setCache } from '@/lib/redis-client'
 import { CACHE_TTL } from '@/lib/constants'
 
-const CACHE_KEY = 'analytics:margin:v1'
+const CACHE_KEY = 'analytics:margin:v2'
 
 /**
  * Margin (מרווח) analytics.
@@ -84,8 +84,19 @@ export async function GET() {
       ORDER BY revenue DESC
     `)
 
+    // Fold supersession chains before ranking. Two effects, both wrong without
+    // it: one part's revenue splits across its codes and neither half makes the
+    // top 100, and an alias row misses `itemsByCode` entirely (that map is keyed
+    // by canonical code) so it renders with no live price and no category.
+    const canon = await getCanonicalizer()
+    const foldedSales = foldByChain(salesByItem.rows as any[], canon, {
+      codeField: 'item_code',
+      sum: ['revenue', 'quantity'],
+      longest: ['sales_name'],
+    }).sort((a: any, b: any) => (Number(b.revenue) || 0) - (Number(a.revenue) || 0))
+
     const byItemResult = {
-      rows: salesByItem.rows.slice(0, 100).map((r: any) => {
+      rows: foldedSales.slice(0, 100).map((r: any) => {
         const it = itemsByCode.get(String(r.item_code || '').toUpperCase())
         return {
           item_code: r.item_code,
@@ -102,7 +113,7 @@ export async function GET() {
     // Category totals over EVERY selling item, not just the top 100 — same scope the
     // SQL GROUP BY had.
     const catAgg = new Map<string, { revenue: number; quantity: number; item_count: number }>()
-    for (const r of salesByItem.rows as any[]) {
+    for (const r of foldedSales as any[]) {
       const k = catOf(r.item_code)
       const b = catAgg.get(k) || { revenue: 0, quantity: 0, item_count: 0 }
       b.revenue += Number(r.revenue) || 0
@@ -188,7 +199,9 @@ export async function GET() {
       summary: {
         total_revenue: Number(s.total_revenue) || 0,
         total_quantity: Number(s.total_quantity) || 0,
-        items_evaluated: Number(s.items_evaluated) || 0,
+        // Distinct PARTS, not distinct codes: COUNT(DISTINCT item_code) counted
+        // each member of a supersession chain as its own item.
+        items_evaluated: foldedSales.length || Number(s.items_evaluated) || 0,
         est_gross_margin_pct: overallMargin,
       },
       byCategory,

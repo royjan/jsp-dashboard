@@ -2,7 +2,7 @@ export const maxDuration = 30
 
 import { NextResponse } from 'next/server'
 import { initializeSecrets } from '@/lib/aws-secrets'
-import { getItems, itemCategory, NO_CATEGORY } from '@/lib/services/analytics-service'
+import { getItems, itemCategory, NO_CATEGORY, getCanonicalizer } from '@/lib/services/analytics-service'
 import { query } from '@/lib/db'
 import { getCached, setCache } from '@/lib/redis-client'
 
@@ -81,6 +81,13 @@ export async function GET(request: Request) {
       const code = String(it.code ?? '').toUpperCase()
       if (code) catByCode.set(code, itemCategory(it))
     }
+    // catByCode is keyed by CANONICAL code, monthly_sales by the raw code on the
+    // document. Without this fold every superseded code missed the map and its
+    // revenue landed in the no-category bucket, while also counting as a second
+    // "unique item".
+    const canon = await getCanonicalizer()
+    const catFor = (code: string) =>
+      catByCode.get(canon(String(code || '')).toUpperCase())
     const salesRows = await query(`
       SELECT item_code,
              SUM(quantity::numeric) as qty,
@@ -90,13 +97,14 @@ export async function GET(request: Request) {
       WHERE year >= $1
       GROUP BY item_code
     `, [currentYear - 2])
-    const catAgg = new Map<string, { qty: number; revenue: number; items: number; months: number }>()
+    const catAgg = new Map<string, { qty: number; revenue: number; items: Set<string>; months: number }>()
     for (const r of salesRows.rows as any[]) {
-      const k = catByCode.get(String(r.item_code || '').toUpperCase()) || NO_CATEGORY
-      const b = catAgg.get(k) || { qty: 0, revenue: 0, items: 0, months: 0 }
+      const k = catFor(r.item_code) || NO_CATEGORY
+      const b = catAgg.get(k) || { qty: 0, revenue: 0, items: new Set<string>(), months: 0 }
       b.qty += Number(r.qty) || 0
       b.revenue += Number(r.revenue) || 0
-      b.items += 1
+      // Distinct PARTS: a chain's codes are one item, counted once.
+      b.items.add(canon(String(r.item_code || '')))
       b.months += Number(r.months) || 0
       catAgg.set(k, b)
     }
@@ -107,7 +115,7 @@ export async function GET(request: Request) {
           category,
           total_qty: v.qty,
           total_revenue: v.revenue,
-          unique_items: v.items,
+          unique_items: v.items.size,
           // AVG(quantity) per monthly_sales ROW, matching the old aggregate.
           avg_monthly_qty: v.months > 0 ? v.qty / v.months : 0,
         }))

@@ -3,7 +3,7 @@ export const maxDuration = 60
 import { NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { initializeSecrets } from '@/lib/aws-secrets'
-import { getItems } from '@/lib/services/analytics-service'
+import { getItems, getCanonicalizer, foldByChain, chainCodesOf } from '@/lib/services/analytics-service'
 
 /**
  * What we actually buy from this supplier, and how fast it sells.
@@ -60,7 +60,7 @@ export async function GET(
          FROM bought b
          LEFT JOIN sales s ON s.item_code = b.item_code
         ORDER BY b.qty DESC
-        LIMIT 200`,
+        LIMIT 500`,
       [code],
     )
 
@@ -70,8 +70,48 @@ export async function GET(
       if (c) liveByCode.set(c, it)
     }
 
-    const items = res.rows.map((r0: Record<string, unknown>) => {
+    // Fold supersession chains before the cut. Purchase orders are written
+    // against whatever code was current that day, so without this a supplier's
+    // one part shows twice, and the alias half misses `liveByCode` (keyed by
+    // canonical code) so it renders with no stock, no price and no cover months.
+    // Widened to 500 above so the fold happens before the 200-row cut.
+    const canon = await getCanonicalizer()
+    const folded = foldByChain(res.rows as Record<string, unknown>[], canon, {
+      codeField: 'item_code',
+      sum: ['qty', 'orders', 'spend', 'units_sold'],
+      max: ['last_order'],
+      longest: ['item_name'],
+    })
+      .sort((a, b) => (Number(b.qty) || 0) - (Number(a.qty) || 0))
+      .slice(0, 200)
+
+    // Sales for the WHOLE chain, not just the codes this supplier's POs used —
+    // a part bought under the old code still sells under the new one.
+    const chainCodes = new Set<string>()
+    for (const r of folded) {
+      const live = liveByCode.get(String(r.item_code || '').toUpperCase())
+      for (const c of live ? chainCodesOf(live) : [String(r.item_code)]) chainCodes.add(c)
+    }
+    const chainSales = new Map<string, number>()
+    if (chainCodes.size > 0) {
+      const sres = await query(
+        `SELECT item_code, SUM(units_sold) AS units
+           FROM dashboard.yearly_item_sales
+          WHERE year >= EXTRACT(YEAR FROM CURRENT_DATE) - 1
+            AND item_code = ANY($1)
+          GROUP BY item_code`,
+        [[...chainCodes]],
+      ).catch(() => null)
+      for (const row of (sres?.rows ?? []) as any[]) {
+        const k = canon(String(row.item_code || ''))
+        chainSales.set(k, (chainSales.get(k) || 0) + (Number(row.units) || 0))
+      }
+    }
+
+    const items = folded.map((r0: Record<string, unknown>) => {
       const live = liveByCode.get(String(r0.item_code || '').toUpperCase())
+      const chainUnits = chainSales.get(String(r0.item_code || ''))
+      if (chainUnits != null) r0 = { ...r0, units_sold: chainUnits }
       const r = {
         ...r0,
         stock_qty: live?.stock_qty ?? null,

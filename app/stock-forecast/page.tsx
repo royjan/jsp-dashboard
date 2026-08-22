@@ -513,6 +513,22 @@ export default function StockForecastPage() {
                           <div className="flex items-center gap-1.5">
                             <EbayRecommendButton itemCode={item.item_code} itemName={item.item_name} />
                             <ItemLink code={item.item_code} showCode />
+                            {/* This row is the SUM of a supersession chain. The API
+                                has always returned alias_codes and nothing rendered
+                                them, so a merged row was indistinguishable from a
+                                plain one — and the stock/demand figures looked wrong
+                                to anyone who knew the old code separately. */}
+                            {(item.alias_codes?.length ?? 0) > 0 && (
+                              <span
+                                className="shrink-0 rounded bg-muted px-1 text-[10px] leading-4 text-muted-foreground"
+                                title={
+                                  (he ? 'כולל קודים קודמים: ' : 'Includes superseded codes: ') +
+                                  item.alias_codes.join(', ')
+                                }
+                              >
+                                +{item.alias_codes.length}
+                              </span>
+                            )}
                           </div>
                         </td>
                         <td className="py-2.5 max-w-[200px] truncate text-end" title={item.item_name}><ItemLink code={item.item_code} name={item.item_name || '-'} /></td>

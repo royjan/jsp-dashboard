@@ -1,0 +1,64 @@
+/**
+ * Regression guard for the chain-fold helper that eight analytics routes now
+ * depend on. No test runner in this repo — run it directly:
+ *
+ *   npx tsx scripts/check-chain-fold.ts
+ *
+ * The fixtures are REAL chains from erp.items (1920LL → 9819938480 →
+ * 1675941280, and 9833964280 → 9863013680, the pair that made /top-items
+ * understate its #1 item by ₪25,648).
+ */
+import { foldByChain, chainCodesOf } from '../lib/services/analytics-service'
+
+let failures = 0
+const check = (name: string, cond: boolean, extra?: unknown) => {
+  if (!cond) { failures++; console.log('FAIL', name, extra ?? '') } else console.log('ok  ', name)
+}
+
+// The real chain from the ERP: 1920LL -> 9819938480 -> 1675941280
+const canonMap = new Map<string, string>([
+  ['1920LL', '1675941280'], ['9819938480', '1675941280'], ['1675941280', '1675941280'],
+  ['9833964280', '9863013680'], ['9863013680', '9863013680'],
+])
+const canon = (c: string) => canonMap.get(c) ?? c
+
+const rows = [
+  { item_code: '9833964280', item_name: 'פלג', revenue: 25648, qty: 3, last: '2025-03-01' },
+  { item_code: '9863013680', item_name: 'פלג 1.2 טורבו ללא ראש', revenue: 66612, qty: 9, last: '2026-07-01' },
+  { item_code: '1920LL', item_name: '0821495761', revenue: 100, qty: 1, last: '2024-01-01' },
+  { item_code: '9819938480', item_name: '0821495761', revenue: 200, qty: 2, last: '2024-06-01' },
+  { item_code: '1675941280', item_name: 'מש לחץ גבוהה', revenue: 5950, qty: 2, last: '2026-02-01' },
+  { item_code: 'LONELY', item_name: 'x', revenue: 7, qty: 1, last: '2020-01-01' },
+]
+
+const out = foldByChain(rows, canon, {
+  codeField: 'item_code', sum: ['revenue', 'qty'], max: ['last'], longest: ['item_name'], aliasField: 'aliases',
+})
+const by = new Map(out.map(r => [r.item_code as string, r]))
+
+check('folds to one row per chain', out.length === 3, out.map(r => r.item_code))
+check('sums revenue across chain', by.get('9863013680')!.revenue === 92260, by.get('9863013680')!.revenue)
+check('sums the 3-member chain', by.get('1675941280')!.revenue === 6250, by.get('1675941280')!.revenue)
+check('sums qty', by.get('1675941280')!.qty === 5, by.get('1675941280')!.qty)
+check('keeps the newest date', by.get('1675941280')!.last === '2026-02-01', by.get('1675941280')!.last)
+check('prefers the fullest name over a code-looking one',
+  by.get('1675941280')!.item_name === 'מש לחץ גבוהה', by.get('1675941280')!.item_name)
+check('records the folded-away codes',
+  JSON.stringify((by.get('1675941280')!.aliases as string[]).sort()) === JSON.stringify(['1920LL', '9819938480']),
+  by.get('1675941280')!.aliases)
+check('a lone code survives untouched', by.get('LONELY')!.revenue === 7)
+check('lone code gets an empty alias list', (by.get('LONELY')!.aliases as string[]).length === 0)
+check('unknown codes map to themselves (degraded chain map is safe)',
+  foldByChain([{ c: 'A', v: 1 }, { c: 'B', v: 2 }], (x) => x, { codeField: 'c', sum: ['v'] }).length === 2)
+
+// chainCodesOf unions all four sources and de-duplicates
+const codes = chainCodesOf({
+  code: '1675941280', alias_codes: ['1920LL', '9819938480'],
+  chain_history: ['1920LL', '9819938480', '1675941280'], item_id_history: ['1920LL'],
+})
+check('chainCodesOf de-duplicates across all sources', codes.length === 3, codes)
+check('chainCodesOf drops blanks',
+  chainCodesOf({ code: 'X', alias_codes: ['', '  ', 'Y'] }).length === 2)
+
+console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILED`)
+process.exit(failures === 0 ? 0 : 1)

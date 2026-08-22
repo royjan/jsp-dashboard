@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { initializeSecrets } from '@/lib/aws-secrets'
-import { getItems } from '@/lib/services/analytics-service'
+import { getItems, chainCodesOf } from '@/lib/services/analytics-service'
 import { readQueryAsync } from '@/lib/neon-read'
 import { classifySize, deadnessScore, matchScore, yearsOfStock } from '@/lib/ebay-size'
 import { marketFlag } from '@/lib/ebay-browse'
@@ -45,16 +45,23 @@ export async function GET(request: Request) {
     // codes. A part-id renamed 3 years ago still counts as old if an alias in its
     // chain goes back further (e.g. 1920LL ← [9819938480, 1675941280]).
     const chainFirstYear = (it: FinansitItem): number | null => {
-      const codes = new Set<string>([it.code])
-      for (const c of it.alias_codes || []) codes.add(c)
-      for (const c of it.chain_history || []) codes.add(c)
-      for (const c of it.item_id_history || []) codes.add(c)
       let min: number | null = null
-      for (const c of codes) {
+      for (const c of chainCodesOf(it)) {
         const y = firstYearMap.get(c)
         if (y !== undefined && (min === null || y < min)) min = y
       }
       return min
+    }
+
+    // Units sold 2 years ago, summed over the chain. This used to read only
+    // sold2yMap.get(item.code) while the two lookups either side of it walked the
+    // chain — so an alias's sales vanished from `demand` and from the match
+    // score. 9847039280 was presented as demand=0 dead stock while its alias
+    // 9806625280 had sold 4 units that year.
+    const chainSold2y = (it: FinansitItem): number => {
+      let total = 0
+      for (const c of chainCodesOf(it)) total += sold2yMap.get(c) || 0
+      return total
     }
 
     // eBay price comparison, populated by /api/cron/ebay-prices. Keyed by any
@@ -66,7 +73,7 @@ export async function GET(request: Request) {
     const ebayMap = new Map<string, EbayRow>()
     for (const r of ebayRows) ebayMap.set(r.item_code, r)
     const chainEbay = (it: FinansitItem): EbayRow | null => {
-      for (const c of [it.code, ...(it.alias_codes || []), ...(it.chain_history || []), ...(it.item_id_history || [])]) {
+      for (const c of chainCodesOf(it)) {
         const hit = ebayMap.get(c)
         if (hit) return hit
       }
@@ -82,7 +89,7 @@ export async function GET(request: Request) {
       const stock = it.stock_qty || 0
       const sold2026 = it.sold_this_year || 0
       const sold2025 = it.sold_last_year || 0
-      const sold2024 = sold2yMap.get(code) || 0
+      const sold2024 = chainSold2y(it)
       const demand = sold2025 + sold2024
 
       // skip junk placeholder rows + fee/discount pseudo-items

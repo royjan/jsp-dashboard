@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { initializeSecrets } from '@/lib/aws-secrets'
 import { query } from '@/lib/db'
 import { deriveBrand, BRAND_RANK } from '@/lib/brand'
+import { partlyCandidates } from '@/lib/partly-codes'
 
 /**
  * Cross-brand linked parts ("aliases") for an item, from partly.part_links —
@@ -20,20 +21,6 @@ import { deriveBrand, BRAND_RANK } from '@/lib/brand'
  *          (schema-match) rows are set status='rejected' so the rebuild
  *          script cannot resurrect them.
  */
-
-/** Candidate partly item_numbers for a dashboard/Finansit code. */
-async function partlyCandidates(upper: string): Promise<string[]> {
-  const candidates = new Set<string>([upper])
-  if (upper.startsWith('MG')) candidates.add(upper.slice(2))
-  const manual = await query(
-    `SELECT partly_item_number FROM partly.finansit_links WHERE finansit_code = $1`,
-    [upper]
-  ).catch(() => null)
-  for (const row of manual?.rows ?? []) {
-    if (row.partly_item_number) candidates.add(String(row.partly_item_number).toUpperCase())
-  }
-  return Array.from(candidates)
-}
 
 /** Resolve a code to its partly.global_parts row (first candidate that exists). */
 async function resolveGlobalPart(

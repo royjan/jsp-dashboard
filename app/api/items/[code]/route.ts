@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { client } from '@/lib/finansit-client'
 import { initializeSecrets } from '@/lib/aws-secrets'
 import { query } from '@/lib/db'
+import { partlyCandidates, partlyMatchForms } from '@/lib/partly-codes'
+import { itemChainCodes } from '@/lib/services/analytics-service'
 
 /** Must match slugify() in partly's vehicle route so deep links resolve. */
 const slug = (t: string) => t.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_-]/g, '')
@@ -10,14 +12,25 @@ const partlyBase = (process.env.PARTLY_URL || 'http://192.168.0.112:3001').repla
 /**
  * The scanned vehicles a part appears on, deep-linked to the exact diagram.
  *
- * Matched on the normalised number: exactly, or with Jan's trailing letter
- * suffix stripped (`1686490780` ↔ `1686490780J`). `partly.finansit_links`
- * exists for an explicit mapping but is empty. Trailing letters come off only
- * OUR code, never the OEM number, so real `…A`/`…B` variants can't collide.
+ * Matched over EVERY spelling the part can have in partly (see partlyCandidates:
+ * exact, MG-prefix-stripped, manual finansit_links mapping, Jan's trailing-letter
+ * stem) and over EVERY code in the ERP supersession chain.
+ *
+ * Both halves were missing and both failed silently, as an empty card:
+ *  · the MG prefix — partly stores `10526735`, the ERP `MG10526735`, so all
+ *    9,931 MG item pages showed no vehicles at all while the catalogue held the
+ *    fitment (MG10526735 alone fits 8 scanned cars);
+ *  · the chain — 284 superseded codes carry their partly row on the OLD number,
+ *    so opening the canonical successor found nothing.
  */
 async function vehiclesFor(itemCode: string) {
-  const norm = itemCode.replace(/[^A-Za-z0-9]/g, '').toUpperCase()
-  const stem = norm.replace(/[A-Z]+$/, '')
+  const chain = await itemChainCodes(itemCode).catch(() => [itemCode])
+  const candidates = (
+    await Promise.all(chain.map((c) => partlyCandidates(c).catch(() => [c])))
+  ).flat()
+  const forms = partlyMatchForms(candidates.length > 0 ? candidates : [itemCode])
+  if (forms.length === 0) return []
+
   const res = await query(
     `SELECT DISTINCT ON (p.id)
             p.id AS project_id, p.vin, p.make, p.model, p.year,
@@ -28,10 +41,10 @@ async function vehiclesFor(itemCode: string) {
        LEFT JOIN partly.schemas s ON s.id = pp.schema_id
        LEFT JOIN partly.subcategories sub ON sub.id = s.subcategory_id
        LEFT JOIN partly.categories c ON c.id = sub.category_id
-      WHERE upper(regexp_replace(gp.item_number, '[^A-Za-z0-9]', '', 'g')) IN ($1, $2)
+      WHERE upper(regexp_replace(gp.item_number, '[^A-Za-z0-9]', '', 'g')) = ANY($1)
       ORDER BY p.id, p.year DESC NULLS LAST
       LIMIT 30`,
-    [norm, stem],
+    [forms],
   ).catch(() => null)
 
   return (res?.rows ?? []).map((r: any) => ({

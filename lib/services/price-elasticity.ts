@@ -18,6 +18,7 @@
  * shown side by side or a repriced list looks like an ignored recommendation.
  */
 import { query } from '@/lib/db'
+import { getCanonicalizer } from './analytics-service'
 import { fetchBatchPrices, fetchBatchCost } from '@/lib/finansit-client'
 
 export interface PricePoint {
@@ -135,16 +136,25 @@ export async function getPriceElasticity(
     `,
   )
 
-  // Group by item_code
+  // Group by CANONICAL item_code — one series per physical part, not per ERP
+  // code. This one matters more than the usual chain fix: the `minMonths` floor
+  // below drops a series outright, so a part whose history is split 4 months on
+  // the old code and 4 on the new vanishes from the report instead of
+  // qualifying with 8. Points from both codes are the same part's price history.
+  const canon = await getCanonicalizer()
   const byItem = new Map<
     string,
     { name: string | null; points: PricePoint[] }
   >()
   for (const row of result.rows) {
-    const code = row.item_code as string
+    const code = canon(String(row.item_code ?? ''))
     const qty = Number(row.qty)
     const revenue = Number(row.revenue)
     const entry = byItem.get(code) || { name: row.item_name, points: [] as PricePoint[] }
+    // The fullest name wins — an alias row often carries the code as its "name".
+    if (String(row.item_name ?? '').length > String(entry.name ?? '').length) {
+      entry.name = row.item_name
+    }
     entry.points.push({
       year: Number(row.year),
       month: Number(row.month),
@@ -153,6 +163,20 @@ export async function getPriceElasticity(
       unit_price: revenue / qty,
     })
     byItem.set(code, entry)
+  }
+  // Two codes can carry the same (year, month) — merge those into one point so a
+  // single month cannot count twice toward minMonths or skew the price tiers.
+  for (const entry of byItem.values()) {
+    const merged = new Map<string, PricePoint>()
+    for (const p of entry.points) {
+      const k = `${p.year}-${p.month}`
+      const prev = merged.get(k)
+      if (!prev) { merged.set(k, { ...p }); continue }
+      prev.qty += p.qty
+      prev.revenue += p.revenue
+      prev.unit_price = prev.qty > 0 ? prev.revenue / prev.qty : prev.unit_price
+    }
+    entry.points = [...merged.values()].sort((a, b) => a.year - b.year || a.month - b.month)
   }
 
   // Compute per-item stats

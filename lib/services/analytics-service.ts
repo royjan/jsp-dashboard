@@ -431,6 +431,164 @@ export async function getChainMap(): Promise<Map<string, string>> {
   return cachedChainMap || new Map()
 }
 
+// ── Chain-aware aggregation helpers ──
+//
+// getItems() returns ONE row per supersession chain, keyed by the canonical
+// code. Every other store — monthly_sales, document_lines, yearly_item_sales,
+// ebay_price_compare, competitor_items — is keyed by the RAW code the document
+// was written against. Joining the two without folding is the single most
+// repeated bug in this file's callers: an alias's sales silently vanish (the
+// lookup misses) and one physical part ranks as two, so 18 of the top-20
+// selling items understated their revenue and the order scrambled.
+//
+// Use ONE of these two, never a bare `map.get(item.code)`:
+//   · getCanonicalizer() — fold raw-code rows UP to the canonical code
+//   · chainCodesOf(item) — fan an item DOWN to every code to look up
+
+/**
+ * Every ERP code belonging to an item's chain: the canonical code plus every
+ * alias the merge folded into it. Sum raw-code lookups over all of these.
+ */
+export function chainCodesOf(item: {
+  code: string
+  alias_codes?: string[] | null
+  chain_history?: string[] | null
+  item_id_history?: string[] | null
+}): string[] {
+  const out = new Set<string>()
+  for (const c of [
+    item.code,
+    ...(item.alias_codes || []),
+    ...(item.chain_history || []),
+    ...(item.item_id_history || []),
+  ]) {
+    const s = String(c ?? '').trim()
+    if (s) out.add(s)
+  }
+  return [...out]
+}
+
+/**
+ * A raw-code → canonical-code resolver. Tolerant of case and padding, because
+ * the document tables are not as tidy as the item master. Unknown codes map to
+ * themselves, so a cold/degraded chain map degrades to today's behaviour rather
+ * than collapsing unrelated parts together.
+ */
+export async function getCanonicalizer(): Promise<(code: string) => string> {
+  const map = await getChainMap()
+  return (code: string) => {
+    const raw = String(code ?? '').trim()
+    if (!raw) return raw
+    return map.get(raw) ?? map.get(raw.toUpperCase()) ?? raw
+  }
+}
+
+/**
+ * Every code in ONE item's chain, resolved from both sources and unioned:
+ * FINAPI's per-item history (authoritative, cheap, one call) and the merged
+ * catalogue (carries aliases the per-item history sometimes doesn't).
+ *
+ * For per-item drill-downs — documents, fitment, anything keyed by raw code.
+ * Always returns at least the requested code, so a FINAPI hiccup degrades to
+ * today's single-code behaviour instead of an empty result.
+ */
+export async function itemChainCodes(code: string): Promise<string[]> {
+  const requested = String(code ?? '').trim()
+  const out = new Set<string>()
+  if (requested) out.add(requested)
+
+  const [history, chainMap] = await Promise.all([
+    client.items.getHistory(requested).catch(() => null),
+    getChainMap().catch(() => new Map<string, string>()),
+  ])
+  if (history?.canonical_code) out.add(history.canonical_code)
+  for (const c of history?.item_id_history ?? []) if (c) out.add(String(c))
+
+  const canonical = chainMap.get(requested) ?? chainMap.get(requested.toUpperCase()) ?? requested
+  out.add(canonical)
+  try {
+    const item = (await getItems()).find((i) => i.code === canonical)
+    if (item) for (const c of chainCodesOf(item)) out.add(c)
+  } catch {
+    // catalogue unavailable — the history codes above still stand
+  }
+
+  return [...out].map((c) => String(c).trim()).filter(Boolean)
+}
+
+export type ChainFoldSpec = {
+  /** Field holding the raw ERP code; it is rewritten to the canonical code. */
+  codeField: string
+  /** Numeric fields to add up across the chain. */
+  sum?: string[]
+  /** Fields to keep the greatest value of (dates, "last seen"). */
+  max?: string[]
+  /** Fields to keep the longest value of (names — the fullest wins). */
+  longest?: string[]
+  /** Optional field to receive the folded-away sibling codes. */
+  aliasField?: string
+}
+
+/**
+ * Fold rows keyed by raw ERP code into one row per chain.
+ *
+ * IMPORTANT: fold BEFORE any LIMIT/slice/HAVING that ranks rows. Truncating
+ * first can drop a chain member whose revenue belonged in the total, which is
+ * how /top-items lost a chain that outranked everything left in its top 50.
+ */
+export function foldByChain<R extends Record<string, unknown>>(
+  rows: R[],
+  canon: (code: string) => string,
+  spec: ChainFoldSpec,
+): R[] {
+  const { codeField, sum = [], max = [], longest = [], aliasField } = spec
+  const groups = new Map<string, R[]>()
+  for (const r of rows) {
+    const key = canon(String(r[codeField] ?? ''))
+    const g = groups.get(key)
+    if (g) g.push(r)
+    else groups.set(key, [r])
+  }
+
+  const out: R[] = []
+  for (const [canonical, group] of groups) {
+    // Base = the member already carrying the canonical code; failing that the
+    // dominant row by the first summed field, so non-numeric fields we don't
+    // explicitly merge come from the row that actually represents the part.
+    const primary = sum[0]
+    const base =
+      group.find((r) => String(r[codeField] ?? '').trim() === canonical) ??
+      (primary
+        ? group.reduce((a, b) => ((Number(b[primary]) || 0) > (Number(a[primary]) || 0) ? b : a))
+        : group[0])
+
+    const merged: Record<string, unknown> = { ...base, [codeField]: canonical }
+    for (const f of sum) merged[f] = 0
+    for (const f of max) merged[f] = null
+    for (const f of longest) merged[f] = ''
+
+    for (const r of group) {
+      for (const f of sum) merged[f] = (Number(merged[f]) || 0) + (Number(r[f]) || 0)
+      for (const f of max) {
+        const cand = r[f] as string | number | null | undefined
+        const cur = merged[f] as string | number | null | undefined
+        if (cand != null && (cur == null || cand > cur)) merged[f] = cand
+      }
+      for (const f of longest) {
+        const cand = String(r[f] ?? '')
+        if (cand.length > String(merged[f] ?? '').length) merged[f] = r[f]
+      }
+    }
+    if (aliasField) {
+      merged[aliasField] = group
+        .map((r) => String(r[codeField] ?? '').trim())
+        .filter((c) => c && c !== canonical)
+    }
+    out.push(merged as R)
+  }
+  return out
+}
+
 // ── Items with full enrichment ──
 
 // In-flight deduplication: if getItems() is already running, reuse the same promise
@@ -1634,7 +1792,7 @@ async function reconcileStockFromItemApi(rows: TopSellingItem[]): Promise<void> 
 }
 
 export async function getTopSellingItems(period: string = '30d', forceRefresh = false): Promise<TopSellingItem[]> {
-  const cacheKey = `analytics:top-items:${period}`
+  const cacheKey = `analytics:top-items:v2:${period}`
   const cached = forceRefresh ? null : await getCached<TopSellingItem[]>(cacheKey)
   if (cached) {
     // Only sales aggregates are cached; stock can be stale/wrong (bulk feed quirk),
@@ -1663,26 +1821,43 @@ export async function getTopSellingItems(period: string = '30d', forceRefresh = 
     const toYear = now.getFullYear()
     const toMonth = now.getMonth() + 1
 
+    // GROUP BY item_code ONLY. Grouping by item_name as well split a single
+    // code across its name spellings in monthly_sales — 17 of the top 20 were
+    // affected, and pseudo-item `000` reported ₪22,302 of a real ₪91,004 across
+    // 7 variants. MAX() picks one name; the chain fold below prefers the fullest.
+    //
+    // And take 500 rows, not 50: the chain fold must happen BEFORE the cut, or a
+    // sibling ranked 200th never gets added to the canonical row that displays.
     const dbResult = await readQueryAsync(
-      `SELECT item_code, item_name,
+      `SELECT item_code,
+              MAX(item_name) AS item_name,
               SUM(quantity) AS total_qty,
               SUM(revenue) AS total_revenue,
               SUM(invoice_count) AS total_count
        FROM monthly_sales
        WHERE (year > ? OR (year = ? AND month >= ?))
          AND (year < ? OR (year = ? AND month <= ?))
-       GROUP BY item_code, item_name
+       GROUP BY item_code
        HAVING SUM(revenue) > 0
        ORDER BY total_revenue DESC
-       LIMIT 50`,
+       LIMIT 500`,
       [fromYear, fromYear, fromMonth, toYear, toYear, toMonth]
     )
 
     if (dbResult.rows.length > 0) {
       const items = await getItems()
       const itemMap = new Map(items.map(i => [i.code, i]))
+      const canon = await getCanonicalizer()
 
-      const result: TopSellingItem[] = dbResult.rows.map((r: any) => {
+      // Fold the supersession chains, THEN rank. 9863013680 showed ₪66,612 while
+      // its alias 9833964280 held another ₪25,648 of the same part's sales.
+      const folded = foldByChain(dbResult.rows as any[], canon, {
+        codeField: 'item_code',
+        sum: ['total_revenue', 'total_qty', 'total_count'],
+        longest: ['item_name'],
+      }).sort((a: any, b: any) => (Number(b.total_revenue) || 0) - (Number(a.total_revenue) || 0))
+
+      const result: TopSellingItem[] = folded.map((r: any) => {
         const item = itemMap.get(r.item_code)
         const soldThisYear = item?.sold_this_year || 0
         const soldLastYear = item?.sold_last_year || 0

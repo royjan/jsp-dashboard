@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server'
 import { initializeSecrets } from '@/lib/aws-secrets'
 import { query } from '@/lib/db'
 import { getCached, setCache } from '@/lib/redis-client'
+import { getCanonicalizer, foldByChain } from '@/lib/services/analytics-service'
 
 const TOP_N = 8
 
@@ -19,7 +20,7 @@ export async function GET(request: Request) {
     const dateFrom = searchParams.get('date_from') || undefined
     const dateTo = searchParams.get('date_to') || undefined
 
-    const cacheKey = `analytics:seasonal-by-month:v1:${dateFrom || 'all'}:${dateTo || 'all'}`
+    const cacheKey = `analytics:seasonal-by-month:v2:${dateFrom || 'all'}:${dateTo || 'all'}`
     const cached = await getCached<any>(cacheKey)
     if (cached) return NextResponse.json(cached)
 
@@ -64,9 +65,20 @@ export async function GET(request: Request) {
       byMonth.set(m, arr)
     }
 
+    // Fold each month's rows onto their canonical codes before taking the top N.
+    // monthly_sales is keyed by whatever code was current when the invoice was
+    // written, so one part superseded mid-history shows up as two lesser items
+    // and can miss the cut that either half's merged total would have made.
+    const canon = await getCanonicalizer()
     const months = Array.from({ length: 12 }, (_, i) => i + 1).map((m) => ({
       month: m,
-      items: (byMonth.get(m) || []).sort((a, b) => b.revenue - a.revenue).slice(0, TOP_N),
+      items: foldByChain(byMonth.get(m) || [], canon, {
+        codeField: 'item_code',
+        sum: ['revenue', 'qty'],
+        longest: ['item_name'],
+      })
+        .sort((a, b) => b.revenue - a.revenue)
+        .slice(0, TOP_N),
     }))
 
     const payload = { months }
