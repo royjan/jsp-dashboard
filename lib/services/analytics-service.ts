@@ -516,7 +516,31 @@ export async function itemChainCodes(code: string): Promise<string[]> {
   return [...out].map((c) => String(c).trim()).filter(Boolean)
 }
 
-export type StockedVariant = { code: string; name: string; stock_qty: number }
+export type StockedVariant = {
+  code: string
+  name: string
+  stock_qty: number
+  /** True only when the item names itself חליפי — an actual substitute. */
+  is_substitute: boolean
+}
+
+/**
+ * A suffixed code is a RELATED code, not automatically a substitute.
+ *
+ * Measured on prod 2026-08-22, `9812071480` has three stocked suffixed siblings
+ * and only one of them could fill an order for it:
+ *
+ *   9812071480S  84  שסתום עבור מכסה שסתומים   — a valve FOR the cover
+ *   9812071480D   8  דיאפרגמה מכסה שסתומים     — a diaphragm for it
+ *   9812071480J  23  מכסה שסתומים חליפי        — the substitute cover
+ *
+ * Presenting all three as substitutes would tell a buyer they hold 115 covers
+ * when they hold 23. The ERP has no field that says which is which, but the
+ * item NAME does: Jan writes חליפי on a substitute. So the flag is read from
+ * the name, and everything else is offered as merely related — worth a look,
+ * not a claim.
+ */
+const SUBSTITUTE_MARKER = /חליפי/
 
 /**
  * Jan's own suffixed variants that are IN STOCK, indexed by the code they
@@ -548,10 +572,19 @@ export function buildStockedVariantIndex(
     const base = m[1]
     if (!known.has(base)) continue
     const list = out.get(base) || []
-    list.push({ code: it.code, name: it.name ?? '', stock_qty: it.stock_qty || 0 })
+    list.push({
+      code: it.code,
+      name: it.name ?? '',
+      stock_qty: it.stock_qty || 0,
+      is_substitute: SUBSTITUTE_MARKER.test(it.name ?? ''),
+    })
     out.set(base, list)
   }
-  for (const list of out.values()) list.sort((a, b) => b.stock_qty - a.stock_qty)
+  // Substitutes first — they are the only ones that can fill the order.
+  for (const list of out.values()) {
+    list.sort((a, b) =>
+      Number(b.is_substitute) - Number(a.is_substitute) || b.stock_qty - a.stock_qty)
+  }
   return out
 }
 

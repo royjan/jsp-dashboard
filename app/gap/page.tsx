@@ -150,16 +150,29 @@ const GAP_COLUMNS = (t: Translate): DataTableColumn<any, SortField>[] => [
     cell: (item: any) => (
       <div className="flex items-center gap-1.5">
         <ItemLink code={item.item_code} name={item.name} />
-        {(item.variants_in_stock?.length ?? 0) > 0 && (
-          <span
-            className="shrink-0 rounded bg-amber-500/15 px-1 text-[10px] leading-4 text-amber-700 dark:text-amber-400"
-            title={item.variants_in_stock
-              .map((v: any) => `${v.code} — ${v.name} (${v.stock_qty})`)
-              .join('\n')}
-          >
-            {item.variants_in_stock.reduce((s: number, v: any) => s + (v.stock_qty || 0), 0)} חליפי
-          </span>
-        )}
+        {(item.variants_in_stock?.length ?? 0) > 0 && (() => {
+          // Only a חליפי can actually fill the order. The other suffixed codes
+          // (9812071480S is a valve FOR the cover, ...D a diaphragm) are related
+          // parts, and badging their 92 units as substitutes would tell the
+          // buyer they hold 115 covers when they hold 23.
+          const subs = item.variants_in_stock.filter((v: any) => v.is_substitute)
+          const qty = (subs.length ? subs : item.variants_in_stock)
+            .reduce((s: number, v: any) => s + (v.stock_qty || 0), 0)
+          return (
+            <span
+              className={`shrink-0 rounded px-1 text-[10px] leading-4 ${
+                subs.length
+                  ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400'
+                  : 'bg-muted text-muted-foreground'
+              }`}
+              title={item.variants_in_stock
+                .map((v: any) => `${v.code} — ${v.name} (${v.stock_qty})${v.is_substitute ? ' ✓' : ''}`)
+                .join('\n')}
+            >
+              {qty} {subs.length ? 'חליפי' : 'קרוב'}
+            </span>
+          )
+        })()}
       </div>
     ),
   },

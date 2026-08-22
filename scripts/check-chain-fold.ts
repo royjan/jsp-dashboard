@@ -90,7 +90,8 @@ check('chainCodesOf drops blanks',
 const catalogue = [
   { code: '9812071480',  name: 'מכסה שסתומים',        stock_qty: 0 },
   { code: '9812071480J', name: 'מכסה שסתומים חליפי',  stock_qty: 23 },
-  { code: '9812071480D', name: 'דיאפרגמה',            stock_qty: 4 },
+  { code: '9812071480D', name: 'דיאפרגמה  מכסה שסתומים', stock_qty: 8 },
+  { code: '9812071480S', name: 'שסתום עבור מכסה שסתומים', stock_qty: 84 },
   { code: '1920LL',      name: 'מש לחץ גבוהה',        stock_qty: 0 },
   { code: '1920GN',      name: 'other part',          stock_qty: 9 },
   { code: '9809162280',  name: 'תושבת מנוע',          stock_qty: 0 },
@@ -100,16 +101,20 @@ const catalogue = [
 const vidx = buildStockedVariantIndex(catalogue)
 
 check('indexes a stocked variant under the code it substitutes for',
-  vidx.get('9812071480')?.map(v => v.code).sort().join(',') === '9812071480D,9812071480J',
+  vidx.get('9812071480')?.map(v => v.code).sort().join(',') === '9812071480D,9812071480J,9812071480S',
   vidx.get('9812071480'))
-check('orders variants by stock, biggest first',
-  vidx.get('9812071480')?.[0].code === '9812071480J', vidx.get('9812071480'))
 check('a shared STEM is not a variant (1920GN is not 1920LL\'s substitute)',
   !vidx.has('1920') && !vidx.has('1920LL'), [...vidx.keys()])
 check('a variant with no stock is not offered', !vidx.has('9809162280'), vidx.get('9809162280'))
 check('a suffixed code whose base does not exist indexes nothing',
   !vidx.has('ORPHAN'), [...vidx.keys()])
 check('an unsuffixed code never indexes itself', !vidx.has('9812071480J'))
+check('only a חליפי counts as a substitute — the others are merely related',
+  vidx.get('9812071480')?.filter(v => v.is_substitute).map(v => v.code).join(',') === '9812071480J',
+  vidx.get('9812071480')?.map(v => [v.code, v.is_substitute]))
+check('substitutes sort ahead of bigger non-substitute piles',
+  vidx.get('9812071480')?.[0].code === '9812071480J',
+  vidx.get('9812071480')?.map(v => v.code))
 
 console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILED`)
 process.exit(failures === 0 ? 0 : 1)
