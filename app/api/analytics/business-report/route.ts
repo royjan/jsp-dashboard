@@ -397,7 +397,10 @@ export async function GET() {
         classA: { count: classACount, revenue: classARevenue },
         classB: { count: classBCount, revenue: classBRevenue },
         classC: { count: classCCount, revenue: classCRevenue },
-        total_items: abcData.length,
+        // The FOLDED count, matching the three class counts beside it. `abcData.length`
+        // is raw codes, so the header said 4,300 over classes that summed to 4,234 —
+        // the same off-by-a-chain the class counts were just fixed for.
+        total_items: abcRows.length,
         total_revenue: totalABCRevenue,
       },
       seasonality,
