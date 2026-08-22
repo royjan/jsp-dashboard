@@ -21,7 +21,10 @@ export async function GET(request: Request) {
     const [profile, balance, aging] = await Promise.all([
       client.customers.get(code),
       fetchCustomerBalanceFallback(code).catch(() => null),
-      fetchCustomerAgingFallback(code, { include_documents: false }).catch(() => null),
+      // include_documents is free (measured 0.25s either way on .109) and is the
+      // ONLY source of per-document days_overdue/bucket — /unpaid returns the same
+      // documents without them.
+      fetchCustomerAgingFallback(code, { include_documents: true }).catch(() => null),
     ])
 
     return NextResponse.json({
@@ -34,6 +37,18 @@ export async function GET(request: Request) {
         days_90: Number(aging?.buckets?.['61_90']?.total ?? aging?.['61_90'] ?? 0) || 0,
         over_90: Number(aging?.buckets?.over_90?.total ?? aging?.['90_plus'] ?? 0) || 0,
       },
+      // The open documents that make up the balance. Verified 2026-08-22: their
+      // amounts sum to net_balance to the shekel.
+      aging_as_of: aging?.as_of ?? null,
+      aging_documents: (aging?.documents ?? []).map((d: any) => ({
+        format: String(d.format ?? '11'),
+        doc_number: String(d.doc_number ?? ''),
+        doc_date: d.doc_date ?? '',
+        due_date: d.due_date ?? '',
+        days_overdue: Number(d.days_overdue ?? 0) || 0,
+        bucket: String(d.bucket ?? 'current'),
+        amount: Number(d.amount ?? 0) || 0,
+      })),
     })
   } catch (error) {
     return NextResponse.json(

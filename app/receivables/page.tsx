@@ -47,8 +47,10 @@ const RECEIVABLES_COLUMNS = (t: Translate): DataTableColumn<any>[] => [
     sortable: true,
     truncate: 'max-w-[220px]',
     title: (c: any) => c.name,
+    // Straight into the open-debts tab: from an AR row, the invoices behind the
+    // balance are what the reader is after, not the purchase history.
     cell: (c: any) => (
-      <Link href={`/customers/${c.code}`} className="font-medium text-primary hover:underline">
+      <Link href={`/customers/${c.code}/unpaid`} className="font-medium text-primary hover:underline">
         {c.name}
       </Link>
     ),

@@ -330,6 +330,10 @@ export const translations = {
     agent: 'סוכן',
 
     // Customer drill-down
+    'customer.openDebts': 'חובות פתוחים',
+    'customer.openDebtsWindow': 'המסמכים הפתוחים שמרכיבים את היתרה · נכון ל-{date}',
+    'customer.noOpenDebts': 'אין חובות פתוחים',
+    'customer.daysOverdue': 'ימי איחור',
     'customer.purchasesWindow': 'מציג את {days} הימים האחרונים · שנה פעילה בלבד',
     'customer.documentsWindow': 'מציג עד 250 המסמכים האחרונים',
     'drilldown.invoicesForItem': 'חשבוניות לפריט זה בתקופה שנבחרה',
@@ -1050,6 +1054,10 @@ export const translations = {
     agent: 'Agent',
 
     // Customer drill-down
+    'customer.openDebts': 'Open Debts',
+    'customer.openDebtsWindow': 'The open documents that make up the balance · as of {date}',
+    'customer.noOpenDebts': 'No open debts',
+    'customer.daysOverdue': 'Days Overdue',
     'customer.purchasesWindow': 'Last {days} days · active year only',
     'customer.documentsWindow': 'Latest 250 documents',
     'drilldown.invoicesForItem': 'Invoices for this item in the selected period',
