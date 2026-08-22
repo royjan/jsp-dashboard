@@ -536,11 +536,15 @@ export type ChainFoldSpec = {
  * first can drop a chain member whose revenue belonged in the total, which is
  * how /top-items lost a chain that outranked everything left in its top 50.
  */
+// The returned rows carry the input's fields plus `aliasField` when one is
+// requested, which TypeScript cannot express as plain `R[]` — hence the index
+// signature. R's own fields keep their exact types through the intersection;
+// only a key that wasn't on R (i.e. aliasField) comes back as `unknown`.
 export function foldByChain<R extends Record<string, unknown>>(
   rows: R[],
   canon: (code: string) => string,
   spec: ChainFoldSpec,
-): R[] {
+): (R & Record<string, unknown>)[] {
   const { codeField, sum = [], max = [], longest = [], aliasField } = spec
   const groups = new Map<string, R[]>()
   for (const r of rows) {
@@ -550,7 +554,7 @@ export function foldByChain<R extends Record<string, unknown>>(
     else groups.set(key, [r])
   }
 
-  const out: R[] = []
+  const out: (R & Record<string, unknown>)[] = []
   for (const [canonical, group] of groups) {
     // Base = the member already carrying the canonical code; failing that the
     // dominant row by the first summed field, so non-numeric fields we don't
@@ -584,7 +588,7 @@ export function foldByChain<R extends Record<string, unknown>>(
         .map((r) => String(r[codeField] ?? '').trim())
         .filter((c) => c && c !== canonical)
     }
-    out.push(merged as R)
+    out.push(merged as R & Record<string, unknown>)
   }
   return out
 }
