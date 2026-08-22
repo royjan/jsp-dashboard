@@ -3,12 +3,49 @@ export const maxDuration = 30
 import { NextResponse } from 'next/server'
 import { initializeSecrets } from '@/lib/aws-secrets'
 import { getItems, getCanonicalizer, getCategorizer } from '@/lib/services/analytics-service'
-import { query } from '@/lib/db'
+import { query, slowQuery } from '@/lib/db'
 import { getCached, setCache } from '@/lib/redis-client'
 
 // v2: real part-type categories (erp.item_categories) instead of one ⁧ללא קטגוריה⁩ series.
 const CACHE_KEY = 'vehicle-population:lifecycle:v2'
 const CACHE_TTL = 86400 // 24h
+
+const AGE_KEY = 'vehicle-population:age-dist:v1'
+const AGE_TTL = 86400 // a day; registrations move slower than that
+let ageRefreshInflight: Promise<void> | null = null
+
+/** Cached vehicle-age histogram. Empty map = not warm yet; a refresh is now running. */
+async function ageDistribution(currentYear: number): Promise<Map<number, number>> {
+  const cached = await getCached<Array<[number, number]>>(AGE_KEY)
+  if (cached?.length) return new Map(cached.map(([a, c]) => [Number(a), Number(c)]))
+  refreshAgeDistribution(currentYear)
+  return new Map()
+}
+
+function refreshAgeDistribution(currentYear: number): void {
+  if (ageRefreshInflight) return
+  ageRefreshInflight = (async () => {
+    const t0 = Date.now()
+    // SARGABLE, unlike the version this replaces: a plain range on the column itself, so
+    // the day someone adds the index it is used without touching this file again.
+    const res = await slowQuery(
+      `SELECT date_part('year', "registrationDate")::int AS year,
+              SUM(COALESCE(quantity, 1))                 AS count
+         FROM ics."Vehicles"
+        WHERE "registrationDate" >= make_date($1, 1, 1)
+          AND "registrationDate" <  make_date($2, 1, 1)
+        GROUP BY 1`,
+      [currentYear - 15, currentYear + 1],
+    )
+    const pairs: Array<[number, number]> = res.rows.map((r: any) => [
+      currentYear - Number(r.year), Number(r.count) || 0,
+    ])
+    if (pairs.length > 0) await setCache(AGE_KEY, pairs, AGE_TTL)
+    console.log(`[Vehicle Lifecycle] age distribution warmed: ${pairs.length} years in ${Date.now() - t0}ms`)
+  })().catch((e) => {
+    console.warn('[Vehicle Lifecycle] age distribution refresh failed:', e?.message?.slice(0, 140))
+  }).finally(() => { ageRefreshInflight = null })
+}
 
 /**
  * Vehicle lifecycle analysis: shows which maintenance items peak at which vehicle age.
@@ -84,22 +121,21 @@ export async function GET() {
       .slice(0, 12)
       .map(([cat]) => cat)
 
-    // Vehicle age distribution for normalization
-    const ageDistResult = await query(`
-      SELECT
-        ($1 - EXTRACT(YEAR FROM "registrationDate")::int) as age,
-        SUM(COALESCE(quantity, 1)) as count
-      FROM ics."Vehicles"
-      WHERE EXTRACT(YEAR FROM "registrationDate") >= $2
-        AND EXTRACT(YEAR FROM "registrationDate") <= $1
-      GROUP BY age
-      ORDER BY age
-    `, [currentYear, currentYear - 15])
-
-    const ageDistMap = new Map<number, number>()
-    for (const row of ageDistResult.rows) {
-      ageDistMap.set(Number(row.age), Number(row.count))
-    }
+    // Vehicle age distribution for normalization — CACHED, and refreshed off the request.
+    //
+    // This used to run inline and it could not succeed: 3.78M rows in ics."Vehicles", no
+    // index on `registrationDate` alone, and `EXTRACT(YEAR FROM ...)` in the WHERE clause,
+    // which cannot use one anyway. 40.1s measured (EXPLAIN ANALYZE) against a 30s pool
+    // timeout and a 30s route budget, so every uncached request returned
+    // `{"error":"Query read timeout"}`. The page looked alive only because a payload cached
+    // before this route grew its current shape was still being served.
+    //
+    // So the aggregate is warmed in the background and kept for a day — it changes at most
+    // daily — and a request that finds it missing answers WITHOUT age normalization and says
+    // so, rather than 500ing. `ONE INDEX on ics."Vehicles"("registrationDate")` would make
+    // this a sub-second inline query again; until then this is the honest shape.
+    const ageDistMap = await ageDistribution(currentYear)
+    const ageDataReady = ageDistMap.size > 0
 
     // Build lifecycle heatmap data
     // Each cell: [vehicle_age, parts_category] -> demand intensity
@@ -190,12 +226,23 @@ export async function GET() {
         .map(([age, count]) => ({ age, count }))
         .sort((a, b) => a.age - b.age),
       total_categories: topCategories.length,
-      note_he: 'הערכה מבוססת על דפוסי תחזוקה ידועים ומתואמת לאוכלוסיית הרכבים בישראל. נתונים אלו הם אומדן בלבד.',
-      note_en: 'Estimate based on known maintenance patterns correlated with Israeli vehicle population. These figures are estimates only.',
+      // SAY WHICH HALF IS MISSING. Without the vehicle histogram the intensities are the
+      // shape of the maintenance curves alone, not scaled to how many cars are that age —
+      // a reader cannot tell that from the numbers, so the payload says it.
+      age_data_ready: ageDataReady,
+      note_he: ageDataReady
+        ? 'הערכה מבוססת על דפוסי תחזוקה ידועים ומתואמת לאוכלוסיית הרכבים בישראל. נתונים אלו הם אומדן בלבד.'
+        : 'התפלגות גיל הרכבים עדיין נטענת, אז העוצמות כאן אינן משוקללות לפי מספר הרכבים בכל גיל. כדאי לרענן בעוד דקה.',
+      note_en: ageDataReady
+        ? 'Estimate based on known maintenance patterns correlated with Israeli vehicle population. These figures are estimates only.'
+        : 'The vehicle age distribution is still warming, so these intensities are not yet scaled to the number of cars at each age.',
       cached_at: new Date().toISOString(),
     }
 
-    await setCache(CACHE_KEY, response, CACHE_TTL)
+    // A payload computed WITHOUT the age histogram must not be cached for a day — it would
+    // outlive the warm-up it is apologising for. Five minutes is long enough to absorb a
+    // reload, short enough that the next visit gets the real thing.
+    await setCache(CACHE_KEY, response, ageDataReady ? CACHE_TTL : 300)
 
     return NextResponse.json(response)
   } catch (error) {

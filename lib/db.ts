@@ -59,3 +59,35 @@ export async function query(sql: string, params?: any[]) {
   const p = await getPool()
   return p.query(sql, params)
 }
+
+/**
+ * One query, on its OWN connection, with a timeout longer than the pool's.
+ *
+ * For the rare aggregate that legitimately cannot fit in 30s and whose result is cached
+ * for a day. The pool's `statement_timeout`/`query_timeout` exist so a slow analytics
+ * query cannot occupy one of five shared connections for minutes; this opens a connection
+ * outside the pool instead of relaxing that guarantee for everything.
+ *
+ * The case that forced it: the vehicle age distribution scans all 3.78M rows of
+ * ics."Vehicles" — 40.1s measured with EXPLAIN ANALYZE, because there is no index on
+ * `registrationDate` alone (only a composite with `importer`). It timed out on every
+ * request, and the page only ever looked alive because a cached payload from some earlier
+ * run survived. ONE index on that column makes this instant and this helper unnecessary
+ * for that caller.
+ *
+ * NEVER call this on a request path. Background refresh only, with the result cached.
+ */
+export async function slowQuery(sql: string, params: any[] = [], timeoutMs = 120_000) {
+  const { Client } = await import('pg')
+  await initializeSecrets()
+  const connectionString = getSecret('DATABASE_URL')
+  if (!connectionString) throw new Error('DATABASE_URL not configured')
+  const client = new Client({ connectionString, statement_timeout: timeoutMs,
+                              query_timeout: timeoutMs + 5_000 })
+  await client.connect()
+  try {
+    return await client.query(sql, params)
+  } finally {
+    await client.end().catch(() => {})
+  }
+}
