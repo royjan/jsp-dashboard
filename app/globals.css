@@ -271,6 +271,27 @@
 .recharts-default-tooltip .recharts-tooltip-item {
   padding: 0.0625rem 0 !important;
 }
+/* Tooltip VALUE text.
+ *
+ * Recharts colours each tooltip row inline with that series' own fill/stroke.
+ * When the colours live on <Cell>s instead of on the series — every donut here,
+ * and the manufacturer bars on /vehicle-intelligence — the series has no fill,
+ * so recharts falls back to `color: rgb(0,0,0)` and writes BLACK text onto the
+ * near-black popover. Measured 1.1:1 contrast: invisible.
+ *
+ * The container rule above cannot fix it; an inline style on the child wins over
+ * an !important on the parent, so this has to target the child spans.
+ *
+ * Colour-coding the text is no loss here: every row already names its series
+ * ("רכבים : 440,730"), and ChartTooltipShell — the kit tooltip this one is kept
+ * in step with — deliberately pairs neutral text with a coloured dot rather than
+ * tinting the words. */
+.recharts-default-tooltip .recharts-tooltip-item-name,
+.recharts-default-tooltip .recharts-tooltip-item-separator,
+.recharts-default-tooltip .recharts-tooltip-item-value,
+.recharts-default-tooltip .recharts-tooltip-item-unit {
+  color: var(--popover-foreground) !important;
+}
 .recharts-default-tooltip .recharts-tooltip-item-value {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
