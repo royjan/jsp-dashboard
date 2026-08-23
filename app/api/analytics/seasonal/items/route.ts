@@ -75,7 +75,7 @@ export async function GET(request: Request) {
     const aiEnabled = searchParams.get('ai') === 'true'
     const refresh = searchParams.get('refresh') === 'true'
 
-    const cacheKey = `analytics:seasonal-items:v8:${dateFrom || 'all'}:${dateTo || 'all'}:${aiEnabled}`
+    const cacheKey = `analytics:seasonal-items:v9:${dateFrom || 'all'}:${dateTo || 'all'}:${aiEnabled}`
     // On refresh (the "רענן ניתוח" button) bypass the cache and regenerate.
     const cached = refresh ? null : await getCached<any>(cacheKey)
     if (cached) return NextResponse.json(cached)
@@ -243,9 +243,16 @@ export async function GET(request: Request) {
       .map(([code, agg]) => {
       const winterAvg = agg.winter_revenue / winterCount
       const summerAvg = agg.summer_revenue / summerCount
-      const avgTotal = winterAvg + summerAvg
-      const winterShare = avgTotal > 0 ? winterAvg / avgTotal : 0.5
-      const summerShare = avgTotal > 0 ? summerAvg / avgTotal : 0.5
+      // SHARES COME OFF THE NON-NEGATIVE HALVES. A season whose credit notes outweigh its
+      // sales has NEGATIVE revenue, and dividing by the sum of the two then produced shares
+      // above 1 — 9811995580 came back winter_share 1.07 on a summer half of -1,500, which
+      // also pushed seasonality_score past its own 0-1 range. A net-credit season is not
+      // "more than all" of the demand; it is no positive demand, which is what 0 says.
+      const winterPos = Math.max(0, winterAvg)
+      const summerPos = Math.max(0, summerAvg)
+      const avgTotal = winterPos + summerPos
+      const winterShare = avgTotal > 0 ? winterPos / avgTotal : 0.5
+      const summerShare = avgTotal > 0 ? summerPos / avgTotal : 0.5
       return {
         item_code: code,
         item_name: agg.item_name,
