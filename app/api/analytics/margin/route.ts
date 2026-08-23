@@ -14,7 +14,7 @@ import { CACHE_TTL } from '@/lib/constants'
 // from Neon at all: the AGE of each cost, a second price list alongside, and a below-cost
 // list. Bumping the key rather than waiting out the TTL — a v3 payload has no cost_date,
 // no compare column and no distribution, and the page would render those as empty.
-const CACHE_KEY = 'analytics:margin:v4'
+const CACHE_KEY = 'analytics:margin:v5'   // v5: suspect costs off every board, not just bestMargin
 
 // How many items get a live cost lookup on FINAPI's side. 1000 covers ~97% of revenue on
 // this catalogue while staying inside the 55s client timeout on a cold FINAPI cache; the
@@ -241,19 +241,27 @@ export async function GET() {
       })
       .filter((r) => r.margin_pct != null)
 
-    // cost_suspect excluded here for the same reason FINAPI excludes it from its own
-    // margin ranking: a ₪0.82 "cost" on a ₪59,110 door scores 100% and took the top three
-    // slots of this very board on the live catalogue. The rows stay in the table below.
-    const bestMargin = [...pooled]
-      .filter((r) => r.revenue >= BEST_MARGIN_MIN_REVENUE && !r.cost_suspect)
+    // This route re-sorts the pool locally (it fetches once, by revenue, and derives all
+    // three boards), so FINAPI's own suspect-cost exclusion — which applies to ITS sort
+    // param — does not cover these. It has to be repeated here, on every costed board and
+    // not just the percentage one: a ₪0.82 "cost" on a ₪59,110 door makes the profit
+    // ≈ the revenue, and 9002W0 topped this very bestProfit list on prod after the first
+    // deploy while bestMargin was already clean. The rows stay in the table below.
+    const costable = pooled.filter((r) => !r.cost_suspect)
+
+    const bestMargin = [...costable]
+      .filter((r) => r.revenue >= BEST_MARGIN_MIN_REVENUE)
       .sort((a, b) => (b.margin_pct ?? 0) - (a.margin_pct ?? 0))
       .slice(0, 20)
 
-    const bestProfit = [...pooled]
+    const bestProfit = [...costable]
       .sort((a, b) => (b.profit ?? 0) - (a.profit ?? 0))
       .slice(0, 20)
 
-    const belowCost = [...pooled]
+    // Below-cost is the one board a suspect row cannot reach anyway (0.82 gives a +100%
+    // margin, not a negative one), but filtering keeps the rule in one place rather than
+    // resting on that coincidence.
+    const belowCost = [...costable]
       .filter((r) => (r.margin_pct ?? 0) < 0)
       .sort((a, b) => (a.profit ?? 0) - (b.profit ?? 0))
       .slice(0, 20)
@@ -323,7 +331,7 @@ export async function GET() {
       bestMargin,
       bestProfit,
       belowCost: {
-        count: pooled.filter((r) => (r.margin_pct ?? 0) < 0).length,
+        count: costable.filter((r) => (r.margin_pct ?? 0) < 0).length,
         lost_profit: finapi?.below_cost?.lost_profit ?? null,
         items: belowCost,
       },
