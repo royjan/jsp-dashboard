@@ -23,7 +23,7 @@ import {
   LineChart, Line, AreaChart, Area, Cell, PieChart, Pie,
   RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
 } from 'recharts'
-import { ChartGrid, AXIS_PROPS, BAR_RADIUS } from '@/components/charts/kit'
+import { ChartGrid, AXIS_PROPS, BAR_RADIUS, BAR_MAX } from '@/components/charts/kit'
 import { formatCurrency, formatNumber, formatCurrencyAxis, maskMoneyInText } from '@/lib/format'
 import { cardVariants } from '@/lib/motion'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
@@ -295,15 +295,15 @@ function ReportContent() {
                 <ResponsiveContainer width="100%" height={350}>
                   <BarChart data={revenueChartData}>
                     <ChartGrid />
-                    <XAxis dataKey="year" />
-                    <YAxis tickFormatter={(v) => formatCurrencyAxis(v, 'M')} />
+                    <XAxis dataKey="year" {...AXIS_PROPS} />
+                    <YAxis {...AXIS_PROPS} tickFormatter={(v) => formatCurrencyAxis(v, 'M')} />
                     <Tooltip formatter={(value, name) => [
                       formatCurrency(Number(value)),
                       name === 'revenue' ? (isHe ? 'הכנסות' : 'Revenue') : (isHe ? 'זיכויים' : 'Credits')
                     ]} />
                     <Legend formatter={(v) => v === 'revenue' ? (isHe ? 'הכנסות' : 'Revenue') : (isHe ? 'זיכויים' : 'Credits')} />
-                    <Bar dataKey="revenue" fill="#60a5fa" radius={BAR_RADIUS.vertical} animationDuration={800} />
-                    <Bar dataKey="credits" fill="#f87171" radius={BAR_RADIUS.vertical} animationDuration={800} />
+                    <Bar dataKey="revenue" fill="#60a5fa" radius={BAR_RADIUS.vertical} maxBarSize={BAR_MAX} animationDuration={800} />
+                    <Bar dataKey="credits" fill="#f87171" radius={BAR_RADIUS.vertical} maxBarSize={BAR_MAX} animationDuration={800} />
                   </BarChart>
                 </ResponsiveContainer>
               </CardContent>
@@ -595,7 +595,7 @@ function ReportContent() {
                 <LineChart data={monthlyCompare}>
                   <ChartGrid />
                   <XAxis dataKey="month" {...AXIS_PROPS} />
-                  <YAxis tickFormatter={(v) => formatCurrencyAxis(v)} />
+                  <YAxis {...AXIS_PROPS} tickFormatter={(v) => formatCurrencyAxis(v)} />
                   <Tooltip formatter={(value: any) => [formatCurrency(value), '']} />
                   <Legend />
                   <Line type="monotone" dataKey="2023" stroke="#34d399" strokeWidth={2} dot={{ r: 3 }} animationDuration={800} />
@@ -689,9 +689,9 @@ function ReportContent() {
                 <BarChart data={seasonalData}>
                   <ChartGrid />
                   <XAxis dataKey="month" {...AXIS_PROPS} />
-                  <YAxis tickFormatter={(v) => formatCurrencyAxis(v)} />
+                  <YAxis {...AXIS_PROPS} tickFormatter={(v) => formatCurrencyAxis(v)} />
                   <Tooltip formatter={(value: any) => [formatCurrency(value), isHe ? 'ממוצע' : 'Average']} />
-                  <Bar dataKey="avg_revenue" radius={BAR_RADIUS.vertical} animationDuration={800}>
+                  <Bar dataKey="avg_revenue" radius={BAR_RADIUS.vertical} maxBarSize={BAR_MAX} animationDuration={800}>
                     {seasonalData.map((_: any, i: number) => (
                       <Cell key={i} fill={[10, 11].includes(i) ? '#34d399' : [3].includes(i) ? '#f87171' : '#60a5fa'} />
                     ))}
@@ -711,9 +711,9 @@ function ReportContent() {
                   <BarChart data={dayOfWeekData}>
                     <ChartGrid />
                     <XAxis dataKey="day" {...AXIS_PROPS} />
-                    <YAxis tickFormatter={(v) => formatCurrencyAxis(v)} />
+                    <YAxis {...AXIS_PROPS} tickFormatter={(v) => formatCurrencyAxis(v)} />
                     <Tooltip formatter={(value: any) => [formatCurrency(value), isHe ? 'ממוצע' : 'Average']} />
-                    <Bar dataKey="avg_revenue" fill="#a78bfa" radius={BAR_RADIUS.vertical} animationDuration={800} />
+                    <Bar dataKey="avg_revenue" fill="#a78bfa" radius={BAR_RADIUS.vertical} maxBarSize={BAR_MAX} animationDuration={800} />
                   </BarChart>
                 </ResponsiveContainer>
               </CardContent>
@@ -762,8 +762,8 @@ function ReportContent() {
               <ResponsiveContainer width="100%" height={350}>
                 <LineChart data={creditChartData}>
                   <ChartGrid />
-                  <XAxis dataKey="year" />
-                  <YAxis tickFormatter={(v) => `${v}%`} />
+                  <XAxis dataKey="year" {...AXIS_PROPS} />
+                  <YAxis {...AXIS_PROPS} tickFormatter={(v) => `${v}%`} />
                   <Tooltip formatter={(value, name) => [
                     `${value}%`,
                     name === 'credit_pct' ? (isHe ? '% כמות' : '% Count') : (isHe ? '% ערך' : '% Value')
@@ -859,16 +859,16 @@ function ReportContent() {
               <ResponsiveContainer width="100%" height={350}>
                 <BarChart data={retentionData}>
                   <ChartGrid />
-                  <XAxis dataKey="year" />
-                  <YAxis />
+                  <XAxis dataKey="year" {...AXIS_PROPS} />
+                  <YAxis {...AXIS_PROPS} allowDecimals={false} />
                   <Tooltip />
                   <Legend formatter={(v) => {
                     if (v === 'returning_customers') return isHe ? 'לקוחות חוזרים' : 'Returning'
                     if (v === 'new_customers') return isHe ? 'לקוחות חדשים' : 'New'
                     return v
                   }} />
-                  <Bar dataKey="returning_customers" stackId="a" fill="#60a5fa" animationDuration={800} />
-                  <Bar dataKey="new_customers" stackId="a" fill="#34d399" radius={BAR_RADIUS.vertical} animationDuration={800} />
+                  <Bar dataKey="returning_customers" stackId="a" fill="#60a5fa" maxBarSize={BAR_MAX} animationDuration={800} />
+                  <Bar dataKey="new_customers" stackId="a" fill="#34d399" radius={BAR_RADIUS.vertical} maxBarSize={BAR_MAX} animationDuration={800} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>

@@ -8,7 +8,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell,
 } from 'recharts'
-import { ChartGrid, BAR_RADIUS } from '@/components/charts/kit'
+import { ChartGrid, BAR_RADIUS, BAR_MAX, PIE_PROPS, DonutCenter } from '@/components/charts/kit'
 
 // 15 distinct, bright colors so the top-15 manufacturers never reuse a hue.
 const BAR_COLORS = [
@@ -95,7 +95,7 @@ export function PopulationChart({
                 barCategoryGap="22%"
                 margin={{ top: 5, right: 40, left: 5, bottom: 5 }}
               >
-                <ChartGrid />
+                <ChartGrid vertical horizontal={false} />
                 <XAxis
                   type="number"
                   tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }}
@@ -114,6 +114,7 @@ export function PopulationChart({
                 <Bar
                   dataKey="count"
                   radius={BAR_RADIUS.horizontal}
+                  maxBarSize={BAR_MAX}
                   cursor="pointer"
                   onClick={(data: any) => onSelectMake?.(data.name)}
                 >
@@ -145,7 +146,7 @@ export function PopulationChart({
         </CardHeader>
         <CardContent>
           <div className="h-[380px] flex flex-col items-center">
-            <div className="w-full h-[280px]">
+            <div className="relative w-full h-[280px]">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
@@ -154,8 +155,8 @@ export function PopulationChart({
                     cy="50%"
                     innerRadius={70}
                     outerRadius={110}
-                    paddingAngle={3}
                     dataKey="value"
+                    {...PIE_PROPS}
                     label={({ percent }: any) =>
                       percent > 0.04 ? `${(percent * 100).toFixed(0)}%` : ''
                     }
@@ -170,6 +171,10 @@ export function PopulationChart({
                   />
                 </PieChart>
               </ResponsiveContainer>
+              <DonutCenter
+                value={totalVehicles.toLocaleString()}
+                label={isHe ? 'רכבים' : 'vehicles'}
+              />
             </div>
             {/* Legend */}
             <div className="flex flex-wrap justify-center gap-x-5 gap-y-2 mt-3">

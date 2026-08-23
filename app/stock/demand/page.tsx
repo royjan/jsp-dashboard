@@ -16,7 +16,7 @@ import { SubTabs } from '@/components/shared/SubTabs'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
 } from 'recharts'
-import { ChartGrid, AXIS_PROPS, BAR_RADIUS } from '@/components/charts/kit'
+import { ChartGrid, AXIS_PROPS, BAR_RADIUS, BAR_MAX } from '@/components/charts/kit'
 import { formatNumber, formatCurrency } from '@/lib/format'
 import { cardVariants } from '@/lib/motion'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
@@ -265,12 +265,12 @@ export default function DemandPage() {
                   layout="vertical"
                   margin={{ left: 10, right: 10 }}
                 >
-                  <ChartGrid />
-                  <XAxis type="number" {...AXIS_PROPS} />
+                  <ChartGrid vertical horizontal={false} />
+                  <XAxis type="number" {...AXIS_PROPS} allowDecimals={false} />
                   <YAxis type="category" dataKey="name" width={120} {...AXIS_PROPS} />
                   <Tooltip />
-                  <Bar dataKey="searches" fill="#3b82f6" radius={BAR_RADIUS.horizontal} name="Searches" />
-                  <Bar dataKey="failed" fill="#f59e0b" radius={BAR_RADIUS.horizontal} name="Zero Results" />
+                  <Bar dataKey="searches" fill="#3b82f6" radius={BAR_RADIUS.horizontal} maxBarSize={BAR_MAX} name="Searches" />
+                  <Bar dataKey="failed" fill="#f59e0b" radius={BAR_RADIUS.horizontal} maxBarSize={BAR_MAX} name="Zero Results" />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>

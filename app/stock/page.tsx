@@ -27,7 +27,7 @@ import { cn } from '@/lib/utils'
 import { deriveBrand, brandChipClasses } from '@/lib/brand'
 import { ArrowUpDown, Search, Crown, TrendingUp, Layers, AlertTriangle, Sparkles, RefreshCw, TableIcon, LayoutGrid, ChevronDown, ChevronLeft, ChevronRight, Filter, Target, FileText, TrendingDown, Clock, ArrowRightLeft } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from 'recharts'
-import { ChartGrid, AXIS_PROPS, BAR_RADIUS } from '@/components/charts/kit'
+import { ChartGrid, AXIS_PROPS, BAR_RADIUS, BAR_MAX, PIE_PROPS, DonutCenter, ChartLegendChips } from '@/components/charts/kit'
 import { incrementStreaming, decrementStreaming } from '@/lib/streaming-counter'
 import { formatCurrency, formatDate, formatNumber } from '@/lib/format'
 import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
@@ -561,7 +561,7 @@ function ConversionSection({ searchQuery }: { searchQuery: string }) {
                 <XAxis type="number" {...AXIS_PROPS} tickFormatter={(v) => formatCurrencyAxis(v)} />
                 <YAxis type="category" dataKey="name" {...AXIS_PROPS} width={70} />
                 <Tooltip formatter={(value: any) => [formatCurrency(value), '']} />
-                <Bar dataKey="value" radius={BAR_RADIUS.horizontal} animationDuration={800} animationBegin={400}>
+                <Bar dataKey="value" radius={BAR_RADIUS.horizontal} maxBarSize={BAR_MAX} animationDuration={800} animationBegin={400}>
                   {funnelData.map((entry, index) => <Cell key={index} fill={entry.fill} />)}
                 </Bar>
               </BarChart>
@@ -571,20 +571,27 @@ function ConversionSection({ searchQuery }: { searchQuery: string }) {
 
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-base">{t('conversionRate')}</CardTitle></CardHeader>
-          <CardContent className="flex items-center justify-center">
+          <CardContent>
             {pieData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={220}>
-                <PieChart>
-                  <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={55} outerRadius={85} paddingAngle={3} animationDuration={800} animationBegin={600} label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`} labelLine={false}>
-                    {pieData.map((entry, index) => <Cell key={index} fill={entry.fill} />)}
-                  </Pie>
-                  <Tooltip formatter={(value: any) => [formatCurrency(value as number), '']} />
-                  <text x="50%" y="48%" textAnchor="middle" fill="var(--foreground)" fontSize={28}>{data.conversion_rate}%</text>
-                  <text x="50%" y="60%" textAnchor="middle" fill="var(--muted-foreground)" fontSize={12}>{t('conversionRate')}</text>
-                </PieChart>
-              </ResponsiveContainer>
+              <>
+                <div className="relative">
+                  <ResponsiveContainer width="100%" height={200}>
+                    <PieChart>
+                      <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={58} outerRadius={85} animationDuration={800} animationBegin={600} {...PIE_PROPS}>
+                        {pieData.map((entry, index) => <Cell key={index} fill={entry.fill} />)}
+                      </Pie>
+                      <Tooltip formatter={(value: any) => [formatCurrency(value as number), '']} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <DonutCenter value={`${data.conversion_rate}%`} label={t('conversionRate')} />
+                </div>
+                <ChartLegendChips
+                  className="justify-center"
+                  items={pieData.map(d => ({ key: d.name, label: d.name, value: formatCurrency(d.value), color: d.fill }))}
+                />
+              </>
             ) : (
-              <div className="text-muted-foreground text-sm py-12">{t('noInsights')}</div>
+              <div className="text-muted-foreground text-sm py-12 text-center">{t('noInsights')}</div>
             )}
           </CardContent>
         </Card>
@@ -987,8 +994,8 @@ function StockPageContent() {
                     formatter={(value: any, name: any) => [`${value}%`, name]}
                   />
                   <Legend />
-                  <Bar dataKey="revenue" name="% הכנסות" fill="#34d399" radius={BAR_RADIUS.vertical} animationDuration={800} />
-                  <Bar dataKey="capital" name="% הון" fill="#60a5fa" radius={BAR_RADIUS.vertical} animationDuration={800} animationBegin={200} />
+                  <Bar dataKey="revenue" name="% הכנסות" fill="#34d399" radius={BAR_RADIUS.vertical} maxBarSize={BAR_MAX} animationDuration={800} />
+                  <Bar dataKey="capital" name="% הון" fill="#60a5fa" radius={BAR_RADIUS.vertical} maxBarSize={BAR_MAX} animationDuration={800} animationBegin={200} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
@@ -998,27 +1005,35 @@ function StockPageContent() {
             <CardHeader className="pb-2">
               <CardTitle className="text-base">הון כלוא לפי קלאס</CardTitle>
             </CardHeader>
-            <CardContent className="flex items-center justify-center">
-              <ResponsiveContainer width="100%" height={220}>
-                <PieChart>
-                  <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%"
-                    innerRadius={45} outerRadius={80} paddingAngle={3} animationDuration={800}>
-                    {pieData.map((entry, index) => (
-                      <Cell key={index} fill={entry.fill} />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    formatter={(value: any) => [formatCurrency(value as number), '']}
-                  />
-                  <Legend />
-                  <text x="50%" y="46%" textAnchor="middle" fill="var(--foreground)" fontSize={16} fontWeight="bold">
-                    {formatCurrency(abcCapital.total_capital)}
-                  </text>
-                  <text x="50%" y="56%" textAnchor="middle" fill="var(--muted-foreground)" fontSize={10}>
-                    סה״כ הון כלוא
-                  </text>
-                </PieChart>
-              </ResponsiveContainer>
+            <CardContent>
+              {/* The hole has to stay the centre of the box for <DonutCenter> to
+                  land in it, so the classes are listed underneath as chips
+                  rather than by a <Legend> inside the SVG. */}
+              <div className="relative">
+                <ResponsiveContainer width="100%" height={200}>
+                  <PieChart>
+                    <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%"
+                      innerRadius={52} outerRadius={82} animationDuration={800} {...PIE_PROPS}>
+                      {pieData.map((entry, index) => (
+                        <Cell key={index} fill={entry.fill} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      formatter={(value: any) => [formatCurrency(value as number), '']}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+                <DonutCenter value={formatCurrency(abcCapital.total_capital)} label="סה״כ הון כלוא" />
+              </div>
+              <ChartLegendChips
+                className="justify-center"
+                items={pieData.map(d => ({
+                  key: d.name,
+                  label: d.name,
+                  value: formatCurrency(d.value),
+                  color: d.fill,
+                }))}
+              />
             </CardContent>
           </Card>
         </div>

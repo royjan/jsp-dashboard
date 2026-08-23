@@ -18,7 +18,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
   AreaChart, Area,
 } from 'recharts'
-import { ChartGrid, AXIS_PROPS, BAR_RADIUS } from '@/components/charts/kit'
+import { ChartGrid, AXIS_PROPS, BAR_RADIUS, BAR_MAX } from '@/components/charts/kit'
 import { formatNumber } from '@/lib/constants'
 import { cardVariants } from '@/lib/motion'
 import { formatDate } from '@/lib/format'
@@ -267,7 +267,7 @@ function ChatInsightsContent() {
                         return [`${formatNumber(value)} · ${p.success_rate ?? 0}% הצלחה · ${formatNumber(p.avg_response_ms ?? 0)}ms`, p.label]
                       }}
                     />
-                    <Bar dataKey="count" radius={BAR_RADIUS.horizontal} animationDuration={700}>
+                    <Bar dataKey="count" radius={BAR_RADIUS.horizontal} maxBarSize={BAR_MAX} animationDuration={700}>
                       {intentChart.map((e, i) => <Cell key={i} fill={e.fill} />)}
                     </Bar>
                   </BarChart>

@@ -308,6 +308,38 @@
   color: var(--foreground) !important;
 }
 
+/* The page is dir="rtl" and recharts is not RTL-aware: it lays a chart out in SVG
+   coordinates (always left→right) but its labels inherit the document direction,
+   so the two disagree about where a label ends.
+
+   A left-hand <YAxis> tick is drawn at the gutter's inner edge with
+   text-anchor="end". Under `direction: rtl` "end" resolves to the LEFT of the
+   glyph run, so every category name was pushed rightwards ACROSS the plot and
+   sat on top of its own bar — the customer names printed over the bars on
+   /customers and /receivables. The built-in <Legend> is DOM, so RTL also
+   reversed each entry and put the colour swatch AFTER its label ("C ■").
+
+   Forcing LTR on the drawing surface and the legend makes anchors agree with
+   the geometry. Hebrew inside a label still shapes right-to-left — the bidi
+   algorithm handles the run; only the base direction changes.
+
+   Deliberately NOT applied to .recharts-tooltip-wrapper: tooltips are our own
+   RTL DOM (<ChartTooltipShell>) and must keep the page's direction. */
+.recharts-surface,
+.recharts-legend-wrapper {
+  direction: ltr;
+}
+
+/* Pie/donut seams. Recharts strokes every sector with a hard-coded white inline
+   `stroke`, which on the dark theme reads as a bright outline drawn around each
+   slice rather than as a gap between them. Card-coloured, the same stroke reads
+   as the separation it was meant to be. Inline attribute → !important. */
+.recharts-pie-sector path,
+.recharts-pie .recharts-sector {
+  stroke: var(--card) !important;
+  stroke-width: 2px !important;
+}
+
 /* react-d3-tree (Decision Observatory catalog): the lib leaks an inherited black stroke
    onto the link paths, so force a visible slate edge (matching the tracer's neutral edges).
    !important beats the inherited value regardless of source. */

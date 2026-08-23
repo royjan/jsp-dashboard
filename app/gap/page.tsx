@@ -18,7 +18,7 @@ import {
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
 } from 'recharts'
-import { ChartGrid, AXIS_PROPS, BAR_RADIUS } from '@/components/charts/kit'
+import { ChartGrid, AXIS_PROPS, BAR_RADIUS, BAR_MAX } from '@/components/charts/kit'
 import { formatCurrency, formatNumber, formatDate } from '@/lib/format'
 import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
 import { sortRows } from '@/lib/sort'
@@ -271,8 +271,8 @@ export default function GapAnalysisPage() {
         <CardContent>
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={topItems} layout="vertical" margin={{ left: 0, right: 10 }}>
-              <ChartGrid />
-              <XAxis type="number" {...AXIS_PROPS} />
+              <ChartGrid vertical horizontal={false} />
+              <XAxis type="number" {...AXIS_PROPS} allowDecimals={false} />
               <YAxis type="category" dataKey="item_code" width={80} {...AXIS_PROPS} />
               <Tooltip
                 labelFormatter={(code) => {
@@ -280,7 +280,7 @@ export default function GapAnalysisPage() {
                   return item ? `${code} — ${item.name}` : code
                 }}
               />
-              <Bar dataKey="quote_count" fill="#ef4444" name={t('quotesCount')} radius={BAR_RADIUS.horizontal} />
+              <Bar dataKey="quote_count" fill="#ef4444" name={t('quotesCount')} radius={BAR_RADIUS.horizontal} maxBarSize={BAR_MAX} />
             </BarChart>
           </ResponsiveContainer>
         </CardContent>

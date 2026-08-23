@@ -26,7 +26,7 @@ import {
   BarChart, Bar, XAxis, YAxis,
 } from 'recharts'
 import {
-  ChartGrid, AXIS_PROPS, ANIM, BAR_RADIUS,
+  ChartGrid, AXIS_PROPS, ANIM, BAR_RADIUS, BAR_MAX,
   ChartTooltipShell, ChartLegendChips, useSeriesIsolation,
 } from '@/components/charts/kit'
 import { CHART_PALETTE } from '@/lib/chart-colors'
@@ -221,7 +221,7 @@ function CustomersSection({ searchQuery }: { searchQuery: string }) {
   })()
 
   const top10Data = data.customers.slice(0, 10).map((c: any) => ({
-    name: c.name.length > 12 ? c.name.substring(0, 12) + '…' : c.name,
+    name: c.name.length > 16 ? c.name.substring(0, 16) + '…' : c.name,
     fullName: c.name,
     revenue: c.total_revenue,
   }))
@@ -396,7 +396,7 @@ function CustomersSection({ searchQuery }: { searchQuery: string }) {
                       the value axis, so they measure rather than clutter. */}
                   <ChartGrid vertical horizontal={false} />
                   <XAxis type="number" {...AXIS_PROPS} tickFormatter={(v) => formatCurrencyAxis(v)} />
-                  <YAxis type="category" dataKey="name" {...AXIS_PROPS} width={80} />
+                  <YAxis type="category" dataKey="name" {...AXIS_PROPS} width={116} />
                   <Tooltip
                     cursor={{ fill: 'var(--muted)', fillOpacity: 0.35 }}
                     content={({ active, payload }) => {
@@ -410,7 +410,7 @@ function CustomersSection({ searchQuery }: { searchQuery: string }) {
                       )
                     }}
                   />
-                  <Bar dataKey="revenue" fill={CHART_PALETTE[0]} radius={BAR_RADIUS.horizontal} animationBegin={400} {...ANIM.secondary} />
+                  <Bar dataKey="revenue" fill={CHART_PALETTE[0]} radius={BAR_RADIUS.horizontal} maxBarSize={BAR_MAX} animationBegin={400} {...ANIM.secondary} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>

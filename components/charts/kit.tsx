@@ -64,12 +64,71 @@ export const CROSSHAIR = {
   strokeOpacity: 0.6,
 } as const
 
+/**
+ * Bar thickness ceiling.
+ *
+ * Recharts divides the axis between however many categories it was given, so a
+ * chart with one or two rows drew a bar as tall as the card — /receivables with
+ * a single late customer was a 300px red slab, which reads as a filled panel,
+ * not as a measurement. A ceiling keeps a 1-row and a 10-row chart the same
+ * shape; there is no floor to add, since recharts already grows the plot.
+ */
+export const BAR_MAX = 28
+
 /** Bars: one rounded end, pointing the way the bar grows. */
 export const BAR_RADIUS = {
   vertical: [4, 4, 0, 0] as [number, number, number, number],
   /** Horizontal bars in an RTL page still grow left→right in the SVG. */
   horizontal: [0, 4, 4, 0] as [number, number, number, number],
 }
+
+// ---------------------------------------------------------------------------
+// Pie / donut
+// ---------------------------------------------------------------------------
+
+/**
+ * The total that belongs in the hole of a donut.
+ *
+ * It used to be two SVG `<text>` nodes inside `<PieChart>`. SVG text does not
+ * wrap and does not shrink, so ₪43,052,935 was laid out straight through the
+ * ring on both sides and the reader saw "43,052,93" with the ends painted over
+ * by the slices. This is DOM on top of the chart instead: it centres on the
+ * container, steps its size down as the number gets longer, and cannot be
+ * overpainted.
+ *
+ * Wrap the chart in `relative` and give the `<Pie>` no `<Legend>` — a legend
+ * inside the SVG shrinks the plot upward and the hole stops being the centre of
+ * the box. Use `<ChartLegendChips>` underneath instead.
+ */
+export function DonutCenter({ value, label, className }: {
+  value: string
+  label?: string
+  className?: string
+}) {
+  const size = value.length > 13 ? 'text-xs' : value.length > 10 ? 'text-sm' : 'text-base'
+  return (
+    <div
+      aria-hidden
+      className={cn(
+        'pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-0.5 px-2 text-center',
+        className,
+      )}
+    >
+      <span className={cn('font-bold leading-none tabular-nums', size)}>{value}</span>
+      {label && <span className="text-[10px] leading-tight text-muted-foreground">{label}</span>}
+    </div>
+  )
+}
+
+/**
+ * Sector separation for every `<Pie>`. The white seam recharts hard-codes is
+ * neutralised in globals.css; this adds the small gap that makes neighbouring
+ * slices legible without a rule between them.
+ */
+export const PIE_PROPS = {
+  paddingAngle: 2,
+  minAngle: 2,
+} as const
 
 // ---------------------------------------------------------------------------
 // Tooltip

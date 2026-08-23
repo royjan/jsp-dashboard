@@ -2,7 +2,7 @@
 
 import React from 'react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
-import { AXIS_PROPS, BAR_RADIUS } from '@/components/charts/kit'
+import { AXIS_PROPS, BAR_RADIUS, BAR_MAX } from '@/components/charts/kit'
 
 interface LambdaRow {
   lambda: string
@@ -36,7 +36,7 @@ export function PortalBars({ data }: { data: LambdaRow[] }) {
           <Tooltip
             formatter={(val: any) => [val.toLocaleString(), 'searches']}
           />
-          <Bar dataKey="count" radius={BAR_RADIUS.horizontal}>
+          <Bar dataKey="count" radius={BAR_RADIUS.horizontal} maxBarSize={BAR_MAX}>
             {sorted.map((r, i) => <Cell key={i} fill={rateColor(r.notFoundRate)} fillOpacity={0.85} />)}
           </Bar>
         </BarChart>

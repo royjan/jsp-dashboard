@@ -11,7 +11,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell,
 } from 'recharts'
-import { ChartGrid, AXIS_PROPS, BAR_RADIUS } from '@/components/charts/kit'
+import { ChartGrid, AXIS_PROPS, BAR_RADIUS, BAR_MAX, PIE_PROPS, DonutCenter, ChartLegendChips } from '@/components/charts/kit'
 import { formatNumber } from '@/lib/format'
 import { cardVariants } from '@/lib/motion'
 
@@ -136,11 +136,11 @@ export function MarketTab() {
                   layout="vertical"
                   margin={{ left: 0, right: 10 }}
                 >
-                  <ChartGrid />
+                  <ChartGrid vertical horizontal={false} />
                   <XAxis type="number" {...AXIS_PROPS} tickFormatter={(v) => formatNumber(v)} />
-                  <YAxis type="category" dataKey="name" width={80} {...AXIS_PROPS} />
+                  <YAxis type="category" dataKey="name" width={96} {...AXIS_PROPS} />
                   <Tooltip formatter={(v) => formatNumber(Number(v))} />
-                  <Bar dataKey="count" fill="#3b82f6" radius={BAR_RADIUS.horizontal} name={isHe ? 'רכבים' : 'Vehicles'} />
+                  <Bar dataKey="count" fill="#3b82f6" radius={BAR_RADIUS.horizontal} maxBarSize={BAR_MAX} name={isHe ? 'רכבים' : 'Vehicles'} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
@@ -157,24 +157,42 @@ export function MarketTab() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <PieChart>
-                  <Pie
-                    data={fuelBreakdown.slice(0, 8)}
-                    dataKey="count"
-                    nameKey="fuel"
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={100}
-                    label={({ fuel, percent }: any) => `${fuel} ${(percent * 100).toFixed(0)}%`}
-                  >
-                    {fuelBreakdown.slice(0, 8).map((_: any, i: number) => (
-                      <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={(v) => formatNumber(Number(v))} />
-                </PieChart>
-              </ResponsiveContainer>
+              <div className="relative">
+                <ResponsiveContainer width="100%" height={260}>
+                  <PieChart>
+                    <Pie
+                      data={fuelBreakdown.slice(0, 8)}
+                      dataKey="count"
+                      nameKey="fuel"
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={62}
+                      outerRadius={100}
+                      label={({ percent }: any) => (percent > 0.06 ? `${(percent * 100).toFixed(0)}%` : '')}
+                      labelLine={false}
+                      {...PIE_PROPS}
+                    >
+                      {fuelBreakdown.slice(0, 8).map((_: any, i: number) => (
+                        <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(v) => formatNumber(Number(v))} />
+                  </PieChart>
+                </ResponsiveContainer>
+                <DonutCenter
+                  value={formatNumber(fuelBreakdown.reduce((sum: number, f: any) => sum + (f.count || 0), 0))}
+                  label={isHe ? 'רכבים' : 'vehicles'}
+                />
+              </div>
+              <ChartLegendChips
+                className="justify-center"
+                items={fuelBreakdown.slice(0, 8).map((f: any, i: number) => ({
+                  key: f.fuel ?? String(i),
+                  label: f.fuel ?? '—',
+                  value: formatNumber(f.count || 0),
+                  color: PIE_COLORS[i % PIE_COLORS.length],
+                }))}
+              />
             </CardContent>
           </Card>
         )}
@@ -204,9 +222,9 @@ export function MarketTab() {
                   {psaModels.slice(0, 30).map((m: any, i: number) => (
                     <tr key={i} className="border-b border-muted/50 hover:bg-muted/30 transition-colors">
                       <td className="py-2 px-2">
-                        <Badge variant="outline" className="text-xs">{m.brand}</Badge>
+                        <Badge variant="outline" className="text-xs">{m.manufacturer || m.brand || '—'}</Badge>
                       </td>
-                      <td className="py-2 px-2 font-medium">{m.model || m.manufacturer || '-'}</td>
+                      <td className="py-2 px-2 font-medium">{m.model || '—'}</td>
                       <td className="py-2 px-2 text-end font-bold">{formatNumber(m.count || m.quantity || 0)}</td>
                     </tr>
                   ))}
