@@ -16,7 +16,7 @@ import { EbayRecommendButton } from '@/components/shared/EbayRecommendButton'
 import { ItemLink } from '@/components/shared/ItemLink'
 import { SortableTh } from '@/components/shared/sortable-table'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, Area, AreaChart } from 'recharts'
-import { ChartGrid, AXIS_PROPS } from '@/components/charts/kit'
+import { ChartGrid, AXIS_PROPS, ACTIVE_DOT } from '@/components/charts/kit'
 import { formatCurrency, formatNumber } from '@/lib/format'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
 
@@ -109,8 +109,8 @@ function ForecastChart({ itemCode }: { itemCode: string }) {
             labelStyle={{ fontWeight: 600 }}
           />
           <ReferenceLine y={0} stroke="hsl(var(--destructive))" strokeDasharray="3 3" label={{ value: locale === 'he' ? 'אזילה' : 'Stock-out', position: 'right', fontSize: 11 }} />
-          <Area type="monotone" dataKey="stock" stroke="hsl(var(--primary))" fill="url(#stockGradient)" name={locale === 'he' ? 'מלאי צפוי' : 'Projected Stock'} strokeWidth={2} />
-          <Line type="monotone" dataKey="demand" stroke="hsl(var(--destructive))" name={locale === 'he' ? 'ביקוש חודשי' : 'Monthly Demand'} strokeWidth={1.5} strokeDasharray="5 5" dot={false} />
+          <Area activeDot={ACTIVE_DOT} type="monotone" dataKey="stock" stroke="hsl(var(--primary))" fill="url(#stockGradient)" name={locale === 'he' ? 'מלאי צפוי' : 'Projected Stock'} strokeWidth={2} />
+          <Line activeDot={ACTIVE_DOT} type="monotone" dataKey="demand" stroke="hsl(var(--destructive))" name={locale === 'he' ? 'ביקוש חודשי' : 'Monthly Demand'} strokeWidth={1.5} strokeDasharray="5 5" dot={false} />
         </AreaChart>
       </ResponsiveContainer>
 
@@ -123,7 +123,7 @@ function ForecastChart({ itemCode }: { itemCode: string }) {
               <XAxis dataKey="month" {...AXIS_PROPS} tickFormatter={(v: number) => String(v)} />
               <YAxis {...AXIS_PROPS} />
               <Tooltip />
-              <Line type="monotone" dataKey="quantity" stroke="hsl(var(--chart-2))" name={locale === 'he' ? 'כמות' : 'Quantity'} strokeWidth={1.5} dot={{ r: 2 }} />
+              <Line activeDot={ACTIVE_DOT} type="monotone" dataKey="quantity" stroke="hsl(var(--chart-2))" name={locale === 'he' ? 'כמות' : 'Quantity'} strokeWidth={1.5} dot={{ r: 2 }} />
             </LineChart>
           </ResponsiveContainer>
         </div>

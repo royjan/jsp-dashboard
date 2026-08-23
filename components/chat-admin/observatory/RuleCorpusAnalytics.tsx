@@ -5,7 +5,7 @@ import { Loader2, Package, AlertTriangle, Database, Sparkles, Check } from 'luci
 import {
   ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, Legend,
 } from 'recharts'
-import { ChartGrid, AXIS_PROPS, BAR_RADIUS, BAR_MAX, PIE_PROPS } from '@/components/charts/kit'
+import { ChartGrid, AXIS_PROPS, BAR_RADIUS, BAR_MAX, PIE_PROPS, ACTIVE_BAR, ActivePieSector } from '@/components/charts/kit'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -96,7 +96,7 @@ export default function RuleCorpusAnalytics() {
         <Card title="התפלגות סטטוס">
           <ResponsiveContainer width="100%" height={200}>
             <PieChart>
-              <Pie data={status} dataKey="value" nameKey="name" innerRadius={45} outerRadius={75} label {...PIE_PROPS}>
+              <Pie activeShape={ActivePieSector} data={status} dataKey="value" nameKey="name" innerRadius={45} outerRadius={75} label {...PIE_PROPS}>
                 {status.map((e: any, i: number) => <Cell key={i} fill={STATUS_COLORS[e.name] || PALETTE[i]} />)}
               </Pie>
               <Tooltip /><Legend wrapperStyle={{ fontSize: 11 }} />
@@ -107,7 +107,7 @@ export default function RuleCorpusAnalytics() {
         <Card title="ממוקד מול גנרי">
           <ResponsiveContainer width="100%" height={200}>
             <PieChart>
-              <Pie data={scope} dataKey="value" nameKey="name" innerRadius={45} outerRadius={75} label {...PIE_PROPS}>
+              <Pie activeShape={ActivePieSector} data={scope} dataKey="value" nameKey="name" innerRadius={45} outerRadius={75} label {...PIE_PROPS}>
                 {scope.map((_: any, i: number) => <Cell key={i} fill={PALETTE[i]} />)}
               </Pie>
               <Tooltip /><Legend wrapperStyle={{ fontSize: 11 }} />
@@ -120,7 +120,7 @@ export default function RuleCorpusAnalytics() {
             <BarChart data={s.byCategory} layout="vertical" margin={{ left: 8, right: 12 }}>
               <ChartGrid vertical horizontal={false} />
               <XAxis type="number" {...AXIS_PROPS} /><YAxis type="category" dataKey="name" width={130} {...AXIS_PROPS} {...AXIS_PROPS} />
-              <Tooltip /><Bar dataKey="c" fill="#38bdf8" radius={BAR_RADIUS.horizontal} maxBarSize={BAR_MAX} />
+              <Tooltip /><Bar activeBar={ACTIVE_BAR} dataKey="c" fill="#38bdf8" radius={BAR_RADIUS.horizontal} maxBarSize={BAR_MAX} />
             </BarChart>
           </ResponsiveContainer>
         </Card>
@@ -130,7 +130,7 @@ export default function RuleCorpusAnalytics() {
             <BarChart data={s.byLambda} margin={{ left: 0, right: 8 }}>
               <ChartGrid />
               <XAxis dataKey="name" {...AXIS_PROPS} /><YAxis {...AXIS_PROPS} />
-              <Tooltip /><Bar dataKey="c" radius={BAR_RADIUS.vertical} maxBarSize={BAR_MAX}>
+              <Tooltip /><Bar activeBar={ACTIVE_BAR} dataKey="c" radius={BAR_RADIUS.vertical} maxBarSize={BAR_MAX}>
                 {(s.byLambda || []).map((_: any, i: number) => <Cell key={i} fill={PALETTE[i]} />)}
               </Bar>
             </BarChart>
@@ -142,7 +142,7 @@ export default function RuleCorpusAnalytics() {
             <BarChart data={(s.source || []).map((r: any) => ({ name: r.src, c: r.c }))} margin={{ left: 0, right: 8 }}>
               <ChartGrid />
               <XAxis dataKey="name" {...AXIS_PROPS} {...AXIS_PROPS} /><YAxis {...AXIS_PROPS} />
-              <Tooltip /><Bar dataKey="c" fill="#a78bfa" radius={BAR_RADIUS.vertical} maxBarSize={BAR_MAX} />
+              <Tooltip /><Bar activeBar={ACTIVE_BAR} dataKey="c" fill="#a78bfa" radius={BAR_RADIUS.vertical} maxBarSize={BAR_MAX} />
             </BarChart>
           </ResponsiveContainer>
         </Card>
@@ -152,7 +152,7 @@ export default function RuleCorpusAnalytics() {
             <BarChart data={confidence} margin={{ left: 0, right: 8 }}>
               <ChartGrid />
               <XAxis dataKey="bucket" {...AXIS_PROPS} /><YAxis {...AXIS_PROPS} />
-              <Tooltip /><Bar dataKey="c" fill="#34d399" radius={BAR_RADIUS.vertical} maxBarSize={BAR_MAX} />
+              <Tooltip /><Bar activeBar={ACTIVE_BAR} dataKey="c" fill="#34d399" radius={BAR_RADIUS.vertical} maxBarSize={BAR_MAX} />
             </BarChart>
           </ResponsiveContainer>
         </Card>

@@ -28,6 +28,7 @@ import {
 import {
   ChartGrid, AXIS_PROPS, ANIM, BAR_RADIUS, BAR_MAX,
   ChartTooltipShell, ChartLegendChips, useSeriesIsolation,
+  ACTIVE_BAR, ActivePieSector,
 } from '@/components/charts/kit'
 import { CHART_PALETTE } from '@/lib/chart-colors'
 import { formatCurrency, formatNumber, formatDate, formatCurrencyAxis } from '@/lib/format'
@@ -326,7 +327,7 @@ function CustomersSection({ searchQuery }: { searchQuery: string }) {
             <CardContent className="space-y-3">
               <ResponsiveContainer width="100%" height={240}>
                 <PieChart>
-                  <Pie
+                  <Pie activeShape={ActivePieSector}
                     data={pieData}
                     dataKey="value"
                     nameKey="name"
@@ -410,7 +411,7 @@ function CustomersSection({ searchQuery }: { searchQuery: string }) {
                       )
                     }}
                   />
-                  <Bar dataKey="revenue" fill={CHART_PALETTE[0]} radius={BAR_RADIUS.horizontal} maxBarSize={BAR_MAX} animationBegin={400} {...ANIM.secondary} />
+                  <Bar activeBar={ACTIVE_BAR} dataKey="revenue" fill={CHART_PALETTE[0]} radius={BAR_RADIUS.horizontal} maxBarSize={BAR_MAX} animationBegin={400} {...ANIM.secondary} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>

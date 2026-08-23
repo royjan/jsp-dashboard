@@ -18,7 +18,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
   AreaChart, Area,
 } from 'recharts'
-import { ChartGrid, AXIS_PROPS, BAR_RADIUS, BAR_MAX } from '@/components/charts/kit'
+import { ChartGrid, AXIS_PROPS, BAR_RADIUS, BAR_MAX, ACTIVE_BAR, ACTIVE_DOT } from '@/components/charts/kit'
 import { formatNumber } from '@/lib/constants'
 import { cardVariants } from '@/lib/motion'
 import { formatDate } from '@/lib/format'
@@ -267,7 +267,7 @@ function ChatInsightsContent() {
                         return [`${formatNumber(value)} · ${p.success_rate ?? 0}% הצלחה · ${formatNumber(p.avg_response_ms ?? 0)}ms`, p.label]
                       }}
                     />
-                    <Bar dataKey="count" radius={BAR_RADIUS.horizontal} maxBarSize={BAR_MAX} animationDuration={700}>
+                    <Bar activeBar={ACTIVE_BAR} dataKey="count" radius={BAR_RADIUS.horizontal} maxBarSize={BAR_MAX} animationDuration={700}>
                       {intentChart.map((e, i) => <Cell key={i} fill={e.fill} />)}
                     </Bar>
                   </BarChart>
@@ -510,8 +510,8 @@ function ChatInsightsContent() {
                   // eslint-disable-next-line @typescript-eslint/no-explicit-any
                   formatter={(value: any, name: any) => [formatNumber(value), name === 'conversations' ? 'שיחות' : 'משתמשים']}
                 />
-                <Area type="monotone" dataKey="conversations" stroke="#60a5fa" strokeWidth={2} fill="url(#convGrad)" />
-                <Area type="monotone" dataKey="users" stroke="#34d399" strokeWidth={2} fill="url(#userGrad)" />
+                <Area activeDot={ACTIVE_DOT} type="monotone" dataKey="conversations" stroke="#60a5fa" strokeWidth={2} fill="url(#convGrad)" />
+                <Area activeDot={ACTIVE_DOT} type="monotone" dataKey="users" stroke="#34d399" strokeWidth={2} fill="url(#userGrad)" />
               </AreaChart>
             </ResponsiveContainer>
           )}

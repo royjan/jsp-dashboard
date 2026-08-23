@@ -27,7 +27,7 @@ import { cn } from '@/lib/utils'
 import { deriveBrand, brandChipClasses } from '@/lib/brand'
 import { ArrowUpDown, Search, Crown, TrendingUp, Layers, AlertTriangle, Sparkles, RefreshCw, TableIcon, LayoutGrid, ChevronDown, ChevronLeft, ChevronRight, Filter, Target, FileText, TrendingDown, Clock, ArrowRightLeft } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from 'recharts'
-import { ChartGrid, AXIS_PROPS, BAR_RADIUS, BAR_MAX, PIE_PROPS, DonutCenter, ChartLegendChips } from '@/components/charts/kit'
+import { ChartGrid, AXIS_PROPS, BAR_RADIUS, BAR_MAX, PIE_PROPS, DonutCenter, ChartLegendChips, ACTIVE_BAR, ActivePieSector } from '@/components/charts/kit'
 import { incrementStreaming, decrementStreaming } from '@/lib/streaming-counter'
 import { formatCurrency, formatDate, formatNumber } from '@/lib/format'
 import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
@@ -561,7 +561,7 @@ function ConversionSection({ searchQuery }: { searchQuery: string }) {
                 <XAxis type="number" {...AXIS_PROPS} tickFormatter={(v) => formatCurrencyAxis(v)} />
                 <YAxis type="category" dataKey="name" {...AXIS_PROPS} width={70} />
                 <Tooltip formatter={(value: any) => [formatCurrency(value), '']} />
-                <Bar dataKey="value" radius={BAR_RADIUS.horizontal} maxBarSize={BAR_MAX} animationDuration={800} animationBegin={400}>
+                <Bar activeBar={ACTIVE_BAR} dataKey="value" radius={BAR_RADIUS.horizontal} maxBarSize={BAR_MAX} animationDuration={800} animationBegin={400}>
                   {funnelData.map((entry, index) => <Cell key={index} fill={entry.fill} />)}
                 </Bar>
               </BarChart>
@@ -577,7 +577,7 @@ function ConversionSection({ searchQuery }: { searchQuery: string }) {
                 <div className="relative">
                   <ResponsiveContainer width="100%" height={200}>
                     <PieChart>
-                      <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={58} outerRadius={85} animationDuration={800} animationBegin={600} {...PIE_PROPS}>
+                      <Pie activeShape={ActivePieSector} data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={58} outerRadius={85} animationDuration={800} animationBegin={600} {...PIE_PROPS}>
                         {pieData.map((entry, index) => <Cell key={index} fill={entry.fill} />)}
                       </Pie>
                       <Tooltip formatter={(value: any) => [formatCurrency(value as number), '']} />
@@ -994,8 +994,8 @@ function StockPageContent() {
                     formatter={(value: any, name: any) => [`${value}%`, name]}
                   />
                   <Legend />
-                  <Bar dataKey="revenue" name="% הכנסות" fill="#34d399" radius={BAR_RADIUS.vertical} maxBarSize={BAR_MAX} animationDuration={800} />
-                  <Bar dataKey="capital" name="% הון" fill="#60a5fa" radius={BAR_RADIUS.vertical} maxBarSize={BAR_MAX} animationDuration={800} animationBegin={200} />
+                  <Bar activeBar={ACTIVE_BAR} dataKey="revenue" name="% הכנסות" fill="#34d399" radius={BAR_RADIUS.vertical} maxBarSize={BAR_MAX} animationDuration={800} />
+                  <Bar activeBar={ACTIVE_BAR} dataKey="capital" name="% הון" fill="#60a5fa" radius={BAR_RADIUS.vertical} maxBarSize={BAR_MAX} animationDuration={800} animationBegin={200} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
@@ -1012,7 +1012,7 @@ function StockPageContent() {
               <div className="relative">
                 <ResponsiveContainer width="100%" height={200}>
                   <PieChart>
-                    <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%"
+                    <Pie activeShape={ActivePieSector} data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%"
                       innerRadius={52} outerRadius={82} animationDuration={800} {...PIE_PROPS}>
                       {pieData.map((entry, index) => (
                         <Cell key={index} fill={entry.fill} />

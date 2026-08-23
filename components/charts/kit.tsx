@@ -17,7 +17,7 @@
 
 import type React from 'react'
 import { useState, useCallback } from 'react'
-import { CartesianGrid } from 'recharts'
+import { CartesianGrid, Sector, type PieSectorDataItem } from 'recharts'
 import { cn } from '@/lib/utils'
 
 // ---------------------------------------------------------------------------
@@ -80,6 +80,52 @@ export const BAR_RADIUS = {
   vertical: [4, 4, 0, 0] as [number, number, number, number],
   /** Horizontal bars in an RTL page still grow left→right in the SVG. */
   horizontal: [0, 4, 4, 0] as [number, number, number, number],
+}
+
+// ---------------------------------------------------------------------------
+// Hover feedback
+// ---------------------------------------------------------------------------
+
+/*
+ * The charts animated on entry and then went inert: the tooltip was the only
+ * thing that acknowledged the pointer, and on a dense bar chart it names a row
+ * without telling you WHICH bar it read. These three give the mark under the
+ * cursor its own response.
+ *
+ * All three are driven by recharts' own active index — the same one the tooltip
+ * uses — so they cost no state, no handlers and no re-render of the page.
+ *
+ * They are hover STATES, not transitions: nothing travels, so there is no
+ * reduced-motion hazard to gate. (Entry animation is a separate concern; see
+ * ANIM, which every chart already spreads.)
+ */
+
+/** Bars: the hovered one comes to full strength and takes a thin outline. */
+export const ACTIVE_BAR = {
+  fillOpacity: 1,
+  stroke: 'var(--foreground)',
+  strokeOpacity: 0.4,
+  strokeWidth: 1,
+} as const
+
+/** Lines/areas: the dot on the hovered point, sized to be findable. */
+export const ACTIVE_DOT = {
+  r: 5,
+  strokeWidth: 2,
+  stroke: 'var(--card)',
+} as const
+
+/**
+ * Pie/donut: the hovered slice grows outward from the same centre.
+ *
+ * Growing only the OUTER radius is deliberate — pushing the whole sector out
+ * along its bisector (the usual "exploded pie") breaks the ring, and on a donut
+ * carrying a centred total it drags the eye off the number.
+ *
+ * Pass as `activeShape={ActivePieSector}`.
+ */
+export function ActivePieSector({ outerRadius = 0, ...rest }: PieSectorDataItem) {
+  return <Sector {...rest} outerRadius={outerRadius + 6} />
 }
 
 // ---------------------------------------------------------------------------

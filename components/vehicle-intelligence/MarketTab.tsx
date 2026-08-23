@@ -11,7 +11,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell,
 } from 'recharts'
-import { ChartGrid, AXIS_PROPS, BAR_RADIUS, BAR_MAX, PIE_PROPS, DonutCenter, ChartLegendChips } from '@/components/charts/kit'
+import { ChartGrid, AXIS_PROPS, BAR_RADIUS, BAR_MAX, PIE_PROPS, DonutCenter, ChartLegendChips, ACTIVE_BAR, ActivePieSector } from '@/components/charts/kit'
 import { formatNumber } from '@/lib/format'
 import { cardVariants } from '@/lib/motion'
 
@@ -140,7 +140,7 @@ export function MarketTab() {
                   <XAxis type="number" {...AXIS_PROPS} tickFormatter={(v) => formatNumber(v)} />
                   <YAxis type="category" dataKey="name" width={96} {...AXIS_PROPS} />
                   <Tooltip formatter={(v) => formatNumber(Number(v))} />
-                  <Bar dataKey="count" fill="#3b82f6" radius={BAR_RADIUS.horizontal} maxBarSize={BAR_MAX} name={isHe ? 'רכבים' : 'Vehicles'} />
+                  <Bar activeBar={ACTIVE_BAR} dataKey="count" fill="#3b82f6" radius={BAR_RADIUS.horizontal} maxBarSize={BAR_MAX} name={isHe ? 'רכבים' : 'Vehicles'} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
@@ -160,7 +160,7 @@ export function MarketTab() {
               <div className="relative">
                 <ResponsiveContainer width="100%" height={260}>
                   <PieChart>
-                    <Pie
+                    <Pie activeShape={ActivePieSector}
                       data={fuelBreakdown.slice(0, 8)}
                       dataKey="count"
                       nameKey="fuel"

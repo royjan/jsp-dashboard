@@ -23,7 +23,7 @@ import {
   LineChart, Line, AreaChart, Area, Cell, PieChart, Pie,
   RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
 } from 'recharts'
-import { ChartGrid, AXIS_PROPS, BAR_RADIUS, BAR_MAX } from '@/components/charts/kit'
+import { ChartGrid, AXIS_PROPS, BAR_RADIUS, BAR_MAX, ACTIVE_BAR, ACTIVE_DOT } from '@/components/charts/kit'
 import { formatCurrency, formatNumber, formatCurrencyAxis, maskMoneyInText } from '@/lib/format'
 import { cardVariants } from '@/lib/motion'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
@@ -302,8 +302,8 @@ function ReportContent() {
                       name === 'revenue' ? (isHe ? 'הכנסות' : 'Revenue') : (isHe ? 'זיכויים' : 'Credits')
                     ]} />
                     <Legend formatter={(v) => v === 'revenue' ? (isHe ? 'הכנסות' : 'Revenue') : (isHe ? 'זיכויים' : 'Credits')} />
-                    <Bar dataKey="revenue" fill="#60a5fa" radius={BAR_RADIUS.vertical} maxBarSize={BAR_MAX} animationDuration={800} />
-                    <Bar dataKey="credits" fill="#f87171" radius={BAR_RADIUS.vertical} maxBarSize={BAR_MAX} animationDuration={800} />
+                    <Bar activeBar={ACTIVE_BAR} dataKey="revenue" fill="#60a5fa" radius={BAR_RADIUS.vertical} maxBarSize={BAR_MAX} animationDuration={800} />
+                    <Bar activeBar={ACTIVE_BAR} dataKey="credits" fill="#f87171" radius={BAR_RADIUS.vertical} maxBarSize={BAR_MAX} animationDuration={800} />
                   </BarChart>
                 </ResponsiveContainer>
               </CardContent>
@@ -598,9 +598,9 @@ function ReportContent() {
                   <YAxis {...AXIS_PROPS} tickFormatter={(v) => formatCurrencyAxis(v)} />
                   <Tooltip formatter={(value: any) => [formatCurrency(value), '']} />
                   <Legend />
-                  <Line type="monotone" dataKey="2023" stroke="#34d399" strokeWidth={2} dot={{ r: 3 }} animationDuration={800} />
-                  <Line type="monotone" dataKey="2024" stroke="#60a5fa" strokeWidth={2} dot={{ r: 3 }} animationDuration={800} />
-                  <Line type="monotone" dataKey="2025" stroke="#f87171" strokeWidth={2} dot={{ r: 3 }} animationDuration={800} />
+                  <Line activeDot={ACTIVE_DOT} type="monotone" dataKey="2023" stroke="#34d399" strokeWidth={2} dot={{ r: 3 }} animationDuration={800} />
+                  <Line activeDot={ACTIVE_DOT} type="monotone" dataKey="2024" stroke="#60a5fa" strokeWidth={2} dot={{ r: 3 }} animationDuration={800} />
+                  <Line activeDot={ACTIVE_DOT} type="monotone" dataKey="2025" stroke="#f87171" strokeWidth={2} dot={{ r: 3 }} animationDuration={800} />
                 </LineChart>
               </ResponsiveContainer>
             </CardContent>
@@ -691,7 +691,7 @@ function ReportContent() {
                   <XAxis dataKey="month" {...AXIS_PROPS} />
                   <YAxis {...AXIS_PROPS} tickFormatter={(v) => formatCurrencyAxis(v)} />
                   <Tooltip formatter={(value: any) => [formatCurrency(value), isHe ? 'ממוצע' : 'Average']} />
-                  <Bar dataKey="avg_revenue" radius={BAR_RADIUS.vertical} maxBarSize={BAR_MAX} animationDuration={800}>
+                  <Bar activeBar={ACTIVE_BAR} dataKey="avg_revenue" radius={BAR_RADIUS.vertical} maxBarSize={BAR_MAX} animationDuration={800}>
                     {seasonalData.map((_: any, i: number) => (
                       <Cell key={i} fill={[10, 11].includes(i) ? '#34d399' : [3].includes(i) ? '#f87171' : '#60a5fa'} />
                     ))}
@@ -713,7 +713,7 @@ function ReportContent() {
                     <XAxis dataKey="day" {...AXIS_PROPS} />
                     <YAxis {...AXIS_PROPS} tickFormatter={(v) => formatCurrencyAxis(v)} />
                     <Tooltip formatter={(value: any) => [formatCurrency(value), isHe ? 'ממוצע' : 'Average']} />
-                    <Bar dataKey="avg_revenue" fill="#a78bfa" radius={BAR_RADIUS.vertical} maxBarSize={BAR_MAX} animationDuration={800} />
+                    <Bar activeBar={ACTIVE_BAR} dataKey="avg_revenue" fill="#a78bfa" radius={BAR_RADIUS.vertical} maxBarSize={BAR_MAX} animationDuration={800} />
                   </BarChart>
                 </ResponsiveContainer>
               </CardContent>
@@ -769,8 +769,8 @@ function ReportContent() {
                     name === 'credit_pct' ? (isHe ? '% כמות' : '% Count') : (isHe ? '% ערך' : '% Value')
                   ]} />
                   <Legend formatter={(v) => v === 'credit_pct' ? (isHe ? '% זיכויים (כמות)' : 'Credit % (Count)') : (isHe ? '% זיכויים (ערך)' : 'Credit % (Value)')} />
-                  <Line type="monotone" dataKey="credit_pct" stroke="#f87171" strokeWidth={2} dot={{ r: 4 }} animationDuration={800} />
-                  <Line type="monotone" dataKey="credit_value_pct" stroke="#f59e0b" strokeWidth={2} dot={{ r: 4 }} animationDuration={800} />
+                  <Line activeDot={ACTIVE_DOT} type="monotone" dataKey="credit_pct" stroke="#f87171" strokeWidth={2} dot={{ r: 4 }} animationDuration={800} />
+                  <Line activeDot={ACTIVE_DOT} type="monotone" dataKey="credit_value_pct" stroke="#f59e0b" strokeWidth={2} dot={{ r: 4 }} animationDuration={800} />
                 </LineChart>
               </ResponsiveContainer>
             </CardContent>
@@ -867,8 +867,8 @@ function ReportContent() {
                     if (v === 'new_customers') return isHe ? 'לקוחות חדשים' : 'New'
                     return v
                   }} />
-                  <Bar dataKey="returning_customers" stackId="a" fill="#60a5fa" maxBarSize={BAR_MAX} animationDuration={800} />
-                  <Bar dataKey="new_customers" stackId="a" fill="#34d399" radius={BAR_RADIUS.vertical} maxBarSize={BAR_MAX} animationDuration={800} />
+                  <Bar activeBar={ACTIVE_BAR} dataKey="returning_customers" stackId="a" fill="#60a5fa" maxBarSize={BAR_MAX} animationDuration={800} />
+                  <Bar activeBar={ACTIVE_BAR} dataKey="new_customers" stackId="a" fill="#34d399" radius={BAR_RADIUS.vertical} maxBarSize={BAR_MAX} animationDuration={800} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>

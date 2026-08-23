@@ -18,7 +18,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
   PieChart, Pie,
 } from 'recharts'
-import { ChartGrid, AXIS_PROPS, BAR_RADIUS, BAR_MAX, PIE_PROPS } from '@/components/charts/kit'
+import { ChartGrid, AXIS_PROPS, BAR_RADIUS, BAR_MAX, PIE_PROPS, ACTIVE_BAR, ActivePieSector } from '@/components/charts/kit'
 import { formatCurrency, formatCurrencyAxis, formatNumber } from '@/lib/format'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
 
@@ -199,7 +199,7 @@ export default function ReceivablesPage() {
           <CardContent>
             <ResponsiveContainer width="100%" height={240}>
               <PieChart>
-                <Pie data={agingPieData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={46} outerRadius={88} label={({ percent }) => ((percent ?? 0) >= 0.06 ? `${((percent ?? 0) * 100).toFixed(0)}%` : '')} labelLine={false} {...PIE_PROPS}>
+                <Pie activeShape={ActivePieSector} data={agingPieData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={46} outerRadius={88} label={({ percent }) => ((percent ?? 0) >= 0.06 ? `${((percent ?? 0) * 100).toFixed(0)}%` : '')} labelLine={false} {...PIE_PROPS}>
                   {agingPieData.map((_, i) => <Cell key={i} fill={AGING_COLORS[i]} />)}
                 </Pie>
                 <Tooltip formatter={(v) => formatCurrency(v as number)} />
@@ -227,7 +227,7 @@ export default function ReceivablesPage() {
                 <XAxis type="number" tickFormatter={(v) => formatCurrencyAxis(v)} {...AXIS_PROPS} />
                 <YAxis type="category" dataKey="name" width={140} {...AXIS_PROPS} tickFormatter={(v: string) => v.length > 20 ? v.substring(0, 20) + '…' : v} />
                 <Tooltip formatter={(v) => formatCurrency(v as number)} />
-                <Bar dataKey="aging.over_90" fill="#ef4444" name={t('overdue90Plus')} radius={BAR_RADIUS.horizontal} maxBarSize={BAR_MAX}>
+                <Bar activeBar={ACTIVE_BAR} dataKey="aging.over_90" fill="#ef4444" name={t('overdue90Plus')} radius={BAR_RADIUS.horizontal} maxBarSize={BAR_MAX}>
                   {customers.filter((c: any) => c.aging.over_90 > 0).slice(0, 10).map((c: any, i: number) => (
                     <Cell key={c.code || i} fill={c.aging.over_90 > 1000 ? '#dc2626' : '#ef4444'} />
                   ))}

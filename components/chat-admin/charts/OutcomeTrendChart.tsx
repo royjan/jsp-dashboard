@@ -4,7 +4,7 @@ import React from 'react'
 import {
   ComposedChart, Area, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts'
-import { ChartGrid, AXIS_PROPS } from '@/components/charts/kit'
+import { ChartGrid, AXIS_PROPS, ACTIVE_DOT } from '@/components/charts/kit'
 
 interface DailyRow {
   date: string
@@ -50,11 +50,11 @@ export function OutcomeTrendChart({ daily, coverage, height = 260 }: OutcomeTren
         <YAxis yAxisId="right" orientation="right" {...AXIS_PROPS} domain={[0, 100]} unit="%" />
         <Tooltip formatter={(val: any, name: any) => [`${val}%`, name]} />
         <Legend wrapperStyle={{ fontSize: 11 }} />
-        <Area yAxisId="left" type="monotone" dataKey="inStockPct" stackId="1" stroke="#10b981" fill="#10b981" fillOpacity={0.45} name="in stock" />
-        <Area yAxisId="left" type="monotone" dataKey="oosPct" stackId="1" stroke="#f59e0b" fill="#f59e0b" fillOpacity={0.45} name="OOS" />
-        <Area yAxisId="left" type="monotone" dataKey="notFoundPct" stackId="1" stroke="#ef4444" fill="#ef4444" fillOpacity={0.45} name="not found" />
+        <Area activeDot={ACTIVE_DOT} yAxisId="left" type="monotone" dataKey="inStockPct" stackId="1" stroke="#10b981" fill="#10b981" fillOpacity={0.45} name="in stock" />
+        <Area activeDot={ACTIVE_DOT} yAxisId="left" type="monotone" dataKey="oosPct" stackId="1" stroke="#f59e0b" fill="#f59e0b" fillOpacity={0.45} name="OOS" />
+        <Area activeDot={ACTIVE_DOT} yAxisId="left" type="monotone" dataKey="notFoundPct" stackId="1" stroke="#ef4444" fill="#ef4444" fillOpacity={0.45} name="not found" />
         {coverage && (
-          <Line yAxisId="right" type="monotone" dataKey="coverage" stroke="#6366f1" strokeWidth={2} dot={false} name="deterministic %" />
+          <Line activeDot={ACTIVE_DOT} yAxisId="right" type="monotone" dataKey="coverage" stroke="#6366f1" strokeWidth={2} dot={false} name="deterministic %" />
         )}
       </ComposedChart>
     </ResponsiveContainer>

@@ -1,7 +1,7 @@
 'use client'
 
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
-import { ChartGrid, AXIS_PROPS } from '@/components/charts/kit'
+import { ChartGrid, AXIS_PROPS, ACTIVE_DOT } from '@/components/charts/kit'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useLocale } from '@/lib/locale-context'
@@ -63,7 +63,7 @@ export function SalesAreaChart({ data, isLoading, title, height = 300 }: SalesAr
               labelFormatter={(label) => new Date(label).toLocaleDateString(dateLocale, { weekday: 'short', month: 'short', day: 'numeric' })}
               labelStyle={{ color: 'var(--muted-foreground)' }}
             />
-            <Area
+            <Area activeDot={ACTIVE_DOT}
               type="monotone"
               dataKey="revenue"
               stroke={CHART_COLOR}

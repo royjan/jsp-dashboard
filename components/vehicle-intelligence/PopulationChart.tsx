@@ -8,7 +8,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell,
 } from 'recharts'
-import { ChartGrid, BAR_RADIUS, BAR_MAX, PIE_PROPS, DonutCenter } from '@/components/charts/kit'
+import { ChartGrid, BAR_RADIUS, BAR_MAX, PIE_PROPS, DonutCenter, ACTIVE_BAR, ActivePieSector } from '@/components/charts/kit'
 
 // 15 distinct, bright colors so the top-15 manufacturers never reuse a hue.
 const BAR_COLORS = [
@@ -111,7 +111,7 @@ export function PopulationChart({
                   cursor={{ fill: 'var(--muted)', fillOpacity: 0.15 }}
                   formatter={(value: any) => [Number(value).toLocaleString(), isHe ? 'רכבים' : 'Vehicles']}
                 />
-                <Bar
+                <Bar activeBar={ACTIVE_BAR}
                   dataKey="count"
                   radius={BAR_RADIUS.horizontal}
                   maxBarSize={BAR_MAX}
@@ -149,7 +149,7 @@ export function PopulationChart({
             <div className="relative w-full h-[280px]">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
-                  <Pie
+                  <Pie activeShape={ActivePieSector}
                     data={pieData}
                     cx="50%"
                     cy="50%"

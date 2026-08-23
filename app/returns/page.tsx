@@ -15,7 +15,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   LineChart, Line,
 } from 'recharts'
-import { ChartGrid, AXIS_PROPS, BAR_RADIUS, BAR_MAX } from '@/components/charts/kit'
+import { ChartGrid, AXIS_PROPS, BAR_RADIUS, BAR_MAX, ACTIVE_BAR } from '@/components/charts/kit'
 import { formatCurrency, formatNumber } from '@/lib/format'
 import { cardVariants } from '@/lib/motion'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
@@ -179,7 +179,7 @@ function ReturnsContent() {
                   <XAxis dataKey="month" {...AXIS_PROPS} />
                   <YAxis {...AXIS_PROPS} />
                   <Tooltip />
-                  <Bar dataKey="count" fill="#ef4444" radius={BAR_RADIUS.vertical} maxBarSize={BAR_MAX} name={isHe ? 'החזרות' : 'Returns'} />
+                  <Bar activeBar={ACTIVE_BAR} dataKey="count" fill="#ef4444" radius={BAR_RADIUS.vertical} maxBarSize={BAR_MAX} name={isHe ? 'החזרות' : 'Returns'} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>

@@ -2,7 +2,7 @@
 
 import React from 'react'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts'
-import { PIE_PROPS } from '@/components/charts/kit'
+import { PIE_PROPS, ActivePieSector } from '@/components/charts/kit'
 
 interface FlowSourceRow {
   source: string
@@ -33,7 +33,7 @@ export function CoverageDonut({ data, pct }: { data: FlowSourceRow[]; pct: numbe
       <div className="relative" style={{ height: 160 }}>
         <ResponsiveContainer width="100%" height={160}>
           <PieChart>
-            <Pie data={rows as unknown as Record<string, unknown>[]} dataKey="count" nameKey="source" cx="50%" cy="50%" innerRadius={48} outerRadius={70} {...PIE_PROPS}>
+            <Pie activeShape={ActivePieSector} data={rows as unknown as Record<string, unknown>[]} dataKey="count" nameKey="source" cx="50%" cy="50%" innerRadius={48} outerRadius={70} {...PIE_PROPS}>
               {rows.map((r, i) => <Cell key={i} fill={COLORS[r.source] || '#64748b'} />)}
             </Pie>
             <Tooltip formatter={(val: any, name: any) => [val.toLocaleString(), LABELS[name] || name]} />
