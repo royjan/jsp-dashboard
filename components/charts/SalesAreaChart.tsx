@@ -1,6 +1,7 @@
 'use client'
 
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
+import { ChartGrid, AXIS_PROPS } from '@/components/charts/kit'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useLocale } from '@/lib/locale-context'
@@ -47,18 +48,17 @@ export function SalesAreaChart({ data, isLoading, title, height = 300 }: SalesAr
                 <stop offset="95%" stopColor={CHART_COLOR} stopOpacity={0.02} />
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" />
+            <ChartGrid />
             <XAxis
               dataKey="date"
-              tick={{ fontSize: 12 }}
+              {...AXIS_PROPS}
               tickFormatter={(v) => new Date(v).toLocaleDateString(dateLocale, { month: 'short', day: 'numeric' })}
             />
             <YAxis
-              tick={{ fontSize: 12 }}
+              {...AXIS_PROPS}
               tickFormatter={(v) => formatCurrencyAxis(v)}
             />
             <Tooltip
-              contentStyle={{ backgroundColor: 'var(--popover)', borderColor: 'var(--border)', borderRadius: '8px', color: 'var(--popover-foreground)' }}
               formatter={(value) => [formatCurrency(Number(value)), t('revenue')]}
               labelFormatter={(label) => new Date(label).toLocaleDateString(dateLocale, { weekday: 'short', month: 'short', day: 'numeric' })}
               labelStyle={{ color: 'var(--muted-foreground)' }}

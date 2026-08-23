@@ -3,15 +3,14 @@
 import React, { useEffect, useState } from 'react'
 import { Loader2, Package, AlertTriangle, Database, Sparkles, Check } from 'lucide-react'
 import {
-  ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Legend,
+  ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, Legend,
 } from 'recharts'
+import { ChartGrid, AXIS_PROPS, BAR_RADIUS } from '@/components/charts/kit'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 const PALETTE = ['#38bdf8', '#34d399', '#f59e0b', '#a78bfa', '#f472b6', '#60a5fa', '#fb7185', '#facc15', '#4ade80', '#22d3ee', '#c084fc', '#94a3b8']
 const STATUS_COLORS: Record<string, string> = { approved: '#34d399', suggestion: '#f59e0b', rejected: '#64748b' }
-const axis = { stroke: '#475569', fontSize: 11 }
-const tip = { contentStyle: { background: '#1e293b', border: '1px solid #334155', borderRadius: 6, fontSize: 12, color: '#e2e8f0' } }
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -100,7 +99,7 @@ export default function RuleCorpusAnalytics() {
               <Pie data={status} dataKey="value" nameKey="name" innerRadius={45} outerRadius={75} label>
                 {status.map((e: any, i: number) => <Cell key={i} fill={STATUS_COLORS[e.name] || PALETTE[i]} />)}
               </Pie>
-              <Tooltip {...tip} /><Legend wrapperStyle={{ fontSize: 11 }} />
+              <Tooltip /><Legend wrapperStyle={{ fontSize: 11 }} />
             </PieChart>
           </ResponsiveContainer>
         </Card>
@@ -111,7 +110,7 @@ export default function RuleCorpusAnalytics() {
               <Pie data={scope} dataKey="value" nameKey="name" innerRadius={45} outerRadius={75} label>
                 {scope.map((_: any, i: number) => <Cell key={i} fill={PALETTE[i]} />)}
               </Pie>
-              <Tooltip {...tip} /><Legend wrapperStyle={{ fontSize: 11 }} />
+              <Tooltip /><Legend wrapperStyle={{ fontSize: 11 }} />
             </PieChart>
           </ResponsiveContainer>
         </Card>
@@ -119,9 +118,9 @@ export default function RuleCorpusAnalytics() {
         <Card title="חוקים לפי קטגוריה">
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={s.byCategory} layout="vertical" margin={{ left: 8, right: 12 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#334155" horizontal={false} />
-              <XAxis type="number" {...axis} /><YAxis type="category" dataKey="name" width={130} {...axis} tick={{ fontSize: 10, fill: '#cbd5e1' }} />
-              <Tooltip {...tip} /><Bar dataKey="c" fill="#38bdf8" radius={[0, 3, 3, 0]} />
+              <ChartGrid vertical horizontal={false} />
+              <XAxis type="number" {...AXIS_PROPS} /><YAxis type="category" dataKey="name" width={130} {...AXIS_PROPS} {...AXIS_PROPS} />
+              <Tooltip /><Bar dataKey="c" fill="#38bdf8" radius={BAR_RADIUS.horizontal} />
             </BarChart>
           </ResponsiveContainer>
         </Card>
@@ -129,9 +128,9 @@ export default function RuleCorpusAnalytics() {
         <Card title="חוקים לפי פורטל (lambda)">
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={s.byLambda} margin={{ left: 0, right: 8 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-              <XAxis dataKey="name" {...axis} /><YAxis {...axis} />
-              <Tooltip {...tip} /><Bar dataKey="c" radius={[3, 3, 0, 0]}>
+              <ChartGrid />
+              <XAxis dataKey="name" {...AXIS_PROPS} /><YAxis {...AXIS_PROPS} />
+              <Tooltip /><Bar dataKey="c" radius={BAR_RADIUS.vertical}>
                 {(s.byLambda || []).map((_: any, i: number) => <Cell key={i} fill={PALETTE[i]} />)}
               </Bar>
             </BarChart>
@@ -141,9 +140,9 @@ export default function RuleCorpusAnalytics() {
         <Card title="מקור החוק">
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={(s.source || []).map((r: any) => ({ name: r.src, c: r.c }))} margin={{ left: 0, right: 8 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-              <XAxis dataKey="name" {...axis} tick={{ fontSize: 9, fill: '#cbd5e1' }} /><YAxis {...axis} />
-              <Tooltip {...tip} /><Bar dataKey="c" fill="#a78bfa" radius={[3, 3, 0, 0]} />
+              <ChartGrid />
+              <XAxis dataKey="name" {...AXIS_PROPS} {...AXIS_PROPS} /><YAxis {...AXIS_PROPS} />
+              <Tooltip /><Bar dataKey="c" fill="#a78bfa" radius={BAR_RADIUS.vertical} />
             </BarChart>
           </ResponsiveContainer>
         </Card>
@@ -151,9 +150,9 @@ export default function RuleCorpusAnalytics() {
         <Card title="התפלגות confidence">
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={confidence} margin={{ left: 0, right: 8 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-              <XAxis dataKey="bucket" {...axis} /><YAxis {...axis} />
-              <Tooltip {...tip} /><Bar dataKey="c" fill="#34d399" radius={[3, 3, 0, 0]} />
+              <ChartGrid />
+              <XAxis dataKey="bucket" {...AXIS_PROPS} /><YAxis {...AXIS_PROPS} />
+              <Tooltip /><Bar dataKey="c" fill="#34d399" radius={BAR_RADIUS.vertical} />
             </BarChart>
           </ResponsiveContainer>
         </Card>

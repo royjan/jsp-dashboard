@@ -14,8 +14,9 @@ import {
 import { ItemLink } from '@/components/shared/ItemLink'
 import { SubTabs } from '@/components/shared/SubTabs'
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
 } from 'recharts'
+import { ChartGrid, AXIS_PROPS, BAR_RADIUS } from '@/components/charts/kit'
 import { formatNumber, formatCurrency } from '@/lib/format'
 import { cardVariants } from '@/lib/motion'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
@@ -264,12 +265,12 @@ export default function DemandPage() {
                   layout="vertical"
                   margin={{ left: 10, right: 10 }}
                 >
-                  <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
-                  <XAxis type="number" tick={{ fontSize: 11 }} />
-                  <YAxis type="category" dataKey="name" width={120} tick={{ fontSize: 11 }} />
+                  <ChartGrid />
+                  <XAxis type="number" {...AXIS_PROPS} />
+                  <YAxis type="category" dataKey="name" width={120} {...AXIS_PROPS} />
                   <Tooltip />
-                  <Bar dataKey="searches" fill="#3b82f6" radius={[0, 4, 4, 0]} name="Searches" />
-                  <Bar dataKey="failed" fill="#f59e0b" radius={[0, 4, 4, 0]} name="Zero Results" />
+                  <Bar dataKey="searches" fill="#3b82f6" radius={BAR_RADIUS.horizontal} name="Searches" />
+                  <Bar dataKey="failed" fill="#f59e0b" radius={BAR_RADIUS.horizontal} name="Zero Results" />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>

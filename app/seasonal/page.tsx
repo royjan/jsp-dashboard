@@ -13,7 +13,8 @@ import { SeasonalPageSkeleton } from '@/components/layout/PageSkeleton'
 import { Badge } from '@/components/ui/badge'
 import { ItemLink } from '@/components/shared/ItemLink'
 import { MONTH_NAMES, formatCurrency } from '@/lib/constants'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts'
+import { ChartGrid, AXIS_PROPS } from '@/components/charts/kit'
 import { Snowflake, Sun, Sparkles, Loader2 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { useQueryClient } from '@tanstack/react-query'
@@ -435,9 +436,9 @@ function SeasonalPageContent() {
               <div className="h-[220px] sm:h-[280px] lg:h-[350px]">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={yoyData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis dataKey="month" tick={{ fontSize: 12 }} />
-                  <YAxis tick={{ fontSize: 12 }} />
+                  <ChartGrid />
+                  <XAxis dataKey="month" {...AXIS_PROPS} />
+                  <YAxis {...AXIS_PROPS} />
                   <Tooltip />
                   <Legend />
                   <Line

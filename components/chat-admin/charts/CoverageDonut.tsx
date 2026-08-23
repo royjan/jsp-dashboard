@@ -19,7 +19,6 @@ const LABELS: Record<string, string> = {
   unknown: 'unknown',
 }
 
-const TOOLTIP_STYLE = { background: '#1b1b1f', border: '1px solid #333', borderRadius: 8, fontSize: 12 }
 
 /** Donut of the flow-decision-source split with a center deterministic-coverage % label. */
 export function CoverageDonut({ data, pct }: { data: FlowSourceRow[]; pct: number }) {
@@ -36,7 +35,7 @@ export function CoverageDonut({ data, pct }: { data: FlowSourceRow[]; pct: numbe
             <Pie data={rows as unknown as Record<string, unknown>[]} dataKey="count" nameKey="source" cx="50%" cy="50%" innerRadius={48} outerRadius={70} paddingAngle={2} stroke="none">
               {rows.map((r, i) => <Cell key={i} fill={COLORS[r.source] || '#64748b'} />)}
             </Pie>
-            <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(val: any, name: any) => [val.toLocaleString(), LABELS[name] || name]} />
+            <Tooltip formatter={(val: any, name: any) => [val.toLocaleString(), LABELS[name] || name]} />
           </PieChart>
         </ResponsiveContainer>
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">

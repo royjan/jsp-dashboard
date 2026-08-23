@@ -22,9 +22,14 @@ import {
   Users, UserMinus, DollarSign, TrendingUp, TrendingDown, Minus, Crown, ShieldAlert,
 } from 'lucide-react'
 import {
-  PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend,
-  BarChart, Bar, XAxis, YAxis, CartesianGrid,
+  PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
+  BarChart, Bar, XAxis, YAxis,
 } from 'recharts'
+import {
+  ChartGrid, AXIS_PROPS, ANIM, BAR_RADIUS,
+  ChartTooltipShell, ChartLegendChips, useSeriesIsolation,
+} from '@/components/charts/kit'
+import { CHART_PALETTE } from '@/lib/chart-colors'
 import { formatCurrency, formatNumber, formatDate, formatCurrencyAxis } from '@/lib/format'
 import { StatTile, StatGrid } from '@/components/shared/StatTile'
 import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
@@ -164,6 +169,9 @@ function CustomersSection({ searchQuery }: { searchQuery: string }) {
 
   // Sort stays CONTROLLED here — it is persisted to the URL above, so the page
   // owns it and <DataTable> just reports clicks.
+  // Above the early returns: the donut and its legend share this state.
+  const concentration = useSeriesIsolation()
+
   const customerColumns = useMemo(() => CUSTOMER_COLUMNS(t), [t])
   const churnColumns = useMemo(() => CHURN_COLUMNS(t), [t])
 
@@ -185,20 +193,36 @@ function CustomersSection({ searchQuery }: { searchQuery: string }) {
   if (error) return <ErrorState onRetry={() => refetch()} className="mt-6" />
   if (!data) return null
 
+  // Names are NOT truncated here any more: the chip legend below the donut is
+  // plain DOM and wraps, where the old recharts <Legend> cut every Hebrew
+  // customer to "מ.ב.גבע שרותי ר…". `key` is the identity the legend isolates
+  // by, so it must survive duplicate display names.
   const pieData = (() => {
     const top5Rev = data.customers.slice(0, 5).reduce((s: number, c: any) => s + c.total_revenue, 0)
     const rest = data.summary.total_revenue - top5Rev
-    const colors = ['#34d399', '#60a5fa', '#f59e0b', '#a78bfa', '#f87171']
+    const total = data.summary.total_revenue || 1
     const items = data.customers.slice(0, 5).map((c: any, i: number) => ({
-      name: c.name.length > 15 ? c.name.substring(0, 15) + '…' : c.name,
-      fullName: c.name, value: c.total_revenue, fill: colors[i],
+      key: String(c.code ?? c.name ?? i),
+      name: c.name,
+      value: c.total_revenue,
+      share: (c.total_revenue / total) * 100,
+      fill: CHART_PALETTE[i % CHART_PALETTE.length],
     }))
-    if (rest > 0) items.push({ name: t('others'), fullName: t('others'), value: rest, fill: '#6b7280' })
+    // "אחרים" is the long tail, not a category — grey keeps it from reading as
+    // the biggest customer just because it is the biggest slice.
+    if (rest > 0) items.push({
+      key: '__others__',
+      name: t('others'),
+      value: rest,
+      share: (rest / total) * 100,
+      fill: 'var(--muted-foreground)',
+    })
     return items
   })()
 
   const top10Data = data.customers.slice(0, 10).map((c: any) => ({
     name: c.name.length > 12 ? c.name.substring(0, 12) + '…' : c.name,
+    fullName: c.name,
     revenue: c.total_revenue,
   }))
 
@@ -299,18 +323,66 @@ function CustomersSection({ searchQuery }: { searchQuery: string }) {
             <CardHeader className="pb-2">
               <CardTitle className="text-base">{t('concentrationChart')}</CardTitle>
             </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={260}>
+            <CardContent className="space-y-3">
+              <ResponsiveContainer width="100%" height={240}>
                 <PieChart>
-                  <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={45} outerRadius={80} paddingAngle={2} animationDuration={800} animationBegin={500}>
-                    {pieData.map((entry: any, index: number) => <Cell key={index} fill={entry.fill} />)}
+                  <Pie
+                    data={pieData}
+                    dataKey="value"
+                    nameKey="name"
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={52}
+                    outerRadius={86}
+                    paddingAngle={2}
+                    stroke="var(--card)"
+                    strokeWidth={2}
+                    animationBegin={300}
+                    {...ANIM.primary}
+                  >
+                    {pieData.map((entry: any) => (
+                      <Cell
+                        key={entry.key}
+                        fill={entry.fill}
+                        fillOpacity={concentration.opacityFor(entry.key)}
+                        onMouseEnter={() => concentration.setIsolated(entry.key)}
+                        onMouseLeave={() => concentration.setIsolated(null)}
+                        style={{ cursor: 'pointer' }}
+                      />
+                    ))}
                   </Pie>
-                  <Tooltip contentStyle={{ backgroundColor: 'var(--popover)', borderColor: 'var(--border)', borderRadius: '8px', color: 'var(--popover-foreground)' }} formatter={(value: any, name: any, props: any) => [formatCurrency(value as number), props.payload.fullName || name]} />
-                  <Legend formatter={(value) => <span className="text-xs">{value}</span>} />
-                  <text x="50%" y="46%" textAnchor="middle" fill="var(--foreground)" fontSize={18}>{data.concentration.top5_pct}%</text>
-                  <text x="50%" y="57%" textAnchor="middle" fill="var(--muted-foreground)" fontSize={10}>{t('top5')}</text>
+                  <Tooltip
+                    content={({ active, payload }) => {
+                      if (!active || !payload?.length) return null
+                      const row: any = payload[0].payload
+                      return (
+                        <ChartTooltipShell
+                          title={row.name}
+                          rows={[{ label: t('revenue'), value: formatCurrency(row.value), color: row.fill }]}
+                          footer={
+                            <span className="text-muted-foreground tabular-nums">
+                              {row.share.toFixed(1)}% {t('ofTotal')}
+                            </span>
+                          }
+                        />
+                      )
+                    }}
+                  />
+                  <text x="50%" y="47%" textAnchor="middle" fill="var(--foreground)" fontSize={22} fontWeight={600}>{data.concentration.top5_pct}%</text>
+                  <text x="50%" y="58%" textAnchor="middle" fill="var(--muted-foreground)" fontSize={10}>{t('top5')}</text>
                 </PieChart>
               </ResponsiveContainer>
+              <ChartLegendChips
+                title={t('isolateSeries')}
+                isolated={concentration.isolated}
+                onIsolate={concentration.setIsolated}
+                items={pieData.map((d: any) => ({
+                  key: d.key,
+                  label: d.name,
+                  value: `${d.share.toFixed(1)}%`,
+                  color: d.fill,
+                }))}
+              />
             </CardContent>
           </Card>
           <Card>
@@ -320,11 +392,25 @@ function CustomersSection({ searchQuery }: { searchQuery: string }) {
             <CardContent>
               <ResponsiveContainer width="100%" height={250}>
                 <BarChart data={top10Data} layout="vertical" margin={{ left: 5, right: 15, top: 5, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                  <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={(v) => formatCurrencyAxis(v)} />
-                  <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={80} />
-                  <Tooltip contentStyle={{ backgroundColor: 'var(--popover)', borderColor: 'var(--border)', borderRadius: '8px', color: 'var(--popover-foreground)' }} formatter={(value: any) => [formatCurrency(value), t('revenue')]} />
-                  <Bar dataKey="revenue" fill="#60a5fa" radius={[0, 4, 4, 0]} animationDuration={800} animationBegin={600} />
+                  {/* Vertical rules only: on a horizontal bar chart they are
+                      the value axis, so they measure rather than clutter. */}
+                  <ChartGrid vertical horizontal={false} />
+                  <XAxis type="number" {...AXIS_PROPS} tickFormatter={(v) => formatCurrencyAxis(v)} />
+                  <YAxis type="category" dataKey="name" {...AXIS_PROPS} width={80} />
+                  <Tooltip
+                    cursor={{ fill: 'var(--muted)', fillOpacity: 0.35 }}
+                    content={({ active, payload }) => {
+                      if (!active || !payload?.length) return null
+                      const row: any = payload[0].payload
+                      return (
+                        <ChartTooltipShell
+                          title={row.fullName}
+                          rows={[{ label: t('revenue'), value: formatCurrency(row.revenue), color: CHART_PALETTE[0] }]}
+                        />
+                      )
+                    }}
+                  />
+                  <Bar dataKey="revenue" fill={CHART_PALETTE[0]} radius={BAR_RADIUS.horizontal} animationBegin={400} {...ANIM.secondary} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>

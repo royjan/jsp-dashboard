@@ -19,9 +19,10 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { OverviewPageSkeleton } from '@/components/layout/PageSkeleton'
 import type { Period, SalesDataPoint, TopSellingItem } from '@/lib/types'
 import {
-  ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip,
+  ScatterChart, Scatter, XAxis, YAxis, Tooltip,
   ResponsiveContainer, Cell, ZAxis,
 } from 'recharts'
+import { ChartGrid } from '@/components/charts/kit'
 import { formatCurrency, formatDate, formatNumber } from '@/lib/format'
 import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
@@ -376,7 +377,7 @@ function HomePageContent() {
             <div className="h-[250px] sm:h-[320px] lg:h-[400px]">
             <ResponsiveContainer width="100%" height="100%">
               <ScatterChart margin={{ top: 10, right: 10, bottom: 30, left: 20 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                <ChartGrid />
                 <XAxis
                   type="number"
                   dataKey="x"
@@ -398,7 +399,6 @@ function HomePageContent() {
                 />
                 <ZAxis range={[60, 300]} />
                 <Tooltip
-                  contentStyle={{ backgroundColor: 'var(--popover)', borderColor: 'var(--border)', borderRadius: '8px', color: 'var(--popover-foreground)' }}
                   formatter={(value: any, name: any) => [value, name]}
                   labelFormatter={(_, payload) => {
                     const p = payload?.[0]?.payload

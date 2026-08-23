@@ -15,7 +15,8 @@ import { AlertTriangle, Clock, ShieldAlert, Eye, TrendingDown, ArrowLeft, Search
 import { EbayRecommendButton } from '@/components/shared/EbayRecommendButton'
 import { ItemLink } from '@/components/shared/ItemLink'
 import { SortableTh } from '@/components/shared/sortable-table'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Area, AreaChart } from 'recharts'
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, Area, AreaChart } from 'recharts'
+import { ChartGrid, AXIS_PROPS } from '@/components/charts/kit'
 import { formatCurrency, formatNumber } from '@/lib/format'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
 
@@ -101,11 +102,10 @@ function ForecastChart({ itemCode }: { itemCode: string }) {
               <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
             </linearGradient>
           </defs>
-          <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-          <XAxis dataKey="month" className="text-xs" tick={{ fontSize: 11 }} />
-          <YAxis className="text-xs" tick={{ fontSize: 11 }} />
+          <ChartGrid />
+          <XAxis dataKey="month" className="text-xs" {...AXIS_PROPS} />
+          <YAxis className="text-xs" {...AXIS_PROPS} />
           <Tooltip
-            contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: '12px' }}
             labelStyle={{ fontWeight: 600 }}
           />
           <ReferenceLine y={0} stroke="hsl(var(--destructive))" strokeDasharray="3 3" label={{ value: locale === 'he' ? 'אזילה' : 'Stock-out', position: 'right', fontSize: 11 }} />
@@ -119,10 +119,10 @@ function ForecastChart({ itemCode }: { itemCode: string }) {
           <h4 className="text-sm font-medium mb-2">{locale === 'he' ? 'היסטוריית מכירות חודשית' : 'Monthly Sales History'}</h4>
           <ResponsiveContainer width="100%" height={160}>
             <LineChart data={data.historical_monthly} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-              <XAxis dataKey="month" tick={{ fontSize: 10 }} tickFormatter={(v: number) => String(v)} />
-              <YAxis tick={{ fontSize: 10 }} />
-              <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: '12px' }} />
+              <ChartGrid />
+              <XAxis dataKey="month" {...AXIS_PROPS} tickFormatter={(v: number) => String(v)} />
+              <YAxis {...AXIS_PROPS} />
+              <Tooltip />
               <Line type="monotone" dataKey="quantity" stroke="hsl(var(--chart-2))" name={locale === 'he' ? 'כמות' : 'Quantity'} strokeWidth={1.5} dot={{ r: 2 }} />
             </LineChart>
           </ResponsiveContainer>

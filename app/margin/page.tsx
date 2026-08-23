@@ -10,9 +10,9 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { ItemLink } from '@/components/shared/ItemLink'
 import { formatNumber, formatCurrency, formatCurrencyAxis } from '@/lib/constants'
 import {
-  ScatterChart, Scatter, BarChart, Bar, XAxis, YAxis, ZAxis,
-  CartesianGrid, Tooltip, ResponsiveContainer, Cell,
+  ScatterChart, Scatter, BarChart, Bar, XAxis, YAxis, ZAxis, Tooltip, ResponsiveContainer, Cell,
 } from 'recharts'
+import { ChartGrid, AXIS_PROPS } from '@/components/charts/kit'
 import {
   TrendingUp, Package, Percent, Hourglass, BarChart3, AlertTriangle,
 } from 'lucide-react'
@@ -164,14 +164,14 @@ function MarginContent() {
           <div className="h-[350px] min-w-0">
             <ResponsiveContainer width="100%" height="100%" minHeight={120}>
               <ScatterChart margin={{ top: 10, right: 10, bottom: 10, left: 10 }}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                <ChartGrid />
                 <XAxis
                   type="number" dataKey="x" name={isHe ? 'הכנסה' : 'Revenue'}
-                  tick={{ fontSize: 11 }} tickFormatter={(v) => formatCurrencyAxis(v)}
+                  {...AXIS_PROPS} tickFormatter={(v) => formatCurrencyAxis(v)}
                 />
                 <YAxis
                   type="number" dataKey="y" name={isHe ? 'כמות' : 'Quantity'}
-                  tick={{ fontSize: 11 }} tickFormatter={(v) => formatNumber(v)}
+                  {...AXIS_PROPS} tickFormatter={(v) => formatNumber(v)}
                 />
                 <ZAxis type="number" dataKey="z" range={[40, 400]} name={isHe ? 'מחיר' : 'Price'} />
                 <Tooltip

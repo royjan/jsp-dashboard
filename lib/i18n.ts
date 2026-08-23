@@ -77,6 +77,7 @@ export const translations = {
     byDay: 'יומי',
     byWeek: 'שבועי',
     partialWeek: 'שבוע חלקי',
+    ofTotal: 'מסך הכל',
 
     // Seasonal
     seasonalHeatmap: 'מפת חום עונתית',
@@ -813,6 +814,7 @@ export const translations = {
     byDay: 'Daily',
     byWeek: 'Weekly',
     partialWeek: 'Partial week',
+    ofTotal: 'of total',
 
     seasonalHeatmap: 'Seasonal Sales Heatmap',
     salesIntensity: 'Sales intensity by product category and month (multi-year average)',

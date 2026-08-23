@@ -2,8 +2,9 @@
 
 import React from 'react'
 import {
-  ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+  ComposedChart, Area, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts'
+import { ChartGrid, AXIS_PROPS } from '@/components/charts/kit'
 
 interface DailyRow {
   date: string
@@ -19,7 +20,6 @@ interface OutcomeTrendChartProps {
   height?: number
 }
 
-const TOOLTIP_STYLE = { background: '#1b1b1f', border: '1px solid #333', borderRadius: 8, fontSize: 12 }
 
 /**
  * 100%-stacked outcome areas (in-stock / OOS / not-found) with an indigo
@@ -44,11 +44,11 @@ export function OutcomeTrendChart({ daily, coverage, height = 260 }: OutcomeTren
   return (
     <ResponsiveContainer width="100%" height={height}>
       <ComposedChart data={data}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2e" />
-        <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#8a8a90' }} />
-        <YAxis yAxisId="left" tick={{ fontSize: 11, fill: '#8a8a90' }} domain={[0, 100]} unit="%" />
-        <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: '#818cf8' }} domain={[0, 100]} unit="%" />
-        <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(val: any, name: any) => [`${val}%`, name]} />
+        <ChartGrid />
+        <XAxis dataKey="date" {...AXIS_PROPS} />
+        <YAxis yAxisId="left" {...AXIS_PROPS} domain={[0, 100]} unit="%" />
+        <YAxis yAxisId="right" orientation="right" {...AXIS_PROPS} domain={[0, 100]} unit="%" />
+        <Tooltip formatter={(val: any, name: any) => [`${val}%`, name]} />
         <Legend wrapperStyle={{ fontSize: 11 }} />
         <Area yAxisId="left" type="monotone" dataKey="inStockPct" stackId="1" stroke="#10b981" fill="#10b981" fillOpacity={0.45} name="in stock" />
         <Area yAxisId="left" type="monotone" dataKey="oosPct" stackId="1" stroke="#f59e0b" fill="#f59e0b" fillOpacity={0.45} name="OOS" />

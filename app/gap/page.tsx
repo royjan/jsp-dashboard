@@ -16,8 +16,9 @@ import {
   MessageCircle, TrendingUp, DollarSign, Send,
 } from 'lucide-react'
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
 } from 'recharts'
+import { ChartGrid, AXIS_PROPS, BAR_RADIUS } from '@/components/charts/kit'
 import { formatCurrency, formatNumber, formatDate } from '@/lib/format'
 import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
 import { sortRows } from '@/lib/sort'
@@ -270,16 +271,16 @@ export default function GapAnalysisPage() {
         <CardContent>
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={topItems} layout="vertical" margin={{ left: 0, right: 10 }}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis type="number" tick={{ fontSize: 11 }} />
-              <YAxis type="category" dataKey="item_code" width={80} tick={{ fontSize: 10 }} />
+              <ChartGrid />
+              <XAxis type="number" {...AXIS_PROPS} />
+              <YAxis type="category" dataKey="item_code" width={80} {...AXIS_PROPS} />
               <Tooltip
                 labelFormatter={(code) => {
                   const item = topItems.find((i: any) => i.item_code === code)
                   return item ? `${code} — ${item.name}` : code
                 }}
               />
-              <Bar dataKey="quote_count" fill="#ef4444" name={t('quotesCount')} radius={[0, 4, 4, 0]} />
+              <Bar dataKey="quote_count" fill="#ef4444" name={t('quotesCount')} radius={BAR_RADIUS.horizontal} />
             </BarChart>
           </ResponsiveContainer>
         </CardContent>

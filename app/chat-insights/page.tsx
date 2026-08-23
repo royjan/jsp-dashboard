@@ -15,9 +15,10 @@ import {
   ThumbsUp, ThumbsDown, Pin, Server, AlertTriangle, Activity,
 } from 'lucide-react'
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
   AreaChart, Area,
 } from 'recharts'
+import { ChartGrid, AXIS_PROPS, BAR_RADIUS } from '@/components/charts/kit'
 import { formatNumber } from '@/lib/constants'
 import { cardVariants } from '@/lib/motion'
 import { formatDate } from '@/lib/format'
@@ -76,8 +77,6 @@ function EmptyState({ label = '— אין נתונים —', className }: { labe
   return <div className={cn('py-10 text-center text-sm text-muted-foreground', className)}>{label}</div>
 }
 
-
-const TOOLTIP_STYLE = { backgroundColor: 'var(--popover)', borderColor: 'var(--border)', borderRadius: '8px', color: 'var(--popover-foreground)' } as const
 
 function LoadingSkeleton() {
   return (
@@ -258,18 +257,17 @@ function ChatInsightsContent() {
               <>
                 <ResponsiveContainer width="100%" height={Math.max(180, intentChart.length * 42)}>
                   <BarChart data={intentChart} layout="vertical" margin={{ left: 8, right: 16, top: 4, bottom: 4 }}>
-                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#4a5168" />
-                    <XAxis type="number" tick={{ fontSize: 10, fill: '#94a3b8' }} />
-                    <YAxis type="category" dataKey="label" tick={{ fontSize: 11, fill: '#e2e8f0' }} width={84} />
+                    <ChartGrid vertical horizontal={false} />
+                    <XAxis type="number" {...AXIS_PROPS} />
+                    <YAxis type="category" dataKey="label" {...AXIS_PROPS} width={84} />
                     <Tooltip
-                      contentStyle={TOOLTIP_STYLE}
                       // eslint-disable-next-line @typescript-eslint/no-explicit-any
                       formatter={(value: any, _name: any, props: any) => {
                         const p = props.payload
                         return [`${formatNumber(value)} · ${p.success_rate ?? 0}% הצלחה · ${formatNumber(p.avg_response_ms ?? 0)}ms`, p.label]
                       }}
                     />
-                    <Bar dataKey="count" radius={[0, 4, 4, 0]} animationDuration={700}>
+                    <Bar dataKey="count" radius={BAR_RADIUS.horizontal} animationDuration={700}>
                       {intentChart.map((e, i) => <Cell key={i} fill={e.fill} />)}
                     </Bar>
                   </BarChart>
@@ -505,11 +503,10 @@ function ChatInsightsContent() {
                     <stop offset="95%" stopColor="#34d399" stopOpacity={0.02} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#4a5168" />
-                <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#94a3b8' }} tickLine={{ stroke: '#4a5168' }} axisLine={{ stroke: '#4a5168' }} />
-                <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} tickLine={{ stroke: '#4a5168' }} axisLine={{ stroke: '#4a5168' }} allowDecimals={false} />
+                <ChartGrid />
+                <XAxis dataKey="label" {...AXIS_PROPS} tickLine={{ stroke: '#4a5168' }} axisLine={{ stroke: '#4a5168' }} />
+                <YAxis {...AXIS_PROPS} tickLine={{ stroke: '#4a5168' }} axisLine={{ stroke: '#4a5168' }} allowDecimals={false} />
                 <Tooltip
-                  contentStyle={TOOLTIP_STYLE}
                   // eslint-disable-next-line @typescript-eslint/no-explicit-any
                   formatter={(value: any, name: any) => [formatNumber(value), name === 'conversations' ? 'שיחות' : 'משתמשים']}
                 />

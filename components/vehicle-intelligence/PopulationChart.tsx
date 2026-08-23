@@ -5,9 +5,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Skeleton } from '@/components/ui/skeleton'
 import { useLocale } from '@/lib/locale-context'
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell,
 } from 'recharts'
+import { ChartGrid, BAR_RADIUS } from '@/components/charts/kit'
 
 // 15 distinct, bright colors so the top-15 manufacturers never reuse a hue.
 const BAR_COLORS = [
@@ -94,7 +95,7 @@ export function PopulationChart({
                 barCategoryGap="22%"
                 margin={{ top: 5, right: 40, left: 5, bottom: 5 }}
               >
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                <ChartGrid />
                 <XAxis
                   type="number"
                   tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }}
@@ -108,17 +109,11 @@ export function PopulationChart({
                 />
                 <Tooltip
                   cursor={{ fill: 'var(--muted)', fillOpacity: 0.15 }}
-                  contentStyle={{
-                    backgroundColor: 'var(--popover)',
-                    borderColor: 'var(--border)',
-                    borderRadius: '8px',
-                    color: 'var(--popover-foreground)',
-                  }}
                   formatter={(value: any) => [Number(value).toLocaleString(), isHe ? 'רכבים' : 'Vehicles']}
                 />
                 <Bar
                   dataKey="count"
-                  radius={[0, 4, 4, 0]}
+                  radius={BAR_RADIUS.horizontal}
                   cursor="pointer"
                   onClick={(data: any) => onSelectMake?.(data.name)}
                 >
@@ -171,12 +166,6 @@ export function PopulationChart({
                     ))}
                   </Pie>
                   <Tooltip
-                    contentStyle={{
-                      backgroundColor: 'var(--popover)',
-                      borderColor: 'var(--border)',
-                      borderRadius: '8px',
-                      color: 'var(--popover-foreground)',
-                    }}
                     formatter={(value: any) => [Number(value).toLocaleString(), isHe ? 'רכבים' : 'Vehicles']}
                   />
                 </PieChart>

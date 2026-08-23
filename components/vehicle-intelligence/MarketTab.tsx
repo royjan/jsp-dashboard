@@ -8,9 +8,10 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Car, Factory, Fuel, TrendingUp } from 'lucide-react'
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell,
 } from 'recharts'
+import { ChartGrid, AXIS_PROPS, BAR_RADIUS } from '@/components/charts/kit'
 import { formatNumber } from '@/lib/format'
 import { cardVariants } from '@/lib/motion'
 
@@ -124,11 +125,11 @@ export function MarketTab() {
                   layout="vertical"
                   margin={{ left: 0, right: 10 }}
                 >
-                  <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
-                  <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={(v) => formatNumber(v)} />
-                  <YAxis type="category" dataKey="name" width={80} tick={{ fontSize: 10 }} />
+                  <ChartGrid />
+                  <XAxis type="number" {...AXIS_PROPS} tickFormatter={(v) => formatNumber(v)} />
+                  <YAxis type="category" dataKey="name" width={80} {...AXIS_PROPS} />
                   <Tooltip formatter={(v) => formatNumber(Number(v))} />
-                  <Bar dataKey="count" fill="#3b82f6" radius={[0, 4, 4, 0]} name={isHe ? 'רכבים' : 'Vehicles'} />
+                  <Bar dataKey="count" fill="#3b82f6" radius={BAR_RADIUS.horizontal} name={isHe ? 'רכבים' : 'Vehicles'} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>

@@ -1,6 +1,7 @@
 'use client'
 
 import { RadarChart, PolarGrid, PolarAngleAxis, Radar, ResponsiveContainer, Tooltip } from 'recharts'
+import { AXIS_PROPS } from '@/components/charts/kit'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useLocale } from '@/lib/locale-context'
 import { URGENCY_BANDS } from '@/lib/constants'
@@ -35,7 +36,7 @@ export function ReorderRadarChart({ item }: ReorderRadarChartProps) {
         <ResponsiveContainer width="100%" height={220}>
           <RadarChart data={radarData}>
             <PolarGrid />
-            <PolarAngleAxis dataKey="metric" tick={{ fontSize: 10 }} />
+            <PolarAngleAxis dataKey="metric" {...AXIS_PROPS} />
             <Radar
               dataKey="value"
               stroke="var(--primary)"
@@ -44,7 +45,6 @@ export function ReorderRadarChart({ item }: ReorderRadarChartProps) {
               strokeWidth={2}
             />
             <Tooltip
-              contentStyle={{ backgroundColor: 'var(--popover)', borderColor: 'var(--border)', borderRadius: '8px', color: 'var(--popover-foreground)' }}
             />
           </RadarChart>
         </ResponsiveContainer>

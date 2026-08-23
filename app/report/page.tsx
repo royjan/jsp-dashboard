@@ -19,10 +19,11 @@ import {
   BarChart3, Calendar, Target, ArrowRight, RefreshCw,
 } from 'lucide-react'
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
   LineChart, Line, AreaChart, Area, Cell, PieChart, Pie,
   RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
 } from 'recharts'
+import { ChartGrid, AXIS_PROPS, BAR_RADIUS } from '@/components/charts/kit'
 import { formatCurrency, formatNumber, formatCurrencyAxis, maskMoneyInText } from '@/lib/format'
 import { cardVariants } from '@/lib/motion'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
@@ -30,13 +31,6 @@ import { isDeclineHidden } from '@/lib/privacy'
 
 const MONTH_LABELS_HE = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר']
 const MONTH_LABELS_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-
-const tooltipStyle = {
-  backgroundColor: 'var(--popover)',
-  borderColor: 'var(--border)',
-  borderRadius: '8px',
-  color: 'var(--popover-foreground)',
-}
 
 type Section = 'summary' | 'deadstock' | 'revenue' | 'seasonal' | 'credits' | 'customers' | 'recommendations'
 
@@ -300,16 +294,16 @@ function ReportContent() {
               <CardContent>
                 <ResponsiveContainer width="100%" height={350}>
                   <BarChart data={revenueChartData}>
-                    <CartesianGrid strokeDasharray="3 3" />
+                    <ChartGrid />
                     <XAxis dataKey="year" />
                     <YAxis tickFormatter={(v) => formatCurrencyAxis(v, 'M')} />
-                    <Tooltip contentStyle={tooltipStyle} formatter={(value, name) => [
+                    <Tooltip formatter={(value, name) => [
                       formatCurrency(Number(value)),
                       name === 'revenue' ? (isHe ? 'הכנסות' : 'Revenue') : (isHe ? 'זיכויים' : 'Credits')
                     ]} />
                     <Legend formatter={(v) => v === 'revenue' ? (isHe ? 'הכנסות' : 'Revenue') : (isHe ? 'זיכויים' : 'Credits')} />
-                    <Bar dataKey="revenue" fill="#60a5fa" radius={[4, 4, 0, 0]} animationDuration={800} />
-                    <Bar dataKey="credits" fill="#f87171" radius={[4, 4, 0, 0]} animationDuration={800} />
+                    <Bar dataKey="revenue" fill="#60a5fa" radius={BAR_RADIUS.vertical} animationDuration={800} />
+                    <Bar dataKey="credits" fill="#f87171" radius={BAR_RADIUS.vertical} animationDuration={800} />
                   </BarChart>
                 </ResponsiveContainer>
               </CardContent>
@@ -599,10 +593,10 @@ function ReportContent() {
             <CardContent>
               <ResponsiveContainer width="100%" height={400}>
                 <LineChart data={monthlyCompare}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+                  <ChartGrid />
+                  <XAxis dataKey="month" {...AXIS_PROPS} />
                   <YAxis tickFormatter={(v) => formatCurrencyAxis(v)} />
-                  <Tooltip contentStyle={tooltipStyle} formatter={(value: any) => [formatCurrency(value), '']} />
+                  <Tooltip formatter={(value: any) => [formatCurrency(value), '']} />
                   <Legend />
                   <Line type="monotone" dataKey="2023" stroke="#34d399" strokeWidth={2} dot={{ r: 3 }} animationDuration={800} />
                   <Line type="monotone" dataKey="2024" stroke="#60a5fa" strokeWidth={2} dot={{ r: 3 }} animationDuration={800} />
@@ -693,11 +687,11 @@ function ReportContent() {
             <CardContent>
               <ResponsiveContainer width="100%" height={350}>
                 <BarChart data={seasonalData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+                  <ChartGrid />
+                  <XAxis dataKey="month" {...AXIS_PROPS} />
                   <YAxis tickFormatter={(v) => formatCurrencyAxis(v)} />
-                  <Tooltip contentStyle={tooltipStyle} formatter={(value: any) => [formatCurrency(value), isHe ? 'ממוצע' : 'Average']} />
-                  <Bar dataKey="avg_revenue" radius={[4, 4, 0, 0]} animationDuration={800}>
+                  <Tooltip formatter={(value: any) => [formatCurrency(value), isHe ? 'ממוצע' : 'Average']} />
+                  <Bar dataKey="avg_revenue" radius={BAR_RADIUS.vertical} animationDuration={800}>
                     {seasonalData.map((_: any, i: number) => (
                       <Cell key={i} fill={[10, 11].includes(i) ? '#34d399' : [3].includes(i) ? '#f87171' : '#60a5fa'} />
                     ))}
@@ -715,11 +709,11 @@ function ReportContent() {
               <CardContent>
                 <ResponsiveContainer width="100%" height={250}>
                   <BarChart data={dayOfWeekData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="day" tick={{ fontSize: 11 }} />
+                    <ChartGrid />
+                    <XAxis dataKey="day" {...AXIS_PROPS} />
                     <YAxis tickFormatter={(v) => formatCurrencyAxis(v)} />
-                    <Tooltip contentStyle={tooltipStyle} formatter={(value: any) => [formatCurrency(value), isHe ? 'ממוצע' : 'Average']} />
-                    <Bar dataKey="avg_revenue" fill="#a78bfa" radius={[4, 4, 0, 0]} animationDuration={800} />
+                    <Tooltip formatter={(value: any) => [formatCurrency(value), isHe ? 'ממוצע' : 'Average']} />
+                    <Bar dataKey="avg_revenue" fill="#a78bfa" radius={BAR_RADIUS.vertical} animationDuration={800} />
                   </BarChart>
                 </ResponsiveContainer>
               </CardContent>
@@ -767,10 +761,10 @@ function ReportContent() {
             <CardContent>
               <ResponsiveContainer width="100%" height={350}>
                 <LineChart data={creditChartData}>
-                  <CartesianGrid strokeDasharray="3 3" />
+                  <ChartGrid />
                   <XAxis dataKey="year" />
                   <YAxis tickFormatter={(v) => `${v}%`} />
-                  <Tooltip contentStyle={tooltipStyle} formatter={(value, name) => [
+                  <Tooltip formatter={(value, name) => [
                     `${value}%`,
                     name === 'credit_pct' ? (isHe ? '% כמות' : '% Count') : (isHe ? '% ערך' : '% Value')
                   ]} />
@@ -864,17 +858,17 @@ function ReportContent() {
             <CardContent>
               <ResponsiveContainer width="100%" height={350}>
                 <BarChart data={retentionData}>
-                  <CartesianGrid strokeDasharray="3 3" />
+                  <ChartGrid />
                   <XAxis dataKey="year" />
                   <YAxis />
-                  <Tooltip contentStyle={tooltipStyle} />
+                  <Tooltip />
                   <Legend formatter={(v) => {
                     if (v === 'returning_customers') return isHe ? 'לקוחות חוזרים' : 'Returning'
                     if (v === 'new_customers') return isHe ? 'לקוחות חדשים' : 'New'
                     return v
                   }} />
                   <Bar dataKey="returning_customers" stackId="a" fill="#60a5fa" animationDuration={800} />
-                  <Bar dataKey="new_customers" stackId="a" fill="#34d399" radius={[4, 4, 0, 0]} animationDuration={800} />
+                  <Bar dataKey="new_customers" stackId="a" fill="#34d399" radius={BAR_RADIUS.vertical} animationDuration={800} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>

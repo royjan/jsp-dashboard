@@ -15,9 +15,10 @@ import {
   Receipt, AlertTriangle, Clock, DollarSign, Search,
 } from 'lucide-react'
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
   PieChart, Pie,
 } from 'recharts'
+import { ChartGrid, AXIS_PROPS, BAR_RADIUS } from '@/components/charts/kit'
 import { formatCurrency, formatNumber } from '@/lib/format'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
 
@@ -222,11 +223,11 @@ export default function ReceivablesPage() {
           <CardContent>
             <ResponsiveContainer width="100%" height={280}>
               <BarChart data={customers.filter((c: any) => c.aging.over_90 > 0).slice(0, 10)} layout="vertical" margin={{ left: 10 }}>
-                <CartesianGrid strokeDasharray="3 3" opacity={0.15} />
-                <XAxis type="number" tickFormatter={(v) => formatCurrency(v)} tick={{ fontSize: 11 }} />
-                <YAxis type="category" dataKey="name" width={140} tick={{ fontSize: 11 }} tickFormatter={(v: string) => v.length > 20 ? v.substring(0, 20) + '…' : v} />
+                <ChartGrid />
+                <XAxis type="number" tickFormatter={(v) => formatCurrency(v)} {...AXIS_PROPS} />
+                <YAxis type="category" dataKey="name" width={140} {...AXIS_PROPS} tickFormatter={(v: string) => v.length > 20 ? v.substring(0, 20) + '…' : v} />
                 <Tooltip formatter={(v) => formatCurrency(v as number)} />
-                <Bar dataKey="aging.over_90" fill="#ef4444" name={t('overdue90Plus')} radius={[0, 4, 4, 0]}>
+                <Bar dataKey="aging.over_90" fill="#ef4444" name={t('overdue90Plus')} radius={BAR_RADIUS.horizontal}>
                   {customers.filter((c: any) => c.aging.over_90 > 0).slice(0, 10).map((c: any, i: number) => (
                     <Cell key={c.code || i} fill={c.aging.over_90 > 1000 ? '#dc2626' : '#ef4444'} />
                   ))}

@@ -26,7 +26,8 @@ import { StockPageSkeleton } from '@/components/layout/PageSkeleton'
 import { cn } from '@/lib/utils'
 import { deriveBrand, brandChipClasses } from '@/lib/brand'
 import { ArrowUpDown, Search, Crown, TrendingUp, Layers, AlertTriangle, Sparkles, RefreshCw, TableIcon, LayoutGrid, ChevronDown, ChevronLeft, ChevronRight, Filter, Target, FileText, TrendingDown, Clock, ArrowRightLeft } from 'lucide-react'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from 'recharts'
+import { ChartGrid, AXIS_PROPS, BAR_RADIUS } from '@/components/charts/kit'
 import { incrementStreaming, decrementStreaming } from '@/lib/streaming-counter'
 import { formatCurrency, formatDate, formatNumber } from '@/lib/format'
 import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
@@ -556,11 +557,11 @@ function ConversionSection({ searchQuery }: { searchQuery: string }) {
           <CardContent>
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={funnelData} layout="vertical" margin={{ left: 10, right: 20, top: 5, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                <XAxis type="number" tick={{ fontSize: 11 }} tickFormatter={(v) => formatCurrencyAxis(v)} />
-                <YAxis type="category" dataKey="name" tick={{ fontSize: 12 }} width={70} />
-                <Tooltip contentStyle={{ backgroundColor: 'var(--popover)', borderColor: 'var(--border)', borderRadius: '8px', color: 'var(--popover-foreground)' }} formatter={(value: any) => [formatCurrency(value), '']} />
-                <Bar dataKey="value" radius={[0, 6, 6, 0]} animationDuration={800} animationBegin={400}>
+                <ChartGrid vertical horizontal={false} />
+                <XAxis type="number" {...AXIS_PROPS} tickFormatter={(v) => formatCurrencyAxis(v)} />
+                <YAxis type="category" dataKey="name" {...AXIS_PROPS} width={70} />
+                <Tooltip formatter={(value: any) => [formatCurrency(value), '']} />
+                <Bar dataKey="value" radius={BAR_RADIUS.horizontal} animationDuration={800} animationBegin={400}>
                   {funnelData.map((entry, index) => <Cell key={index} fill={entry.fill} />)}
                 </Bar>
               </BarChart>
@@ -577,7 +578,7 @@ function ConversionSection({ searchQuery }: { searchQuery: string }) {
                   <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={55} outerRadius={85} paddingAngle={3} animationDuration={800} animationBegin={600} label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`} labelLine={false}>
                     {pieData.map((entry, index) => <Cell key={index} fill={entry.fill} />)}
                   </Pie>
-                  <Tooltip contentStyle={{ backgroundColor: 'var(--popover)', borderColor: 'var(--border)', borderRadius: '8px', color: 'var(--popover-foreground)' }} formatter={(value: any) => [formatCurrency(value as number), '']} />
+                  <Tooltip formatter={(value: any) => [formatCurrency(value as number), '']} />
                   <text x="50%" y="48%" textAnchor="middle" fill="var(--foreground)" fontSize={28}>{data.conversion_rate}%</text>
                   <text x="50%" y="60%" textAnchor="middle" fill="var(--muted-foreground)" fontSize={12}>{t('conversionRate')}</text>
                 </PieChart>
@@ -979,16 +980,15 @@ function StockPageContent() {
             <CardContent>
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart data={barChartData} margin={{ left: 0, right: 10, top: 5, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="name" tick={{ fontSize: 13 }} />
-                  <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${v}%`} />
+                  <ChartGrid />
+                  <XAxis dataKey="name" {...AXIS_PROPS} />
+                  <YAxis {...AXIS_PROPS} tickFormatter={(v) => `${v}%`} />
                   <Tooltip
-                    contentStyle={{ backgroundColor: 'var(--popover)', borderColor: 'var(--border)', borderRadius: '8px', color: 'var(--popover-foreground)' }}
                     formatter={(value: any, name: any) => [`${value}%`, name]}
                   />
                   <Legend />
-                  <Bar dataKey="revenue" name="% הכנסות" fill="#34d399" radius={[4, 4, 0, 0]} animationDuration={800} />
-                  <Bar dataKey="capital" name="% הון" fill="#60a5fa" radius={[4, 4, 0, 0]} animationDuration={800} animationBegin={200} />
+                  <Bar dataKey="revenue" name="% הכנסות" fill="#34d399" radius={BAR_RADIUS.vertical} animationDuration={800} />
+                  <Bar dataKey="capital" name="% הון" fill="#60a5fa" radius={BAR_RADIUS.vertical} animationDuration={800} animationBegin={200} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
@@ -1008,7 +1008,6 @@ function StockPageContent() {
                     ))}
                   </Pie>
                   <Tooltip
-                    contentStyle={{ backgroundColor: 'var(--popover)', borderColor: 'var(--border)', borderRadius: '8px', color: 'var(--popover-foreground)' }}
                     formatter={(value: any) => [formatCurrency(value as number), '']}
                   />
                   <Legend />

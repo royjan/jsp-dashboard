@@ -244,12 +244,36 @@
 /* Default tooltip (charts that never pass contentStyle): the library ships a WHITE box with
    dark text and a light-gray #ccc hover-cursor — unreadable/glaring on the dark theme. Inline
    styles win over plain CSS, hence the !important; charts that DO pass contentStyle use the
-   same popover vars, so this changes nothing for them. */
+   same popover vars, so this changes nothing for them.
+
+   This block is also what keeps every default tooltip in step with
+   <ChartTooltipShell> (components/charts/kit.tsx). A chart that needs rows,
+   colour swatches or a delta line uses the shell; a chart that just needs a
+   value gets the same surface from here, without 14 hand-copied contentStyle
+   objects. Keep the two in sync — radius, blur, shadow and padding. */
 .recharts-default-tooltip {
-  background-color: var(--popover) !important;
+  background-color: color-mix(in srgb, var(--popover) 95%, transparent) !important;
   border: 1px solid var(--border) !important;
   border-radius: 8px;
   color: var(--popover-foreground) !important;
+  padding: 0.5rem 0.75rem !important;
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.3), 0 4px 6px -4px rgb(0 0 0 / 0.3);
+  backdrop-filter: blur(4px);
+  font-size: 0.875rem;
+}
+/* The label row above the values — the shell renders it muted and smaller. */
+.recharts-default-tooltip .recharts-tooltip-label {
+  margin-bottom: 0.375rem !important;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--muted-foreground) !important;
+}
+.recharts-default-tooltip .recharts-tooltip-item {
+  padding: 0.0625rem 0 !important;
+}
+.recharts-default-tooltip .recharts-tooltip-item-value {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 .recharts-tooltip-cursor {
   fill: var(--muted);

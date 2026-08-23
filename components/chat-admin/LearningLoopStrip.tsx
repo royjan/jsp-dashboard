@@ -11,7 +11,6 @@ interface LearningLoopStripProps {
   daily: Array<{ date: string; added: number }>
 }
 
-const TOOLTIP_STYLE = { background: '#1b1b1f', border: '1px solid #333', borderRadius: 8, fontSize: 12 }
 
 /** Mini learning-loop KPI + cumulative sparkline of newly-learned pins. */
 export function LearningLoopStrip({ total, addedInRange, daily }: LearningLoopStripProps) {
@@ -37,7 +36,7 @@ export function LearningLoopStrip({ total, addedInRange, daily }: LearningLoopSt
         {cumulative.length > 0 ? (
           <ResponsiveContainer width="100%" height={48}>
             <LineChart data={cumulative}>
-              <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v: any) => [v, 'total']} labelFormatter={(l) => l} />
+              <Tooltip formatter={(v: any) => [v, 'total']} labelFormatter={(l) => l} />
               <Line type="monotone" dataKey="cumulative" stroke="#8b5cf6" strokeWidth={2} dot={false} />
             </LineChart>
           </ResponsiveContainer>

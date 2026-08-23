@@ -3,9 +3,10 @@
 import type React from 'react'
 import { useMemo, useState } from 'react'
 import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
+  AreaChart, Area, XAxis, YAxis, Tooltip,
   ResponsiveContainer, ReferenceLine, ReferenceDot,
 } from 'recharts'
+import { ChartGrid, AXIS_PROPS } from '@/components/charts/kit'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useLocale } from '@/lib/locale-context'
@@ -300,20 +301,16 @@ export function ComparisonChart({ data, title, isLoading, headerActions }: Compa
             {/* Horizontal rules only: the vertical half of the old crosshatch
                 competed with the series without locating anything the tooltip
                 does not already say. */}
-            <CartesianGrid vertical={false} stroke="var(--chart-grid)" strokeOpacity={0.5} />
+            <ChartGrid />
             <XAxis
               dataKey="date"
-              tick={{ fontSize: 11 }}
+              {...AXIS_PROPS}
               tickFormatter={shortDate}
-              tickLine={false}
-              axisLine={false}
               minTickGap={28}
             />
             <YAxis
-              tick={{ fontSize: 11 }}
+              {...AXIS_PROPS}
               tickFormatter={(v) => formatCurrencyAxis(v)}
-              tickLine={false}
-              axisLine={false}
               width={moneyHidden ? 8 : 48}
             />
             <Tooltip

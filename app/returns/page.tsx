@@ -12,9 +12,10 @@ import {
   RotateCcw, AlertTriangle, Users, TrendingDown, Receipt,
 } from 'lucide-react'
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   LineChart, Line,
 } from 'recharts'
+import { ChartGrid, AXIS_PROPS, BAR_RADIUS } from '@/components/charts/kit'
 import { formatCurrency, formatNumber } from '@/lib/format'
 import { cardVariants } from '@/lib/motion'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
@@ -174,11 +175,11 @@ function ReturnsContent() {
             <CardContent>
               <ResponsiveContainer width="100%" height={280}>
                 <BarChart data={monthly}>
-                  <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
-                  <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 11 }} />
+                  <ChartGrid />
+                  <XAxis dataKey="month" {...AXIS_PROPS} />
+                  <YAxis {...AXIS_PROPS} />
                   <Tooltip />
-                  <Bar dataKey="count" fill="#ef4444" radius={[4, 4, 0, 0]} name={isHe ? 'החזרות' : 'Returns'} />
+                  <Bar dataKey="count" fill="#ef4444" radius={BAR_RADIUS.vertical} name={isHe ? 'החזרות' : 'Returns'} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>

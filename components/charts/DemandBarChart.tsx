@@ -102,7 +102,6 @@ export function DemandBarChart({ data, isLoading, mode, limit = 10, hoveredCode,
                   ))}
                 </Pie>
                 <Tooltip
-                  contentStyle={{ backgroundColor: 'var(--popover)', borderColor: 'var(--border)', borderRadius: '8px', color: 'var(--popover-foreground)' }}
                   formatter={(value) => {
                     const v = Number(value)
                     const pct = total > 0 ? ((v / total) * 100).toFixed(1) : '0'

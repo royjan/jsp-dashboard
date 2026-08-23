@@ -2,6 +2,7 @@
 
 import React from 'react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
+import { AXIS_PROPS, BAR_RADIUS } from '@/components/charts/kit'
 
 interface LambdaRow {
   lambda: string
@@ -11,7 +12,6 @@ interface LambdaRow {
   p95: number
 }
 
-const TOOLTIP_STYLE = { background: '#1b1b1f', border: '1px solid #333', borderRadius: 8, fontSize: 12 }
 
 function rateColor(rate: number): string {
   if (rate >= 30) return '#ef4444'
@@ -31,13 +31,12 @@ export function PortalBars({ data }: { data: LambdaRow[] }) {
     <div className="space-y-3">
       <ResponsiveContainer width="100%" height={height}>
         <BarChart data={sorted} layout="vertical" margin={{ left: 8, right: 16 }}>
-          <XAxis type="number" tick={{ fontSize: 11, fill: '#8a8a90' }} allowDecimals={false} />
-          <YAxis type="category" dataKey="lambda" width={70} tick={{ fontSize: 11, fill: '#c7c7cc' }} />
+          <XAxis type="number" {...AXIS_PROPS} allowDecimals={false} />
+          <YAxis type="category" dataKey="lambda" width={70} {...AXIS_PROPS} />
           <Tooltip
-            contentStyle={TOOLTIP_STYLE}
             formatter={(val: any) => [val.toLocaleString(), 'searches']}
           />
-          <Bar dataKey="count" radius={[0, 4, 4, 0]}>
+          <Bar dataKey="count" radius={BAR_RADIUS.horizontal}>
             {sorted.map((r, i) => <Cell key={i} fill={rateColor(r.notFoundRate)} fillOpacity={0.85} />)}
           </Bar>
         </BarChart>
