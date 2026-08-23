@@ -245,7 +245,7 @@ function HomePageContent() {
       <MorningBrief />
 
       {/* ── KPIs ── */}
-      <KPIGrid data={dashboard} isLoading={dashLoading} />
+      <KPIGrid data={dashboard} isLoading={dashLoading} dailySales={salesData} />
 
       {/* ── Sales controls ── */}
       <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-4">

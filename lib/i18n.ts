@@ -70,6 +70,13 @@ export const translations = {
     current: 'נוכחית',
     previous: 'קודמת',
     topItemsPlaceholder: 'נתוני הפריטים המובילים ימולאו מפרטי חשבוניות מס',
+    chartAverage: 'ממוצע',
+    chartPeak: 'שיא',
+    dailyThisMonth: 'מכירות יומיות החודש',
+    isolateSeries: 'לחצו לבידוד הסדרה',
+    byDay: 'יומי',
+    byWeek: 'שבועי',
+    partialWeek: 'שבוע חלקי',
 
     // Seasonal
     seasonalHeatmap: 'מפת חום עונתית',
@@ -799,6 +806,13 @@ export const translations = {
     current: 'Current',
     previous: 'Previous',
     topItemsPlaceholder: 'Top items data will be populated from tax invoices line items',
+    chartAverage: 'Average',
+    chartPeak: 'Peak',
+    dailyThisMonth: 'Daily sales this month',
+    isolateSeries: 'Click to isolate series',
+    byDay: 'Daily',
+    byWeek: 'Weekly',
+    partialWeek: 'Partial week',
 
     seasonalHeatmap: 'Seasonal Sales Heatmap',
     salesIntensity: 'Sales intensity by product category and month (multi-year average)',

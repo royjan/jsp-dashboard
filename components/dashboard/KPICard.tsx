@@ -3,6 +3,7 @@
 import { motion } from 'framer-motion'
 import { Card, CardContent } from '@/components/ui/card'
 import { AnimatedCounter } from '@/components/shared/AnimatedCounter'
+import { Sparkline } from '@/components/charts/Sparkline'
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useLocale } from '@/lib/locale-context'
@@ -20,9 +21,13 @@ interface KPICardProps {
   changePercent?: number
   iconColor?: string
   iconBg?: string
+  /** Recent values behind this KPI, oldest → newest. Omit when none exists. */
+  sparkline?: number[]
+  sparkColor?: string
+  sparkTitle?: string
 }
 
-export function KPICard({ label, value, format, icon: Icon, trend, changePercent, iconColor = 'text-primary', iconBg = 'bg-primary/10' }: KPICardProps) {
+export function KPICard({ label, value, format, icon: Icon, trend, changePercent, iconColor = 'text-primary', iconBg = 'bg-primary/10', sparkline, sparkColor, sparkTitle }: KPICardProps) {
   const { t } = useLocale()
   useMoneyHidden()
   // Demo mode drops the whole row rather than the number alone — a red
@@ -45,6 +50,18 @@ export function KPICard({ label, value, format, icon: Icon, trend, changePercent
               <Icon className={cn('h-5 w-5', iconColor)} />
             </div>
           </div>
+          {sparkline && sparkline.length > 1 && (
+            <div className="mt-2 -mb-0.5">
+              <Sparkline
+                data={sparkline}
+                color={sparkColor || 'var(--primary)'}
+                title={sparkTitle}
+                width={160}
+                height={26}
+                className="w-full"
+              />
+            </div>
+          )}
           {changePercent !== undefined && !hideTrend && (
             <div className="mt-2 flex items-center gap-1 text-xs">
               {trend === 'up' && <TrendingUp className="h-3 w-3 text-emerald-500" />}
