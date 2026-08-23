@@ -25,7 +25,8 @@ export async function GET(req: NextRequest) {
     const msg = e instanceof Error ? e.message : String(e)
     if (/relation .*sim_(runs|cases).* does not exist/i.test(msg)) {
       return NextResponse.json({ success: true, runs: [], latest: null, byDomain: [],
-                                 trend: [], failingChecks: [], notRunYet: true })
+                                 latency: null, trend: [], failingChecks: [],
+                                 notRunYet: true })
     }
     console.error('[api/diego/simulator]', e)
     return NextResponse.json({ success: false, error: msg }, { status: 500 })
