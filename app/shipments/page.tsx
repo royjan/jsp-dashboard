@@ -20,7 +20,6 @@ interface Shipment {
   supplier: string | null
   folder: string | null
   isInternal: boolean
-  internalSource: string | null
   matchedSupplier: { code: string; name: string } | null
   shipmentDate: string
   createdAt: string | null
@@ -36,15 +35,9 @@ interface SupplierRollup {
   count: number
   latest: string
 }
-interface InternalRollup {
-  source: string
-  count: number
-  latest: string
-}
 interface ShipmentsResponse {
   shipments: Shipment[]
   suppliers?: SupplierRollup[]
-  internalSources?: InternalRollup[]
   internalCount?: number
   unfilteredTotal?: number
   hasMore: boolean
@@ -66,7 +59,7 @@ export default function ShipmentsPage() {
   // the columns and re-sort on every render.
   const t = useCallback((he: string, en: string) => (isHe ? he : en), [isHe])
   const [offset, setOffset] = useState(0)
-  // '' = everything, 'internal' = Lubinski deliveries, otherwise a supplier code.
+  // '' = everything, 'internal' = the internal receiving stream, otherwise a supplier code.
   const [filter, setFilter] = useState('')
 
   // Changing the filter re-pages from the top; keeping the old offset would
@@ -97,7 +90,7 @@ export default function ShipmentsPage() {
   // Both are computed server-side over the unfiltered set, so the chips keep
   // their labels and counts while a filter is active.
   const supplierOptions = data?.suppliers ?? []
-  const internalSources = data?.internalSources ?? []
+  const internalCount = data?.internalCount ?? 0
   // Sorting moved into <DataTable> (uncontrolled, shared comparator). No
   // defaultSort: rows keep the API's order until a header is clicked, which is
   // what useSortable did with no initial key.
@@ -109,9 +102,7 @@ export default function ShipmentsPage() {
       key: 'supplier', header: t('ספק', 'Supplier'), sortable: true,
       cell: (s: Shipment) => s.isInternal ? (
         // Not a supplier at all — an internal delivery.
-        <Badge variant="secondary" className="max-w-[200px] truncate">
-          {t('פנימי', 'Internal')}{s.internalSource ? ` · ${s.internalSource}` : ''}
-        </Badge>
+        <Badge variant="secondary">{t('פנימי', 'Internal')}</Badge>
       ) : s.matchedSupplier ? (
         <Link href={`/suppliers/${encodeURIComponent(s.matchedSupplier.code)}`} onClick={(e) => e.stopPropagation()}>
           <Badge variant="outline" className="max-w-[200px] cursor-pointer truncate hover:bg-accent">
@@ -172,10 +163,9 @@ export default function ShipmentsPage() {
           </div>
           {/* Filter by supplier. The options come from the API's roll-up over
               the whole set (not the page), so they stay put once one is
-              picked. Internal deliveries have no supplier — they get a chip
-              per actual sender (they all share one folder, so the folder
-              cannot tell them apart). */}
-          {(supplierOptions.length > 0 || internalSources.length > 0) && (
+              picked. Internal deliveries have no supplier and no sender label
+              — one chip for the whole stream, filtered by `internal=1`. */}
+          {(supplierOptions.length > 0 || internalCount > 0) && (
             <div className="flex flex-wrap items-center gap-1.5">
               <Button
                 size="sm"
@@ -201,18 +191,17 @@ export default function ShipmentsPage() {
                   <span className="ms-1 opacity-70 tabular-nums">{formatNumber(s.count)}</span>
                 </Button>
               ))}
-              {internalSources.map((s) => (
+              {internalCount > 0 && (
                 <Button
-                  key={s.source}
                   size="sm"
-                  variant={filter === s.source ? 'secondary' : 'outline'}
-                  className="h-7 text-xs max-w-[220px]"
-                  onClick={() => selectFilter(s.source)}
+                  variant={filter === 'internal' ? 'secondary' : 'outline'}
+                  className="h-7 text-xs"
+                  onClick={() => selectFilter('internal')}
                 >
-                  <span className="truncate">{t('פנימי', 'Internal')} · {s.source}</span>
-                  <span className="ms-1 opacity-70 tabular-nums">{formatNumber(s.count)}</span>
+                  <span>{t('פנימי', 'Internal')}</span>
+                  <span className="ms-1 opacity-70 tabular-nums">{formatNumber(internalCount)}</span>
                 </Button>
-              ))}
+              )}
             </div>
           )}
         </CardHeader>

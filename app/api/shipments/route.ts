@@ -11,7 +11,7 @@ export async function GET(request: Request) {
     await initializeSecrets()
     const { searchParams } = new URL(request.url)
     const supplier = searchParams.get('supplier') || undefined
-    // '1' = only internal (Lubinski) deliveries, '0' = only real suppliers.
+    // '1' = only internal deliveries, '0' = only real suppliers.
     const internal = searchParams.get('internal') || undefined
     const date = searchParams.get('date') || undefined
     const limit = Math.min(Number(searchParams.get('limit')) || 30, 100)
@@ -41,13 +41,12 @@ export async function GET(request: Request) {
     const base = snap.docs
       .map((doc) => {
         const data = doc.data() as Record<string, unknown>
-        const { folder, isInternal, internalSource, tag, matchedSupplier } = resolveShipmentSupplier(data, registry, matcher)
+        const { folder, isInternal, tag, matchedSupplier } = resolveShipmentSupplier(data, registry, matcher)
         return {
           doc,
           name: (data.name as string) || '',
           folder,
           isInternal,
-          internalSource,
           tag,
           matchedSupplier,
           shipmentDate: toIso(data.shipmentDate) || '',
@@ -62,13 +61,16 @@ export async function GET(request: Request) {
       .filter((h) => (internal === '1' ? h.isInternal : internal === '0' ? !h.isInternal : true))
       .filter(
         (h) =>
-          // A filter value can be a supplier code, a folder, an alias tag, or
-          // an internal sender ("קאר איסט").
+          // A filter value can be a supplier code, a folder or an alias tag.
+          // INTERNAL rows match none of them: they all share the one folder
+          // "לובינסקי", so a folder match here handed every other sender's
+          // receipt to whoever the folder is named after. They are reachable
+          // through `internal=1` only.
           !supplierFilter ||
-          h.matchedSupplier?.code.toLowerCase() === supplierFilter ||
-          h.internalSource?.toLowerCase() === supplierFilter ||
-          h.folder?.toLowerCase() === supplierFilter ||
-          h.tag?.toLowerCase() === supplierFilter,
+          (!h.isInternal &&
+            (h.matchedSupplier?.code.toLowerCase() === supplierFilter ||
+              h.folder?.toLowerCase() === supplierFilter ||
+              h.tag?.toLowerCase() === supplierFilter)),
       )
 
     const total = headers.length
@@ -94,7 +96,6 @@ export async function GET(request: Request) {
           supplier: h.tag,
           folder: h.folder,
           isInternal: h.isInternal,
-          internalSource: h.internalSource,
           matchedSupplier: h.matchedSupplier,
           shipmentDate: h.shipmentDate,
           createdAt: h.createdAt,
@@ -107,21 +108,14 @@ export async function GET(request: Request) {
     // Distinct-supplier roll-up — keyed by the real supplier code, built from
     // `base` (pre supplier/internal filter) so it doubles as the filter's
     // option list and doesn't collapse to one entry once a filter is applied.
-    // Internal (Lubinski) deliveries are not a supplier: they get their own
-    // count rather than inflating this one.
+    // Internal deliveries are not a supplier: they get one count rather than
+    // inflating this one. They used to roll up per sender, which meant deriving
+    // a sender — see resolveShipmentSupplier. One "פנימי" chip, one number.
     const supMap = new Map<string, { name: string; count: number; latest: string }>()
-    // Internal deliveries roll up by who actually sent them, not by the single
-    // "לובינסקי" folder they all share.
-    const intMap = new Map<string, { count: number; latest: string }>()
     let internalCount = 0
     for (const h of base) {
       if (h.isInternal) {
         internalCount += 1
-        const key = h.internalSource || h.folder || '—'
-        const c = intMap.get(key) || { count: 0, latest: '' }
-        c.count += 1
-        if (h.sortKey > c.latest) c.latest = h.sortKey
-        intMap.set(key, c)
         continue
       }
       if (!h.matchedSupplier) continue
@@ -134,14 +128,10 @@ export async function GET(request: Request) {
     const suppliers = [...supMap.entries()]
       .map(([code, v]) => ({ supplier: code, ...v }))
       .sort((a, b) => b.latest.localeCompare(a.latest))
-    const internalSources = [...intMap.entries()]
-      .map(([source, v]) => ({ source, ...v }))
-      .sort((a, b) => b.count - a.count)
 
     return NextResponse.json({
       shipments,
       suppliers,
-      internalSources,
       internalCount,
       unfilteredTotal: base.length,
       hasMore,

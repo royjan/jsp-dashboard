@@ -28,7 +28,6 @@ interface DetailResponse {
     id: string; name: string; supplier: string | null
     folder: string | null
     isInternal: boolean
-    internalSource: string | null
     matchedSupplier: { code: string; name: string } | null
     shipmentDate: string
     createdAt: string | null
@@ -81,9 +80,7 @@ export default function ShipmentDetailPage() {
             <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
               {sh.isInternal ? (
                 // Internal delivery — deliberately no supplier link.
-                <Badge variant="secondary">
-                  {t('פנימי', 'Internal')}{sh.internalSource ? ` · ${sh.internalSource}` : ''}
-                </Badge>
+                <Badge variant="secondary">{t('פנימי', 'Internal')}</Badge>
               ) : sh.matchedSupplier ? (
                 <Link href={`/suppliers/${encodeURIComponent(sh.matchedSupplier.code)}`}>
                   <Badge variant="outline" className="cursor-pointer hover:bg-accent">

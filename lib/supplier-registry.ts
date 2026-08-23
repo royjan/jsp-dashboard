@@ -115,37 +115,9 @@ export type ShipmentSupplier = {
   folder: string | null
   /** Internal delivery — no supplier, and not counted as one. */
   isInternal: boolean
-  /** Who an internal delivery actually came from (see internalSource). */
-  internalSource: string | null
-  /** Display tag for the shipment: the folder, else the name's lead token. */
+  /** Display tag for the shipment: the folder, else the name's lead token. Null when internal. */
   tag: string | null
   matchedSupplier: MatchedSupplier | null
-}
-
-// Every internal delivery is filed under the one folder "לובינסקי" regardless
-// of who actually sent it — the real sender only appears in the free-text
-// `name`, spelled inconsistently ("לוינסקי", "לובניסקי", "דוד לובינסקי",
-// "מקבוצת לובינסקי"). These are the distinct senders, each with the spellings
-// seen in the data; matching is on a punctuation-stripped name so a typo in
-// the middle of a word still lands in the right group.
-const INTERNAL_SOURCES: Array<{ label: string; match: RegExp }> = [
-  { label: 'קאר איסט', match: /קאר\s*איסט/ },
-  { label: "ג'אן", match: /ג['׳]?אן/ },
-  // לובינסקי and its misspellings: לוב/לוו/לו + optional נ/ל + ינסקי.
-  { label: 'לובינסקי', match: /לו[בו]?[נל]?[יל]?[נל]?סקי/ },
-]
-
-/**
- * Which company an internal delivery came from. Derived from the name because
- * the folder cannot distinguish them; falls back to the folder when no known
- * sender matches, so an unrecognised one still shows something.
- */
-export function internalSource(name?: string | null, folder?: string | null): string | null {
-  const clean = (name || '').replace(/["'׳״]/g, '').replace(/\s+/g, ' ').trim()
-  for (const s of INTERNAL_SOURCES) {
-    if (s.match.test(clean)) return s.label
-  }
-  return folder || null
 }
 
 /**
@@ -158,7 +130,7 @@ export function internalSource(name?: string | null, folder?: string | null): st
  *   4. The name's lead token against registry aliases. Last because it guesses
  *      the token, but it catches the letter tags ("AF", "11ARG") the legacy
  *      matcher's number regex structurally cannot.
- * Internal deliveries short-circuit: they are labelled, never matched.
+ * Internal deliveries short-circuit: they are neither labelled nor matched.
  */
 export function resolveShipmentSupplier(
   data: Record<string, unknown>,
@@ -173,12 +145,19 @@ export function resolveShipmentSupplier(
   const tag = folder || leadToken(name)
 
   if (isInternal) {
-    // The folder says "לובינסקי" for all of them; the name says who it really was.
-    const src = internalSource(name, folder)
-    return { folder, isInternal, internalSource: src, tag: src || tag, matchedSupplier: null }
+    // An internal delivery is just "פנימי" — it gets NO sender label. Every one of
+    // them sits in the single folder "לובינסקי" whoever actually sent it, and the
+    // per-sender label derived from the free-text `name` fell back to that folder
+    // when it recognised nobody — so "רקורד - סמי ואהרון כהן בע\"מ" was presented as
+    // Lubinsky's. Deriving a sender only from names we happen to recognise is the
+    // shape of that bug, not an implementation detail of it, so the label is gone
+    // for all senders rather than repaired for one. `tag` is nulled too: it falls
+    // back to `folder` just above, which would put "לובינסקי" straight back into the
+    // API's `supplier` field. The shipment `name` still carries the real sender.
+    return { folder, isInternal, tag: null, matchedSupplier: null }
   }
 
-  const base = { folder, isInternal, internalSource: null, tag }
+  const base = { folder, isInternal, tag }
 
   const code = str(data.supplierCode)
   if (code) {
