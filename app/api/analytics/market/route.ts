@@ -1,21 +1,31 @@
-export const maxDuration = 30
+export const maxDuration = 60
 
 import { NextResponse } from 'next/server'
 import { initializeSecrets } from '@/lib/aws-secrets'
-
-const ICS_API = 'https://pgzwvgwxtw.eu-central-1.awsapprunner.com'
+import { getIcsStats } from '@/lib/ics-stats'
 
 export async function GET() {
   try {
     await initializeSecrets()
 
-    // ICS exposes /api/stats with everything we need
-    const res = await fetch(`${ICS_API}/api/stats`, {
-      next: { revalidate: 3600 },
-      signal: AbortSignal.timeout(10000),
-    })
-    if (!res.ok) throw new Error(`ICS API error: ${res.status}`)
-    const stats = await res.json()
+    // Everything this route needs comes out of one cached scan of
+    // ics."Vehicles" — the ICS HTTP service this used to call is gone.
+    const stats = await getIcsStats()
+    // Warming, not broken — see the vehicle-population route.
+    if (!stats) {
+      return NextResponse.json({
+        total_vehicles: 0,
+        total_manufacturers: 0,
+        total_importers: 0,
+        top_manufacturers: [],
+        top_models: [],
+        psa_models: [],
+        psa_total: 0,
+        fuel_breakdown: [],
+        monthly_trend: [],
+        warming: true,
+      })
+    }
 
     const overview = stats.overview || {}
     // ICS returns { type: "בנזין", count }. Normalize to `fuel`/`name` so the

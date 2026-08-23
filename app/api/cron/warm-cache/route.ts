@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { initializeSecrets, getSecret } from '@/lib/aws-secrets'
 import { searchDocuments, fetchDocumentDetail, fetchDocuments, fetchDocumentDetailsByNumber } from '@/lib/finansit-client'
 import { deleteCache } from '@/lib/redis-client'
+import { getIcsStats } from '@/lib/ics-stats'
 import { query, getDb } from '@/lib/db'
 import { monthlySales, dailySales } from '@/lib/db/schema'
 import { sql } from 'drizzle-orm'
@@ -327,6 +328,10 @@ async function runWarmCache(mode: string, from?: number, to?: number) {
       ['stockForecast', () =>
         fetch(`http://127.0.0.1:${process.env.PORT || '3000'}/api/analytics/stock-forecast?limit=200&refresh=1`)
           .then(r => r.json())],
+      // Vehicle registrations: one ~10s scan of 3.78M rows behind a 24h key.
+      // The overview page's Vehicle Market tile reads this cache WITHOUT
+      // computing it, so if this step stops running that tile silently shows 0.
+      ['icsStats', () => getIcsStats(true)],
     ]
 
     for (const [label, fn] of warmSteps) {

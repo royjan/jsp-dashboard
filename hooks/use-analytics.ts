@@ -87,6 +87,10 @@ export function useMarketAnalytics() {
       if (!res.ok) throw new Error('Failed')
       return res.json()
     },
+    // While the ICS scan runs in the background the route answers `warming`
+    // with empty data. Poll until it lands, then stop — without this the page
+    // stays empty until the user reloads.
+    refetchInterval: (q) => (q.state.data?.warming ? 5_000 : false),
     staleTime: 30 * 60 * 1000,
     gcTime: 60 * 60 * 1000,
     retry: 1,

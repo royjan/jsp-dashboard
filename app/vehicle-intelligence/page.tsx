@@ -52,7 +52,9 @@ function VehicleIntelligenceContent() {
   const { data: lifecycleData, isLoading: lifecycleLoading } = useVehicleLifecycle()
 
   const totalVehicles = popData?.total_vehicles || 0
-  const mfrCount = popData?.manufacturers?.length || 0
+  // The real distinct-manufacturer count, not the length of the top-20 chart
+  // slice — that is what made this card read "20" against 3.78M vehicles.
+  const mfrCount = popData?.total_manufacturers ?? popData?.manufacturers?.length ?? 0
   const avgAge = popData?.age_distribution
     ? (() => {
         const total = popData.age_distribution.reduce((s: number, a: any) => s + a.count, 0)
@@ -147,6 +149,15 @@ function VehicleIntelligenceContent() {
         </motion.div>
       </div>
 
+      {popData?.warming && (
+        <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/30 px-4 py-2 text-sm text-muted-foreground">
+          <span className="h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
+          {isHe
+            ? 'מחשב נתוני רישום רכבים (3.8 מיליון רשומות) — הנתונים יופיעו בעוד מספר שניות'
+            : 'Computing vehicle registration data (3.8M records) — this will appear in a few seconds'}
+        </div>
+      )}
+
       {/* Population overview charts */}
       <motion.div custom={4} variants={cardVariants} initial="hidden" animate="visible">
         <PopulationChart
@@ -188,6 +199,8 @@ function VehicleIntelligenceContent() {
           heatmap={lifecycleData?.heatmap || []}
           peakAnalysis={lifecycleData?.peak_analysis || []}
           isLoading={lifecycleLoading}
+          ageDataReady={lifecycleData?.age_data_ready ?? true}
+          note={isHe ? lifecycleData?.note_he : lifecycleData?.note_en}
         />
       </motion.div>
 

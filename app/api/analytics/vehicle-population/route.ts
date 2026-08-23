@@ -1,11 +1,11 @@
-export const maxDuration = 20
+export const maxDuration = 60
 
 import { NextResponse } from 'next/server'
 import { initializeSecrets } from '@/lib/aws-secrets'
 import { getCached, setCache } from '@/lib/redis-client'
+import { getIcsStats } from '@/lib/ics-stats'
 
-const ICS_API = 'https://pgzwvgwxtw.eu-central-1.awsapprunner.com'
-const CACHE_KEY = 'vehicle-population:summary:v2'
+const CACHE_KEY = 'vehicle-population:summary:v3' // v3 adds total_manufacturers
 const CACHE_TTL = 86400 // 24h
 
 // National fleet age mix (Israel) — snapshot of the registration-year
@@ -27,13 +27,24 @@ export async function GET() {
     const cached = await getCached<any>(CACHE_KEY)
     if (cached) return NextResponse.json(cached)
 
-    // Pre-aggregated, fast — same source the /market page uses.
-    const res = await fetch(`${ICS_API}/api/stats`, {
-      next: { revalidate: 3600 },
-      signal: AbortSignal.timeout(12000),
-    })
-    if (!res.ok) throw new Error(`ICS API error: ${res.status}`)
-    const stats = await res.json()
+    // Pre-aggregated, fast — same source the /market page uses. Was an HTTP
+    // call to an ICS App Runner service that no longer exists; now one cached
+    // scan of ics."Vehicles" in this same database. See lib/ics-stats.ts.
+    const stats = await getIcsStats()
+    // A cold cache is not a failure — getIcsStats() has just started the scan in
+    // the background. Answer 200 with an empty payload and `warming`, so the
+    // page shows its empty state instead of a red error, and NOTHING is cached:
+    // the next request must be able to pick up the real numbers.
+    if (!stats) {
+      return NextResponse.json({
+        total_vehicles: 0,
+        total_manufacturers: 0,
+        manufacturers: [],
+        age_distribution: [],
+        warming: true,
+        cached_at: null,
+      })
+    }
 
     const total = Number(stats.overview?.totalVehicles) || 0
     const topModels: any[] = stats.topModels || []
@@ -62,6 +73,9 @@ export async function GET() {
 
     const response = {
       total_vehicles: total,
+      // `manufacturers` is the TOP 20 for the chart; the KPI needs the real
+      // count, which is 947 — reading it off the array made the card say 20.
+      total_manufacturers: stats.overview.totalManufacturers,
       manufacturers,
       age_distribution,
       cached_at: new Date().toISOString(),

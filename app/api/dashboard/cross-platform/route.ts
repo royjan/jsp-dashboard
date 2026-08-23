@@ -3,8 +3,7 @@ export const maxDuration = 30
 import { NextResponse } from 'next/server'
 import { initializeSecrets } from '@/lib/aws-secrets'
 import { query } from '@/lib/db'
-
-const ICS_API = 'https://pgzwvgwxtw.eu-central-1.awsapprunner.com'
+import { getIcsStats } from '@/lib/ics-stats'
 
 export async function GET() {
   try {
@@ -33,10 +32,12 @@ export async function GET() {
           (SELECT COUNT(*)::int FROM ebay_uploader.listing_updates WHERE status = 'pending') AS stock_alerts
       `),
 
-      // Market KPIs (from ICS API — external service)
-      fetch(`${ICS_API}/api/stats`, { signal: AbortSignal.timeout(5000) })
-        .then(r => r.json())
-        .then(d => ({ total_vehicles: d.overview?.totalVehicles || 0 }))
+      // Market KPIs. This tile is one number on a busy overview page, so it
+      // reads the cache only: getIcsStats() returns null rather than blocking
+      // this request behind a 10s scan, and the tile shows 0 until the cron
+      // (or the /vehicle-intelligence page) has warmed it.
+      getIcsStats()
+        .then(d => ({ total_vehicles: d?.overview?.totalVehicles || 0 }))
         .catch(() => ({ total_vehicles: 0 })),
     ])
 

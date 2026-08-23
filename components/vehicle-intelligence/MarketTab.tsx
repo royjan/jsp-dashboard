@@ -44,6 +44,17 @@ export function MarketTab() {
   if (isLoading) return <MarketSkeleton />
   if (error) return <div className="text-red-500 p-4">{isHe ? 'שגיאה בטעינת נתוני שוק' : 'Error loading market data'}</div>
   if (!data) return null
+  // The registration figures come from a ~10s scan of 3.78M rows that runs in
+  // the background on a cold cache. That is a wait, not a failure — showing the
+  // red error here is what made a warming page look broken.
+  if (data.warming) {
+    return (
+      <div className="flex items-center justify-center gap-2 p-8 text-sm text-muted-foreground">
+        <span className="h-3 w-3 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
+        {isHe ? 'מחשב נתוני רישום רכבים…' : 'Computing vehicle registration data…'}
+      </div>
+    )
+  }
 
   const manufacturers = data.top_manufacturers || []
   const psaModels = data.psa_models || []

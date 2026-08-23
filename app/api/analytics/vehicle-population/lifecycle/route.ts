@@ -184,7 +184,16 @@ export async function GET() {
       lifecyclePatterns[category] = curve.map((v, age) => {
         const vehiclesAtAge = ageDistMap.get(age) || 1
         // intensity = pattern curve * sales volume factor * vehicle population weight
-        return Math.round(v * (totalSales / 1000) * (vehiclesAtAge / 10000) * 100) / 100
+        //
+        // NOT rounded here. These values are only meaningful after the
+        // per-category normalisation below, and rounding to 2dp first destroys
+        // them: with no age histogram `vehiclesAtAge` falls back to 1, so the
+        // whole product lands around 0.001, every entry rounds to 0.00, and the
+        // normalisation then divides 0 by its floor — a heatmap of pure zeros
+        // and "peak at age 0" for every category. That is exactly the state the
+        // `age_data_ready: false` branch below claims to avoid by showing the
+        // curve SHAPE, so the apology was rendering as broken data.
+        return v * (totalSales / 1000) * (vehiclesAtAge / 10000)
       })
     }
 
@@ -203,7 +212,8 @@ export async function GET() {
         ages: values.map((v, age) => ({
           age,
           intensity: Math.round((v / max) * 100) / 100,
-          rawValue: v,
+          // Rounded only for display, after it has served its purpose above.
+          rawValue: Math.round(v * 100) / 100,
         })),
       })
     }

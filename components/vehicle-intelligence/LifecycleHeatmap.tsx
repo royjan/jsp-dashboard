@@ -25,6 +25,14 @@ interface PeakInfo {
 }
 
 interface LifecycleHeatmapProps {
+  /**
+   * False while the vehicle age histogram is still warming. The intensities are
+   * then the shape of the maintenance curves alone, unscaled by how many cars
+   * are actually that age — a distinction a reader cannot make from the colours,
+   * so the route sends a note and this renders it.
+   */
+  ageDataReady?: boolean
+  note?: string
   heatmap: HeatmapRow[]
   peakAnalysis: PeakInfo[]
   isLoading?: boolean
@@ -51,7 +59,7 @@ function getIntensityStyle(intensity: number): React.CSSProperties {
   }
 }
 
-export function LifecycleHeatmap({ heatmap, peakAnalysis, isLoading }: LifecycleHeatmapProps) {
+export function LifecycleHeatmap({ heatmap, peakAnalysis, isLoading, ageDataReady = true, note }: LifecycleHeatmapProps) {
   const { locale } = useLocale()
   const isHe = locale === 'he'
 
@@ -151,6 +159,12 @@ export function LifecycleHeatmap({ heatmap, peakAnalysis, isLoading }: Lifecycle
         </div>
 
         {/* Peak summary */}
+        {!ageDataReady && note && (
+          <div className="mb-3 flex items-start gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+            <span className="mt-0.5 h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
+            <span>{note}</span>
+          </div>
+        )}
         {peakAnalysis.length > 0 && (
           <div className="mt-4 pt-4 border-t">
             <h4 className="text-sm font-medium mb-2">
