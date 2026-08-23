@@ -2,32 +2,53 @@
 
 import { Suspense, useMemo } from 'react'
 import { motion } from 'framer-motion'
-import { useMargin } from '@/hooks/use-margin'
+import { useMargin, type MarginItem } from '@/hooks/use-margin'
 import { useLocale } from '@/lib/locale-context'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ItemLink } from '@/components/shared/ItemLink'
 import { formatNumber, formatCurrency, formatCurrencyAxis } from '@/lib/constants'
+import { formatMarginPercent } from '@/lib/format'
+import { isDeclineHidden } from '@/lib/privacy'
 import {
   ScatterChart, Scatter, BarChart, Bar, XAxis, YAxis, ZAxis, Tooltip, ResponsiveContainer, Cell,
 } from 'recharts'
-import { ChartGrid, AXIS_PROPS } from '@/components/charts/kit'
+import { ChartGrid, AXIS_PROPS, BAR_RADIUS, BAR_MAX, ChartTooltipShell, ANIM } from '@/components/charts/kit'
 import {
-  TrendingUp, Package, Percent, Hourglass, BarChart3, AlertTriangle,
+  TrendingUp, Percent, Hourglass, BarChart3, AlertTriangle, Coins, Clock,
 } from 'lucide-react'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
 
-const CHART_COLORS = ['#6366f1', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6']
+// Margin buckets, in the order FINAPI emits them. `below_cost` is deliberately
+// its own bucket and its own colour — a -3% part and a +3% part are not
+// neighbours, one of them is a loss.
+const BUCKET_ORDER = ['below_cost', '0-10', '10-20', '20-30', '30-40', '40-50', '50+']
+const BUCKET_COLORS: Record<string, string> = {
+  below_cost: '#ef4444',
+  '0-10': '#f59e0b',
+  '10-20': '#eab308',
+  '20-30': '#84cc16',
+  '30-40': '#10b981',
+  '40-50': '#0ea5e9',
+  '50+': '#6366f1',
+}
 
 function MarginContent() {
-  // Subscribe to the demo-mode eye: formatCurrency() masks from a module
-  // store, so without this the amounts here would not re-render on toggle.
+  // Subscribe to the demo-mode eye: formatCurrency() and formatMarginPercent()
+  // mask from a module store, so without this the amounts here would not
+  // re-render on toggle.
   useMoneyHidden()
 
   const { locale } = useLocale()
   const isHe = locale === 'he'
   const { data, isLoading, isError } = useMargin()
+
+  // Loss-making parts are the definition of bad news, and the eye's contract is
+  // that nothing left on screen with it closed is bad news. Masking the shekels
+  // and leaving a card headed "selling below cost" up would keep the finding
+  // fully legible — the item names and the count carry it on their own.
+  const hideLosses = isDeclineHidden(true)
 
   const scatterData = useMemo(() => {
     if (!data?.byItem) return []
@@ -35,6 +56,7 @@ function MarginContent() {
       x: i.revenue,
       y: i.quantity,
       z: i.avg_price,
+      m: i.margin_pct,
       name: i.item_name || i.item_code,
       code: i.item_code,
     }))
@@ -48,6 +70,17 @@ function MarginContent() {
     return sorted[Math.floor(sorted.length / 2)]
   }, [scatterData])
 
+  const distData = useMemo(() => {
+    const d = data?.distribution
+    if (!d) return []
+    return BUCKET_ORDER.filter((k) => d[k]).map((k) => ({
+      bucket: k === 'below_cost' ? (isHe ? 'מתחת לעלות' : 'below cost') : `${k}%`,
+      key: k,
+      items: d[k].items,
+      revenue: d[k].revenue,
+      profit: d[k].profit,
+    }))
+  }, [data, isHe])
 
   // ── Loading ──
   if (isLoading) {
@@ -85,37 +118,55 @@ function MarginContent() {
   }
 
   const s = data.summary
+  const fresh = data.freshness
   const costPending = !data.cost_available || s.est_gross_margin_pct == null
+  const below = data.belowCost
 
   const kpis = [
     {
       icon: TrendingUp,
       label: isHe ? 'סה"כ הכנסה' : 'Total Revenue',
       value: formatCurrency(s.total_revenue),
+      sub: `${formatNumber(s.items_evaluated)} ${isHe ? 'פריטים' : 'items'}`,
       color: 'text-primary',
     },
     {
-      icon: Package,
-      label: isHe ? 'סה"כ כמות' : 'Total Quantity',
-      value: formatNumber(s.total_quantity),
-      sub: `${formatNumber(s.items_evaluated)} ${isHe ? 'פריטים' : 'items'}`,
-      color: 'text-sky-500',
+      icon: Coins,
+      label: isHe ? 'רווח גולמי' : 'Gross Profit',
+      value: s.gross_profit != null ? formatCurrency(s.gross_profit) : (isHe ? 'בהמתנה' : 'Pending'),
+      // A margin % on its own is the same number at ₪7M and at ₪70k. The scope
+      // it was measured over belongs next to it, not in a footnote.
+      sub: s.costed_revenue != null
+        ? (isHe ? `על ${formatCurrency(s.costed_revenue)} מתומחרים` : `on ${formatCurrency(s.costed_revenue)} costed`)
+        : undefined,
+      color: 'text-emerald-500',
     },
     {
       icon: costPending ? Hourglass : Percent,
-      label: isHe ? 'מרווח גולמי משוער' : 'Est. Gross Margin',
-      value: costPending
-        ? (isHe ? 'בהמתנה' : 'Pending')
-        : `${formatNumber(s.est_gross_margin_pct, 1)}%`,
-      sub: costPending ? (isHe ? 'עלות בהמתנה (FINAPI)' : 'cost pending (FINAPI)') : undefined,
+      label: isHe ? 'מרווח גולמי' : 'Gross Margin',
+      value: costPending ? (isHe ? 'בהמתנה' : 'Pending') : formatMarginPercent(s.est_gross_margin_pct),
+      sub: s.cost_pool
+        ? (isHe ? `${formatNumber(s.items_costed ?? 0)} מתוך ${formatNumber(s.cost_pool)} במאגר` : `${formatNumber(s.items_costed ?? 0)} of ${formatNumber(s.cost_pool)} in pool`)
+        : (isHe ? 'עלות בהמתנה (מחירון 06)' : 'cost pending (list 06)'),
       color: costPending ? 'text-amber-500' : 'text-emerald-500',
     },
-    {
-      icon: BarChart3,
-      label: isHe ? 'קטגוריות' : 'Categories',
-      value: formatNumber(data.byCategory.length),
-      color: 'text-violet-500',
-    },
+    hideLosses
+      ? {
+          icon: BarChart3,
+          label: isHe ? 'קטגוריות' : 'Categories',
+          value: formatNumber(data.byCategory.length),
+          sub: undefined as string | undefined,
+          color: 'text-violet-500',
+        }
+      : {
+          icon: AlertTriangle,
+          label: isHe ? 'נמכר מתחת לעלות' : 'Sold Below Cost',
+          value: formatNumber(below?.count ?? 0),
+          sub: below?.lost_profit != null
+            ? (isHe ? `${formatCurrency(below.lost_profit)} הפסד` : `${formatCurrency(below.lost_profit)} lost`)
+            : undefined,
+          color: (below?.count ?? 0) > 0 ? 'text-red-500' : 'text-muted-foreground',
+        },
   ]
 
   return (
@@ -128,6 +179,40 @@ function MarginContent() {
             {isHe ? (data.note_he || 'מרווח גולמי בהמתנה — מחיר עלות נמצא ב-FINAPI ועדיין לא מחובר.')
                   : (data.note_en || 'Gross margin pending — cost price lives in FINAPI and is not wired yet.')}
           </p>
+        </div>
+      )}
+
+      {/* Where the numbers come from and how old they are.
+          Not a footnote: both lists move per ITEM on purchase, not on a
+          schedule, so a current-looking list can still be backing a given part
+          with a cost from last year. The per-row ⚠ carries that; this strip
+          carries the shape of it. */}
+      {fresh && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-lg border bg-muted/30 px-4 py-2.5 text-xs text-muted-foreground">
+          <span className="inline-flex items-center gap-1.5 font-medium text-foreground">
+            <Clock className="h-3.5 w-3.5" />
+            {isHe ? 'טריות נתונים' : 'Data freshness'}
+          </span>
+          <span>
+            {isHe ? 'מחירון 06 (עלות)' : 'List 06 (cost)'}:{' '}
+            <span className="font-mono text-foreground">{fresh.cost_newest_date || '—'}</span>
+            {fresh.cost_stale_items > 0 && (
+              <span className="ms-1 text-amber-500">
+                ({formatNumber(fresh.cost_stale_items)} {isHe ? `ישנים מ-${fresh.stale_after_days} ימים` : `older than ${fresh.stale_after_days}d`})
+              </span>
+            )}
+          </span>
+          {fresh.compare_price_code && (
+            <span>
+              {isHe ? 'מחירון 12 (נטו)' : 'List 12 (net)'}:{' '}
+              <span className="font-mono text-foreground">{fresh.compare_newest_date || '—'}</span>
+              {fresh.compare_stale_items > 0 && (
+                <span className="ms-1 text-amber-500">
+                  ({formatNumber(fresh.compare_stale_items)} {isHe ? 'ישנים' : 'stale'})
+                </span>
+              )}
+            </span>
+          )}
         </div>
       )}
 
@@ -148,6 +233,131 @@ function MarginContent() {
           </motion.div>
         ))}
       </div>
+
+      {/* Margin distribution — where the catalogue actually sits */}
+      {distData.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">
+              {isHe ? 'התפלגות מרווח' : 'Margin Distribution'}
+            </CardTitle>
+            <p className="text-xs text-muted-foreground">
+              {isHe ? 'כמה פריטים בכל טווח מרווח. הכנסה ורווח בטולטיפ.'
+                    : 'How many items sit in each margin band. Revenue and profit in the tooltip.'}
+            </p>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[260px] min-w-0">
+              <ResponsiveContainer width="100%" height="100%" minHeight={120}>
+                <BarChart data={distData} margin={{ top: 8, right: 8, left: 0, bottom: 4 }}>
+                  <ChartGrid vertical />
+                  <XAxis dataKey="bucket" {...AXIS_PROPS} />
+                  <YAxis {...AXIS_PROPS} tickFormatter={(v) => formatNumber(v)} />
+                  <Tooltip
+                    cursor={{ fill: 'var(--chart-grid)', fillOpacity: 0.25 }}
+                    content={({ active, payload }) => {
+                      if (!active || !payload?.length) return null
+                      const p: any = payload[0].payload
+                      return (
+                        <ChartTooltipShell
+                          title={p.bucket}
+                          rows={[
+                            { label: isHe ? 'פריטים' : 'Items', value: formatNumber(p.items), color: BUCKET_COLORS[p.key] },
+                            { label: isHe ? 'הכנסה' : 'Revenue', value: formatCurrency(p.revenue) },
+                            { label: isHe ? 'רווח' : 'Profit', value: formatCurrency(p.profit) },
+                          ]}
+                        />
+                      )
+                    }}
+                  />
+                  <Bar dataKey="items" radius={BAR_RADIUS.vertical} maxBarSize={BAR_MAX} {...ANIM.primary}>
+                    {distData.map((d) => (
+                      <Cell key={d.key} fill={BUCKET_COLORS[d.key] || '#6366f1'} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* The two "best" questions, side by side — because they have different answers */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <LeaderBoard
+          isHe={isHe}
+          title={isHe ? 'המרווח הגבוה ביותר (%)' : 'Best Margin (%)'}
+          note={
+            (isHe ? 'מדורג לפי אחוז, עם רצפת הכנסה — מכירה בודדת ב-95% אינה תשובה.'
+                  : 'Ranked by percentage, with a revenue floor — a single 95% sale is not an answer.')
+            + ((s.suspect_cost_items ?? 0) > 0
+                ? (isHe ? ` ${formatNumber(s.suspect_cost_items!)} פריטים הוחרגו — מחיר עלות לא סביר ב-7ITP (למשל ₪0.82 על דלת). שווה לתקן.`
+                        : ` ${formatNumber(s.suspect_cost_items!)} items excluded — implausible cost in 7ITP (e.g. ₪0.82 on a door). Worth fixing.`)
+                : '')
+          }
+          rows={data.bestMargin ?? []}
+          primary="margin"
+        />
+        <LeaderBoard
+          isHe={isHe}
+          title={isHe ? 'הרווח הגבוה ביותר (₪)' : 'Best Profit (₪)'}
+          note={isHe ? 'מדורג לפי שקלים. כמעט תמיד פריטים אחרים מאלה שמשמאל.'
+                     : 'Ranked by shekels. Almost never the same items as the list beside it.'}
+          rows={data.bestProfit ?? []}
+          primary="profit"
+        />
+      </div>
+
+      {/* Selling below cost */}
+      {!hideLosses && (below?.items?.length ?? 0) > 0 && (
+        <Card className="border-red-500/30">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-red-500" />
+              {isHe ? 'נמכר מתחת לעלות' : 'Sold Below Cost'}
+              <Badge variant="destructive" className="ms-1">{formatNumber(below!.count)}</Badge>
+            </CardTitle>
+            <p className="text-xs text-muted-foreground">
+              {isHe ? 'מחיר המכירה הממוצע נמוך ממחירון 06. בדוק אם העלות מעודכנת לפני שמשנים מחיר.'
+                    : 'Average sell price is under list 06. Check the cost is current before repricing.'}
+            </p>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto -mx-4 md:mx-0">
+              <table className="w-full text-sm min-w-[560px]">
+                <thead>
+                  <tr className="border-b text-muted-foreground">
+                    <th className="pb-2 font-medium text-start ps-4 md:ps-0">{isHe ? 'פריט' : 'Item'}</th>
+                    <th className="pb-2 font-medium text-end">{isHe ? 'הכנסה' : 'Revenue'}</th>
+                    <th className="pb-2 font-medium text-end">{isHe ? 'עלות' : 'Cost'}</th>
+                    <th className="pb-2 font-medium text-end">{isHe ? 'מרווח' : 'Margin'}</th>
+                    <th className="pb-2 font-medium text-end pe-4 md:pe-0">{isHe ? 'הפסד' : 'Loss'}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {below!.items.map((it) => (
+                    <tr key={it.item_code} className="border-b hover:bg-muted/50 transition-colors">
+                      <td className="py-2 ps-4 md:ps-0 max-w-[240px] truncate">
+                        <ItemLink code={it.item_code} name={it.item_name || undefined} />
+                      </td>
+                      <td className="py-2 text-end font-mono tabular-nums">{formatCurrency(it.revenue)}</td>
+                      <td className="py-2 text-end font-mono tabular-nums">
+                        <CostCell item={it} isHe={isHe} />
+                      </td>
+                      <td className="py-2 text-end font-semibold tabular-nums text-red-500">
+                        {formatMarginPercent(it.margin_pct)}
+                      </td>
+                      <td className="py-2 text-end pe-4 md:pe-0 font-mono tabular-nums text-red-500">
+                        {formatCurrency(it.profit)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Revenue vs Quantity scatter — spot high-revenue / low-value SKUs */}
       <Card>
@@ -180,12 +390,17 @@ function MarginContent() {
                     if (!active || !payload?.length) return null
                     const p: any = payload[0].payload
                     return (
-                      <div className="rounded-md border bg-background px-3 py-2 text-xs shadow-md">
-                        <div className="font-medium mb-1 max-w-[200px] truncate">{p.name}</div>
-                        <div>{isHe ? 'הכנסה' : 'Revenue'}: {formatCurrency(p.x)}</div>
-                        <div>{isHe ? 'כמות' : 'Quantity'}: {formatNumber(p.y)}</div>
-                        <div>{isHe ? 'מחיר ממוצע' : 'Avg price'}: {formatCurrency(p.z)}</div>
-                      </div>
+                      <ChartTooltipShell
+                        title={p.name}
+                        rows={[
+                          { label: isHe ? 'הכנסה' : 'Revenue', value: formatCurrency(p.x) },
+                          { label: isHe ? 'כמות' : 'Quantity', value: formatNumber(p.y) },
+                          { label: isHe ? 'מחיר ממוצע' : 'Avg price', value: formatCurrency(p.z) },
+                          ...(p.m != null
+                            ? [{ label: isHe ? 'מרווח' : 'Margin', value: formatMarginPercent(p.m) }]
+                            : []),
+                        ]}
+                      />
                     )
                   }}
                 />
@@ -207,10 +422,14 @@ function MarginContent() {
             {isHe ? 'פריטים מובילים לפי הכנסה' : 'Top Items by Revenue'}
             <Badge variant="secondary" className="ms-2">{data.byItem.length}</Badge>
           </CardTitle>
+          <p className="text-xs text-muted-foreground">
+            {isHe ? 'עלות = מחירון 06. נטו = מחירון 12 (להשוואה בלבד). פער = המרווח בפועל פחות מרווח מחירון 12.'
+                  : 'Cost = list 06. Net = list 12 (comparison only). Gap = realised margin minus the list-12 margin.'}
+          </p>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto max-h-[600px] overflow-y-auto -mx-4 md:mx-0">
-            <table className="w-full text-sm min-w-[720px]">
+            <table className="w-full text-sm min-w-[980px]">
               <thead className="sticky top-0 bg-background z-10">
                 <tr className="border-b">
                   <th className="pb-2 font-medium text-start ps-4 md:ps-0 w-8">#</th>
@@ -220,6 +439,9 @@ function MarginContent() {
                   <th className="pb-2 font-medium text-end">{isHe ? 'הכנסה' : 'Revenue'}</th>
                   <th className="pb-2 font-medium text-end">{isHe ? 'כמות' : 'Qty'}</th>
                   <th className="pb-2 font-medium text-end">{isHe ? 'מחיר ממוצע' : 'Avg Price'}</th>
+                  <th className="pb-2 font-medium text-end">{isHe ? 'עלות (06)' : 'Cost (06)'}</th>
+                  <th className="pb-2 font-medium text-end">{isHe ? 'נטו (12)' : 'Net (12)'}</th>
+                  <th className="pb-2 font-medium text-end">{isHe ? 'רווח' : 'Profit'}</th>
                   <th className="pb-2 font-medium text-end pe-4 md:pe-0">{isHe ? 'מרווח' : 'Margin'}</th>
                 </tr>
               </thead>
@@ -237,17 +459,17 @@ function MarginContent() {
                     <td className="py-2 text-end font-mono tabular-nums font-semibold">{formatCurrency(item.revenue)}</td>
                     <td className="py-2 text-end tabular-nums">{formatNumber(item.quantity)}</td>
                     <td className="py-2 text-end font-mono tabular-nums">{formatCurrency(item.avg_price)}</td>
+                    <td className="py-2 text-end font-mono tabular-nums">
+                      <CostCell item={item} isHe={isHe} />
+                    </td>
+                    <td className="py-2 text-end font-mono tabular-nums text-muted-foreground">
+                      {item.compare_price != null ? formatCurrency(item.compare_price) : '—'}
+                    </td>
+                    <td className="py-2 text-end font-mono tabular-nums">
+                      {item.profit != null ? formatCurrency(item.profit) : '—'}
+                    </td>
                     <td className="py-2 text-end pe-4 md:pe-0">
-                      {item.margin_pct == null ? (
-                        <span className="inline-flex items-center gap-1 text-[11px] text-amber-500">
-                          <Hourglass className="h-3 w-3" />
-                          {isHe ? 'בהמתנה' : 'pending'}
-                        </span>
-                      ) : (
-                        <span className="font-semibold tabular-nums text-emerald-500">
-                          {formatNumber(item.margin_pct, 1)}%
-                        </span>
-                      )}
+                      <MarginCell item={item} isHe={isHe} />
                     </td>
                   </tr>
                 ))}
@@ -263,6 +485,107 @@ function MarginContent() {
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+/** Cost with its age. A stale cost still computes a margin — it is flagged, not dropped. */
+function CostCell({ item, isHe }: { item: MarginItem; isHe: boolean }) {
+  if (item.cost == null) {
+    return (
+      <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+        {isHe ? 'אין' : 'none'}
+      </span>
+    )
+  }
+  return (
+    <span className={item.cost_stale ? 'text-amber-500' : undefined}
+          title={item.cost_date ? `${isHe ? 'מתאריך' : 'as of'} ${item.cost_date}` : undefined}>
+      {formatCurrency(item.cost)}
+      {item.cost_stale && <span className="ms-1 text-[10px]">⚠</span>}
+    </span>
+  )
+}
+
+/** Margin, or an explicit "pending" — never a 0% standing in for an unknown. */
+function MarginCell({ item, isHe }: { item: MarginItem; isHe: boolean }) {
+  if (item.margin_pct == null) {
+    return (
+      <span className="inline-flex items-center gap-1 text-[11px] text-amber-500">
+        <Hourglass className="h-3 w-3" />
+        {isHe ? 'בהמתנה' : 'pending'}
+      </span>
+    )
+  }
+  const negative = item.margin_pct < 0
+  // A negative margin is bad news; with the eye closed the colour alone would
+  // still broadcast it, so the cluster goes neutral rather than half-hidden.
+  const tone = isDeclineHidden(negative)
+    ? 'text-muted-foreground'
+    : negative ? 'text-red-500' : 'text-emerald-500'
+  return (
+    <span className={`font-semibold tabular-nums ${tone}`}>
+      {formatMarginPercent(item.margin_pct)}
+    </span>
+  )
+}
+
+function LeaderBoard({ isHe, title, note, rows, primary }: {
+  isHe: boolean
+  title: string
+  note: string
+  rows: MarginItem[]
+  primary: 'margin' | 'profit'
+}) {
+  return (
+    <Card className="h-full">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base">
+          {title}
+          <Badge variant="secondary" className="ms-2">{rows.length}</Badge>
+        </CardTitle>
+        <p className="text-xs text-muted-foreground">{note}</p>
+      </CardHeader>
+      <CardContent>
+        {rows.length === 0 ? (
+          <p className="py-8 text-center text-sm text-muted-foreground">
+            {isHe ? 'אין נתונים — מחיר עלות חסר.' : 'No data — cost price missing.'}
+          </p>
+        ) : (
+          <div className="overflow-x-auto -mx-4 md:mx-0">
+            <table className="w-full text-sm min-w-[420px]">
+              <thead>
+                <tr className="border-b text-muted-foreground">
+                  <th className="pb-2 font-medium text-start ps-4 md:ps-0 w-6">#</th>
+                  <th className="pb-2 font-medium text-start">{isHe ? 'פריט' : 'Item'}</th>
+                  <th className="pb-2 font-medium text-end">{isHe ? 'הכנסה' : 'Revenue'}</th>
+                  <th className="pb-2 font-medium text-end pe-4 md:pe-0">
+                    {primary === 'margin' ? (isHe ? 'מרווח' : 'Margin') : (isHe ? 'רווח' : 'Profit')}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((it, i) => (
+                  <tr key={it.item_code} className="border-b hover:bg-muted/50 transition-colors">
+                    <td className="py-2 ps-4 md:ps-0 text-muted-foreground tabular-nums">{i + 1}</td>
+                    <td className="py-2 max-w-[220px] truncate">
+                      <ItemLink code={it.item_code} name={it.item_name || undefined} />
+                    </td>
+                    <td className="py-2 text-end font-mono tabular-nums text-muted-foreground">
+                      {formatCurrency(it.revenue)}
+                    </td>
+                    <td className="py-2 text-end pe-4 md:pe-0 font-semibold tabular-nums text-emerald-500">
+                      {primary === 'margin'
+                        ? formatMarginPercent(it.margin_pct)
+                        : formatCurrency(it.profit)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   )
 }
 

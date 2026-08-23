@@ -306,6 +306,7 @@ export function createClient(config: FinapiClientConfig) {
     },
     analytics: {
       gap: (params?: any) => get('/api/analytics/gap', params),
+      margin: (params?: any) => get('/api/analytics/margin', params),
     },
     pg: {
       schema: () => get('/api/pg/schema'),

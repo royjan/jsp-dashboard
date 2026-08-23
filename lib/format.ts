@@ -173,6 +173,27 @@ export function formatPercent(value: number | null | undefined, decimals = 1): s
   return `${n.toFixed(decimals)}%`
 }
 
+/** What a masked margin renders as. Percent-shaped so column widths do not jump. */
+export const PERCENT_MASK = '••%'
+
+/**
+ * A percentage that is really a money figure — gross margin above all.
+ *
+ * `formatPercent` is for neutral ratios (share of total, coverage, a hit rate)
+ * and stays visible in demo mode. A margin is not neutral: "we make 38% on
+ * this" is the single number Jan Parts would least like on a projector, and
+ * masking the shekels beside it while leaving the percentage up gives the
+ * viewer the multiplier for free — revenue is often visible elsewhere on the
+ * same screen. Non-finite renders `—`, not `0%`: an unpriced part has no
+ * margin, and a zero would read as one.
+ */
+export function formatMarginPercent(value: number | null | undefined, decimals = 1): string {
+  if (isMoneyHidden()) return PERCENT_MASK
+  const n = Number(value)
+  if (!Number.isFinite(n)) return '—'
+  return `${n.toFixed(decimals)}%`
+}
+
 /**
  * `+12.5%` / `-3.0%` — for deltas, where the sign carries meaning.
  *

@@ -887,6 +887,71 @@ export async function fetchBatchCost(codes: string[]): Promise<Record<string, nu
   return result
 }
 
+/**
+ * Server-side gross-margin analytics — FINAPI's `/api/analytics/margin`.
+ *
+ * The margin arithmetic used to live HERE (estimateMargin in the route) and
+ * separately inside the MCP's prompt. It moved into FINAPI so all three
+ * consumers answer the same number, and because the parts this route cannot do
+ * well from Neon — a live cost per item, the age of that cost — are a keyed
+ * Btrieve read on FINAPI's side and a 100-code round trip on ours.
+ *
+ * Its own client: the cold path costs FINAPI ~2 keyed Btrieve reads per item in
+ * the pool, which the default 15s timeout would abort halfway. Warm (its Redis
+ * payload is cached 1h server-side) it returns in well under a second.
+ */
+const marginClient = createClient({
+  baseUrls: finansitBaseUrls.length ? finansitBaseUrls : undefined,
+  baseUrl: process.env.FINANSIT_BASE_URL || FINANSIT_PRIMARY,
+  credentials: async () => {
+    await initializeSecrets()
+    return getSecret('FINANSIT_API_CREDENTIALS', '')
+  },
+  credentialsByUrl: async (base: string) => {
+    if (!base.includes('192.168.0.109')) return undefined
+    await initializeSecrets()
+    return getSecret('FINANSIT_API_CREDENTIALS_FALLBACK', '') || undefined
+  },
+  concurrency: 2,
+  timeout: 55000,
+})
+
+export interface FinapiMarginRow {
+  item_code: string
+  item_name: string | null
+  chain_codes: string[] | null
+  quantity: number
+  revenue: number
+  avg_price: number | null
+  cost: number | null
+  cost_date: string | null
+  cost_age_days: number | null
+  cost_stale: boolean
+  /** The "cost" is implausible (sub-shekel behind a three-figure sale) — a 7ITP
+   *  placeholder. The margin is still computed; it just must not win a ranking. */
+  cost_suspect: boolean
+  margin_pct: number | null
+  profit: number | null
+  compare_price: number | null
+  compare_date: string | null
+  compare_margin_pct: number | null
+  compare_gap: number | null
+}
+
+export async function fetchMarginAnalytics(params: {
+  /** Omit for ALL years combined — what the dashboard's lifetime margin view wants. */
+  year?: number
+  month?: number
+  pool?: number
+  limit?: number
+  sort?: string
+  min_revenue?: number
+  cost_price_code?: string
+  compare_price_code?: string
+}): Promise<any> {
+  return marginClient.analytics.margin(params)
+}
+
 export async function lookupPrice(itemCode: string, customerCode?: string, priceCode?: string): Promise<any> {
   return client.prices.lookup(itemCode, { customer_code: customerCode, price_code: priceCode })
 }
