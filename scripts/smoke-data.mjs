@@ -83,10 +83,12 @@ const CHECKS = [
     detail: (d) => d?.error ? 'ERROR:' + d.error : `items=${arr(d?.items ?? d).length}`,
   },
   {
-    name: 'Vehicle population lifecycle',
-    path: '/api/analytics/vehicle-population/lifecycle',
+    name: 'Vehicle population (ICS registrations)',
+    path: '/api/analytics/vehicle-population',
     ok: (d) => !d?.error,
-    detail: (d) => d?.error ? 'ERROR:' + d.error : 'ok',
+    detail: (d) => d?.error ? 'ERROR:' + d.error
+      : d?.warming ? 'warming (scan running)'
+      : `vehicles=${d?.total_vehicles} mfrs=${d?.total_manufacturers}`,
   },
   {
     name: 'Price elasticity',

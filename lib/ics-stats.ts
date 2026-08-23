@@ -111,7 +111,13 @@ function shape(rows: StatsRow[]): IcsStats {
     if (r.g_f === 0) {
       // Blank fuelType is 116k rows of missing data, not a fuel — the old
       // service's consumers filtered it by count, which kept it.
-      if (r.fuel) fuels.push({ type: r.fuel, count: r.c })
+      //
+      // 509 rows also carry a label that is nothing but U+FFFD replacement
+      // characters: a Hebrew string mis-decoded somewhere upstream at ingest,
+      // unrecoverable from here. It cleared the callers' `count > 100` filter
+      // and rendered in the fuel legend as a row of empty boxes, which tells a
+      // reader strictly less than omitting it does.
+      if (r.fuel && !/^�+$/.test(r.fuel)) fuels.push({ type: r.fuel, count: r.c })
       continue
     }
     if (r.g_mo === 0 && r.mo) {

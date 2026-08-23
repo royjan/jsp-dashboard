@@ -1,26 +1,22 @@
 'use client'
 
-import { useState, Suspense } from 'react'
+import { Suspense } from 'react'
 import { motion } from 'framer-motion'
 import { useLocale } from '@/lib/locale-context'
-import { useVehiclePopulation, useVehicleDemand, useVehicleLifecycle } from '@/hooks/use-vehicle-intelligence'
+import { useVehiclePopulation } from '@/hooks/use-vehicle-intelligence'
 import { PopulationChart } from '@/components/vehicle-intelligence/PopulationChart'
-import { LifecycleHeatmap } from '@/components/vehicle-intelligence/LifecycleHeatmap'
-import { OpportunityTable } from '@/components/vehicle-intelligence/OpportunityTable'
-import { MakeModelSelector } from '@/components/vehicle-intelligence/MakeModelSelector'
 import { MarketTab } from '@/components/vehicle-intelligence/MarketTab'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
+import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Car, TrendingUp, BarChart3, Target, Factory } from 'lucide-react'
+import { Car, TrendingUp, BarChart3, Factory } from 'lucide-react'
 import { cardVariants } from '@/lib/motion'
 
 
 function LoadingSkeleton() {
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {[...Array(4)].map((_, i) => (
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+        {[...Array(3)].map((_, i) => (
           <Card key={i}><CardContent className="p-4"><Skeleton className="h-4 w-20 mb-3" /><Skeleton className="h-8 w-24" /></CardContent></Card>
         ))}
       </div>
@@ -41,15 +37,7 @@ function VehicleIntelligenceContent() {
   const { locale } = useLocale()
   const isHe = locale === 'he'
 
-  const [selectedMake, setSelectedMake] = useState('')
-  const [selectedModel, setSelectedModel] = useState('')
-  const [selectedYearRange, setSelectedYearRange] = useState('')
-
   const { data: popData, isLoading: popLoading } = useVehiclePopulation()
-  const { data: demandData, isLoading: demandLoading } = useVehicleDemand(
-    selectedMake, selectedModel, selectedYearRange
-  )
-  const { data: lifecycleData, isLoading: lifecycleLoading } = useVehicleLifecycle()
 
   const totalVehicles = popData?.total_vehicles || 0
   // The real distinct-manufacturer count, not the length of the top-20 chart
@@ -66,7 +54,6 @@ function VehicleIntelligenceContent() {
         return (weighted / total).toFixed(1)
       })()
     : '—'
-  const demandVehicleCount = demandData?.vehicle_count || 0
 
   return (
     <div className="space-y-6">
@@ -84,7 +71,7 @@ function VehicleIntelligenceContent() {
       </div>
 
       {/* KPI cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
         <motion.div custom={0} variants={cardVariants} initial="hidden" animate="visible">
           <Card>
             <CardContent className="p-4">
@@ -129,24 +116,6 @@ function VehicleIntelligenceContent() {
           </Card>
         </motion.div>
 
-        <motion.div custom={3} variants={cardVariants} initial="hidden" animate="visible">
-          <Card>
-            <CardContent className="p-4">
-              <div className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
-                <Target className="h-3 w-3" />
-                {isHe ? 'רכבי יעד' : 'Target Vehicles'}
-              </div>
-              <div className="text-2xl font-bold">
-                {demandLoading ? <Skeleton className="h-8 w-20" /> : (
-                  demandVehicleCount > 0 ? demandVehicleCount.toLocaleString() : '—'
-                )}
-              </div>
-              {selectedMake && (
-                <Badge variant="secondary" className="text-[10px] mt-1">{selectedMake}</Badge>
-              )}
-            </CardContent>
-          </Card>
-        </motion.div>
       </div>
 
       {popData?.warming && (
@@ -165,51 +134,9 @@ function VehicleIntelligenceContent() {
           ageDistribution={popData?.age_distribution || []}
           totalVehicles={totalVehicles}
           isLoading={popLoading}
-          onSelectMake={setSelectedMake}
         />
       </motion.div>
 
-      {/* Make/Model Deep Dive */}
-      <motion.div custom={5} variants={cardVariants} initial="hidden" animate="visible">
-        <MakeModelSelector
-          manufacturers={popData?.manufacturers || []}
-          selectedMake={selectedMake}
-          selectedModel={selectedModel}
-          selectedYearRange={selectedYearRange}
-          onMakeChange={setSelectedMake}
-          onModelChange={setSelectedModel}
-          onYearRangeChange={setSelectedYearRange}
-          isLoading={popLoading}
-        />
-      </motion.div>
-
-      {/* Demand predictions / Opportunity table */}
-      <motion.div custom={6} variants={cardVariants} initial="hidden" animate="visible">
-        <OpportunityTable
-          predictions={demandData?.predictions || []}
-          vehicleCount={demandData?.vehicle_count || 0}
-          isLoading={demandLoading}
-          filters={demandData?.filters}
-        />
-      </motion.div>
-
-      {/* Lifecycle heatmap */}
-      <motion.div custom={7} variants={cardVariants} initial="hidden" animate="visible">
-        <LifecycleHeatmap
-          heatmap={lifecycleData?.heatmap || []}
-          peakAnalysis={lifecycleData?.peak_analysis || []}
-          isLoading={lifecycleLoading}
-          ageDataReady={lifecycleData?.age_data_ready ?? true}
-          note={isHe ? lifecycleData?.note_he : lifecycleData?.note_en}
-        />
-      </motion.div>
-
-      {/* Disclaimer */}
-      <div className="text-xs text-muted-foreground text-center pb-2">
-        {isHe
-          ? 'נתונים אלו הם הערכה בלבד, מבוססת על מתאם בין אוכלוסיית הרכבים לדפוסי מכירות היסטוריים. אין להסתמך עליהם כנתונים מדויקים.'
-          : 'These figures are estimates only, based on correlation between vehicle population and historical sales patterns. Do not rely on them as exact data.'}
-      </div>
 
       {/* Vehicle market (Israel registrations) — merged in from the former /market page */}
       <div className="pt-2 border-t">
