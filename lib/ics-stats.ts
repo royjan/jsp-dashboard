@@ -42,7 +42,10 @@ export interface IcsStats {
   computedAt: string
 }
 
-const CACHE_KEY = 'ics:stats:v1'
+// BUMP THIS whenever shape() changes what it emits. Redis survives deploys and
+// the TTL is 24h, so without a bump new code keeps serving yesterday's payload —
+// the U+FFFD fuel label stayed on prod through a deploy that had removed it.
+const CACHE_KEY = 'ics:stats:v2' // v2 drops unrenderable fuel labels
 const CACHE_TTL = 86_400 // 24h — the national fleet moves slowly.
 const LOCK_KEY = 'ics:stats:lock'
 const LOCK_TTL = 180

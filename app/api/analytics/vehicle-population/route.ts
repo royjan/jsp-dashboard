@@ -5,7 +5,7 @@ import { initializeSecrets } from '@/lib/aws-secrets'
 import { getCached, setCache } from '@/lib/redis-client'
 import { getIcsStats } from '@/lib/ics-stats'
 
-const CACHE_KEY = 'vehicle-population:summary:v3' // v3 adds total_manufacturers
+const CACHE_KEY = 'vehicle-population:summary:v4' // v4 re-shapes off ics:stats:v2
 const CACHE_TTL = 86400 // 24h
 
 // National fleet age mix (Israel) — snapshot of the registration-year
