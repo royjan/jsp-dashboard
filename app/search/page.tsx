@@ -9,7 +9,6 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Search, Sparkles, Package, Clock, X, ArrowLeft, ExternalLink } from 'lucide-react'
-import { SubTabs } from '@/components/shared/SubTabs'
 import { brandChipClasses } from '@/lib/brand'
 import { formatCurrency } from '@/lib/format'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
@@ -185,12 +184,6 @@ export default function SearchPage() {
 
   return (
     <div className="space-y-6">
-      <SubTabs
-        tabs={[
-          { href: '/search', label: t('smartSearch') },
-          { href: '/sales-rep/price-check', label: t('stockCheck') },
-        ]}
-      />
       {/* Header */}
       <div className="flex items-center gap-3">
         <Sparkles className="h-6 w-6 text-primary" />

@@ -98,7 +98,7 @@ function HomePageContent() {
   const urlDateTo = get('date_to')
   const urlPeriod = get('period') as Period | null
 
-  const [period, setPeriod] = useState<Period>(urlPeriod || '90d')
+  const [period, setPeriod] = useState<Period>(urlPeriod || '30d')
   const [customDateFrom, setCustomDateFrom] = useState<string | null>(urlDateFrom)
   const [customDateTo, setCustomDateTo] = useState<string | null>(urlDateTo)
   const [customMode, setCustomMode] = useState<boolean>(urlDateFrom !== null && urlDateTo !== null)

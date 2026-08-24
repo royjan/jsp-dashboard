@@ -92,6 +92,7 @@ const navSections: Array<{ id: string; labelKey: TranslationKey; items: NavItem[
       { href: '/ebay', labelKey: 'ebay', icon: ShoppingCart },
       { href: '/ebay-reco', labelKey: 'ebayReco', icon: PackageCheck },
       { href: '/sales-rep', labelKey: 'salesRep', icon: Briefcase },
+      { href: '/sales-rep/price-check', labelKey: 'stockCheck', icon: DollarSign },
     ],
   },
   {
