@@ -7,59 +7,21 @@
  * so nothing on this page is a sample of a page of rows.
  */
 
-import { Suspense, useState } from 'react'
-import { Sparkles } from 'lucide-react'
+import { Suspense } from 'react'
 import { StatGrid, StatTile } from '@/components/shared/StatTile'
 import { ErrorState } from '@/components/ui/feedback-state'
 import { Skeleton } from '@/components/ui/skeleton'
-import { formatCurrency, formatCurrencyCompact, formatDate, formatId } from '@/lib/format'
+import { formatCurrency, formatCurrencyCompact, formatId } from '@/lib/format'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
-import { useBooksInsights, useBooksOverview } from '@/hooks/use-books'
+import { useBooksOverview } from '@/hooks/use-books'
 import { useBooksScope } from '@/components/books/use-books-scope'
 import {
   AccountLink, BooksFilters, accountClassLabel, useBooksText,
 } from '@/components/books/BooksChrome'
 import { MonthlyFlowChart } from '@/components/books/BooksCharts'
+import { BooksInsights } from '@/components/books/BooksInsights'
 import { Sparkline } from '@/components/charts/kit'
 import { CHART_PALETTE } from '@/lib/chart-colors'
-
-function AiPanel({ params }: { params: Record<string, string | number | undefined> }) {
-  const { t } = useBooksText()
-  const [asked, setAsked] = useState(false)
-  const { data, isFetching, error } = useBooksInsights(params as any, asked)
-
-  return (
-    <div className="rounded-xl border border-primary/30 bg-card p-4 shadow-sm">
-      <div className="flex flex-wrap items-center gap-3">
-        <Sparkles className="h-4 w-4 text-primary" />
-        <b className="text-sm">{t('aiTitle')}</b>
-        <span className="text-xs text-muted-foreground">{t('aiHint')}</span>
-        <button
-          type="button"
-          disabled={isFetching}
-          onClick={() => setAsked(true)}
-          className="ms-auto rounded-lg bg-primary px-3 py-1.5 text-sm text-primary-foreground disabled:opacity-60 pointer-coarse:min-h-11"
-        >
-          {isFetching ? t('aiRunning') : asked ? t('aiAgain') : t('aiRun')}
-        </button>
-      </div>
-      {(error || data?.text) && (
-        <div className="mt-3 border-t pt-3 text-sm leading-7">
-          {error
-            ? <p className="text-destructive">{(error as Error).message}</p>
-            : data.text.split(/\n{2,}/).map((block: string, i: number) => (
-                <p key={i} className="mb-2 whitespace-pre-line">{block}</p>
-              ))}
-          {data?.generated_at && (
-            <p className="mt-1 text-xs text-muted-foreground">
-              {formatDate(data.generated_at, 'datetime')}
-            </p>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
 
 function OverviewInner() {
   useMoneyHidden()
@@ -99,7 +61,7 @@ function OverviewInner() {
         </StatGrid>
       )}
 
-      <AiPanel params={scope.params} />
+      <BooksInsights params={scope.params} />
 
       {isLoading ? <Skeleton className="h-72 w-full" /> : <MonthlyFlowChart months={monthly} />}
 

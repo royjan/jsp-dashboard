@@ -10,7 +10,9 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 120
 
-const CACHE_TTL = 2 * 3600
+/** A week: the analysis describes a fixed window, so it does not go off.
+ *  'נתח שוב' (refresh=1) is what regenerates it. */
+const CACHE_TTL = 7 * 24 * 3600
 
 const SYSTEM = `אתה רואה חשבון ותיק שקורא את הספרים של חברה ישראלית לחלקי חילוף.
 אתה מקבל נתונים מצטברים מתוך ספרי החברה — לא מסמכים בודדים.

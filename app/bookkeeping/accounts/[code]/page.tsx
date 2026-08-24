@@ -98,7 +98,7 @@ function LedgerCardInner({ code }: { code: string }) {
       {!isLoading && <BalanceAreaChart rows={data?.rows ?? []} opening={data?.opening ?? 0} />}
 
       <BooksTable
-        columns={columns} rows={data?.rows ?? []} total={data?.rows?.length ?? 0}
+        columns={columns} rows={data?.rows ?? []} total={data?.total ?? data?.rows?.length ?? 0}
         scope={scope} loading={isLoading} error={error} onRetry={() => refetch()}
         getRowKey={(r, i) => `${r.ref1}-${r.sequence}-${i}`} emptyLabel={t('noRows')}
         footer={summary ? (

@@ -11,7 +11,7 @@
 import { Suspense } from 'react'
 import { BookOpen } from 'lucide-react'
 import { PageHeader } from '@/components/shared/PageHeader'
-import { BooksTabs, StaleBanner, YearPicker, useBooksText } from '@/components/books/BooksChrome'
+import { StaleBanner, YearPicker, useBooksText } from '@/components/books/BooksChrome'
 import { useBooksScope } from '@/components/books/use-books-scope'
 
 function BookkeepingShell({ children }: { children: React.ReactNode }) {
@@ -20,10 +20,9 @@ function BookkeepingShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="space-y-4">
+      {/* No tab strip: every one of these screens has its own sidebar entry,
+          so a strip underneath just said the same thing twice. */}
       <PageHeader title={t('section')} icon={BookOpen} actions={<YearPicker scope={scope} />} />
-      <div className="sticky top-14 z-20 -mx-2 border-b bg-background/95 px-2 backdrop-blur sm:-mx-4 sm:px-4 lg:-mx-6 lg:px-6">
-        <BooksTabs />
-      </div>
       <StaleBanner scope={scope} />
       {children}
     </div>

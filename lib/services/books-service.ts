@@ -292,15 +292,10 @@ export async function getLedgerCard(code: string, scope: BooksScope) {
     filter = ` AND (detail ILIKE $${args.length} OR ref1 ILIKE $${args.length})`
   }
 
-  const [account, movements, opening] = await Promise.all([
+  const { pageSize, page, offset } = paging(scope)
+
+  const [account, opening, totals, movements] = await Promise.all([
     query(`SELECT * FROM books.accounts WHERE year=$1 AND code=$2`, [scope.year, code]),
-    query(
-      `SELECT l.*, COALESCE(a.name,'') AS counter_name, a.class_code AS counter_class
-       FROM books.ledger l
-       LEFT JOIN books.accounts a ON a.year=l.year AND a.code=l.counter_account
-       WHERE l.year=$1 AND l.source='ledger' AND l.account=$2
-         AND l.doc_date BETWEEN $3 AND $4${filter}
-       ORDER BY l.doc_date, l.sequence`, args),
     // Anything before the window folds into an opening balance, so the running
     // balance on screen is the account's real balance, not the window's.
     query(
@@ -308,25 +303,49 @@ export async function getLedgerCard(code: string, scope: BooksScope) {
        FROM books.ledger
        WHERE year=$1 AND source='ledger' AND account=$2 AND doc_date < $3`,
       [scope.year, code, scope.from]),
+    query(
+      `SELECT COUNT(*)::int AS movements, ROUND(COALESCE(SUM(debit),0),2) AS debit,
+              ROUND(COALESCE(SUM(credit),0),2) AS credit
+       FROM books.ledger l
+       WHERE l.year=$1 AND l.source='ledger' AND l.account=$2
+         AND l.doc_date BETWEEN $3 AND $4${filter}`, args),
+    // The running balance is a window function over the whole filtered set, so
+    // a later page still starts where the previous one ended — carrying it in
+    // the page's own rows would restart the balance at every page.
+    query(
+      `WITH ordered AS (
+         SELECT l.*, COALESCE(a.name,'') AS counter_name, a.class_code AS counter_class,
+                SUM(l.debit - l.credit) OVER (ORDER BY l.doc_date, l.sequence
+                                              ROWS UNBOUNDED PRECEDING) AS running
+         FROM books.ledger l
+         LEFT JOIN books.accounts a ON a.year=l.year AND a.code=l.counter_account
+         WHERE l.year=$1 AND l.source='ledger' AND l.account=$2
+           AND l.doc_date BETWEEN $3 AND $4${filter}
+       )
+       SELECT * FROM ordered ORDER BY doc_date, sequence
+       LIMIT $${args.length + 1} OFFSET $${args.length + 2}`,
+      [...args, pageSize, offset]),
   ])
 
-  let running = Number(opening.rows[0]?.opening ?? 0)
-  const rows = movements.rows.map((r: any) => {
-    running += Number(r.debit ?? 0) - Number(r.credit ?? 0)
-    return { ...r, balance: Math.round(running * 100) / 100 }
-  })
-  const debit = rows.reduce((s: number, r: any) => s + Number(r.debit ?? 0), 0)
-  const credit = rows.reduce((s: number, r: any) => s + Number(r.credit ?? 0), 0)
+  const openingBalance = Number(opening.rows[0]?.opening ?? 0)
+  const rows = movements.rows.map((r: any) => ({
+    ...r,
+    balance: Math.round((openingBalance + Number(r.running ?? 0)) * 100) / 100,
+  }))
+  const t = totals.rows[0]
 
   return {
     account: account.rows[0] ?? null,
-    opening: Number(opening.rows[0]?.opening ?? 0),
+    opening: openingBalance,
     rows,
+    total: t.movements,
+    page,
+    pageSize,
     summary: {
-      debit: Math.round(debit * 100) / 100,
-      credit: Math.round(credit * 100) / 100,
-      balance: Math.round(running * 100) / 100,
-      movements: rows.length,
+      debit: Number(t.debit),
+      credit: Number(t.credit),
+      balance: Math.round((openingBalance + Number(t.debit) - Number(t.credit)) * 100) / 100,
+      movements: t.movements,
     },
   }
 }

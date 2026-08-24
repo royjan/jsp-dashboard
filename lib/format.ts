@@ -115,10 +115,19 @@ export function formatCurrencyAxis(value: number, unit: 'K' | 'M' = 'K'): string
 const NUM = String.raw`\d(?:[\d,.]*\d)?`
 const MAG = String.raw`(?:\s?(?:אלף|מיליון|מיליארד|[kKmMbB]))?`
 const RANGE = String.raw`(?:${NUM}${MAG}\s?[-–]\s?)?`
-/** The report page writes `ILS` in its English copy, the rest of the app `₪`. */
+/**
+ * The report page writes `ILS` in its English copy, the rest of the app `₪` —
+ * and an LLM writing Hebrew prose writes `ש״ח` after the number, in either
+ * quote form (a straight " or a Hebrew gershayim ״). Without that last case a
+ * generated paragraph kept its amounts visible while every tile around it was
+ * masked.
+ */
 const SYM = String.raw`(?:₪|ILS|NIS)`
+const SHEKEL_WORD = String.raw`(?:ש["״׳']?ח|שקלים|שקל)`
 const MONEY_IN_TEXT = new RegExp(
-  String.raw`${SYM}\s?${RANGE}${NUM}${MAG}` + '|' + String.raw`${RANGE}${NUM}${MAG}\s?${SYM}`,
+  String.raw`${SYM}\s?${RANGE}${NUM}${MAG}` + '|'
+  + String.raw`${RANGE}${NUM}${MAG}\s?${SYM}` + '|'
+  + String.raw`${RANGE}${NUM}${MAG}\s?${SHEKEL_WORD}`,
   'g',
 )
 

@@ -101,6 +101,7 @@ export const BOOKS_STRINGS = {
     aiRun: 'נתח את הספרים',
     aiRunning: 'קורא את הספרים…',
     aiAgain: 'נתח שוב',
+    aiSaved: 'תשובה שמורה (עד שבוע)',
 
     monthlyFlow: 'מכירות, רכש ותקבולים',
     monthlyFlowHint: 'הכל בשקלים, סקאלה אחת',
@@ -209,6 +210,7 @@ export const BOOKS_STRINGS = {
     aiRun: 'Analyse the books',
     aiRunning: 'Reading the books…',
     aiAgain: 'Analyse again',
+    aiSaved: 'saved answer (kept a week)',
 
     monthlyFlow: 'Sales, purchases and receipts',
     monthlyFlowHint: 'One shekel scale',
