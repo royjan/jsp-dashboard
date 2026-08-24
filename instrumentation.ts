@@ -32,6 +32,13 @@ export async function register() {
       } catch (e) {
         console.error('[instrumentation] failed to start morning-brief loop:', e)
       }
+      // The books' live year, topped up from the ERP every few minutes.
+      try {
+        const { startBooksRefreshLoop } = await import('./lib/books-refresh-loop')
+        startBooksRefreshLoop()
+      } catch (e) {
+        console.error('[instrumentation] failed to start books refresh loop:', e)
+      }
     }
   }
 }

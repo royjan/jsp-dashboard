@@ -5,7 +5,30 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { useLocale } from '@/lib/locale-context'
-import { LayoutDashboard, Sun, Warehouse, Users, Trash2, FileBarChart, Receipt, SearchX, TrendingDown, ShoppingCart, RotateCcw, CarFront, MoreHorizontal, X, Sparkles, Percent, Truck, Briefcase, PackageCheck, Swords } from 'lucide-react'
+import {
+  BookOpen,
+  Briefcase,
+  CarFront,
+  FileBarChart,
+  LayoutDashboard,
+  MoreHorizontal,
+  PackageCheck,
+  Percent,
+  Receipt,
+  RotateCcw,
+  SearchX,
+  ShoppingCart,
+  Sparkles,
+  Sun,
+  Swords,
+  Trash2,
+  TrendingDown,
+  Truck,
+  Users,
+  Wallet,
+  Warehouse,
+  X,
+} from 'lucide-react'
 import type { TranslationKey } from '@/lib/i18n'
 
 const primaryNav: Array<{ href: string; labelKey: TranslationKey; icon: typeof LayoutDashboard }> = [
@@ -16,6 +39,9 @@ const primaryNav: Array<{ href: string; labelKey: TranslationKey; icon: typeof L
 ]
 
 const moreNav: Array<{ href: string; labelKey: TranslationKey; icon: typeof LayoutDashboard }> = [
+  { href: '/bookkeeping', labelKey: 'bookkeepingOverview', icon: BookOpen },
+  { href: '/bookkeeping/vat', labelKey: 'bookkeepingVat', icon: Percent },
+  { href: '/bookkeeping/cash', labelKey: 'bookkeepingCash', icon: Wallet },
   { href: '/sales-rep', labelKey: 'salesRep', icon: Briefcase },
   { href: '/deliveries/driver', labelKey: 'deliveries', icon: Truck },
   { href: '/stock-forecast', labelKey: 'stockForecast', icon: TrendingDown },

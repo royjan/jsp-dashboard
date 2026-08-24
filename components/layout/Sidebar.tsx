@@ -6,45 +6,62 @@ import { cn } from '@/lib/utils'
 import { useLocale } from '@/lib/locale-context'
 import type { TranslationKey } from '@/lib/i18n'
 import {
-  LayoutDashboard,
-  Sun,
-  Warehouse,
-  ChevronLeft,
-  Users,
-  FileBarChart,
-  Trash2,
-  Receipt,
-  SearchX,
-  TrendingDown,
-  ShoppingCart,
-  RotateCcw,
-  CarFront,
-  Bell,
-  DollarSign,
-  Percent,
-  Sparkles,
-  Truck,
-  Briefcase,
-  PackageCheck,
-  Container,
-  GitBranch,
-  Radar,
-  Languages,
   Activity,
-  MessagesSquare,
+  Bell,
+  BookOpen,
   Bot,
   BotMessageSquare,
-  ThumbsUp,
-  ReceiptText,
-  Swords,
-  PackageX,
+  Briefcase,
+  CarFront,
+  ChevronLeft,
+  Container,
+  DollarSign,
+  FileBarChart,
   FlaskConical,
+  GitBranch,
+  Landmark,
+  Languages,
+  LayoutDashboard,
+  MessagesSquare,
+  NotebookPen,
+  PackageCheck,
+  PackageX,
+  Percent,
+  Radar,
+  Receipt,
+  ReceiptText,
+  RotateCcw,
+  Scale,
+  SearchX,
+  ShoppingBag,
+  ShoppingCart,
+  Sparkles,
+  Sun,
+  Swords,
+  ThumbsUp,
+  Trash2,
+  TrendingDown,
+  Truck,
+  Users,
+  Wallet,
+  Warehouse,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { useUnacknowledgedCount } from '@/hooks/use-analytics'
 
-type NavItem = { href: string; labelKey: TranslationKey; icon: typeof LayoutDashboard }
+type NavItem = {
+  href: string
+  labelKey: TranslationKey
+  icon: typeof LayoutDashboard
+  /**
+   * How the active state is decided. Every entry matched the pathname exactly
+   * until bookkeeping arrived with sub-routes (/bookkeeping/vat …), where an
+   * exact match leaves the whole section unlit. Defaults to 'exact' so no
+   * existing entry changes behaviour.
+   */
+  match?: 'exact' | 'prefix'
+}
 
 const navSections: Array<{ id: string; labelKey: TranslationKey; items: NavItem[] }> = [
   {
@@ -88,6 +105,20 @@ const navSections: Array<{ id: string; labelKey: TranslationKey; items: NavItem[
     ],
   },
   {
+    // הנהח״ש — the books, decoded from the ERP's own files into books.*
+    id: 'bookkeeping', labelKey: 'sectionBookkeeping', items: [
+      { href: '/bookkeeping', labelKey: 'bookkeepingOverview', icon: BookOpen },
+      { href: '/bookkeeping/accounts', labelKey: 'bookkeepingAccounts', icon: Landmark,
+        match: 'prefix' },
+      { href: '/bookkeeping/trial-balance', labelKey: 'bookkeepingTrialBalance', icon: Scale },
+      { href: '/bookkeeping/journal', labelKey: 'bookkeepingJournal', icon: NotebookPen,
+        match: 'prefix' },
+      { href: '/bookkeeping/vat', labelKey: 'bookkeepingVat', icon: Percent },
+      { href: '/bookkeeping/cash', labelKey: 'bookkeepingCash', icon: Wallet, match: 'prefix' },
+      { href: '/bookkeeping/purchasing', labelKey: 'bookkeepingPurchasing', icon: ShoppingBag },
+    ],
+  },
+  {
     // Chat admin (integrated from chat.jan.parts)
     id: 'chat', labelKey: 'sectionChat', items: [
       { href: '/chat/flow-decisions', labelKey: 'chatFlowDecisions', icon: GitBranch },
@@ -116,7 +147,9 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const { data: unackCount } = useUnacknowledgedCount()
 
   const renderItem = (item: NavItem) => {
-    const isActive = pathname === item.href
+    const isActive = item.match === 'prefix'
+      ? pathname === item.href || pathname.startsWith(`${item.href}/`)
+      : pathname === item.href
     const Icon = item.icon
     const showBadge =
       (item.href === '/customers/health-score' || item.href === '/customers') &&

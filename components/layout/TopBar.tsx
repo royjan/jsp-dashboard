@@ -14,6 +14,14 @@ import type { TranslationKey } from '@/lib/i18n'
 
 const pageTitleKeys: Record<string, TranslationKey> = {
   '/': 'page.overview',
+  '/bookkeeping': 'sectionBookkeeping',
+  '/bookkeeping/accounts': 'sectionBookkeeping',
+  '/bookkeeping/trial-balance': 'sectionBookkeeping',
+  '/bookkeeping/journal': 'sectionBookkeeping',
+  '/bookkeeping/vat': 'sectionBookkeeping',
+  '/bookkeeping/cash': 'sectionBookkeeping',
+  '/bookkeeping/purchasing': 'sectionBookkeeping',
+  '/bookkeeping/years': 'sectionBookkeeping',
   '/demand': 'page.demand',
   '/sales': 'page.sales',
   '/seasonal': 'page.seasonal',

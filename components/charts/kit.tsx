@@ -303,3 +303,137 @@ export function useSeriesIsolation() {
   )
   return { isolated, setIsolated, opacityFor }
 }
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * The frame: card, gradients, range switcher, sparkline.
+ *
+ * Added for הנהח״ש, but deliberately generic — a figure anywhere in the
+ * dashboard gets the same header (title, hero value, delta), the same gradient
+ * area fill, and the same range control, so charts read as one system instead
+ * of one-offs.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/** Gradient fills for area charts. Render once inside <defs>, then reference
+ *  `fill={`url(#${gradientId(key)})`}`. */
+export function gradientId(key: string) {
+  return `books-grad-${key}`
+}
+
+export function GradientDefs({ series }: { series: Array<{ key: string; color: string }> }) {
+  return (
+    <defs>
+      {series.map((s) => (
+        <linearGradient key={s.key} id={gradientId(s.key)} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={s.color} stopOpacity={0.35} />
+          <stop offset="100%" stopColor={s.color} stopOpacity={0.02} />
+        </linearGradient>
+      ))}
+    </defs>
+  )
+}
+
+export interface ChartCardProps {
+  title: string
+  /** The one number the chart is about — rendered large, already formatted. */
+  value?: string
+  hint?: string
+  /** Percent change beside the value; pass null to hide. */
+  changePercent?: number | null
+  actions?: React.ReactNode
+  legend?: React.ReactNode
+  footer?: React.ReactNode
+  className?: string
+  children: React.ReactNode
+}
+
+/** A chart with its title, hero figure and legend in one frame. */
+export function ChartCard({
+  title, value, hint, changePercent, actions, legend, footer, className, children,
+}: ChartCardProps) {
+  return (
+    <div className={cn('rounded-xl border bg-card text-card-foreground shadow-sm', className)}>
+      <div className="flex flex-wrap items-start justify-between gap-3 p-3 pb-1 sm:p-4 sm:pb-2">
+        <div className="min-w-0">
+          <div className="flex items-baseline gap-2">
+            <h3 className="text-sm font-semibold sm:text-base">{title}</h3>
+            {changePercent != null && <DeltaBadge percent={changePercent} />}
+          </div>
+          {value && (
+            <div className="mt-0.5 text-xl font-bold tabular-nums sm:text-2xl">{value}</div>
+          )}
+          {hint && <p className="mt-0.5 text-xs text-muted-foreground">{hint}</p>}
+        </div>
+        {actions && <div className="flex items-center gap-1.5">{actions}</div>}
+      </div>
+      <div className="px-1 pb-2 sm:px-2">{children}</div>
+      {(legend || footer) && (
+        <div className="flex flex-wrap items-center gap-2 border-t px-3 py-2 sm:px-4">
+          {legend}
+          {footer && <div className="ms-auto text-xs text-muted-foreground">{footer}</div>}
+        </div>
+      )}
+    </div>
+  )
+}
+
+export interface ChartRangeOption<V extends string = string> {
+  value: V
+  label: string
+}
+
+/** The range switcher above a time series (3 חודשים / 6 / שנה / הכל). */
+export function ChartRange<V extends string>({ value, options, onChange }: {
+  value: V
+  options: ChartRangeOption<V>[]
+  onChange: (value: V) => void
+}) {
+  return (
+    <div className="flex items-center gap-0.5 rounded-lg bg-muted/60 p-0.5">
+      {options.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          aria-pressed={value === option.value}
+          onClick={() => onChange(option.value)}
+          className={cn(
+            'rounded-md px-2 py-1 text-xs transition-colors pointer-coarse:min-h-9',
+            value === option.value
+              ? 'bg-card text-foreground shadow-sm'
+              : 'text-muted-foreground hover:text-foreground',
+          )}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+/**
+ * A row-sized area chart — the shape of one account's movement, inline in a
+ * table cell. Deliberately axis-less and tooltip-less: it is a glyph, and the
+ * numbers next to it are the data.
+ */
+export function Sparkline({ points, color = 'var(--primary)', width = 72, height = 20 }: {
+  points: number[]
+  color?: string
+  width?: number
+  height?: number
+}) {
+  if (points.length < 2) return <span className="inline-block" style={{ width, height }} />
+  const min = Math.min(...points, 0)
+  const max = Math.max(...points, 0)
+  const span = max - min || 1
+  const step = width / (points.length - 1)
+  const y = (v: number) => height - ((v - min) / span) * height
+  const line = points.map((v, i) => `${(i * step).toFixed(1)},${y(v).toFixed(1)}`).join(' ')
+  const zero = y(0)
+  return (
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}
+         className="inline-block align-middle overflow-visible" aria-hidden="true">
+      <polygon points={`0,${zero} ${line} ${width},${zero}`} fill={color} fillOpacity={0.14} />
+      <polyline points={line} fill="none" stroke={color} strokeWidth={1.5}
+                strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  )
+}
