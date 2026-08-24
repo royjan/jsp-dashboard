@@ -12,7 +12,7 @@ export async function GET(request: Request) {
     const live = await getLiveYear()
     const scope = parseScope(new URL(request.url), live)
     const includeZero = scope.extras.get('zero') === '1'
-    return NextResponse.json(await getTrialBalance({ ...scope, includeZero }))
+    return NextResponse.json(await getTrialBalance({ ...scope, includeZero }, live))
   } catch (e) {
     return NextResponse.json(booksError(e), { status: 500 })
   }

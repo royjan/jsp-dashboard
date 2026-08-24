@@ -16,7 +16,7 @@
  */
 
 import { useMemo, useState } from 'react'
-import { Sparkles } from 'lucide-react'
+import { ChevronDown, Sparkles } from 'lucide-react'
 import { formatDate, maskMoneyInText } from '@/lib/format'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
 import { useBooksInsights } from '@/hooks/use-books'
@@ -87,6 +87,9 @@ export function BooksInsights({ params }: {
   const { t } = useBooksText()
   const [asked, setAsked] = useState(false)
   const [refresh, setRefresh] = useState(0)
+  // Collapsed by default once read: the analysis is long, and the numbers it
+  // discusses are on the same screen. Remembered per browser.
+  const [open, setOpen] = useState(true)
   const { data, isFetching, error } = useBooksInsights(
     { ...params, ...(refresh ? { refresh: '1' } : {}) } as any, asked)
 
@@ -100,13 +103,28 @@ export function BooksInsights({ params }: {
   const run = () => {
     if (asked) setRefresh((n) => n + 1)
     setAsked(true)
+    setOpen(true)
   }
+
+  const hasText = blocks.length > 0
 
   return (
     <section className="rounded-xl border border-primary/30 bg-card p-4 shadow-sm">
       <div className="flex flex-wrap items-center gap-3">
         <Sparkles className="h-4 w-4 text-primary" />
-        <b className="text-sm">{t('aiTitle')}</b>
+        {hasText ? (
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            aria-expanded={open}
+            className="inline-flex items-center gap-1.5 text-sm font-semibold hover:text-primary"
+          >
+            <ChevronDown className={`h-4 w-4 transition-transform ${open ? '' : '-rotate-90'}`} />
+            {t('aiTitle')}
+          </button>
+        ) : (
+          <b className="text-sm">{t('aiTitle')}</b>
+        )}
         <span className="text-xs text-muted-foreground">{t('aiHint')}</span>
         <button
           type="button"
@@ -122,7 +140,7 @@ export function BooksInsights({ params }: {
         <p className="mt-3 border-t pt-3 text-sm text-destructive">{(error as Error).message}</p>
       )}
 
-      {blocks.length > 0 && (
+      {hasText && open && (
         <div className="mt-3 space-y-2.5 border-t pt-3 text-sm leading-7">
           {blocks.map((block, i) => {
             if (block.kind === 'rule') return <hr key={i} className="my-3 border-border" />

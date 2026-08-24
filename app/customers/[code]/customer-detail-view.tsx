@@ -16,8 +16,18 @@ import { useSortable, SortableTh } from '@/components/shared/sortable-table'
 import { ItemLink } from '@/components/shared/ItemLink'
 import Link from 'next/link'
 import {
-  User, DollarSign, Clock, FileText, Receipt, ArrowLeft, AlertTriangle, ShoppingCart, ExternalLink,
-  ChevronDown, Wallet,
+  AlertTriangle,
+  ArrowLeft,
+  BookOpen,
+  ChevronDown,
+  Clock,
+  DollarSign,
+  ExternalLink,
+  FileText,
+  Receipt,
+  ShoppingCart,
+  User,
+  Wallet,
 } from 'lucide-react'
 import { formatCurrency, formatDate, formatNumber } from '@/lib/format'
 import { cardVariants } from '@/lib/motion'
@@ -130,6 +140,13 @@ export function CustomerDetailView({ code, initialTab }: { code: string; initial
           <p className="text-xs sm:text-sm text-muted-foreground">{code} {profile?.agent_name ? `— ${profile.agent_name}` : ''}</p>
         </div>
         {hasOverdue && <Badge variant="destructive" className="gap-1"><AlertTriangle className="h-3 w-3" /> {t('overdueCustomers')}</Badge>}
+        <Link
+          href={`/bookkeeping/accounts/${encodeURIComponent(String(code).replace(/^0+/, '') || code)}`}
+          className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm text-primary transition-colors hover:bg-accent"
+        >
+          <BookOpen className="h-3.5 w-3.5" />
+          {t('bookkeepingLedgerCard')}
+        </Link>
       </div>
 
       {/* Profile + KPI Cards */}
@@ -284,9 +301,9 @@ function OpenDebtsTable({ docs, asOf, balance }: { docs: AgingDoc[]; asOf: strin
         </span>
       </div>
 
-      <div className="overflow-x-auto">
+      <div className="overflow-auto max-h-[60vh]">
         <table className="w-full text-xs sm:text-sm">
-          <thead>
+          <thead className="sticky top-0 z-10 bg-card">
             <tr className="border-b text-muted-foreground [&>th]:p-2">
               <SortableTh<AgingDoc> label={t('docNumber')} sortKey="doc_number" align="start" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
               <SortableTh<AgingDoc> label={t('date')} sortKey="doc_date" align="start" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
@@ -402,9 +419,9 @@ function PurchasesTable({
       ) : sorted.length === 0 ? (
         <p className="text-sm text-muted-foreground text-center py-6">אין קניות בתקופה זו</p>
       ) : (
-        <div className="overflow-x-auto">
+        <div className="overflow-auto max-h-[60vh]">
           <table className="w-full text-xs sm:text-sm">
-            <thead>
+            <thead className="sticky top-0 z-10 bg-card">
               <tr className="border-b text-muted-foreground [&>th]:p-2">
                 <SortableTh<PurchaseItem> label="קוד" sortKey="item_code" align="start" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                 <SortableTh<PurchaseItem> label="שם פריט" sortKey="item_name" align="start" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
@@ -611,9 +628,9 @@ function DocumentTable({ items, t, isReceipt, isLoading, expandable, caption }: 
   return (
     <div className="space-y-2">
       {caption && <p className="text-[11px] text-muted-foreground">{caption}</p>}
-      <div className="overflow-x-auto">
+      <div className="overflow-auto max-h-[60vh]">
         <table className="w-full text-sm">
-          <thead>
+          <thead className="sticky top-0 z-10 bg-card">
             <tr className="border-b text-muted-foreground [&>th]:p-2">
               <SortableTh<DocRow> label={t('docNumber')} sortKey="docNumber" align="start" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
               <SortableTh<DocRow> label={t('docType')} sortKey="docType" align="start" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />

@@ -132,7 +132,8 @@ export async function getLiveYear(): Promise<number> {
   return Number(any[0]?.year ?? new Date().getFullYear())
 }
 
-/** Year-over-year totals for the שנים screen. */
+/** Year-over-year totals — a full-ledger aggregate, so it is asked for only by
+ *  the שנים screen, never by the year picker in the section header. */
 export async function getYearTotals() {
   const { rows } = await query(
     `SELECT l.year,
@@ -231,7 +232,13 @@ const ACCOUNT_SORTS: Record<string, string> = {
   balance: 'ABS(COALESCE(l.debit,0) - COALESCE(l.credit,0))',
 }
 
-export async function getAccounts(scope: BooksScope & { classCode?: string }) {
+export async function getAccounts(scope: BooksScope & { classCode?: string },
+                                  live?: number): Promise<Paged<any>> {
+  if (live !== undefined) {
+    const key = `books:accounts:v1:${scope.year}:${scope.from}:${scope.to}:`
+      + `${scope.q ?? ''}:${scope.classCode ?? ''}:${scope.sort ?? ''}:${scope.dir}:${scope.page ?? 1}`
+    return cached(key, scope.year, live, () => getAccounts(scope))
+  }
   const { pageSize, page, offset } = paging(scope)
   const where: string[] = ['a.year = $1']
   const args: unknown[] = [scope.year, scope.from, scope.to]
@@ -255,21 +262,23 @@ export async function getAccounts(scope: BooksScope & { classCode?: string }) {
     ) l ON l.account = a.code
     WHERE ${where.join(' AND ')}`
 
-  const [count, rows] = await Promise.all([
-    query(`SELECT COUNT(*)::int AS n ${base}`, args),
-    query(
-      `SELECT a.code, a.name, a.class_code, a.city, a.phone, a.tax_id,
-              COALESCE(l.debit,0)  AS debit,
-              COALESCE(l.credit,0) AS credit,
-              COALESCE(l.movements,0) AS movements,
-              COALESCE(l.debit,0) - COALESCE(l.credit,0) AS balance
-       ${base}
-       ${orderBy(scope.sort, scope.dir, ACCOUNT_SORTS, 'balance')}
-       LIMIT $${args.length + 1} OFFSET $${args.length + 2}`,
-      [...args, pageSize, offset],
-    ),
-  ])
-  return { rows: rows.rows, total: count.rows[0].n, page, pageSize } as Paged<any>
+  // COUNT(*) OVER() rides along with the page instead of a second identical
+  // aggregate: the join is over every account in the year, and paying for it
+  // twice was most of this screen's latency.
+  const rows = await query(
+    `SELECT a.code, a.name, a.class_code, a.city, a.phone, a.tax_id,
+            COALESCE(l.debit,0)  AS debit,
+            COALESCE(l.credit,0) AS credit,
+            COALESCE(l.movements,0) AS movements,
+            COALESCE(l.debit,0) - COALESCE(l.credit,0) AS balance,
+            COUNT(*) OVER()::int AS total_rows
+     ${base}
+     ${orderBy(scope.sort, scope.dir, ACCOUNT_SORTS, 'balance')}
+     LIMIT $${args.length + 1} OFFSET $${args.length + 2}`,
+    [...args, pageSize, offset],
+  )
+  const total = rows.rows[0]?.total_rows ?? 0
+  return { rows: rows.rows, total, page, pageSize } as Paged<any>
 }
 
 /** The class codes present in a year, for the filter dropdown. */
@@ -284,7 +293,10 @@ export async function getAccountClasses(year: number) {
 
 // ── ledger card (כרטסת) ───────────────────────────────────────────────── //
 
-export async function getLedgerCard(code: string, scope: BooksScope) {
+export async function getLedgerCard(rawCode: string, scope: BooksScope) {
+  // The books key accounts bare; the ERP and the dashboard pad them to ten
+  // digits. Accept either, so a link from /customers/0000032505 lands here.
+  const code = String(rawCode ?? '').trim().replace(/^0+/, '') || rawCode
   const args: unknown[] = [scope.year, code, scope.from, scope.to]
   let filter = ''
   if (scope.q) {
@@ -359,7 +371,13 @@ const TRIAL_SORTS: Record<string, string> = {
   balance: 'ABS(SUM(l.debit) - SUM(l.credit))',
 }
 
-export async function getTrialBalance(scope: BooksScope & { includeZero?: boolean }) {
+export async function getTrialBalance(scope: BooksScope & { includeZero?: boolean },
+                                      live?: number): Promise<Paged<any>> {
+  if (live !== undefined) {
+    const key = `books:trial:v1:${scope.year}:${scope.from}:${scope.to}:${scope.q ?? ''}:`
+      + `${scope.includeZero ? 1 : 0}:${scope.sort ?? ''}:${scope.dir}:${scope.page ?? 1}`
+    return cached(key, scope.year, live, () => getTrialBalance(scope))
+  }
   const { pageSize, page, offset } = paging(scope)
   const args: unknown[] = [scope.year, scope.from, scope.to]
   let filter = ''
@@ -380,6 +398,8 @@ export async function getTrialBalance(scope: BooksScope & { includeZero?: boolea
     query(`SELECT COUNT(*)::int AS accounts, ROUND(COALESCE(SUM(debit),0),2) AS debit,
                   ROUND(COALESCE(SUM(credit),0),2) AS credit
            FROM (SELECT SUM(l.debit) AS debit, SUM(l.credit) AS credit ${base}) t`, args),
+    // (the row query below is the second pass; the summary above is what the
+    // KPI line reports over the WHOLE filtered set, never the page)
     query(
       `SELECT l.account, COALESCE(a.name,'') AS name, a.class_code,
               COUNT(*)::int AS movements,

@@ -16,7 +16,7 @@ function YearsInner() {
   useMoneyHidden()
   const scope = useBooksScope()
   const { t } = useBooksText()
-  const { data, isLoading, error, refetch } = useBooksYears()
+  const { data, isLoading, error, refetch } = useBooksYears(true)
 
   if (error) return <ErrorState onRetry={() => refetch()} className="mt-6" />
   if (isLoading) return <Skeleton className="h-96 w-full" />

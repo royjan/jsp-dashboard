@@ -53,10 +53,11 @@ function useBooks<T>(key: string, path: string, params: BooksQuery, enabled = tr
   })
 }
 
-export function useBooksYears() {
+export function useBooksYears(withTotals = false) {
   return useQuery({
-    queryKey: ['books:years'],
-    queryFn: () => fetchBooks<any>('years', {} as BooksQuery),
+    queryKey: ['books:years', withTotals],
+    queryFn: () => fetchBooks<any>('years',
+      (withTotals ? { totals: 1 } : {}) as unknown as BooksQuery),
     staleTime: 10 * 60 * 1000,
     refetchOnWindowFocus: false,
   })

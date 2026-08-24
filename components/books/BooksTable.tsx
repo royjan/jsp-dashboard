@@ -9,6 +9,7 @@
  * instead of the whole set.
  */
 
+import { useMemo } from 'react'
 import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
 import { BooksPager } from './BooksChrome'
 import type { BooksScopeState } from './use-books-scope'
@@ -41,10 +42,13 @@ export function BooksTable<T>({
   emptyLabel?: string
   footer?: React.ReactNode
 }) {
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const spaced = useMemo(() => withGutter(columns), [columns])
+
   return (
     <div className="space-y-2">
       <DataTable<T>
-        columns={withGutter(columns)}
+        columns={spaced}
         rows={rows}
         getRowKey={getRowKey}
         loading={loading}

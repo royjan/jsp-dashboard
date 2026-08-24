@@ -13,7 +13,7 @@ export async function GET(request: Request) {
     const scope = parseScope(new URL(request.url), live)
     const classCode = scope.extras.get('class') || undefined
     const [page, classes] = await Promise.all([
-      getAccounts({ ...scope, classCode }),
+      getAccounts({ ...scope, classCode }, live),
       getAccountClasses(scope.year),
     ])
     return NextResponse.json({ ...page, classes })
