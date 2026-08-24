@@ -10,7 +10,8 @@ export async function GET(request: Request) {
   try {
     await initializeSecrets()
     const live = await getLiveYear()
-    return NextResponse.json(await getBookSuppliers(parseScope(new URL(request.url), live)))
+    return NextResponse.json(
+      await getBookSuppliers(parseScope(new URL(request.url), live), live))
   } catch (e) {
     return NextResponse.json(booksError(e), { status: 500 })
   }

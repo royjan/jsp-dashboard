@@ -12,7 +12,7 @@ export async function GET(request: Request) {
     const live = await getLiveYear()
     const scope = parseScope(new URL(request.url), live)
     const kind = scope.extras.get('kind') || undefined
-    return NextResponse.json(await getPurchasing({ ...scope, kind }))
+    return NextResponse.json(await getPurchasing({ ...scope, kind }, live))
   } catch (e) {
     return NextResponse.json(booksError(e, { byKind: [], monthly: [] }), { status: 500 })
   }

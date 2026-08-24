@@ -12,7 +12,7 @@ export async function GET(request: Request) {
     const live = await getLiveYear()
     const scope = parseScope(new URL(request.url), live)
     const [page, cheques] = await Promise.all([
-      getReceipts(scope),
+      getReceipts(scope, live),
       getUpcomingCheques(scope.year),
     ])
     return NextResponse.json({ ...page, upcomingCheques: cheques })

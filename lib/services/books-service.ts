@@ -561,7 +561,12 @@ const RECEIPT_SORTS: Record<string, string> = {
   amount: 'r.amount', lines: 'lines',
 }
 
-export async function getReceipts(scope: BooksScope) {
+export async function getReceipts(scope: BooksScope, live?: number): Promise<any> {
+  if (live !== undefined) {
+    const key = `books:receipts:v1:${scope.year}:${scope.from}:${scope.to}:`
+      + `${scope.q ?? ''}:${scope.sort ?? ''}:${scope.dir}:${scope.page ?? 1}`
+    return cached(key, scope.year, live, () => getReceipts(scope))
+  }
   const { pageSize, page, offset } = paging(scope)
   const args: unknown[] = [scope.year, scope.from, scope.to]
   let filter = ''
@@ -619,7 +624,13 @@ export async function getReceipt(number: string, year: number) {
 export async function getCashTable(
   table: 'bank_lines' | 'cheques' | 'bank_payments' | 'payment_orders',
   scope: BooksScope & { bankAccount?: string },
-) {
+  live?: number,
+): Promise<any> {
+  if (live !== undefined) {
+    const key = `books:cash-table:v1:${table}:${scope.year}:${scope.from}:${scope.to}:`
+      + `${scope.bankAccount ?? ''}:${scope.q ?? ''}:${scope.sort ?? ''}:${scope.dir}:${scope.page ?? 1}`
+    return cached(key, scope.year, live, () => getCashTable(table, scope))
+  }
   const dateColumn = table === 'cheques' ? 'due_date' : 'date'
   // bank_lines is raw bank-statement lines: no counter-account column at all.
   const hasAccount = table !== 'bank_lines'
@@ -684,7 +695,13 @@ export async function getUpcomingCheques(year: number, limit = 60) {
 
 // ── purchasing (רכש) ──────────────────────────────────────────────────── //
 
-export async function getPurchasing(scope: BooksScope & { kind?: string }) {
+export async function getPurchasing(scope: BooksScope & { kind?: string },
+                                    live?: number): Promise<any> {
+  if (live !== undefined) {
+    const key = `books:purchasing:v1:${scope.year}:${scope.from}:${scope.to}:`
+      + `${scope.kind ?? ''}:${scope.q ?? ''}:${scope.sort ?? ''}:${scope.dir}:${scope.page ?? 1}`
+    return cached(key, scope.year, live, () => getPurchasing(scope))
+  }
   const { pageSize, page, offset } = paging(scope)
   const args: unknown[] = [scope.year, scope.from, scope.to, PURCHASE_PREFIXES]
   const where = [`year=$1`, `source='ledger'`, `doc_date BETWEEN $2 AND $3`,
@@ -739,7 +756,12 @@ export async function getPurchasing(scope: BooksScope & { kind?: string }) {
   }
 }
 
-export async function getBookSuppliers(scope: BooksScope) {
+export async function getBookSuppliers(scope: BooksScope, live?: number): Promise<any> {
+  if (live !== undefined) {
+    const key = `books:suppliers:v1:${scope.year}:${scope.from}:${scope.to}:`
+      + `${scope.q ?? ''}:${scope.sort ?? ''}:${scope.dir}:${scope.page ?? 1}`
+    return cached(key, scope.year, live, () => getBookSuppliers(scope))
+  }
   const { pageSize, page, offset } = paging(scope)
   const args: unknown[] = [scope.year, scope.from, scope.to, SUPPLIER_CLASSES]
   let filter = ''

@@ -24,7 +24,7 @@ export async function GET(request: Request) {
     if (!table) return NextResponse.json({ error: 'unknown table', rows: [] }, { status: 400 })
     const bankAccount = url.searchParams.get('account') || undefined
     const [page, accounts] = await Promise.all([
-      getCashTable(table, { ...scope, bankAccount }),
+      getCashTable(table, { ...scope, bankAccount }, live),
       getBankAccounts(scope.year),
     ])
     return NextResponse.json({ ...page, table: key, bankAccounts: accounts })
