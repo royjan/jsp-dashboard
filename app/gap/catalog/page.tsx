@@ -265,6 +265,8 @@ function CatalogGapPageInner() {
     {
       key: 'part',
       header: t('catalogGap.colPart'),
+      sortable: true,
+      sortValue: r => r.itemNumber,
       cellClassName: cn('font-mono', GUTTER),
       headerClassName: GUTTER,
       cell: r => <ItemLink code={r.itemNumber} showCode />,
@@ -272,6 +274,8 @@ function CatalogGapPageInner() {
     {
       key: 'brand',
       header: t('catalogGap.colBrand'),
+      sortable: true,
+      sortValue: r => r.brand ?? '',
       cellClassName: GUTTER,
       headerClassName: GUTTER,
       // The stored brand wins over deriveBrand(code): partly knows which catalog
@@ -281,6 +285,8 @@ function CatalogGapPageInner() {
     {
       key: 'description',
       header: t('catalogGap.colDescription'),
+      sortable: true,
+      sortValue: r => r.hebrewDescription ?? r.description ?? '',
       truncate: 'max-w-[280px]',
       cellClassName: GUTTER,
       headerClassName: GUTTER,
@@ -293,6 +299,8 @@ function CatalogGapPageInner() {
       key: 'vehicleCount',
       header: t('catalogGap.colVehicleCount'),
       align: 'end',
+      sortable: true,
+      sortValue: r => r.vehicleCount,
       headerClassName: cn('text-foreground', GUTTER),
       cellClassName: GUTTER,
       cell: r => <VehicleCount count={r.vehicleCount} max={maxCount} />,
@@ -300,6 +308,8 @@ function CatalogGapPageInner() {
     {
       key: 'vehicles',
       header: t('catalogGap.colVehicles'),
+      sortable: true,
+      sortValue: r => r.vehicleCount,
       cellClassName: cn('max-w-[300px]', GUTTER),
       headerClassName: GUTTER,
       cell: r => (
@@ -309,6 +319,10 @@ function CatalogGapPageInner() {
     {
       key: 'equivalent',
       header: t('catalogGap.colEquivalent'),
+      sortable: true,
+      // Parts WITH a sellable equivalent sort together; the ones without —
+      // the actionable gaps — stay findable at the other end.
+      sortValue: r => r.sellableEquivalent ?? '',
       cell: r => (r.sellableEquivalent ? (
         <span className="inline-flex items-center gap-1.5">
           <ItemLink code={r.sellableEquivalent} showCode />
@@ -459,6 +473,8 @@ function CatalogGapPageInner() {
               error={error}
               onRetry={() => refetch()}
               minWidth="min-w-[860px]"
+              maxHeight="calc(100vh - 22rem)"
+              defaultSort={{ field: 'vehicleCount', dir: 'desc' }}
               labels={{ empty: t('catalogGap.empty') }}
             />
 

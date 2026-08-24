@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, Suspense } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { useUrlParams } from '@/hooks/use-url-params'
 import { ItemLink } from '@/components/shared/ItemLink'
+import { SubTabs } from '@/components/shared/SubTabs'
 import { LiquidationMap } from '../LiquidationMap'
 import { formatCurrency } from '@/lib/format'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
@@ -204,7 +205,7 @@ function EbayRecoContent() {
   const Th = ({ k, children, className = '' }: { k?: SortKey; children: React.ReactNode; className?: string }) => (
     <th
       onClick={k ? () => sortBy(k) : undefined}
-      className={`px-3 py-2.5 text-right text-xs font-bold text-muted-foreground whitespace-nowrap bg-muted/40 border-b sticky top-0 ${k ? 'cursor-pointer select-none hover:text-foreground' : ''} ${className}`}
+      className={`px-3 py-2.5 text-right text-xs font-bold text-muted-foreground whitespace-nowrap bg-card border-b sticky top-0 z-10 ${k ? 'cursor-pointer select-none hover:text-foreground' : ''} ${className}`}
     >
       {children}{k && sortKey === k ? <span className="text-primary ms-1 text-[10px]">{sortDir < 0 ? '▼' : '▲'}</span> : null}
     </th>
@@ -212,6 +213,10 @@ function EbayRecoContent() {
 
   return (
     <div className="space-y-5">
+      <SubTabs tabs={[
+        { href: '/ebay', label: 'eBay' },
+        { href: '/ebay-reco/table', label: 'eBay חכם' },
+      ]} />
       <div>
         <div className="text-xs font-bold text-primary mb-1">רשימת מכירה ל-eBay — לוגיקה חדשה</div>
         <h1 className="text-2xl font-bold">מלאי מת ויקר שקל לשלוח — למכירה ב-eBay</h1>
@@ -319,7 +324,7 @@ function EbayRecoContent() {
 
       {/* Table */}
       {view === 'table' && (<>
-      <div className="overflow-x-auto rounded-xl border">
+      <div className="overflow-auto rounded-xl border max-h-[calc(100vh-24rem)]">
         <table className="w-full text-sm min-w-[1180px]">
           <thead>
             <tr>

@@ -6,7 +6,6 @@ import { cn } from '@/lib/utils'
 import { useLocale } from '@/lib/locale-context'
 import type { TranslationKey } from '@/lib/i18n'
 import {
-  Activity,
   Bell,
   BookOpen,
   Bot,
@@ -89,8 +88,8 @@ const navSections: Array<{ id: string; labelKey: TranslationKey; items: NavItem[
       { href: '/receivables', labelKey: 'receivables', icon: Receipt },
       { href: '/margin', labelKey: 'margin', icon: Percent },
       { href: '/pricing', labelKey: 'pricing', icon: DollarSign },
+      // One entry: /ebay and /ebay-reco are two tabs of the same screen.
       { href: '/ebay', labelKey: 'ebay', icon: ShoppingCart },
-      { href: '/ebay-reco', labelKey: 'ebayReco', icon: PackageCheck },
       { href: '/sales-rep', labelKey: 'salesRep', icon: Briefcase },
       { href: '/sales-rep/price-check', labelKey: 'stockCheck', icon: DollarSign },
     ],
@@ -125,7 +124,6 @@ const navSections: Array<{ id: string; labelKey: TranslationKey; items: NavItem[
       { href: '/chat/flow-decisions', labelKey: 'chatFlowDecisions', icon: GitBranch },
       { href: '/chat/flow-decisions/observatory', labelKey: 'chatFlowObservatory', icon: Radar },
       { href: '/chat/word-mappings', labelKey: 'chatWordMappings', icon: Languages },
-      { href: '/chat/monitoring', labelKey: 'chatMonitoring', icon: Activity },
       { href: '/chat/parts-analytics', labelKey: 'chatPartsAnalytics', icon: Bot },
       { href: '/chat/diego', labelKey: 'chatDiego', icon: BotMessageSquare },
       { href: '/chat/feedback', labelKey: 'chatFeedback', icon: ThumbsUp },

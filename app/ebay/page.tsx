@@ -4,6 +4,7 @@ import { Suspense } from 'react'
 import { motion } from 'framer-motion'
 import { useEbayAnalytics } from '@/hooks/use-analytics'
 import { useLocale } from '@/lib/locale-context'
+import { SubTabs } from '@/components/shared/SubTabs'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -36,6 +37,17 @@ function LoadingSkeleton() {
   )
 }
 
+/** The two eBay screens: the account as it stands, and what to list next. */
+function EbayTabs() {
+  const { t } = useLocale()
+  return (
+    <SubTabs tabs={[
+      { href: '/ebay', label: t('ebay') },
+      { href: '/ebay-reco/table', label: t('ebayReco') },
+    ]} />
+  )
+}
+
 export default function EbayPage() {
   return (
     <Suspense fallback={<LoadingSkeleton />}>
@@ -60,6 +72,7 @@ function EbayContent() {
 
   return (
     <div className="space-y-6">
+      <EbayTabs />
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3">
         <motion.div custom={0} variants={cardVariants} initial="hidden" animate="visible">
