@@ -50,8 +50,9 @@ export function useUrlParams() {
 
   // Reads the live `searchParams` — reading a mirror of it would hand the
   // render caused by a URL change the *previous* URL, and no re-render would
-  // ever follow to correct that. Pending writes win over the URL so two clicks
-  // inside one frame compound (7→8→9) instead of both computing 8.
+  // ever follow to correct that. Pending writes win over it so a read that
+  // follows a write in the same frame sees the write, rather than the value
+  // the URL still holds until the flush lands.
   const get = useCallback((key: string): string | null => {
     if (key in pendingRef.current) return pendingRef.current[key]
     return searchParams.get(key)

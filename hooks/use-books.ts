@@ -8,7 +8,7 @@
  * the rows already loaded.
  */
 
-import { useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 
 export interface BooksQuery {
   year: number
@@ -42,6 +42,14 @@ const LIST_OPTIONS = {
   gcTime: 15 * 60 * 1000,
   retry: 1,
   refetchOnWindowFocus: false,
+  // The page number is part of the query key, so without this the next page is
+  // a cold cache entry: `data` goes undefined mid-flight, `total` falls to 0,
+  // and BooksPager — which hides itself when the total fits one page — takes
+  // its own buttons off the screen for the length of the fetch. Clicking
+  // "next" twice then lands the second click on nothing, which reads as a
+  // button that only sometimes works. Holding the previous page keeps the
+  // pager mounted and the row count honest until the new page arrives.
+  placeholderData: keepPreviousData,
 } as const
 
 function useBooks<T>(key: string, path: string, params: BooksQuery, enabled = true) {
