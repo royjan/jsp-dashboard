@@ -621,6 +621,8 @@ export async function getCashTable(
   scope: BooksScope & { bankAccount?: string },
 ) {
   const dateColumn = table === 'cheques' ? 'due_date' : 'date'
+  // bank_lines is raw bank-statement lines: no counter-account column at all.
+  const hasAccount = table !== 'bank_lines'
   const { pageSize, page, offset } = paging(scope)
   const args: unknown[] = [scope.year, scope.from, scope.to]
   const where = [`t.year=$1`, `t.${dateColumn} BETWEEN $2 AND $3`]
@@ -630,21 +632,27 @@ export async function getCashTable(
   }
   if (scope.q) {
     args.push(`%${scope.q}%`)
-    where.push(`(t.detail ILIKE $${args.length} OR t.account ILIKE $${args.length})`)
+    where.push(hasAccount
+      ? `(t.detail ILIKE $${args.length} OR t.account ILIKE $${args.length})`
+      : `t.detail ILIKE $${args.length}`)
   }
   const sorts: Record<string, string> = {
-    date: `t.${dateColumn}`, amount: 't.amount', account: 't.account',
+    date: `t.${dateColumn}`, amount: 't.amount',
     reference: 't.reference', detail: 't.detail',
+    ...(hasAccount ? { account: 't.account' } : {}),
   }
-  const base = `FROM books.${table} t WHERE ${where.join(' AND ')}`
-  const joinName = table === 'payment_orders' ? '' :
-    `LEFT JOIN books.accounts a ON a.year=t.year AND a.code=t.account`
-  const nameColumn = table === 'payment_orders' ? `t.name AS account_name` :
-    `COALESCE(a.name,'') AS account_name`
+  const from = `FROM books.${table} t`
+  const whereClause = `WHERE ${where.join(' AND ')}`
+  const joinName = hasAccount && table !== 'payment_orders' ?
+    `LEFT JOIN books.accounts a ON a.year=t.year AND a.code=t.account` : ''
+  const nameColumn = table === 'payment_orders' ? `t.name AS account_name`
+    : hasAccount ? `COALESCE(a.name,'') AS account_name`
+    : `NULL::text AS account_name`
 
   const [summary, rows] = await Promise.all([
-    query(`SELECT COUNT(*)::int AS count, ROUND(COALESCE(SUM(t.amount),0),2) AS total ${base}`, args),
-    query(`SELECT t.*, ${nameColumn} ${base} ${joinName}
+    query(`SELECT COUNT(*)::int AS count, ROUND(COALESCE(SUM(t.amount),0),2) AS total
+           ${from} ${whereClause}`, args),
+    query(`SELECT t.*, ${nameColumn} ${from} ${joinName} ${whereClause}
            ${orderBy(scope.sort, scope.dir, sorts, 'date')}
            LIMIT $${args.length + 1} OFFSET $${args.length + 2}`,
       [...args, pageSize, offset]),
