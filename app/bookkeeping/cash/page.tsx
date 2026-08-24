@@ -85,7 +85,7 @@ function ReceiptsView({ scope }: { scope: ReturnType<typeof useBooksScope> }) {
 function BankView({ scope, view }: { scope: ReturnType<typeof useBooksScope>; view: View }) {
   useMoneyHidden()
   const { t } = useBooksText()
-  const account = scope.params.account as string | undefined
+  const account = scope.get('account') ?? undefined
   const { data, isLoading, error, refetch } = useBooksCashTable({
     ...scope.params, table: view, account,
   } as any)
@@ -153,7 +153,7 @@ function BankView({ scope, view }: { scope: ReturnType<typeof useBooksScope>; vi
 function CashInner() {
   const scope = useBooksScope('date')
   const { t } = useBooksText()
-  const view = ((scope.params.view as string) ?? 'receipts') as View
+  const view = (scope.get('view') ?? 'receipts') as View
 
   return (
     <div className="space-y-3">

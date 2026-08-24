@@ -24,7 +24,7 @@ function Money({ value }: { value: number }) {
 function AccountsInner() {
   const scope = useBooksScope('balance')
   const { t, lang } = useBooksText()
-  const classCode = scope.params.class as string | undefined
+  const classCode = scope.get('class') ?? undefined
   const { data, isLoading, error, refetch } = useBooksAccounts({
     ...scope.params, class: classCode,
   } as any)

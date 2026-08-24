@@ -29,6 +29,10 @@ export interface BooksScopeState {
   loading: boolean
   /** The scope as query parameters, for the data hooks. */
   params: Record<string, string | number | undefined>
+  /** Raw read of any URL param — for the ad-hoc ones (view, kind, class, …)
+   *  that `params` doesn't carry, since a page's own filter belongs in its
+   *  own URL key, not in the shared scope shape. */
+  get: (key: string) => string | null
   set: (updates: Record<string, string | number | null | undefined>) => void
   setYear: (year: number) => void
   setSort: (field: string) => void
@@ -108,7 +112,7 @@ export function useBooksScope(defaultSort = ''): BooksScopeState {
     year, liveYear, from, to, q, sort, dir, page,
     isLive: year === liveYear,
     stale: Boolean(yearRow?.stale),
-    years, loading: isLoading, params,
+    years, loading: isLoading, params, get,
     set, setYear, setSort, reset,
   }
 }

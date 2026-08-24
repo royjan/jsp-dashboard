@@ -16,7 +16,7 @@ function JournalInner() {
   useMoneyHidden()
   const scope = useBooksScope('date')
   const { t, lang } = useBooksText()
-  const kind = scope.params.kind as string | undefined
+  const kind = scope.get('kind') ?? undefined
   const { data, isLoading, error, refetch } = useBooksJournal({ ...scope.params, kind } as any)
 
   const columns = useMemo<DataTableColumn<any>[]>(() => [

@@ -20,7 +20,7 @@ import { ReceiptsChart } from '@/components/books/BooksCharts'
 function DocumentsView({ scope }: { scope: ReturnType<typeof useBooksScope> }) {
   useMoneyHidden()
   const { t, lang } = useBooksText()
-  const kind = scope.params.kind as string | undefined
+  const kind = scope.get('kind') ?? undefined
   const { data, isLoading, error, refetch } = useBooksPurchasing({ ...scope.params, kind } as any)
 
   const columns = useMemo<DataTableColumn<any>[]>(() => [
@@ -118,7 +118,7 @@ function SuppliersView({ scope }: { scope: ReturnType<typeof useBooksScope> }) {
 function PurchasingInner() {
   const scope = useBooksScope('date')
   const { t } = useBooksText()
-  const view = (scope.params.view as string) === 'suppliers' ? 'suppliers' : 'documents'
+  const view = scope.get('view') === 'suppliers' ? 'suppliers' : 'documents'
 
   return (
     <div className="space-y-3">

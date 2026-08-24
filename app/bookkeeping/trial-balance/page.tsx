@@ -18,7 +18,7 @@ function TrialBalanceInner() {
   useMoneyHidden()
   const scope = useBooksScope('balance')
   const { t, lang } = useBooksText()
-  const includeZero = scope.params.zero === '1'
+  const includeZero = scope.get('zero') === '1'
   const { data, isLoading, error, refetch } = useBooksTrialBalance({
     ...scope.params, zero: includeZero ? '1' : undefined,
   } as any)
