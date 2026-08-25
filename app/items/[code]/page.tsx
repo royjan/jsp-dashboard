@@ -2,7 +2,7 @@
 
 import { use, useState } from 'react'
 import { motion } from 'framer-motion'
-import { useItemDetail, useItemDocuments, useItemLinks } from '@/hooks/use-analytics'
+import { useItemDetail, useItemDocuments, useItemLinks, HttpError } from '@/hooks/use-analytics'
 import { deriveBrand, brandChipClasses } from '@/lib/brand'
 import { ItemLink } from '@/components/shared/ItemLink'
 import { PartLinksCard } from '@/components/items/PartLinksCard'
@@ -192,6 +192,91 @@ function FitsCard({ fits, isHe, open, setOpen }: {
   )
 }
 
+/** A part number that is in neither the ERP nor the catalog. */
+function UnknownCode({ code, isHe }: { code: string; isHe: boolean }) {
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center gap-3 sm:gap-4">
+        <button
+          onClick={() => window.history.back()}
+          className="text-muted-foreground hover:text-foreground transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
+          aria-label={isHe ? 'חזרה' : 'Back'}
+        >
+          <ArrowLeft className="h-5 w-5" />
+        </button>
+        <h1 className="text-lg sm:text-xl font-bold flex items-center gap-2 min-w-0">
+          <Package className="h-5 w-5 text-muted-foreground shrink-0" />
+          <span className="font-mono truncate">{code}</span>
+        </h1>
+      </div>
+      <Card>
+        <CardContent className="p-6 space-y-4">
+          <p className="font-medium">
+            {isHe ? 'המק״ט הזה לא קיים אצלנו' : 'We do not have this part number'}
+          </p>
+          {/* SAY WHAT WAS CHECKED. "Not found" without a bound reads as "we did not look" —
+              the reader cannot tell a missing item from a missing search. */}
+          <p className="text-sm text-muted-foreground">
+            {isHe
+              ? 'חיפשנו במלאי, בהיסטוריית הרכש והמכירות ובקטלוג — המספר הזה לא מופיע באף אחד מהם. לרוב זה טעות הקלדה או מק״ט של יצרן אחר.'
+              : 'We checked stock, the purchase and sales history, and the catalog — this number appears in none of them. Usually that means a typo, or another manufacturer\'s number.'}
+          </p>
+          <div className="flex flex-wrap gap-2 pt-1">
+            {/* `/search`, not `/items` — `app/items` has only the `[code]` route, so a link
+                to an index page would be a 404 inside a page whose whole job is explaining a
+                404. */}
+            <Link
+              href="/search"
+              className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm hover:bg-muted transition-colors"
+            >
+              <Package className="h-4 w-4" />
+              {isHe ? 'חיפוש מק״ט' : 'Search part numbers'}
+            </Link>
+            <button
+              onClick={() => window.history.back()}
+              className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm hover:bg-muted transition-colors"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              {isHe ? 'חזרה' : 'Go back'}
+            </button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
+/** Everything that is NOT "we do not have it" — a dead session, a dead ERP, a dead network. */
+function LoadFailed({ isHe, status }: { isHe: boolean; status?: number }) {
+  const expired = status === 401 || status === 403
+  return (
+    <Card className="mt-4">
+      <CardContent className="p-6 space-y-3">
+        <p className="font-medium">
+          {expired
+            ? (isHe ? 'ההתחברות פגה' : 'Your session expired')
+            : (isHe ? 'לא הצלחנו לטעון את הפריט' : 'Could not load this item')}
+        </p>
+        <p className="text-sm text-muted-foreground">
+          {expired
+            ? (isHe ? 'צריך להתחבר שוב כדי לראות את הפריט.' : 'Sign in again to view this item.')
+            : (isHe
+              ? 'זו תקלה אצלנו, לא סימן שהפריט לא קיים. אפשר לנסות שוב עוד רגע.'
+              : 'This is a fault on our side, not a sign the item is missing. Try again in a moment.')}
+          {status ? <span className="ms-2 font-mono text-xs opacity-60">HTTP {status}</span> : null}
+        </p>
+        <button
+          onClick={() => window.location.reload()}
+          className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm hover:bg-muted transition-colors"
+        >
+          {isHe ? 'נסה שוב' : 'Try again'}
+        </button>
+      </CardContent>
+    </Card>
+  )
+}
+
+
 export default function ItemDetailPage({ params }: { params: Promise<{ code: string }> }) {
   // Subscribe to the demo-mode eye: formatCurrency() masks from a module
   // store, so without this the amounts here would not re-render on toggle.
@@ -209,7 +294,20 @@ export default function ItemDetailPage({ params }: { params: Promise<{ code: str
   const toggleDocs = (type: DocType) => setOpenDocs((cur) => (cur === type ? null : type))
 
   if (isLoading) return <LoadingSkeleton />
-  if (error) return <div className="text-destructive p-4">Error: {(error as Error).message}</div>
+  // A CODE WE DO NOT HAVE IS AN ANSWER, NOT A CRASH.
+  //
+  // This used to render "Error: Failed" — the literal string the fetch hook threw — for every
+  // failure alike. Someone holding an invoice with a part number on it got a red line of
+  // developer text and no idea whether the number is wrong, the item is discontinued, or the
+  // system is down. The page already treats "in the catalog but not the ERP" as a real state
+  // worth designing (`catalog_only`, below); this is the same courtesy for a code that is in
+  // neither.
+  if (error) {
+    const status = (error as HttpError).status
+    return status === 404
+      ? <UnknownCode code={decodedCode} isHe={isHe} />
+      : <LoadFailed isHe={isHe} status={status} />
+  }
   if (!data) return null
 
   const salesData = [

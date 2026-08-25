@@ -475,18 +475,34 @@ export function useCustomerHistory(code: string | null) {
   })
 }
 
+/**
+ * A failed request that still knows WHY it failed.
+ *
+ * `throw new Error('Failed')` threw the status code away, so every caller had exactly one
+ * thing it could say — "Error: Failed" — whether the item does not exist, the session
+ * expired, or the ERP is down. Those are three different messages to three different people.
+ */
+export class HttpError extends Error {
+  constructor(public status: number, message?: string) {
+    super(message || `HTTP ${status}`)
+    this.name = 'HttpError'
+  }
+}
+
 export function useItemDetail(code: string | null) {
   return useQuery({
     queryKey: ['item-detail', code],
     queryFn: async () => {
       const res = await fetch(`/api/items/${encodeURIComponent(code!)}`)
-      if (!res.ok) throw new Error('Failed')
+      if (!res.ok) throw new HttpError(res.status)
       return res.json()
     },
     enabled: !!code,
     staleTime: 5 * 60 * 1000,
     gcTime: 15 * 60 * 1000,
-    retry: 2,
+    // A 404 is an ANSWER, not a failure to get one. Retrying it twice cannot change it and
+    // costs the reader several seconds of a spinner before the same result arrives.
+    retry: (count, err) => !(err instanceof HttpError && err.status === 404) && count < 2,
     refetchOnWindowFocus: false,
   })
 }
