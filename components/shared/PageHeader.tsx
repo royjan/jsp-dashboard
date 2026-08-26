@@ -15,6 +15,8 @@
 import * as React from 'react'
 import type { LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { FreshnessChip } from '@/components/shared/FreshnessChip'
+import type { Provenance } from '@/lib/provenance'
 
 export interface PageHeaderProps {
   /** The page title. Keep it short — it is the h1. */
@@ -28,6 +30,15 @@ export interface PageHeaderProps {
    * refresh. Wraps below the title on narrow screens instead of squashing it.
    */
   actions?: React.ReactNode
+  /**
+   * Where this screen's headline numbers came from. Renders a chip beside the
+   * actions saying live / cached / sampled / unavailable.
+   *
+   * Passing it is how a page opts out of presenting an uncheckable figure as a
+   * fact — which is the failure mode this codebase keeps hitting, because a
+   * source that cannot see something renders identically to one that saw zero.
+   */
+  provenance?: Provenance | null
   /** Extra content below the header (filter bars, tabs). */
   children?: React.ReactNode
   className?: string
@@ -38,6 +49,7 @@ export function PageHeader({
   description,
   icon: Icon,
   actions,
+  provenance,
   children,
   className,
 }: PageHeaderProps) {
@@ -57,7 +69,12 @@ export function PageHeader({
             )}
           </div>
         </div>
-        {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
+        {(actions || provenance) && (
+          <div className="flex shrink-0 items-center gap-2">
+            {provenance && <FreshnessChip provenance={provenance} />}
+            {actions}
+          </div>
+        )}
       </div>
       {children}
     </div>

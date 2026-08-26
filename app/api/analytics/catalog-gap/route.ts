@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import type { Provenance } from '@/lib/provenance'
 import { query } from '@/lib/db'
 import { initializeSecrets } from '@/lib/aws-secrets'
 
@@ -73,6 +74,8 @@ export interface CatalogGapResponse {
   /** Set when the request hit the export cap, so the UI can say so. */
   truncated: boolean
   tookMs: number
+  /** Source/coverage of this answer, for the freshness chip. */
+  provenance?: Provenance
 }
 
 const MAX_LIMIT = 5000
@@ -221,6 +224,17 @@ export async function GET(req: Request) {
       onlyOrphans,
       truncated: limit === MAX_LIMIT && page.length === MAX_LIMIT,
       tookMs: Date.now() - started,
+      // There is no exact total here BY CONSTRUCTION — the query pages first and
+      // decorates only the returned ids, because counting properly does not
+      // finish. Saying so in the response is what lets the page show "a page of
+      // results" rather than implying it is showing all of them.
+      provenance: {
+        source: 'postgres' as const,
+        asOf: new Date().toISOString(),
+        rows: parts.length,
+        truncated: page.length === limit,
+        scope: 'עמוד תוצאות — אין ספירה מדויקת (השאילתה המלאה לא מסתיימת)',
+      },
     }
     return NextResponse.json(body)
   } catch (err) {

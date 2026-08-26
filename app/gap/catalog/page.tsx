@@ -347,6 +347,7 @@ function CatalogGapPageInner() {
           icon={PackageX}
           title={t('page.catalogGap')}
           description={t('catalogGap.subtitle')}
+          provenance={data?.provenance}
           actions={
             <Button size="sm" onClick={exportToExcel} disabled={exporting || isLoading || !rows.length}>
               {exporting
