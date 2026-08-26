@@ -68,7 +68,7 @@ export function MobileNav() {
   const isMoreActive = moreNav.some(item => item.href === pathname)
 
   return (
-    <>
+    <div data-print="hide" className="contents">
       {/* More menu overlay */}
       {showMore && (
         <div className="fixed inset-0 z-50 lg:hidden" onClick={() => setShowMore(false)}>
@@ -143,6 +143,6 @@ export function MobileNav() {
           </button>
         </div>
       </nav>
-    </>
+    </div>
   )
 }

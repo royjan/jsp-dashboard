@@ -369,3 +369,79 @@
   stroke-width: 1.5px !important;
   fill: none !important;
 }
+
+/* ---------------------------------------------------------------------------
+   Print / "save as PDF".
+   The dashboard had no print styles, so ⌘P produced the sidebar, the top bar,
+   the bottom nav and every button alongside the report, and long tables were
+   cut mid-row. There is no PDF export in this app — FINAPI renders the ERP
+   documents, nothing renders the analytics — so the browser IS the export, and
+   it only needs the page to get out of its own way.
+
+   Anything that is chrome rather than content carries data-print="hide".
+--------------------------------------------------------------------------- */
+@media print {
+  [data-print='hide'],
+  nav[aria-label='Main'],
+  header.sticky,
+  aside {
+    display: none !important;
+  }
+
+  /* The shell offsets content by the sidebar width; with the sidebar gone that
+     margin is just a blank strip down the page. */
+  main {
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  /* Force the light palette: printing the dark theme wastes toner and renders
+     muted text as unreadable grey. */
+  :root {
+    color-scheme: light !important;
+  }
+
+  /* A card or a row split across a page break is the main thing that makes a
+     printed table unusable. */
+  .rounded-xl,
+  .rounded-lg,
+  tr,
+  figure {
+    break-inside: avoid;
+  }
+
+  /* Repeat the header on every page of a long table. */
+  thead {
+    display: table-header-group;
+  }
+
+  /* A capped table prints only the visible slice; release it so the printed
+     copy is the whole thing. */
+  [style*='max-height'] {
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  /* Tailwind's `shadow-*` and backdrop blur cost ink and render as grey mud. */
+  * {
+    box-shadow: none !important;
+    text-shadow: none !important;
+    backdrop-filter: none !important;
+  }
+
+  /* Default UA behaviour appends every href after the link text. In an app
+     where most links are internal, that is noise on every row. */
+  a[href]::after {
+    content: '' !important;
+  }
+
+  @page {
+    margin: 12mm;
+  }
+}

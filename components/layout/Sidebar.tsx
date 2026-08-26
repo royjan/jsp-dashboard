@@ -200,6 +200,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   return (
     <TooltipProvider delayDuration={0}>
       <aside
+        data-print="hide"
         className={cn(
           'fixed top-0 start-0 z-40 h-screen border-e bg-card transition-all duration-300 hidden lg:flex flex-col',
           collapsed ? 'w-16' : 'w-56'

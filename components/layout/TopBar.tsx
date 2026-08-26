@@ -11,33 +11,8 @@ import { AppSwitcher } from '@/components/layout/AppSwitcher'
 import { CommandPalette } from '@/components/layout/CommandPalette'
 import { MoneyToggle } from '@/components/layout/MoneyToggle'
 import { DensityToggle } from '@/components/layout/DensityToggle'
-import type { TranslationKey } from '@/lib/i18n'
+import { resolveRouteTitle, APP_TITLE_SUFFIX } from '@/lib/route-titles'
 
-const pageTitleKeys: Record<string, TranslationKey> = {
-  '/': 'page.overview',
-  '/bookkeeping': 'sectionBookkeeping',
-  '/bookkeeping/accounts': 'sectionBookkeeping',
-  '/bookkeeping/trial-balance': 'sectionBookkeeping',
-  '/bookkeeping/journal': 'sectionBookkeeping',
-  '/bookkeeping/vat': 'sectionBookkeeping',
-  '/bookkeeping/cash': 'sectionBookkeeping',
-  '/bookkeeping/purchasing': 'sectionBookkeeping',
-  '/bookkeeping/years': 'sectionBookkeeping',
-  '/demand': 'page.demand',
-  '/sales': 'page.sales',
-  '/seasonal': 'page.seasonal',
-  '/reorder': 'page.reorder',
-  '/stock': 'page.stock',
-  '/conversion': 'page.conversion',
-  '/abc': 'page.abc',
-  '/customers': 'page.customers',
-  '/scrap': 'page.scrap',
-  '/returns': 'page.returns',
-  '/ebay': 'page.ebay',
-  '/chat-insights': 'page.chatInsights',
-  '/market': 'page.market',
-  '/report': 'page.report',
-}
 
 export function TopBar() {
   const pathname = usePathname()
@@ -70,7 +45,16 @@ export function TopBar() {
     }
   }
 
-  const titleKey = pageTitleKeys[pathname]
+  // One map for all 76 routes, with dynamic and prefix fallbacks, instead of
+  // 23 exact entries and "דשבורד" for the other 53.
+  const route = resolveRouteTitle(pathname)
+  const title = route ? (route.key ? t(route.key) : route.he) : t('dashboard')
+
+  // The tab title was the static one from metadata on every screen, so browser
+  // history and a row of open tabs were indistinguishable.
+  useEffect(() => {
+    document.title = `${route?.he ?? 'דשבורד'} · ${APP_TITLE_SUFFIX}`
+  }, [route])
 
   // Five inline actions left ~110px for the title on a 390px screen, so every
   // page read as "ניתוח מ…". On mobile the secondary ones move into this menu;
@@ -148,10 +132,10 @@ export function TopBar() {
   )
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-2 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4 md:px-6">
+    <header data-print="hide" className="sticky top-0 z-30 flex h-14 items-center justify-between gap-2 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4 md:px-6">
       {/* min-w-0 is what lets the flex child actually shrink so truncate works. */}
       <h1 className="text-sm sm:text-lg font-semibold truncate min-w-0 flex-1">
-        {titleKey ? t(titleKey) : t('dashboard')}
+        {title}
       </h1>
       <div className="flex items-center gap-1 shrink-0">
         <CommandPalette />
