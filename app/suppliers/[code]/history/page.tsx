@@ -9,6 +9,8 @@ import { Badge } from '@/components/ui/badge'
 import { Loader2, Truck, Download, Eye } from 'lucide-react'
 import { formatDate } from '@/lib/format'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
+import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
+import type { TranslationKey } from '@/lib/i18n'
 
 interface HistoryDoc {
   year: number
@@ -31,6 +33,50 @@ interface HistoryResponse {
  * supplier — so it showed "no deliveries" regardless of how much we had
  * actually bought.
  */
+type Translate = (key: TranslationKey) => string
+
+const HISTORY_COLUMNS = (t: Translate, isHe: boolean): DataTableColumn<HistoryDoc>[] => [
+  { key: 'docDate', header: t('suppliers.shipmentDate'), sortable: true,
+    cell: d => formatDate(d.docDate), exportValue: d => d.docDate,
+    cellClassName: 'tabular-nums whitespace-nowrap' },
+  { key: 'formatLabel', header: t('suppliers.docType'), sortable: true,
+    cell: d => (
+      <Badge variant={d.format === '58' ? 'secondary' : 'outline'} className="text-xs">
+        {isHe ? d.formatLabel.he : d.formatLabel.en}
+      </Badge>
+    ),
+    exportValue: d => (isHe ? d.formatLabel.he : d.formatLabel.en),
+    sortValue: d => (isHe ? d.formatLabel.he : d.formatLabel.en) },
+  { key: 'docNumber', header: t('suppliers.docNumber'), sortable: true,
+    cell: d => d.docNumber, exportValue: d => d.docNumber, cellClassName: 'font-mono text-xs' },
+  { key: 'grandTotal', header: t('suppliers.totalValue'), align: 'end', sortable: true,
+    cell: d => formatCurrency(d.grandTotal), exportValue: d => d.grandTotal },
+  {
+    key: 'document',
+    header: t('suppliers.document'),
+    align: 'center',
+    // Row actions, not data — excluded from the export rather than written as
+    // an empty column.
+    exportValue: null,
+    cell: d => {
+      const pdf = `/api/documents/${encodeURIComponent(d.format)}/${encodeURIComponent(d.docNumber)}/pdf?year=${d.year}`
+      return (
+        <div className="flex items-center justify-center gap-1">
+          {/* View opens the ERP's own rendering; download saves it. */}
+          <a href={pdf} target="_blank" rel="noopener noreferrer" title={t('suppliers.viewDoc')}
+             className="inline-flex items-center rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground">
+            <Eye className="h-3.5 w-3.5" />
+          </a>
+          <a href={`${pdf}&download=1`} title={t('suppliers.downloadDoc')}
+             className="inline-flex items-center rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground">
+            <Download className="h-3.5 w-3.5" />
+          </a>
+        </div>
+      )
+    },
+  },
+]
+
 export default function SupplierHistoryPage() {
   // Subscribe to the demo-mode eye: formatCurrency() masks from a module
   // store, so without this the amounts here would not re-render on toggle.
@@ -92,53 +138,20 @@ export default function SupplierHistoryPage() {
         </div>
       )}
 
-      {/* Bounded height makes THIS the scroll container, which is what a sticky
-          thead latches onto — inside a plain overflow-x-auto wrapper the header
-          has nothing to stick to. Background must be opaque (bg-muted/50 is
-          translucent, so rows would show through the header as they scroll). */}
-      <div className="rounded border overflow-auto max-h-[calc(100vh-22rem)]">
-        <table className="w-full text-sm min-w-[560px]">
-          <thead className="sticky top-0 z-20 bg-card">
-            <tr className="border-b">
-              <th className="px-3 py-2 text-start text-xs font-medium">{t('suppliers.shipmentDate')}</th>
-              <th className="px-3 py-2 text-start text-xs font-medium">{t('suppliers.docType')}</th>
-              <th className="px-3 py-2 text-start text-xs font-medium">{t('suppliers.docNumber')}</th>
-              <th className="px-3 py-2 text-end text-xs font-medium">{t('suppliers.totalValue')}</th>
-              <th className="px-3 py-2 text-center text-xs font-medium">{t('suppliers.document')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {documents.map((d) => {
-              const pdf = `/api/documents/${encodeURIComponent(d.format)}/${encodeURIComponent(d.docNumber)}/pdf?year=${d.year}`
-              return (
-                <tr key={`${d.format}-${d.docNumber}-${d.docDate}`} className="border-t hover:bg-accent/50">
-                  <td className="px-3 py-2 tabular-nums whitespace-nowrap">{formatDate(d.docDate)}</td>
-                  <td className="px-3 py-2">
-                    <Badge variant={d.format === '58' ? 'secondary' : 'outline'} className="text-xs">
-                      {isHe ? d.formatLabel.he : d.formatLabel.en}
-                    </Badge>
-                  </td>
-                  <td className="px-3 py-2 font-mono text-xs">{d.docNumber}</td>
-                  <td className="px-3 py-2 text-end tabular-nums">{formatCurrency(d.grandTotal)}</td>
-                  <td className="px-3 py-2">
-                    <div className="flex items-center justify-center gap-1">
-                      {/* View opens the ERP's own rendering; download saves it. */}
-                      <a href={pdf} target="_blank" rel="noopener noreferrer" title={t('suppliers.viewDoc')}
-                         className="inline-flex items-center rounded p-1 text-muted-foreground hover:text-foreground hover:bg-accent">
-                        <Eye className="h-3.5 w-3.5" />
-                      </a>
-                      <a href={`${pdf}&download=1`} title={t('suppliers.downloadDoc')}
-                         className="inline-flex items-center rounded p-1 text-muted-foreground hover:text-foreground hover:bg-accent">
-                        <Download className="h-3.5 w-3.5" />
-                      </a>
-                    </div>
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        rows={documents}
+        columns={HISTORY_COLUMNS(t, isHe)}
+        getRowKey={d => `${d.format}-${d.docNumber}-${d.docDate}`}
+        defaultSort={{ field: 'docDate', dir: 'desc' }}
+        minWidth="min-w-[560px]"
+        pageSize={25}
+        exportFileName={`supplier-history-${code}`}
+        mobileCard={{
+          title: d => (isHe ? d.formatLabel.he : d.formatLabel.en),
+          subtitle: d => `${d.docNumber} · ${formatDate(d.docDate)}`,
+          accent: d => formatCurrency(d.grandTotal),
+        }}
+      />
     </div>
   )
 }
