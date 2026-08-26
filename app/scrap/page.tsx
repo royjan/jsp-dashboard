@@ -10,13 +10,11 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { ItemLink } from '@/components/shared/ItemLink'
 import { EbayRecommendButton } from '@/components/shared/EbayRecommendButton'
-import { Search, Trash2, AlertTriangle, Package, ArrowUpDown, Download, ShoppingCart, Loader2 } from 'lucide-react'
-import * as XLSX from 'xlsx'
+import { Search, Trash2, AlertTriangle, Package, ShoppingCart, Loader2 } from 'lucide-react'
 import { formatCurrency, formatNumber } from '@/lib/format'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
+import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
 
-type SortField = 'scrap_score' | 'capital_tied' | 'price' | 'qty' | 'item_name'
-type SortDir = 'asc' | 'desc'
 
 function getScoreColor(score: number) {
   if (score >= 75) return 'text-red-500'
@@ -58,8 +56,6 @@ function ScrapContent() {
   const isHe = locale === 'he'
   const [inputValue, setInputValue] = useState('')
   const [query, setQuery] = useState('')
-  const [sortField, setSortField] = useState<SortField>('scrap_score')
-  const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [tableFilter, setTableFilter] = useState('')
 
   const [ebayExporting, setEbayExporting] = useState(false)
@@ -77,53 +73,22 @@ function ScrapContent() {
     if (e.key === 'Enter') handleSearch()
   }, [handleSearch])
 
-  const toggleSort = useCallback((field: SortField) => {
-    if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
-    else { setSortField(field); setSortDir('desc') }
-  }, [sortField])
 
+  // Filtering only. Sorting moved into DataTable, which does it with the shared
+  // comparator — Hebrew-aware, ISO dates chronological, blanks last — instead of
+  // this local `av - bv`, which put every blank at one end and compared Hebrew
+  // by code point.
   const sortedItems = useMemo(() => {
     if (!data?.items) return []
-    let items = [...data.items]
-    if (tableFilter) {
-      const q = tableFilter.toLowerCase()
-      items = items.filter((i: any) => i.item_name.toLowerCase().includes(q) || i.item_code.toLowerCase().includes(q))
-    }
-    items.sort((a: any, b: any) => {
-      const av = a[sortField], bv = b[sortField]
-      if (typeof av === 'string') return sortDir === 'asc' ? av.localeCompare(bv, 'he') : bv.localeCompare(av, 'he')
-      return sortDir === 'asc' ? av - bv : bv - av
-    })
-    return items
-  }, [data, sortField, sortDir, tableFilter])
+    if (!tableFilter) return data.items
+    const q = tableFilter.toLowerCase()
+    return data.items.filter(
+      (i: any) => i.item_name.toLowerCase().includes(q) || i.item_code.toLowerCase().includes(q),
+    )
+  }, [data, tableFilter])
 
   const summary = data?.summary
 
-  const exportToExcel = useCallback(() => {
-    if (!sortedItems.length) return
-    const rows = sortedItems.map((item: any, i: number) => ({
-      '#': i + 1,
-      [isHe ? 'קוד' : 'Code']: item.item_code,
-      [isHe ? 'תיאור' : 'Description']: item.item_name,
-      [isHe ? 'כמות' : 'Qty']: item.qty,
-      [isHe ? 'מחיר' : 'Price']: Math.round(item.price),
-      [isHe ? 'הון כלוא' : 'Capital Tied']: Math.round(item.capital_tied),
-      [isHe ? 'נמכר השנה' : 'Sold This Year']: item.sold_this_year || 0,
-      [isHe ? 'נמכר שנה שעברה' : 'Sold Last Year']: item.sold_last_year || 0,
-      [isHe ? 'נמכר לפני שנתיים' : 'Sold 2Y Ago']: item.sold_2y_ago || 0,
-      [isHe ? 'נמכר לפני 3+' : 'Sold 3Y+']: item.sold_3y_ago || 0,
-      [isHe ? 'ציון גריטה' : 'Scrap Score']: item.scrap_score,
-    }))
-    const ws = XLSX.utils.json_to_sheet(rows)
-    ws['!cols'] = [
-      { wch: 5 }, { wch: 14 }, { wch: 40 }, { wch: 8 }, { wch: 10 },
-      { wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 12 },
-    ]
-    if (isHe) ws['!dir'] = 'rtl'
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, isHe ? 'גריטה' : 'Scrap')
-    XLSX.writeFile(wb, `scrap-${query}-${new Date().toISOString().split('T')[0]}.xlsx`)
-  }, [sortedItems, query, isHe])
 
   const exportToEbay = useCallback(async () => {
     if (!sortedItems.length) return
@@ -158,18 +123,6 @@ function ScrapContent() {
     }
   }, [sortedItems, query])
 
-  const SortHeader = ({ field, children, className }: { field: SortField; children: React.ReactNode; className?: string }) => (
-    <th
-      className={cn('pb-2 font-medium cursor-pointer select-none hover:text-foreground transition-colors whitespace-nowrap', className)}
-      onClick={() => toggleSort(field)}
-    >
-      <span className="inline-flex items-center gap-1">
-        {children}
-        <ArrowUpDown className={cn('h-3 w-3 shrink-0', sortField === field ? 'text-primary' : 'text-muted-foreground/30')} />
-        {sortField === field && <span className="text-primary text-[10px]">{sortDir === 'desc' ? '▼' : '▲'}</span>}
-      </span>
-    </th>
-  )
 
   return (
     <div className="space-y-4 md:space-y-6">
@@ -291,14 +244,6 @@ function ScrapContent() {
                       {isHe ? `${ebayExportResult.count} פריטים יוצאו` : `${ebayExportResult.count} items exported`}
                     </span>
                   )}
-                  <button
-                    onClick={exportToExcel}
-                    disabled={!sortedItems.length}
-                    className="h-8 px-3 rounded-md border border-input text-xs font-medium hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed transition-colors inline-flex items-center gap-1.5"
-                  >
-                    <Download className="h-3.5 w-3.5" />
-                    Excel
-                  </button>
                 </div>
                 <div className="relative min-w-[160px] sm:max-w-xs">
                   <Search className="absolute start-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
@@ -313,76 +258,46 @@ function ScrapContent() {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="overflow-x-auto max-h-[600px] overflow-y-auto -mx-4 md:mx-0">
-                <table className="w-full text-sm min-w-[800px]">
-                  <thead className="sticky top-0 bg-background z-10">
-                    <tr className="border-b">
-                      <th className="pb-2 font-medium text-start ps-4 md:ps-0 w-8">#</th>
-                      <th className="pb-2 font-medium text-start">{isHe ? 'קוד' : 'Code'}</th>
-                      <SortHeader field="item_name" className="text-start">{isHe ? 'תיאור' : 'Description'}</SortHeader>
-                      <SortHeader field="qty" className="text-end">{isHe ? 'כמות' : 'Qty'}</SortHeader>
-                      <SortHeader field="price" className="text-end">{isHe ? 'מחיר' : 'Price'}</SortHeader>
-                      <SortHeader field="capital_tied" className="text-end">{isHe ? 'הון כלוא' : 'Capital'}</SortHeader>
-                      <th className="pb-2 font-medium text-start">{isHe ? 'מכירות' : 'Sales'}</th>
-                      <SortHeader field="scrap_score" className="text-end pe-4 md:pe-0">{isHe ? 'ציון גריטה' : 'Scrap Score'}</SortHeader>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sortedItems.map((item: any, i: number) => (
-                      <motion.tr
-                        key={item.item_code}
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        transition={{ delay: Math.min(i * 0.01, 0.5) }}
-                        className="border-b hover:bg-muted/50 transition-colors"
-                      >
-                        <td className="py-2 ps-4 md:ps-0 text-muted-foreground tabular-nums">{i + 1}</td>
-                        <td className="py-2 font-mono text-xs text-muted-foreground">
-                          <div className="flex items-center gap-1.5">
-                            <EbayRecommendButton itemCode={item.item_code} itemName={item.item_name} source="scrap_analysis" />
-                            <ItemLink code={item.item_code} showCode />
-                          </div>
-                        </td>
-                        <td className="py-2 truncate max-w-[220px]"><ItemLink code={item.item_code} name={item.item_name} /></td>
-                        <td className="py-2 text-end tabular-nums">{formatNumber(item.qty)}</td>
-                        <td className="py-2 text-end font-mono tabular-nums">{formatCurrency(Math.round(item.price))}</td>
-                        <td className="py-2 text-end font-mono tabular-nums font-semibold text-destructive">{formatCurrency(Math.round(item.capital_tied))}</td>
-                        <td className="py-2">{getSalesLabel(item, isHe)}</td>
-                        <td className="py-2 pe-4 md:pe-0">
-                          <div className="flex items-center justify-end gap-2">
-                            <div className="w-12 h-1.5 bg-muted rounded-full overflow-hidden">
-                              <div className={cn('h-full rounded-full', getScoreBg(item.scrap_score))} style={{ width: `${Math.min(item.scrap_score, 100)}%` }} />
-                            </div>
-                            <span className={cn('font-bold tabular-nums text-sm min-w-[28px] text-end', getScoreColor(item.scrap_score))}>
-                              {item.scrap_score}
-                            </span>
-                          </div>
-                        </td>
-                      </motion.tr>
-                    ))}
-                    {sortedItems.length === 0 && (
-                      <tr><td colSpan={8} className="py-12 text-center text-muted-foreground">
-                        {isHe ? 'לא נמצאו פריטים' : 'No items found'}
-                      </td></tr>
-                    )}
-                  </tbody>
-                  {sortedItems.length > 0 && (
-                    <tfoot>
-                      <tr className="border-t-2 font-semibold">
-                        <td colSpan={3} className="py-2 ps-4 md:ps-0">
-                          {isHe ? `סה"כ ${formatNumber(sortedItems.length)} פריטים` : `Total ${formatNumber(sortedItems.length)} items`}
-                        </td>
-                        <td className="py-2 text-end tabular-nums">{formatNumber(sortedItems.reduce((s: number, i: any) => s + i.qty, 0))}</td>
-                        <td className="py-2" />
-                        <td className="py-2 text-end font-mono tabular-nums text-destructive">
-                          {formatCurrency(Math.round(sortedItems.reduce((s: number, i: any) => s + i.capital_tied, 0)))}
-                        </td>
-                        <td colSpan={2} className="py-2" />
-                      </tr>
-                    </tfoot>
-                  )}
-                </table>
-              </div>
+              <DataTable
+                rows={sortedItems}
+                columns={SCRAP_COLUMNS(isHe)}
+                getRowKey={(i: ScrapItem) => i.item_code}
+                loading={isLoading}
+                pageSize={50}
+                defaultSort={{ field: 'scrap_score', dir: 'desc' }}
+                exportFileName={`scrap-${query}`}
+                labels={{ empty: isHe ? 'לא נמצאו פריטים' : 'No items found' }}
+                minWidth="min-w-[800px]"
+                // The totals row is why this table could not move over before:
+                // DataTable had no <tfoot> slot, and migrating without one would
+                // have dropped the capital total off a dead-stock screen.
+                // It sums the WHOLE result, not the visible page — a total that
+                // silently followed the pager would be the more dangerous number.
+                footer={(_shown: ScrapItem[], all: ScrapItem[]) => (
+                  <tr>
+                    <td colSpan={3} className="py-2">
+                      {isHe ? `סה"כ ${formatNumber(all.length)} פריטים` : `Total ${formatNumber(all.length)} items`}
+                    </td>
+                    <td className="py-2 text-end tabular-nums">
+                      {formatNumber(all.reduce((sum, i) => sum + i.qty, 0))}
+                    </td>
+                    <td className="py-2" />
+                    <td className="py-2 text-end font-mono tabular-nums text-destructive">
+                      {formatCurrency(Math.round(all.reduce((sum, i) => sum + i.capital_tied, 0)))}
+                    </td>
+                    <td colSpan={2} className="py-2" />
+                  </tr>
+                )}
+                mobileCard={{
+                  title: (i: ScrapItem) => i.item_name,
+                  subtitle: (i: ScrapItem) => i.item_code,
+                  accent: (i: ScrapItem) => formatCurrency(Math.round(i.capital_tied)),
+                  fields: [
+                    { label: isHe ? 'כמות' : 'Qty', value: (i: ScrapItem) => formatNumber(i.qty) },
+                    { label: isHe ? 'ציון' : 'Score', value: (i: ScrapItem) => i.scrap_score },
+                  ],
+                }}
+              />
             </CardContent>
           </Card>
         </>
@@ -406,6 +321,115 @@ function ScrapContent() {
     </div>
   )
 }
+
+/** One dead-stock candidate, as /api/analytics/dead-stock/search returns it. */
+interface ScrapItem {
+  item_code: string
+  item_name: string
+  qty: number
+  price: number
+  capital_tied: number
+  sold_this_year: number
+  sold_last_year: number
+  sold_2y_ago: number
+  sold_3y_ago: number
+  scrap_score: number
+}
+
+/**
+ * Columns lifted verbatim from the hand-rolled table this page used to carry —
+ * same renderers, same alignment, same helpers. The only additions are
+ * `exportValue`, so the xlsx gets RAW numbers rather than "₪1,204" strings that
+ * Excel cannot sum, and `sortValue` where the sort key is not the field itself.
+ */
+const SCRAP_COLUMNS = (isHe: boolean): DataTableColumn<ScrapItem>[] => [
+  {
+    key: 'idx',
+    header: '#',
+    cell: (_i: ScrapItem, index: number) => <span className="text-muted-foreground tabular-nums">{index + 1}</span>,
+    // A row number is a property of the view, not of the item; exporting it
+    // would put a column in the workbook that means nothing once it is sorted.
+    exportValue: null,
+  },
+  {
+    key: 'item_code',
+    header: isHe ? 'קוד' : 'Code',
+    sortable: true,
+    cell: (i: ScrapItem) => (
+      <div className="flex items-center gap-1.5">
+        <EbayRecommendButton itemCode={i.item_code} itemName={i.item_name} source="scrap_analysis" />
+        <ItemLink code={i.item_code} showCode />
+      </div>
+    ),
+    exportValue: (i: ScrapItem) => i.item_code,
+    cellClassName: 'font-mono text-xs text-muted-foreground',
+  },
+  {
+    key: 'item_name',
+    header: isHe ? 'תיאור' : 'Description',
+    sortable: true,
+    truncate: 'max-w-[220px]',
+    title: (i: ScrapItem) => i.item_name,
+    cell: (i: ScrapItem) => <ItemLink code={i.item_code} name={i.item_name} />,
+    exportValue: (i: ScrapItem) => i.item_name,
+  },
+  {
+    key: 'qty',
+    header: isHe ? 'כמות' : 'Qty',
+    align: 'end',
+    sortable: true,
+    cell: (i: ScrapItem) => formatNumber(i.qty),
+    exportValue: (i: ScrapItem) => i.qty,
+  },
+  {
+    key: 'price',
+    header: isHe ? 'מחיר' : 'Price',
+    align: 'end',
+    sortable: true,
+    cell: (i: ScrapItem) => formatCurrency(Math.round(i.price)),
+    exportValue: (i: ScrapItem) => Math.round(i.price),
+    cellClassName: 'font-mono',
+  },
+  {
+    key: 'capital_tied',
+    header: isHe ? 'הון כלוא' : 'Capital',
+    align: 'end',
+    sortable: true,
+    cell: (i: ScrapItem) => formatCurrency(Math.round(i.capital_tied)),
+    exportValue: (i: ScrapItem) => Math.round(i.capital_tied),
+    cellClassName: 'font-mono font-semibold text-destructive',
+  },
+  {
+    key: 'sales',
+    header: isHe ? 'מכירות' : 'Sales',
+    cell: (i: ScrapItem) => getSalesLabel(i, isHe),
+    // getSalesLabel returns a node; the export wants the underlying counts.
+    exportValue: (i: ScrapItem) =>
+      [i.sold_this_year, i.sold_last_year, i.sold_2y_ago, i.sold_3y_ago]
+        .map((n: number) => n || 0)
+        .join(' / '),
+  },
+  {
+    key: 'scrap_score',
+    header: isHe ? 'ציון גריטה' : 'Scrap Score',
+    align: 'end',
+    sortable: true,
+    cell: (i: ScrapItem) => (
+      <div className="flex items-center justify-end gap-2">
+        <div className="h-1.5 w-12 overflow-hidden rounded-full bg-muted">
+          <div
+            className={cn('h-full rounded-full', getScoreBg(i.scrap_score))}
+            style={{ width: `${Math.min(i.scrap_score, 100)}%` }}
+          />
+        </div>
+        <span className={cn('min-w-[28px] text-end text-sm font-bold tabular-nums', getScoreColor(i.scrap_score))}>
+          {i.scrap_score}
+        </span>
+      </div>
+    ),
+    exportValue: (i: ScrapItem) => i.scrap_score,
+  },
+]
 
 export default function ScrapPage() {
   return (
