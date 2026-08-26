@@ -3,7 +3,7 @@
 import type React from 'react'
 import { useState, useMemo, useEffect, useRef, Suspense } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useDeadStock, useABCClassification, useReorderRecommendations, useConversionAnalysis } from '@/hooks/use-analytics'
+import { useDeadStock, useABCClassification, useReorderRecommendations, useConversionAnalysis, useReplenishment } from '@/hooks/use-analytics'
 import { useItems } from '@/hooks/use-dashboard'
 import { useLocale } from '@/lib/locale-context'
 import { isUrgent, formatCurrencyAxis, maskMoneyInText } from '@/lib/constants'
@@ -33,6 +33,7 @@ import { formatCurrency, formatDate, formatNumber } from '@/lib/format'
 import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
 import { isMoneyHidden } from '@/lib/privacy'
+import { PageHeader } from '@/components/shared/PageHeader'
 
 // ── Types ──
 
@@ -107,6 +108,9 @@ interface UnifiedItem {
   health_score: number
   days_of_supply: number | null
   reorder_point: number
+  safety_stock: number | null
+  lead_time_days: number
+  lead_time_is_default: boolean
   suggested_order: number | null
   sold_this_year: number
   sold_last_year: number
@@ -121,9 +125,45 @@ interface UnifiedItem {
 
 // ── Health Score ──
 
+/**
+ * Fallback only. Used when we have never purchased the part, or its supplier
+ * has no lead_time_days on file — which today is EVERY part, because
+ * supplier_profiles holds 3 rows and none of them has the column filled in.
+ * The suppliers screen has offered that field all along and no stock
+ * calculation ever read it; /api/analytics/replenishment now does, so the
+ * moment someone fills it in these numbers start reflecting reality.
+ */
 const LEAD_TIME_DAYS = 14
 
-function computeHealthScore(item: any): { score: number; tier: HealthTier } {
+/**
+ * Service level → z. The reorder point WITHOUT a safety term equals expected
+ * demand over the lead time, so any period that runs above average stocks out
+ * roughly half the time by construction. That is what this app did.
+ */
+const SERVICE_Z: Record<number, number> = { 90: 1.28, 95: 1.65, 98: 2.05 }
+
+export interface Replenishment {
+  lead_time_days: number
+  lead_time_is_default: boolean
+  monthly_stddev: number | null
+  months: number
+}
+
+/**
+ * Safety stock = z × σ_monthly × √(leadTime / 30).
+ *
+ * Returns null — not 0 — when there is too little history for a standard
+ * deviation. Zero would read as "this part needs no buffer"; null lets the
+ * table say "not enough history", which is the distinction the old "ביטחון"
+ * column got wrong before it was renamed to "reliability".
+ */
+function safetyStock(rep: Replenishment | undefined, serviceLevel: number): number | null {
+  if (!rep || rep.monthly_stddev == null) return null
+  const z = SERVICE_Z[serviceLevel] ?? SERVICE_Z[95]
+  return Math.ceil(z * rep.monthly_stddev * Math.sqrt(rep.lead_time_days / 30))
+}
+
+function computeHealthScore(item: any, leadDays: number = LEAD_TIME_DAYS): { score: number; tier: HealthTier } {
   const sold = item.sold_this_year || 0
   const soldLy = item.sold_last_year || 0
   const inq = item.inquiry_count || 0
@@ -133,7 +173,7 @@ function computeHealthScore(item: any): { score: number; tier: HealthTier } {
   // Full supply pipeline: on-hand + arriving + on-order
   const effectiveStock = stock + incoming + ordered
   const dailyDemand = (sold + soldLy * 0.5) / 365
-  const reorderPoint = Math.ceil(dailyDemand * LEAD_TIME_DAYS)
+  const reorderPoint = Math.ceil(dailyDemand * leadDays)
   const monthlyDemand = (sold + soldLy * 0.5) / 12
   const dos = monthlyDemand > 0 ? (effectiveStock / monthlyDemand) * 30 : null
   if (sold === 0 && soldLy === 0 && inq === 0) return { score: 5, tier: 'excess' }
@@ -149,7 +189,13 @@ function computeHealthScore(item: any): { score: number; tier: HealthTier } {
 
 // ── computeUnifiedItems ──
 
-function computeUnifiedItems(allItems: any[], abcData: any, reorderData: any): UnifiedItem[] {
+function computeUnifiedItems(
+  allItems: any[],
+  abcData: any,
+  reorderData: any,
+  repMap?: Map<string, Replenishment>,
+  serviceLevel: number = 95,
+): UnifiedItem[] {
   const abcMap = new Map<string, any>()
   for (const item of (abcData?.items || [])) {
     if (item.code) abcMap.set(item.code, item)
@@ -182,11 +228,17 @@ function computeUnifiedItems(allItems: any[], abcData: any, reorderData: any): U
     const revenue_pct = abcItem?.revenue_pct
     const revenue = abcItem?.revenue
 
-    const { score, tier } = computeHealthScore(i)
+    const rep = repMap?.get(i.code)
+    const leadDays = rep?.lead_time_days ?? LEAD_TIME_DAYS
+    const safety = safetyStock(rep, serviceLevel)
+
+    const { score, tier } = computeHealthScore(i, leadDays)
 
     const dailyDemand = (sold + soldLy * 0.5) / 365
     const monthlyDemand = (sold + soldLy * 0.5) / 12
-    const reorder_point = Math.ceil(dailyDemand * LEAD_TIME_DAYS)
+    // The buffer is added to the reorder point, not shown beside it: a reorder
+    // point you have to mentally add a second number to is not a reorder point.
+    const reorder_point = Math.ceil(dailyDemand * leadDays) + (safety ?? 0)
 
     let days_of_supply: number | null
     if (abcItem?.days_of_supply != null) {
@@ -233,6 +285,9 @@ function computeUnifiedItems(allItems: any[], abcData: any, reorderData: any): U
       health_score: score,
       days_of_supply,
       reorder_point,
+      safety_stock: safety,
+      lead_time_days: leadDays,
+      lead_time_is_default: rep?.lead_time_is_default ?? true,
       suggested_order,
       sold_this_year: sold,
       sold_last_year: soldLy,
@@ -691,6 +746,17 @@ function StockPageContent() {
   const { data: itemsData, isLoading: itemsLoading } = useItems()
   const { data: abcData } = useABCClassification()
   const { data: reorderData } = useReorderRecommendations()
+  // Per-item lead time and demand variability. Deliberately non-blocking: if it
+  // fails the page still renders, every item falls back to the 14-day default,
+  // and the header chip says the numbers are running on defaults.
+  const { data: replenishment } = useReplenishment()
+  const [serviceLevel] = useState<number>(95)
+
+  const repMap = useMemo(() => {
+    const m = new Map<string, Replenishment>()
+    for (const r of (replenishment?.items ?? [])) m.set(r.code, r)
+    return m
+  }, [replenishment])
 
   // Reset page on filter change
   useEffect(() => { setPage(0) }, [searchQuery, quickView, abcFilter, tierFilter, sortField, sortDir])
@@ -761,8 +827,11 @@ function StockPageContent() {
 
   // Unified items
   const unifiedItems = useMemo(
-    () => computeUnifiedItems(allItems, abcData, reorderData),
-    [allItems, abcData, reorderData]
+    () => computeUnifiedItems(allItems, abcData, reorderData, repMap, serviceLevel),
+    // repMap and serviceLevel belong here: replenishment resolves AFTER the
+    // first render, and without them in the deps the table would keep the
+    // 14-day-default figures for the life of the page.
+    [allItems, abcData, reorderData, repMap, serviceLevel]
   )
 
   // Alias resolution: when search returns 0 results, try to resolve via history API
@@ -905,6 +974,17 @@ function StockPageContent() {
 
   return (
     <div className="space-y-6">
+      {/* The reorder point on this page now carries a safety term and a
+          per-item lead time, so it has to say what those are built from.
+          Today that chip reports every lead time as a default, because
+          supplier_profiles.lead_time_days is empty for every supplier — the
+          field the suppliers screen has always offered and nothing ever read. */}
+      <PageHeader
+        title={t('stock')}
+        description="בריאות מלאי, נקודות הזמנה ומלאי ביטחון"
+        provenance={replenishment?.provenance}
+      />
+
       <SubTabs
         tabs={[
           { href: '/stock', label: t('stock') },

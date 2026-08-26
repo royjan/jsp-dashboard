@@ -608,3 +608,23 @@ export function useCustomerPurchases(code: string | null, days = 90) {
     retry: 2,
   })
 }
+
+/**
+ * Per-item lead time and monthly demand variability, for the reorder point.
+ *
+ * Long staleTime on purpose: the underlying figures move on the timescale of a
+ * purchase order, not a page view, and the route itself is Redis-cached for 6h.
+ */
+export function useReplenishment() {
+  return useQuery({
+    queryKey: ['replenishment'],
+    queryFn: async () => {
+      const res = await fetch('/api/analytics/replenishment')
+      if (!res.ok) throw new Error('replenishment unavailable')
+      return res.json()
+    },
+    staleTime: 60 * 60 * 1000,
+    gcTime: 2 * 60 * 60 * 1000,
+    retry: 1,
+  })
+}
