@@ -16,29 +16,21 @@ export async function register() {
     process.on('SIGTERM', () => shutdown('SIGTERM'))
     process.on('SIGINT', () => shutdown('SIGINT'))
 
-    // Free, self-scheduling eBay price warmer (rate-limit-aware). Production only
-    // so local `next dev` doesn't spend the shared Browse quota.
-    if (process.env.NODE_ENV === 'production') {
-      try {
-        const { startEbayWarmLoop } = await import('./lib/ebay-warm-loop')
-        startEbayWarmLoop()
-      } catch (e) {
-        console.error('[instrumentation] failed to start eBay warm loop:', e)
-      }
-      // Daily 07:00 morning brief to the staff Telegram group — same no-cron pattern.
-      try {
-        const { startMorningBriefLoop } = await import('./lib/morning-brief-push')
-        startMorningBriefLoop()
-      } catch (e) {
-        console.error('[instrumentation] failed to start morning-brief loop:', e)
-      }
-      // The books' live year, topped up from the ERP every few minutes.
-      try {
-        const { startBooksRefreshLoop } = await import('./lib/books-refresh-loop')
-        startBooksRefreshLoop()
-      } catch (e) {
-        console.error('[instrumentation] failed to start books refresh loop:', e)
-      }
-    }
+    // The eBay price warmer, the 07:00 morning brief and the books live-year
+    // top-up used to start here as setInterval loops inside this process.
+    //
+    // They are systemd timers on jan-box now — jan-ebay-prices, jan-morning-brief,
+    // jan-books-refresh — calling the same /api/cron/* routes, which were already
+    // the canonical entry points and are unchanged.
+    //
+    // Why they moved: in-process timers reset on every deploy, are invisible from
+    // outside the container, have no retry, keep no history, and would double-fire
+    // the moment this app runs more than one replica. `systemctl list-timers` and
+    // `journalctl -u jan-ebay-prices` now answer "did it run, and what happened",
+    // which nothing could answer before, and a failed run alerts to Telegram.
+    //
+    // Both paths take the same Redis locks, so the switchover was safe to overlap.
+    // If you ever run this outside jan-box, those schedules do NOT come with it —
+    // the timers are host state, not app state.
   }
 }
