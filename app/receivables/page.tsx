@@ -263,6 +263,20 @@ export default function ReceivablesPage() {
             defaultSort={{ field: 'balance', dir: 'desc' }}
             maxHeight="70vh"
             onRetry={() => refetch()}
+            exportFileName="גיול-חובות"
+            // Eight columns at 390px meant sideways scrolling to reach the
+            // balance — the one number an AR row exists to show. On a phone the
+            // row becomes: who, how much, and how overdue.
+            mobileCard={{
+              title: (c: any) => c.name,
+              subtitle: (c: any) => c.code,
+              accent: (c: any) => formatCurrency(c.balance),
+              fields: [
+                { label: t('overdue30'), value: (c: any) => formatCurrency(c.days_30) },
+                { label: t('overdue60'), value: (c: any) => formatCurrency(c.days_60) },
+                { label: t('overdue90Plus'), value: (c: any) => formatCurrency(c.over_90) },
+              ],
+            }}
           />
         </CardContent>
       </Card>

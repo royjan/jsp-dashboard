@@ -181,6 +181,25 @@ export interface DataTableProps<TRow, TSortKey extends string = string> {
   /** Extra controls rendered in the toolbar, before the export button. */
   toolbar?: React.ReactNode
   /**
+   * Below `lg`, render each row as a stacked card instead of a table row.
+   *
+   * The dense tables on this app are 6-8 columns wide, and on a 390px screen
+   * that means horizontal scroll plus pinch-zoom — with the two columns a rep
+   * in the field actually needs (price and stock) landing off-screen. Pinch
+   * zoom is the a11y fallback, not the design.
+   *
+   * `title` and `subtitle` are the always-visible line; `fields` are the
+   * labelled pairs beneath. Columns are NOT reused automatically because a
+   * card is a different information hierarchy from a row, not a narrower one.
+   */
+  mobileCard?: {
+    title: (row: TRow, index: number) => React.ReactNode
+    subtitle?: (row: TRow, index: number) => React.ReactNode
+    /** Trailing value on the title line — the number the row is really about. */
+    accent?: (row: TRow, index: number) => React.ReactNode
+    fields?: Array<{ label: string; value: (row: TRow, index: number) => React.ReactNode }>
+  }
+  /**
    * Footer row(s), rendered in a <tfoot> — pass <tr>…</tr>, not a <div>.
    *
    * This exists because several hand-rolled tables carry a totals row, and
@@ -268,6 +287,7 @@ export function DataTable<TRow, TSortKey extends string = string>({
   exportSheetName,
   toolbar,
   footer,
+  mobileCard,
   labels,
 }: DataTableProps<TRow, TSortKey>) {
   // Column `cell` renderers call formatCurrency() from here, and that reads the
@@ -399,10 +419,54 @@ export function DataTable<TRow, TSortKey extends string = string>({
 
   const showToolbar = Boolean(toolbar || exportFileName)
 
+  const cards = mobileCard && !loading && rows.length > 0 && (
+    <div className="flex flex-col gap-2 lg:hidden">
+      {rows.map((row, i) => {
+        const key = getRowKey(row, i)
+        return (
+          <div
+            key={key}
+            onClick={onRowClick ? () => onRowClick(row, i) : undefined}
+            className={cn(
+              'rounded-lg border bg-card p-3 transition-colors',
+              onRowClick && 'cursor-pointer active:bg-muted/50',
+              selectedKeys?.has(key) && 'bg-primary/5',
+              rowClassName?.(row, i),
+            )}
+          >
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="min-w-0 flex-1 truncate font-medium">{mobileCard.title(row, i)}</span>
+              {mobileCard.accent && (
+                <span className="shrink-0 tabular-nums font-semibold">{mobileCard.accent(row, i)}</span>
+              )}
+            </div>
+            {mobileCard.subtitle && (
+              <div className="mt-0.5 truncate text-xs text-muted-foreground">
+                {mobileCard.subtitle(row, i)}
+              </div>
+            )}
+            {mobileCard.fields && mobileCard.fields.length > 0 && (
+              <dl className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs">
+                {mobileCard.fields.map(f => (
+                  <div key={f.label} className="flex gap-1.5">
+                    <dt className="text-muted-foreground">{f.label}</dt>
+                    <dd className="tabular-nums">{f.value(row, i)}</dd>
+                  </div>
+                ))}
+              </dl>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+
   const table = (
     <div
       className={cn(
         'overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0',
+        // When cards are configured the table is the desktop presentation only.
+        mobileCard && 'hidden lg:block',
         effectiveMaxHeight && 'overflow-y-auto',
         !showToolbar && className,
       )}
@@ -556,7 +620,16 @@ export function DataTable<TRow, TSortKey extends string = string>({
     </div>
   )
 
-  if (!showToolbar) return table
+  if (!showToolbar) {
+    return cards ? (
+      <>
+        {cards}
+        {table}
+      </>
+    ) : (
+      table
+    )
+  }
 
   return (
     <div className={cn('space-y-2', className)}>
@@ -579,6 +652,7 @@ export function DataTable<TRow, TSortKey extends string = string>({
           </button>
         )}
       </div>
+      {cards}
       {table}
     </div>
   )
