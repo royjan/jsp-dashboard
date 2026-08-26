@@ -9,38 +9,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useLocale } from '@/lib/locale-context'
 import type { TranslationKey } from '@/lib/i18n'
 import { brandChipClasses } from '@/lib/brand'
-import {
-  Bell,
-  BookOpen,
-  DollarSign,
-  Eye,
-  EyeOff,
-  FileBarChart,
-  Landmark,
-  LayoutDashboard,
-  Loader2,
-  Moon,
-  NotebookPen,
-  Package,
-  Percent,
-  Receipt,
-  RefreshCw,
-  RotateCcw,
-  Scale,
-  Search,
-  SearchX,
-  ShoppingBag,
-  ShoppingCart,
-  Sparkles,
-  Sun,
-  Swords,
-  Trash2,
-  TrendingDown,
-  User,
-  Users,
-  Wallet,
-  Warehouse,
-} from 'lucide-react'
+import { Bell, BookOpen, DollarSign, Eye, EyeOff, FileBarChart, Landmark, LayoutDashboard, Loader2, Moon, NotebookPen, Package, Percent, Receipt, RefreshCw, RotateCcw, Scale, Search, SearchX, ShoppingBag, ShoppingCart, Sparkles, Sun, Swords, Trash2, TrendingDown, User, Users, Wallet, Warehouse, Clock, X } from 'lucide-react'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
 import { toggleMoneyHidden } from '@/lib/privacy'
 
@@ -109,6 +78,15 @@ export function CommandPalette() {
   const moneyHidden = useMoneyHidden()
   const queryClient = useQueryClient()
   const { t } = useLocale()
+  const recents = useRecentDestinations()
+
+  // Every exit path goes through here so the box is empty for the next ⌘K
+  // rather than reopening on a stale query. Doing it in an effect keyed on
+  // `open` would be a setState during render-commit for the same result.
+  const closePalette = useCallback(() => {
+    setOpen(false)
+    setQuery('')
+  }, [])
 
   // Keyboard: Cmd/Ctrl+K toggles, Escape closes.
   //
@@ -129,6 +107,7 @@ export function CommandPalette() {
           if (!prev) return prev
           e.preventDefault()
           e.stopPropagation()
+          setQuery('')
           return false
         })
       }
@@ -138,11 +117,6 @@ export function CommandPalette() {
     document.addEventListener('keydown', onKeyDown, true)
     return () => document.removeEventListener('keydown', onKeyDown, true)
   }, [])
-
-  // Leave the box empty for the next ⌘K rather than reopening on a stale query.
-  useEffect(() => {
-    if (!open) setQuery('')
-  }, [open])
 
   // Debounced search
   useEffect(() => {
@@ -221,7 +195,7 @@ export function CommandPalette() {
           {/* Backdrop */}
           <div
             className="fixed inset-0 bg-black/50 backdrop-blur-sm"
-            onClick={() => setOpen(false)}
+            onClick={closePalette}
           />
 
           {/* Palette */}
@@ -403,6 +377,41 @@ export function CommandPalette() {
                         </span>
                       </Command.Item>
                     ))}
+                  </Command.Group>
+                )}
+
+                {/* Recently opened — only with an empty box, where it is a
+                    shortcut. Once you are typing, search results are the answer
+                    and a recents list competing with them is noise. */}
+                {!query && recents.length > 0 && (
+                  <Command.Group
+                    heading="נפתחו לאחרונה"
+                    className="[&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5"
+                  >
+                    {recents.map((r) => (
+                      <Command.Item
+                        key={`recent-${r.href}`}
+                        value={`recent ${r.label} ${r.sublabel ?? ''}`}
+                        onSelect={() => runAction(() => router.push(r.href))}
+                        className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm cursor-pointer aria-selected:bg-accent aria-selected:text-accent-foreground"
+                      >
+                        <Clock className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium truncate">{r.label}</div>
+                          {r.sublabel && (
+                            <div className="text-xs text-muted-foreground truncate">{r.sublabel}</div>
+                          )}
+                        </div>
+                      </Command.Item>
+                    ))}
+                    <Command.Item
+                      value="recent clear נקה"
+                      onSelect={() => clearRecentDestinations()}
+                      className="flex items-center gap-3 rounded-lg px-3 py-2 text-xs text-muted-foreground cursor-pointer aria-selected:bg-accent"
+                    >
+                      <X className="h-3.5 w-3.5 shrink-0" />
+                      נקה היסטוריה
+                    </Command.Item>
                   </Command.Group>
                 )}
 

@@ -372,11 +372,11 @@ export function DataTable<TRow, TSortKey extends string = string>({
   const [page, setPage] = React.useState(0)
   const pageCount = pageSize ? Math.max(1, Math.ceil(rows.length / pageSize)) : 1
   // A filter that shrinks the list can strand the viewer on a page that no
-  // longer exists; clamp rather than render an empty table.
+  // longer exists. Clamping on READ handles that with no effect and no extra
+  // render: every consumer below reads safePage, and the two handlers clamp
+  // again when they write. Syncing `page` back down in an effect would only add
+  // a cascading render to reach the same slice.
   const safePage = Math.min(page, pageCount - 1)
-  React.useEffect(() => {
-    if (page !== safePage) setPage(safePage)
-  }, [page, safePage])
   const pagedRows = pageSize ? rows.slice(safePage * pageSize, safePage * pageSize + pageSize) : rows
 
   // A sticky header is inert without a bounded scroll container, so give long
@@ -645,7 +645,7 @@ export function DataTable<TRow, TSortKey extends string = string>({
           <div className="flex items-center gap-1.5">
             <button
               type="button"
-              onClick={() => setPage(p => Math.max(0, p - 1))}
+              onClick={() => setPage(Math.max(0, safePage - 1))}
               disabled={safePage === 0}
               className="cursor-pointer rounded-md border px-2.5 py-1 font-medium transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
             >
@@ -656,7 +656,7 @@ export function DataTable<TRow, TSortKey extends string = string>({
             </span>
             <button
               type="button"
-              onClick={() => setPage(p => Math.min(pageCount - 1, p + 1))}
+              onClick={() => setPage(Math.min(pageCount - 1, safePage + 1))}
               disabled={safePage >= pageCount - 1}
               className="cursor-pointer rounded-md border px-2.5 py-1 font-medium transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
             >
