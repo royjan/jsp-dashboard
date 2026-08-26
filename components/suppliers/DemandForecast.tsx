@@ -1,19 +1,88 @@
 'use client'
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { useLocale } from '@/lib/locale-context'
+import type { TranslationKey } from '@/lib/i18n'
+
+type Translate = (key: TranslationKey) => string
 import { formatNumber, urgencyBand } from '@/lib/constants'
 import { useSupplierDemand } from '@/hooks/use-suppliers'
-import { TrendingDown, AlertTriangle, Loader2 } from 'lucide-react'
+import { TrendingDown, Loader2 } from 'lucide-react'
+import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
 
-function getUrgencyBadge(score: number, t: (key: any) => string) {
+function getUrgencyBadge(score: number, t: Translate) {
   const band = urgencyBand(score)
   if (band === 'severe' || band === 'critical') return <Badge variant="destructive">{t('suppliers.critical')}</Badge>
   if (band === 'high') return <Badge variant="warning">{t('suppliers.high')}</Badge>
   if (band === 'watch') return <Badge variant="default">{t('suppliers.medium')}</Badge>
   return <Badge variant="secondary">{t('suppliers.low')}</Badge>
 }
+
+interface DemandItem {
+  itemCode: string
+  itemName: string
+  currentStock: number
+  avgMonthlySales: number
+  suggestedQty: number
+  urgencyScore: number
+}
+
+const COLUMNS = (t: Translate): DataTableColumn<DemandItem>[] => [
+  {
+    key: 'itemCode',
+    header: t('suppliers.itemCode'),
+    sortable: true,
+    cell: i => i.itemCode,
+    cellClassName: 'font-mono text-xs',
+  },
+  {
+    key: 'itemName',
+    header: t('suppliers.itemName'),
+    sortable: true,
+    truncate: 'max-w-[200px]',
+    title: i => i.itemName,
+    cell: i => i.itemName,
+  },
+  {
+    key: 'currentStock',
+    header: t('suppliers.currentStock'),
+    align: 'end',
+    sortable: true,
+    // Zero stock is the row's whole point on a demand screen, so it stays red.
+    cell: i => (
+      <span className={i.currentStock === 0 ? 'font-semibold text-destructive' : undefined}>
+        {formatNumber(i.currentStock)}
+      </span>
+    ),
+    exportValue: i => i.currentStock,
+  },
+  {
+    key: 'avgMonthlySales',
+    header: t('suppliers.avgMonthlySales'),
+    align: 'end',
+    sortable: true,
+    cell: i => formatNumber(i.avgMonthlySales),
+    exportValue: i => i.avgMonthlySales,
+  },
+  {
+    key: 'suggestedQty',
+    header: t('suppliers.suggestedQty'),
+    align: 'end',
+    sortable: true,
+    cell: i => formatNumber(i.suggestedQty),
+    exportValue: i => i.suggestedQty,
+    cellClassName: 'font-semibold',
+  },
+  {
+    key: 'urgencyScore',
+    header: t('suppliers.urgencyLevel'),
+    align: 'center',
+    sortable: true,
+    cell: i => getUrgencyBadge(i.urgencyScore, t),
+    // The badge is a node; export the score behind it.
+    exportValue: i => i.urgencyScore,
+  },
+]
 
 interface DemandForecastProps {
   supplierCode: string
@@ -47,38 +116,24 @@ export function DemandForecast({ supplierCode }: DemandForecastProps) {
         {data.count} {t('items')}
       </div>
 
-      <div className="rounded border overflow-x-auto">
-        <table className="w-full text-sm min-w-[560px]">
-          <thead className="bg-muted/50">
-            <tr>
-              <th className="px-3 py-2 text-start text-xs font-medium">{t('suppliers.itemCode')}</th>
-              <th className="px-3 py-2 text-start text-xs font-medium">{t('suppliers.itemName')}</th>
-              <th className="px-3 py-2 text-end text-xs font-medium">{t('suppliers.currentStock')}</th>
-              <th className="px-3 py-2 text-end text-xs font-medium">{t('suppliers.avgMonthlySales')}</th>
-              <th className="px-3 py-2 text-end text-xs font-medium">{t('suppliers.suggestedQty')}</th>
-              <th className="px-3 py-2 text-center text-xs font-medium">{t('suppliers.urgencyLevel')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.items.map((item: any, i: number) => (
-              <tr key={item.itemCode || i} className="border-t hover:bg-muted/30 transition-colors">
-                <td className="px-3 py-2 font-mono text-xs">{item.itemCode}</td>
-                <td className="px-3 py-2 text-xs max-w-[200px] truncate">{item.itemName}</td>
-                <td className="px-3 py-2 text-end text-xs">
-                  <span className={item.currentStock === 0 ? 'text-destructive font-semibold' : ''}>
-                    {formatNumber(item.currentStock)}
-                  </span>
-                </td>
-                <td className="px-3 py-2 text-end text-xs">{formatNumber(item.avgMonthlySales)}</td>
-                <td className="px-3 py-2 text-end text-xs font-semibold">{formatNumber(item.suggestedQty)}</td>
-                <td className="px-3 py-2 text-center">
-                  {getUrgencyBadge(item.urgencyScore, t)}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        rows={data.items as DemandItem[]}
+        columns={COLUMNS(t)}
+        getRowKey={(i, idx) => i.itemCode || String(idx)}
+        defaultSort={{ field: 'urgencyScore', dir: 'desc' }}
+        minWidth="min-w-[560px]"
+        exportFileName={`demand-${supplierCode}`}
+        pageSize={25}
+        mobileCard={{
+          title: i => i.itemName,
+          subtitle: i => i.itemCode,
+          accent: i => getUrgencyBadge(i.urgencyScore, t),
+          fields: [
+            { label: t('suppliers.currentStock'), value: i => formatNumber(i.currentStock) },
+            { label: t('suppliers.suggestedQty'), value: i => formatNumber(i.suggestedQty) },
+          ],
+        }}
+      />
     </div>
   )
 }

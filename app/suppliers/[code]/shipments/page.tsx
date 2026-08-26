@@ -7,6 +7,62 @@ import { useSupplierShipments } from '@/hooks/use-suppliers'
 import { formatNumber } from '@/lib/constants'
 import { Loader2, Container } from 'lucide-react'
 import { formatDate } from '@/lib/format'
+import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
+import type { TranslationKey } from '@/lib/i18n'
+
+type Translate = (key: TranslationKey) => string
+type Shipment = NonNullable<ReturnType<typeof useSupplierShipments>['data']>['shipments'][number]
+
+const COLUMNS = (t: Translate): DataTableColumn<Shipment>[] => [
+  {
+    key: 'shipmentDate',
+    header: t('suppliers.shipmentDate'),
+    sortable: true,
+    cell: s => formatDate(s.shipmentDate as string | null | undefined),
+    exportValue: s => (s.shipmentDate as string | null) ?? null,
+    cellClassName: 'tabular-nums whitespace-nowrap',
+  },
+  {
+    key: 'name',
+    header: t('suppliers.shipmentName'),
+    sortable: true,
+    cell: s => (
+      <Link href={`/shipments/${encodeURIComponent(s.id)}`} className="hover:underline">
+        {s.name || s.id} ↗
+      </Link>
+    ),
+    exportValue: s => s.name || s.id,
+  },
+  {
+    key: 'totalScanned',
+    header: t('suppliers.scanned'),
+    align: 'end',
+    sortable: true,
+    cell: s => `${formatNumber(s.totalScanned)} / ${formatNumber(s.totalExpected)}`,
+    // "12 / 15" is one cell to read and two numbers to sum; split it for export.
+    exportValue: s => s.totalScanned,
+    exportHeader: t('suppliers.scanned'),
+  },
+  {
+    key: 'missing',
+    header: t('suppliers.missingQty'),
+    align: 'end',
+    sortable: true,
+    cell: s =>
+      s.missing > 0
+        ? <span className="font-semibold text-amber-500">{formatNumber(s.missing)}</span>
+        : <span className="text-muted-foreground">0</span>,
+    exportValue: s => s.missing,
+  },
+  {
+    key: 'uniqueProducts',
+    header: t('suppliers.products'),
+    align: 'end',
+    sortable: true,
+    cell: s => formatNumber(s.uniqueProducts),
+    exportValue: s => s.uniqueProducts,
+  },
+]
 
 /**
  * Warehouse receiving for this supplier. Distinct from "delivery history",
@@ -37,41 +93,20 @@ export default function SupplierShipmentsPage() {
   }
 
   return (
-    <div className="rounded border overflow-x-auto">
-      <table className="w-full text-sm min-w-[560px]">
-        <thead className="bg-muted/50">
-          <tr>
-            <th className="px-3 py-2 text-start text-xs font-medium">{t('suppliers.shipmentDate')}</th>
-            <th className="px-3 py-2 text-start text-xs font-medium">{t('suppliers.shipmentName')}</th>
-            <th className="px-3 py-2 text-end text-xs font-medium">{t('suppliers.scanned')}</th>
-            <th className="px-3 py-2 text-end text-xs font-medium">{t('suppliers.missingQty')}</th>
-            <th className="px-3 py-2 text-end text-xs font-medium">{t('suppliers.products')}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {shipments.map((s) => (
-            <tr key={s.id} className="border-t hover:bg-accent/50">
-              <td className="px-3 py-2 tabular-nums whitespace-nowrap">
-                {formatDate(s.shipmentDate as string | null | undefined)}
-              </td>
-              <td className="px-3 py-2">
-                <Link href={`/shipments/${encodeURIComponent(s.id)}`} className="hover:underline">
-                  {s.name || s.id} ↗
-                </Link>
-              </td>
-              <td className="px-3 py-2 text-end tabular-nums">
-                {formatNumber(s.totalScanned)} / {formatNumber(s.totalExpected)}
-              </td>
-              <td className="px-3 py-2 text-end tabular-nums">
-                {s.missing > 0
-                  ? <span className="text-amber-500 font-semibold">{formatNumber(s.missing)}</span>
-                  : <span className="text-muted-foreground">0</span>}
-              </td>
-              <td className="px-3 py-2 text-end tabular-nums">{formatNumber(s.uniqueProducts)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <DataTable
+      rows={shipments}
+      columns={COLUMNS(t)}
+      getRowKey={s => s.id}
+      defaultSort={{ field: 'shipmentDate', dir: 'desc' }}
+      minWidth="min-w-[560px]"
+      pageSize={25}
+      exportFileName={`shipments-${code}`}
+      mobileCard={{
+        title: s => s.name || s.id,
+        subtitle: s => formatDate(s.shipmentDate as string | null | undefined),
+        accent: s => `${formatNumber(s.totalScanned)}/${formatNumber(s.totalExpected)}`,
+        fields: [{ label: t('suppliers.missingQty'), value: s => formatNumber(s.missing) }],
+      }}
+    />
   )
 }
