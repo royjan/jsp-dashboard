@@ -8,6 +8,7 @@
  * filter the ERP by date for a "recent" question).
  */
 
+import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
 import { Undo2 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
@@ -19,6 +20,7 @@ import type { Provenance } from '@/lib/provenance'
 interface Credit {
   doc_number: string
   doc_date: string | null
+  year: string | null
   supplier_code: string | null
   supplier_name: string | null
   grand_total: number
@@ -37,7 +39,16 @@ const COLUMNS: DataTableColumn<Credit>[] = [
     key: 'doc_number',
     header: 'מסמך',
     sortable: true,
-    cell: c => <span className="font-mono text-xs">51/{c.doc_number}</span>,
+    // The document viewer needs the year as well: a 2025 and a 2026 document
+    // can carry the same number, so linking on number alone opens the wrong one.
+    cell: c => (
+      <Link
+        href={`/documents/51/${encodeURIComponent(c.doc_number)}${c.year ? `?year=${c.year}` : ''}`}
+        className="font-mono text-xs text-primary hover:underline"
+      >
+        51/{c.doc_number}
+      </Link>
+    ),
     exportValue: c => `51/${c.doc_number}`,
   },
   {
@@ -123,7 +134,10 @@ export default function SupplierCreditsPage() {
           <DataTable
             rows={data?.credits ?? []}
             columns={COLUMNS}
-            getRowKey={c => c.doc_number}
+            // Not doc_number alone: the wider scan now spans 2025 and 2026, and
+            // a document number is unique per YEAR, not across them. Two rows
+            // sharing a React key make one of them vanish.
+            getRowKey={c => `${c.year ?? '?'}/${c.doc_number}`}
             loading={isLoading}
             error={isError ? 'לא ניתן לטעון זיכויי ספקים' : undefined}
             onRetry={() => refetch()}

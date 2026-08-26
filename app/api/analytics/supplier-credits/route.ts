@@ -33,17 +33,34 @@ import type { Provenance } from '@/lib/provenance'
  * moving in the opposite direction.
  */
 
-const CACHE_KEY = 'analytics:supplier-credits:v1'
+// Bump this whenever the payload SHAPE changes. Redis survives a Dokploy deploy
+// and holds the old body for the full TTL — a deployed change that "does
+// nothing" is almost always this.
+const CACHE_KEY = 'analytics:supplier-credits:v2'
 const TTL_SECONDS = 30 * 60
 
-/** How many recent format-51 documents to scan for negatives. */
-const SCAN_DEPTH = 300
+/**
+ * How many recent format-51 documents to scan for negatives.
+ *
+ * Measured against FINAPI 2026-08-26: limit=300 returns 300 docs / 44 credits
+ * back to 2026-04-14, while limit=1000 returns 879 docs / 94 credits back to
+ * 2025-01-02 — and asking for 2000 returns the same 879, so 879 IS the whole
+ * window FINAPI serves. The cost of going from 300 to 1000 is 0.25s → 0.70s.
+ *
+ * So 300 was leaving more than half the credits off the screen for no gain.
+ * At 1000 the scan reaches the end of the available range, which is why
+ * `truncated` below now normally comes back false — the list really is
+ * everything FINAPI holds, not a page of it.
+ */
+const SCAN_DEPTH = 1000
 
 export interface SupplierCredit {
   doc_number: string
   doc_date: string | null
   supplier_code: string | null
   supplier_name: string | null
+  /** Fiscal year, for the document deep-link. */
+  year: string | null
   /** Including VAT. This is the number to quote. */
   grand_total: number
   /** Pre-VAT, kept only so the difference is inspectable. */
@@ -68,6 +85,10 @@ export async function GET() {
         return {
           doc_number: String(d.doc_number ?? ''),
           doc_date: (d.doc_date as string) ?? null,
+          // The document viewer keys off format + number + year, and the year
+          // is not derivable from the number — a 2025 and a 2026 document can
+          // share one. Carry it from the date.
+          year: typeof d.doc_date === 'string' ? d.doc_date.slice(0, 4) : null,
           supplier_code: (d.customer_code as string) ?? null,
           supplier_name: (d.customer_name as string) ?? null,
           grand_total: grand,
@@ -93,7 +114,9 @@ export async function GET() {
         // SCAN_DEPTH format-51 documents is not in this list, and saying so
         // beats implying the list is every credit ever issued.
         truncated: docs.length >= SCAN_DEPTH,
-        scope: `${docs.length} מסמכי פורמט 51 אחרונים${
+        scope: `${docs.length} מסמכי פורמט 51 — עד ${
+          docs.length ? (docs[docs.length - 1] as Record<string, unknown>).doc_date : '—'
+        }${
           missingGrandTotal ? ` · ${missingGrandTotal} ללא grand_total (הוחלף ב-total)` : ''
         }`,
       } satisfies Provenance,
