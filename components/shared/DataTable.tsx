@@ -178,6 +178,18 @@ export interface DataTableProps<TRow, TSortKey extends string = string> {
   exportFileName?: string
   /** Sheet tab name; defaults to `exportFileName`. */
   exportSheetName?: string
+  /**
+   * Rows per page. Setting it turns on a real pager and turns OFF the automatic
+   * height cap, so the table flows with the document instead of scrolling
+   * inside itself.
+   *
+   * Worth being explicit about why both: the auto cap exists so a long table's
+   * sticky header has something to stick to, but on a 94-row list it produced a
+   * scroll area nested inside the page's own scroll area, showing eight rows
+   * with no indication that eighty-six more existed. Nested scrollbars are easy
+   * to miss and hard to use; "1–25 of 94" is neither.
+   */
+  pageSize?: number
   /** Extra controls rendered in the toolbar, before the export button. */
   toolbar?: React.ReactNode
   /**
@@ -225,6 +237,10 @@ export interface DataTableLabels {
   truncated: (shown: number, total: number) => string
   showAll: string
   exportLabel: string
+  /** `(from, to, total)` → "מוצגות 1–25 מתוך 94" */
+  pageRange: (from: number, to: number, total: number) => string
+  prevPage: string
+  nextPage: string
 }
 
 const DEFAULT_LABELS: DataTableLabels = {
@@ -236,6 +252,10 @@ const DEFAULT_LABELS: DataTableLabels = {
     `מוצגות ${formatNumber(shown)} שורות מתוך ${formatNumber(total)}`,
   showAll: 'הצג הכל',
   exportLabel: 'ייצוא',
+  pageRange: (from, to, total) =>
+    `מוצגות ${formatNumber(from)}–${formatNumber(to)} מתוך ${formatNumber(total)}`,
+  prevPage: 'הקודם',
+  nextPage: 'הבא',
 }
 
 /**
@@ -285,6 +305,7 @@ export function DataTable<TRow, TSortKey extends string = string>({
   className,
   exportFileName,
   exportSheetName,
+  pageSize,
   toolbar,
   footer,
   mobileCard,
@@ -347,10 +368,21 @@ export function DataTable<TRow, TSortKey extends string = string>({
   const rows = truncating ? sortedRows.slice(0, maxRows) : sortedRows
   const hiddenCount = sortedRows.length - rows.length
 
+  // ----- paging -----
+  const [page, setPage] = React.useState(0)
+  const pageCount = pageSize ? Math.max(1, Math.ceil(rows.length / pageSize)) : 1
+  // A filter that shrinks the list can strand the viewer on a page that no
+  // longer exists; clamp rather than render an empty table.
+  const safePage = Math.min(page, pageCount - 1)
+  React.useEffect(() => {
+    if (page !== safePage) setPage(safePage)
+  }, [page, safePage])
+  const pagedRows = pageSize ? rows.slice(safePage * pageSize, safePage * pageSize + pageSize) : rows
+
   // A sticky header is inert without a bounded scroll container, so give long
   // tables a cap by default rather than leaving the header silently broken.
   const effectiveMaxHeight =
-    maxHeight === 'none'
+    maxHeight === 'none' || pageSize
       ? undefined
       : (maxHeight ?? (rows.length > STICKY_MIN_ROWS ? DEFAULT_MAX_HEIGHT : undefined))
 
@@ -419,9 +451,9 @@ export function DataTable<TRow, TSortKey extends string = string>({
 
   const showToolbar = Boolean(toolbar || exportFileName)
 
-  const cards = mobileCard && !loading && rows.length > 0 && (
+  const cards = mobileCard && !loading && pagedRows.length > 0 && (
     <div className="flex flex-col gap-2 lg:hidden">
-      {rows.map((row, i) => {
+      {pagedRows.map((row, i) => {
         const key = getRowKey(row, i)
         return (
           <div
@@ -533,14 +565,14 @@ export function DataTable<TRow, TSortKey extends string = string>({
                 ))}
               </tr>
             ))
-          ) : rows.length === 0 ? (
+          ) : pagedRows.length === 0 ? (
             <tr>
               <td colSpan={colCount} className="py-0">
                 <EmptyState variant="inline" title={L.empty} />
               </td>
             </tr>
           ) : (
-            rows.map((row, i) => {
+            pagedRows.map((row, i) => {
               const key = getRowKey(row, i)
               const selected = selectedKeys?.has(key)
               return (
@@ -593,9 +625,9 @@ export function DataTable<TRow, TSortKey extends string = string>({
             })
           )}
         </tbody>
-        {footer && !loading && rows.length > 0 && (
+        {footer && !loading && pagedRows.length > 0 && (
           <tfoot className="sticky bottom-0 z-10 border-t-2 bg-card font-semibold">
-            {footer(rows, sortedRows)}
+            {footer(pagedRows, sortedRows)}
           </tfoot>
         )}
       </table>
@@ -605,6 +637,35 @@ export function DataTable<TRow, TSortKey extends string = string>({
           {L.loading}
         </div>
       )}
+      {pageSize && !loading && rows.length > 0 && pageCount > 1 && (
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t py-2.5 text-xs">
+          <span className="text-muted-foreground tabular-nums">
+            {L.pageRange(safePage * pageSize + 1, safePage * pageSize + pagedRows.length, rows.length)}
+          </span>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setPage(p => Math.max(0, p - 1))}
+              disabled={safePage === 0}
+              className="cursor-pointer rounded-md border px-2.5 py-1 font-medium transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {L.prevPage}
+            </button>
+            <span className="px-1 text-muted-foreground tabular-nums">
+              {safePage + 1}/{pageCount}
+            </span>
+            <button
+              type="button"
+              onClick={() => setPage(p => Math.min(pageCount - 1, p + 1))}
+              disabled={safePage >= pageCount - 1}
+              className="cursor-pointer rounded-md border px-2.5 py-1 font-medium transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {L.nextPage}
+            </button>
+          </div>
+        </div>
+      )}
+
       {hiddenCount > 0 && !loading && (
         <div className="flex flex-wrap items-center justify-center gap-2 border-t py-2.5 text-xs text-muted-foreground">
           <span>{L.truncated(rows.length, sortedRows.length)}</span>

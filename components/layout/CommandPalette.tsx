@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useRecentDestinations, recordDestination, clearRecentDestinations } from '@/lib/recent-destinations'
 import { Command } from 'cmdk'
 import { useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
@@ -109,17 +110,39 @@ export function CommandPalette() {
   const queryClient = useQueryClient()
   const { t } = useLocale()
 
-  // Keyboard shortcut: Cmd+K / Ctrl+K
+  // Keyboard: Cmd/Ctrl+K toggles, Escape closes.
+  //
+  // Escape was missing entirely — the only ways out were clicking the backdrop
+  // or picking something, which on a keyboard-driven surface means the shortcut
+  // that opens it had no counterpart to abandon it.
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault()
         setOpen((prev) => !prev)
+        return
+      }
+      if (e.key === 'Escape') {
+        // Only swallow the key when this is actually open, so Escape keeps
+        // working for whatever else is on screen.
+        setOpen(prev => {
+          if (!prev) return prev
+          e.preventDefault()
+          e.stopPropagation()
+          return false
+        })
       }
     }
-    document.addEventListener('keydown', onKeyDown)
-    return () => document.removeEventListener('keydown', onKeyDown)
+    // Capture phase: cmdk installs its own Escape handling on the input, and on
+    // the bubble phase it can consume the event before this sees it.
+    document.addEventListener('keydown', onKeyDown, true)
+    return () => document.removeEventListener('keydown', onKeyDown, true)
   }, [])
+
+  // Leave the box empty for the next ⌘K rather than reopening on a stale query.
+  useEffect(() => {
+    if (!open) setQuery('')
+  }, [open])
 
   // Debounced search
   useEffect(() => {
@@ -236,7 +259,17 @@ export function CommandPalette() {
                       <Command.Item
                         key={`item-${item.code}`}
                         value={`item ${item.code} ${item.name || ''}`}
-                        onSelect={() => runAction(() => router.push(`/stock?q=${item.code}`))}
+                        onSelect={() =>
+                          runAction(() => {
+                            recordDestination({
+                              href: `/stock?q=${item.code}`,
+                              label: item.code,
+                              sublabel: item.name || item.description,
+                              kind: 'item',
+                            })
+                            router.push(`/stock?q=${item.code}`)
+                          })
+                        }
                         className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm cursor-pointer aria-selected:bg-accent aria-selected:text-accent-foreground"
                       >
                         <Package className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -268,7 +301,17 @@ export function CommandPalette() {
                       <Command.Item
                         key={`cat-${item.code}`}
                         value={`catalog ${item.code} ${item.description || ''}`}
-                        onSelect={() => runAction(() => router.push(`/items/${encodeURIComponent(item.code)}`))}
+                        onSelect={() =>
+                          runAction(() => {
+                            recordDestination({
+                              href: `/items/${encodeURIComponent(item.code)}`,
+                              label: item.code,
+                              sublabel: item.hebrewDescription || item.description || undefined,
+                              kind: 'item',
+                            })
+                            router.push(`/items/${encodeURIComponent(item.code)}`)
+                          })
+                        }
                         className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm cursor-pointer aria-selected:bg-accent aria-selected:text-accent-foreground"
                       >
                         <Package className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -301,7 +344,17 @@ export function CommandPalette() {
                         <Command.Item
                           key={`cust-${code}`}
                           value={`customer ${code} ${name}`}
-                          onSelect={() => runAction(() => router.push(`/customers/${code}`))}
+                          onSelect={() =>
+                            runAction(() => {
+                              recordDestination({
+                                href: `/customers/${code}`,
+                                label: cust.name || code,
+                                sublabel: code,
+                                kind: 'customer',
+                              })
+                              router.push(`/customers/${code}`)
+                            })
+                          }
                           className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm cursor-pointer aria-selected:bg-accent aria-selected:text-accent-foreground"
                         >
                           <User className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -327,7 +380,17 @@ export function CommandPalette() {
                       <Command.Item
                         key={`sem-${item.code}`}
                         value={`semantic ${item.code} ${item.name}`}
-                        onSelect={() => runAction(() => router.push(`/items/${encodeURIComponent(item.code)}`))}
+                        onSelect={() =>
+                          runAction(() => {
+                            recordDestination({
+                              href: `/items/${encodeURIComponent(item.code)}`,
+                              label: item.code,
+                              sublabel: item.name,
+                              kind: 'item',
+                            })
+                            router.push(`/items/${encodeURIComponent(item.code)}`)
+                          })
+                        }
                         className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm cursor-pointer aria-selected:bg-accent aria-selected:text-accent-foreground"
                       >
                         <Sparkles className="h-4 w-4 shrink-0 text-primary" />

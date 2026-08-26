@@ -106,7 +106,11 @@ export default function SupplierCreditsPage() {
       <PageHeader
         icon={Undo2}
         title="זיכויי ספקים"
-        description="מסמכי פורמט 51 עם סכום שלילי — אין פורמט ייעודי לזיכוי ספק"
+        description={
+          data
+            ? `${formatNumber(data.credits.length)} זיכויים · פורמט 51 עם סכום שלילי`
+            : 'מסמכי פורמט 51 עם סכום שלילי — אין פורמט ייעודי לזיכוי ספק'
+        }
         provenance={data?.provenance}
       />
 
@@ -144,6 +148,7 @@ export default function SupplierCreditsPage() {
             defaultSort={{ field: 'doc_date', dir: 'desc' }}
             exportFileName="זיכויי-ספקים"
             minWidth="min-w-[560px]"
+            pageSize={25}
             labels={{ empty: 'לא נמצאו זיכויי ספקים בטווח שנסרק' }}
             mobileCard={{
               title: c => c.supplier_name ?? c.supplier_code ?? '—',

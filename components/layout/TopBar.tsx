@@ -7,7 +7,6 @@ import { useTheme } from 'next-themes'
 import { useLocale } from '@/lib/locale-context'
 import { useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
-import { AppSwitcher } from '@/components/layout/AppSwitcher'
 import { CommandPalette } from '@/components/layout/CommandPalette'
 import { MoneyToggle } from '@/components/layout/MoneyToggle'
 import { DensityToggle } from '@/components/layout/DensityToggle'
@@ -170,7 +169,6 @@ export function TopBar() {
       </div>
       <div className="flex items-center gap-1 shrink-0">
         <CommandPalette />
-        <AppSwitcher currentApp="dashboard" />
 
         {/* sm+ : everything inline, exactly as before */}
         <div className="hidden sm:flex items-center gap-1">{actions(false)}</div>
