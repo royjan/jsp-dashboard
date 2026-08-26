@@ -20,6 +20,7 @@ import { Swords, Upload, PackageX, TrendingDown, SearchX, Search, ChevronLeft, C
 import type { CompareRow, CompetitorCell } from '@/app/api/analytics/competitors/route'
 import type { TranslationKey } from '@/lib/i18n'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
+import { PageHeader } from '@/components/shared/PageHeader'
 
 type SortField = 'code' | 'ourPrice' | 'ourStock' | 'minNet' | 'spread' | 'sold'
 type T = (k: TranslationKey) => string
@@ -457,21 +458,19 @@ function CompetitorsPageInner() {
 
   return (
     <div className="w-full min-w-0 space-y-4">
-      {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="flex items-center gap-2 text-xl font-semibold">
-            <Swords className="h-5 w-5 text-primary" />
-            {t('competitors.title')}
-          </h1>
-          <p className="text-sm text-muted-foreground">{t('competitors.subtitle')}</p>
-          <p className="text-xs text-muted-foreground/70">{t('competitors.subtitle2')}</p>
-        </div>
-        <Button variant={showUploader ? 'secondary' : 'default'} size="sm" onClick={() => setShowUploader(v => !v)}>
-          <Upload className="h-4 w-4 me-1.5" />
-          {t('competitors.uploadFile')}
-        </Button>
-      </div>
+      <PageHeader
+        icon={Swords}
+        title={t('competitors.title')}
+        description={t('competitors.subtitle')}
+        actions={
+          <Button variant={showUploader ? 'secondary' : 'default'} size="sm" onClick={() => setShowUploader(v => !v)}>
+            <Upload className="h-4 w-4 me-1.5" />
+            {t('competitors.uploadFile')}
+          </Button>
+        }
+      >
+        <p className="text-xs text-muted-foreground/70">{t('competitors.subtitle2')}</p>
+      </PageHeader>
 
       {(showUploader || (!hasData && !isLoading)) && <CompetitorUploader />}
 

@@ -19,6 +19,7 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceL
 import { ChartGrid, AXIS_PROPS, ACTIVE_DOT } from '@/components/charts/kit'
 import { formatCurrency, formatNumber } from '@/lib/format'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
+import { PageHeader } from '@/components/shared/PageHeader'
 
 type UrgencyLevel = 'critical' | 'warning' | 'watch' | 'ok'
 
@@ -277,16 +278,14 @@ export default function StockForecastPage() {
 
   return (
     <div className="space-y-6" dir={dir}>
-      {/* Header */}
-      <div>
-        <h1 className="text-xl sm:text-2xl font-bold tracking-tight">
-          {he ? 'תחזית אזילת מלאי' : 'Stock-out Forecast'}
-        </h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          {he
+      <PageHeader
+        title={he ? 'תחזית אזילת מלאי' : 'Stock-out Forecast'}
+        description={
+          he
             ? 'תחזית אזילת מלאי מבוססת החלקה מעריכית (שיטת הולט) על נתוני מכירות היסטוריים'
-            : 'Predictive stock-out alerts based on Holt\'s exponential smoothing of historical sales data'}
-        </p>
+            : 'Predictive stock-out alerts based on Holt\'s exponential smoothing of historical sales data'
+        }
+      >
         {/* The two things people misread: "אמינות תחזית" is about data quality,
             not stock level; and the blue arrow/truck mean incoming units count. */}
         <p className="text-muted-foreground text-xs mt-2 leading-relaxed">
@@ -294,7 +293,7 @@ export default function StockForecastPage() {
             ? 'טיפ: עבירו עם העכבר על כותרת עמודה להסבר. «אמינות תחזית» מודדת כמה היסטוריית מכירות עומדת מאחורי התחזית — אחוז נמוך אומר שתאריך האזילה הוא ניחוש, לא שצריך להזמין יותר. סימון כחול (← או משאית) אומר שהחישוב כולל סחורה שהוזמנה או בדרך.'
             : 'Tip: hover a column title for an explanation. "Reliability" measures how much sales history backs the forecast — a low value means the stock-out date is a guess, not that you should order more. Blue markers (→ or a truck) mean on-order/in-transit units are included.'}
         </p>
-      </div>
+      </PageHeader>
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 lg:gap-4">

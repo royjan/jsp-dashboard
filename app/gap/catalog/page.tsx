@@ -23,6 +23,7 @@ import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
 import { ItemLink } from '@/components/shared/ItemLink'
 import { SubTabs } from '@/components/shared/SubTabs'
 import { Segmented, useUrlTextInput } from '@/components/shared/filter-controls'
+import { PageHeader } from '@/components/shared/PageHeader'
 
 const PAGE_SIZE = 50
 const EXPORT_CAP = 5000
@@ -342,23 +343,21 @@ function CatalogGapPageInner() {
   return (
     <TooltipProvider delayDuration={150}>
       <div className="w-full min-w-0 space-y-4">
-        {/* Header */}
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h1 className="flex items-center gap-2 text-xl font-semibold">
-              <PackageX className="h-5 w-5 text-primary" />
-              {t('page.catalogGap')}
-            </h1>
-            <p className="text-sm text-muted-foreground">{t('catalogGap.subtitle')}</p>
-            <p className="text-xs text-muted-foreground/70">{t('catalogGap.subtitle2')}</p>
-          </div>
-          <Button size="sm" onClick={exportToExcel} disabled={exporting || isLoading || !rows.length}>
-            {exporting
-              ? <Loader2 className="h-4 w-4 me-1.5 animate-spin" />
-              : <Download className="h-4 w-4 me-1.5" />}
-            {exporting ? t('catalogGap.exporting') : t('catalogGap.export')}
-          </Button>
-        </div>
+        <PageHeader
+          icon={PackageX}
+          title={t('page.catalogGap')}
+          description={t('catalogGap.subtitle')}
+          actions={
+            <Button size="sm" onClick={exportToExcel} disabled={exporting || isLoading || !rows.length}>
+              {exporting
+                ? <Loader2 className="h-4 w-4 me-1.5 animate-spin" />
+                : <Download className="h-4 w-4 me-1.5" />}
+              {exporting ? t('catalogGap.exporting') : t('catalogGap.export')}
+            </Button>
+          }
+        >
+          <p className="text-xs text-muted-foreground/70">{t('catalogGap.subtitle2')}</p>
+        </PageHeader>
 
         <SubTabs
           tabs={[

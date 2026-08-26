@@ -12,6 +12,7 @@ import { Search, Sparkles, Package, Clock, X, ArrowLeft, ExternalLink } from 'lu
 import { brandChipClasses } from '@/lib/brand'
 import { formatCurrency } from '@/lib/format'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
+import { PageHeader } from '@/components/shared/PageHeader'
 
 interface SemanticResult {
   code: string
@@ -184,13 +185,7 @@ export default function SearchPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <Sparkles className="h-6 w-6 text-primary" />
-        <div>
-          <h1 className="text-2xl font-bold">{t('page.smartSearch')}</h1>
-        </div>
-      </div>
+      <PageHeader icon={Sparkles} title={t('page.smartSearch')} />
 
       {/* Search Input */}
       <div className="relative">

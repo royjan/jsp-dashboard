@@ -24,6 +24,7 @@ import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
 import { sortRows } from '@/lib/sort'
 import { cardVariants } from '@/lib/motion'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
+import { PageHeader } from '@/components/shared/PageHeader'
 
 type SortField = 'name' | 'total_qty' | 'quote_count' | 'last_quoted' | 'stock_qty' | 'incoming_qty' | 'ordered_qty'
 type SortDir = 'asc' | 'desc'
@@ -225,10 +226,7 @@ export default function GapAnalysisPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl sm:text-2xl font-bold">{t('page.gap')}</h1>
-        <p className="text-sm text-muted-foreground mt-1">{t('gapSubtitle')}</p>
-      </div>
+      <PageHeader title={t('page.gap')} description={t('gapSubtitle')} />
 
       {/* Two different gaps share this entry: what customers asked for and we
           couldn't supply (here), and what sits on their cars and we can't sell

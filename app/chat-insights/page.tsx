@@ -22,6 +22,7 @@ import { ChartGrid, AXIS_PROPS, BAR_RADIUS, BAR_MAX, ACTIVE_BAR, ACTIVE_DOT } fr
 import { formatNumber } from '@/lib/constants'
 import { cardVariants } from '@/lib/motion'
 import { formatDate } from '@/lib/format'
+import { PageHeader } from '@/components/shared/PageHeader'
 
 // ── types (mirror the API) ──
 interface ChatInsights {
@@ -205,29 +206,27 @@ function ChatInsightsContent() {
   return (
     <div className="space-y-6">
       {/* 1 ── Header + day-range */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl md:text-2xl font-bold flex items-center gap-2">
-            <MessageSquare className="h-5 w-5 text-primary" />
-            {t('chatInsights')}
-          </h1>
-          <p className="text-xs text-muted-foreground mt-0.5">{`${days} ימים אחרונים`}</p>
-        </div>
-        <div className="flex items-center gap-1 rounded-lg border border-input bg-background p-1">
-          {DAY_OPTIONS.map(opt => (
-            <button
-              key={opt}
-              onClick={() => setDays(opt)}
-              className={cn(
-                'h-7 min-w-[44px] rounded-md px-2.5 text-sm font-medium transition-colors',
-                days === opt ? 'bg-primary text-primary-foreground shadow' : 'text-muted-foreground hover:text-foreground hover:bg-muted/50',
-              )}
-            >
-              {`${opt} ימים`}
-            </button>
-          ))}
-        </div>
-      </div>
+      <PageHeader
+        icon={MessageSquare}
+        title={t('chatInsights')}
+        description={`${days} ימים אחרונים`}
+        actions={
+          <div className="flex items-center gap-1 rounded-lg border border-input bg-background p-1">
+            {DAY_OPTIONS.map(opt => (
+              <button
+                key={opt}
+                onClick={() => setDays(opt)}
+                className={cn(
+                  'h-7 min-w-[44px] rounded-md px-2.5 text-sm font-medium transition-colors',
+                  days === opt ? 'bg-primary text-primary-foreground shadow' : 'text-muted-foreground hover:text-foreground hover:bg-muted/50',
+                )}
+              >
+                {`${opt} ימים`}
+              </button>
+            ))}
+          </div>
+        }
+      />
 
       {/* 2 ── Diego parts-bot KPIs (headline) */}
       <section className="space-y-3">

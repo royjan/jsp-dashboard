@@ -10,6 +10,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Car, TrendingUp, BarChart3, Factory } from 'lucide-react'
 import { cardVariants } from '@/lib/motion'
+import { PageHeader } from '@/components/shared/PageHeader'
 
 
 function LoadingSkeleton() {
@@ -57,18 +58,15 @@ function VehicleIntelligenceContent() {
 
   return (
     <div className="space-y-6">
-      {/* Page header */}
-      <div>
-        <h1 className="text-2xl font-bold flex items-center gap-2">
-          <Car className="h-6 w-6 text-primary" />
-          {isHe ? 'אינטליגנציית רכב' : 'Vehicle Intelligence'}
-        </h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          {isHe
+      <PageHeader
+        icon={Car}
+        title={isHe ? 'אינטליגנציית רכב' : 'Vehicle Intelligence'}
+        description={
+          isHe
             ? 'מתאם נתוני רישום רכבים עם היסטוריית מכירות לחיזוי ביקוש'
-            : 'Correlating vehicle registration data with sales history to predict demand'}
-        </p>
-      </div>
+            : 'Correlating vehicle registration data with sales history to predict demand'
+        }
+      />
 
       {/* KPI cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">

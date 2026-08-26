@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Bell, Plus, Trash2, Power, Loader2, AlertCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { PageHeader } from '@/components/shared/PageHeader'
 
 /**
  * Defined at module scope on purpose. This used to be declared inside
@@ -124,22 +125,23 @@ export default function AlertsPage() {
 
   return (
     <div className="space-y-4 md:space-y-6">
-      {/* Title + both actions don't fit on one line at 320px, so the row wraps
-          instead of forcing the whole page into horizontal scroll. */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3 min-w-0">
-          <Bell className="h-6 w-6 text-primary shrink-0" />
-          <h1 className="text-2xl font-bold truncate">Stock Alerts</h1>
-        </div>
-        <div className="flex gap-2 shrink-0">
-          <Button onClick={runNow} variant="outline">
-            Run Now
-          </Button>
-          <Button onClick={() => setShowNew(!showNew)}>
-            <Plus className="h-4 w-4 me-1" /> New Rule
-          </Button>
-        </div>
-      </div>
+      {/* PageHeader already wraps its actions below the title on a narrow
+          screen, which is what the hand-rolled row here was doing by hand. */}
+      <PageHeader
+        title="התראות מלאי"
+        description="כללי התראה על אזילת מלאי ועל חריגות"
+        icon={Bell}
+        actions={
+          <>
+            <Button onClick={runNow} variant="outline" size="sm">
+              הרץ עכשיו
+            </Button>
+            <Button onClick={() => setShowNew(!showNew)} size="sm">
+              <Plus className="h-4 w-4 me-1" /> כלל חדש
+            </Button>
+          </>
+        }
+      />
 
       {error && (
         <Card>

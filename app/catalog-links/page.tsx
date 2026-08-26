@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Search, Link2, Unlink, CheckCircle, ExternalLink, Filter, ArrowUp, ArrowDown, ArrowUpDown, X } from 'lucide-react'
+import { PageHeader } from '@/components/shared/PageHeader'
 
 type StatusKey = 'exact' | 'mg' | 'linked' | 'unmatched'
 type SortField = 'code' | 'brand' | 'status'
@@ -216,12 +217,10 @@ export default function CatalogLinksPage() {
 
   return (
     <div className="p-6 space-y-6" dir="rtl">
-      <div>
-        <h1 className="text-2xl font-bold">חיבורי קטלוג</h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          חלקים מקטלוג Partly — קשר חלקים שאינם בפינאנסיט לקוד מקביל
-        </p>
-      </div>
+      <PageHeader
+        title="חיבורי קטלוג"
+        description="חלקים מקטלוג Partly — קשר חלקים שאינם בפינאנסיט לקוד מקביל"
+      />
 
       {stats && stats.unmatched > 0 && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 flex items-center gap-3">

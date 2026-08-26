@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { DeliveryBoard } from '@/components/deliveries/DeliveryBoard'
 import type { Delivery } from '@/lib/db/schema'
+import { PageHeader } from '@/components/shared/PageHeader'
 
 export default function DeliveriesPage() {
   const router = useRouter()
@@ -103,15 +104,7 @@ export default function DeliveriesPage() {
     <div className="space-y-6" dir="rtl">
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <Truck className="h-7 w-7 text-primary" />
-          <div>
-            <h1 className="text-2xl font-bold">ניהול משלוחים</h1>
-            <p className="text-sm text-muted-foreground">
-              מעקב וניהול תעודות משלוח (תבנית 21)
-            </p>
-          </div>
-        </div>
+        <PageHeader icon={Truck} title="ניהול משלוחים" description="מעקב וניהול תעודות משלוח (תבנית 21)" />
 
         <div className="flex items-center gap-2 flex-wrap">
           <div className="flex items-center gap-2">

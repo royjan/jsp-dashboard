@@ -18,6 +18,7 @@ import { useLocale } from '@/lib/locale-context'
 import type { TranslationKey } from '@/lib/i18n'
 import { formatCurrency, formatNumber } from '@/lib/format'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
+import { PageHeader } from '@/components/shared/PageHeader'
 
 interface ElasticityTier {
   label: 'low' | 'mid' | 'high'
@@ -217,19 +218,13 @@ export default function PricingPage() {
 
   return (
     <div className="space-y-4 md:space-y-6">
-      <div className="flex items-center gap-3">
-        <DollarSign className="h-6 w-6 text-primary" />
-        <div>
-          <h1 className="text-2xl font-bold">{t('priceElasticity')}</h1>
-          <p className="text-sm text-muted-foreground">
-            {data.year_range.from}–{data.year_range.to} · {data.items.length}{' '}
-            {t('itemsAnalyzed')}
-          </p>
-          <p className="text-xs text-muted-foreground mt-1 max-w-2xl">
-            {t('pricingDesc')}
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        icon={DollarSign}
+        title={t('priceElasticity')}
+        description={`${data.year_range.from}–${data.year_range.to} · ${data.items.length} ${t('itemsAnalyzed')}`}
+      >
+        <p className="max-w-2xl text-xs text-muted-foreground">{t('pricingDesc')}</p>
+      </PageHeader>
 
       {/* Summary */}
       <div className="grid grid-cols-3 gap-3 md:gap-4">

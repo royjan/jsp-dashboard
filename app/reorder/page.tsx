@@ -5,6 +5,7 @@ import { ReorderToolbar } from '@/components/reorder/ReorderToolbar'
 import { useReorderQueue } from '@/hooks/use-reorder-queue'
 import { Loader2, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { PageHeader } from '@/components/shared/PageHeader'
 
 export default function ReorderPage() {
   const { data, isLoading, isError, refetch } = useReorderQueue()
@@ -13,10 +14,10 @@ export default function ReorderPage() {
     <div className="flex flex-col h-full" dir="rtl">
       {/* Page header */}
       <div className="px-4 pt-4 pb-2">
-        <h1 className="text-xl font-bold">ניהול הזמנות מחדש</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">
-          גרור פריטים בין עמודות כדי לקדם את תהליך ההזמנה
-        </p>
+        <PageHeader
+          title="ניהול הזמנות מחדש"
+          description="גרור פריטים בין עמודות כדי לקדם את תהליך ההזמנה"
+        />
       </div>
 
       {/* Toolbar */}

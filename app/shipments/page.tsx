@@ -13,6 +13,7 @@ import { formatNumber } from '@/lib/constants'
 import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
 import { Container, PackageCheck, AlertTriangle, Truck, ChevronLeft, ChevronRight} from 'lucide-react'
 import { formatDate } from '@/lib/format'
+import { PageHeader } from '@/components/shared/PageHeader'
 
 interface Shipment {
   id: string
@@ -126,13 +127,11 @@ export default function ShipmentsPage() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-bold flex items-center gap-2">
-          <Container className="h-6 w-6 text-primary" />
-          {t('משלוחים נכנסים', 'Inbound Shipments')}
-        </h1>
-        <p className="text-sm text-muted-foreground">{t('סחורה שמגיעה מספקים אל ג׳אן', 'Goods arriving from suppliers to Jan')}</p>
-      </div>
+      <PageHeader
+        icon={Container}
+        title={t('משלוחים נכנסים', 'Inbound Shipments')}
+        description={t('סחורה שמגיעה מספקים אל ג׳אן', 'Goods arriving from suppliers to Jan')}
+      />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[

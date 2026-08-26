@@ -12,6 +12,7 @@ import {
   Truck, Package, AlertTriangle, Users, Plus, Search,
   Loader2, AlertCircle, X,
 } from 'lucide-react'
+import { PageHeader } from '@/components/shared/PageHeader'
 
 export default function SuppliersPage() {
   const { t } = useLocale()
@@ -52,19 +53,16 @@ export default function SuppliersPage() {
 
   return (
     <div className="flex flex-col gap-4 p-4" dir="rtl">
-      {/* Page header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold">{t('page.suppliers')}</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            ניהול ספקים, הזמנות ומחירונים
-          </p>
-        </div>
-        <Button size="sm" onClick={() => setShowAdd(!showAdd)}>
-          {showAdd ? <X className="h-4 w-4 me-1" /> : <Plus className="h-4 w-4 me-1" />}
-          {showAdd ? 'ביטול' : t('suppliers.addSupplier')}
-        </Button>
-      </div>
+      <PageHeader
+        title={t('page.suppliers')}
+        description="ניהול ספקים, הזמנות ומחירונים"
+        actions={
+          <Button size="sm" onClick={() => setShowAdd(!showAdd)}>
+            {showAdd ? <X className="h-4 w-4 me-1" /> : <Plus className="h-4 w-4 me-1" />}
+            {showAdd ? 'ביטול' : t('suppliers.addSupplier')}
+          </Button>
+        }
+      />
 
       {/* Summary stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
