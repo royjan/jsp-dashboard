@@ -52,6 +52,7 @@ const EXACT: Record<string, RouteTitle> = {
   '/customers/health-score': { key: 'page.customerHealth', he: 'בריאות לקוחות' },
   '/receivables': { key: 'page.receivables', he: 'גיול חובות' },
   '/margin': { he: 'רווחיות' },
+  '/credits': { he: 'זיכויי ספקים' },
   '/pricing': { key: 'page.pricing', he: 'תמחור' },
   '/ebay': { key: 'page.ebay', he: 'eBay' },
 

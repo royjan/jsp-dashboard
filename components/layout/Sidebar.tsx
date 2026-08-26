@@ -43,7 +43,7 @@ import {
   Truck,
   Users,
   Wallet,
-  Warehouse, Sunrise} from 'lucide-react'
+  Warehouse, Sunrise, Undo2} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { useUnacknowledgedCount } from '@/hooks/use-analytics'
@@ -97,6 +97,7 @@ const navSections: Array<{ id: string; labelKey: TranslationKey; items: NavItem[
   {
     id: 'operations', labelKey: 'sectionOperations', items: [
       { href: '/suppliers', labelKey: 'suppliers', icon: PackageCheck },
+      { href: '/credits', labelKey: 'supplierCredits', icon: Undo2 },
       { href: '/competitors', labelKey: 'competitors', icon: Swords },
       { href: '/shipments', labelKey: 'inboundShipments', icon: Container },
       { href: '/deliveries', labelKey: 'deliveries', icon: Truck },

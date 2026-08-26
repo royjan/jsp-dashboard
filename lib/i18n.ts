@@ -296,6 +296,7 @@ export const translations = {
 
     // Morning brief
     morningBrief: 'בריף בוקר',
+    supplierCredits: 'זיכויי ספקים',
 
     // Business Report
     report: 'דוח עסקי',
@@ -1040,6 +1041,7 @@ export const translations = {
 
     // Morning brief
     morningBrief: 'Morning Brief',
+    supplierCredits: 'Supplier Credits',
 
     // Business Report
     report: 'Report',
