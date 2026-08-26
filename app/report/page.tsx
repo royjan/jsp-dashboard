@@ -28,6 +28,7 @@ import { formatCurrency, formatNumber, formatCurrencyAxis, maskMoneyInText } fro
 import { cardVariants } from '@/lib/motion'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
 import { isDeclineHidden } from '@/lib/privacy'
+import { DataWarning } from '@/components/shared/DataWarning'
 
 const MONTH_LABELS_HE = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר']
 const MONTH_LABELS_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -206,6 +207,12 @@ function ReportContent() {
 
   return (
     <div className="space-y-4 md:space-y-6">
+      {/* The API has reported query_failures for a while; nothing rendered it,
+          so a query that failed showed up as a zero on a revenue card and
+          nowhere else. On this data an empty result and a quiet month look
+          identical — and the empty one is the more believable of the two. */}
+      <DataWarning failures={data.query_failures} />
+
       {/* Section tabs + refresh */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
       <Tabs value={activeSection} onValueChange={(v) => changeSection(v as Section)}>
