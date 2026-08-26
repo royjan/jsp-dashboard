@@ -180,6 +180,19 @@ export interface DataTableProps<TRow, TSortKey extends string = string> {
   exportSheetName?: string
   /** Extra controls rendered in the toolbar, before the export button. */
   toolbar?: React.ReactNode
+  /**
+   * Footer row(s), rendered in a <tfoot> — pass <tr>…</tr>, not a <div>.
+   *
+   * This exists because several hand-rolled tables carry a totals row, and
+   * without a slot for it "migrate to DataTable" silently drops the totals off
+   * a money screen. It receives the rows the table is SHOWING plus the full
+   * set, since a total under a truncated table has to say which one it is.
+   *
+   * Sticks to the bottom of the scroll area for the same reason the header
+   * sticks to the top: on a long table the total is the line you are scrolling
+   * to check.
+   */
+  footer?: (shown: TRow[], all: TRow[]) => React.ReactNode
   /** Localized strings (Hebrew-first by default). */
   labels?: Partial<DataTableLabels>
 }
@@ -254,6 +267,7 @@ export function DataTable<TRow, TSortKey extends string = string>({
   exportFileName,
   exportSheetName,
   toolbar,
+  footer,
   labels,
 }: DataTableProps<TRow, TSortKey>) {
   // Column `cell` renderers call formatCurrency() from here, and that reads the
@@ -515,6 +529,11 @@ export function DataTable<TRow, TSortKey extends string = string>({
             })
           )}
         </tbody>
+        {footer && !loading && rows.length > 0 && (
+          <tfoot className="sticky bottom-0 z-10 border-t-2 bg-card font-semibold">
+            {footer(rows, sortedRows)}
+          </tfoot>
+        )}
       </table>
       {loading && (
         <div className="flex items-center justify-center gap-2 py-2 text-xs text-muted-foreground" aria-live="polite">
