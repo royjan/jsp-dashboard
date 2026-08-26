@@ -294,6 +294,9 @@ export const translations = {
     scrap: 'גריטה',
     'page.scrap': 'ניתוח מלאי לגריטה',
 
+    // Morning brief
+    morningBrief: 'בריף בוקר',
+
     // Business Report
     report: 'דוח עסקי',
     'page.report': 'ניתוח עסקי מקיף',
@@ -1034,6 +1037,9 @@ export const translations = {
     // Scrap
     scrap: 'Scrap',
     'page.scrap': 'Dead Stock Scrap Analysis',
+
+    // Morning brief
+    morningBrief: 'Morning Brief',
 
     // Business Report
     report: 'Report',

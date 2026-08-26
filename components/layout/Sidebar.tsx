@@ -43,8 +43,7 @@ import {
   Truck,
   Users,
   Wallet,
-  Warehouse,
-} from 'lucide-react'
+  Warehouse, Sunrise} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { useUnacknowledgedCount } from '@/hooks/use-analytics'
@@ -66,6 +65,7 @@ const navSections: Array<{ id: string; labelKey: TranslationKey; items: NavItem[
   {
     id: 'overview', labelKey: 'sectionOverview', items: [
       { href: '/', labelKey: 'overview', icon: LayoutDashboard },
+      { href: '/brief', labelKey: 'morningBrief', icon: Sunrise },
       { href: '/search', labelKey: 'smartSearch', icon: Sparkles },
       { href: '/seasonal', labelKey: 'seasonal', icon: Sun },
       { href: '/report', labelKey: 'report', icon: FileBarChart },
