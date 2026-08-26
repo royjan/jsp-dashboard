@@ -50,10 +50,38 @@ export function TopBar() {
   const route = resolveRouteTitle(pathname)
   const title = route ? (route.key ? t(route.key) : route.he) : t('dashboard')
 
-  // The tab title was the static one from metadata on every screen, so browser
-  // history and a row of open tabs were indistinguishable.
+  // The tab title was the static one from layout metadata on every screen, so
+  // browser history and a row of open tabs were indistinguishable.
+  //
+  // This is an observer rather than a plain assignment because Next commits its
+  // own metadata <title> AFTER this effect on the hydration pass and clobbers a
+  // direct write. Deferring by one frame fixed the fast pages and still lost on
+  // the ones that fetch data first — the clobber lands whenever THEIR metadata
+  // commits, so there is no delay that is correct for every route. Watching the
+  // element instead is timing-independent.
+  //
+  // It cannot loop: `apply` no-ops when the title already matches, so our own
+  // write does not re-trigger it. The head observer catches Next REPLACING the
+  // <title> node rather than editing its text.
   useEffect(() => {
-    document.title = `${route?.he ?? 'דשבורד'} · ${APP_TITLE_SUFFIX}`
+    const next = `${route?.he ?? 'דשבורד'} · ${APP_TITLE_SUFFIX}`
+    const apply = () => {
+      if (document.title !== next) document.title = next
+    }
+    apply()
+
+    const observers: MutationObserver[] = []
+    const titleEl = document.head.querySelector('title')
+    if (titleEl) {
+      const o = new MutationObserver(apply)
+      o.observe(titleEl, { childList: true, characterData: true, subtree: true })
+      observers.push(o)
+    }
+    const headObserver = new MutationObserver(apply)
+    headObserver.observe(document.head, { childList: true })
+    observers.push(headObserver)
+
+    return () => observers.forEach(o => o.disconnect())
   }, [route])
 
   // Five inline actions left ~110px for the title on a 390px screen, so every
@@ -133,10 +161,13 @@ export function TopBar() {
 
   return (
     <header data-print="hide" className="sticky top-0 z-30 flex h-14 items-center justify-between gap-2 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4 md:px-6">
-      {/* min-w-0 is what lets the flex child actually shrink so truncate works. */}
-      <h1 className="text-sm sm:text-lg font-semibold truncate min-w-0 flex-1">
+      {/* Not an <h1>: the top bar is chrome, and the page's own PageHeader owns
+          the document's single h1. Two of them on the same screen is both an a11y
+          fault and a rendering of the same string twice.
+          min-w-0 is what lets the flex child actually shrink so truncate works. */}
+      <div className="text-sm sm:text-lg font-semibold truncate min-w-0 flex-1">
         {title}
-      </h1>
+      </div>
       <div className="flex items-center gap-1 shrink-0">
         <CommandPalette />
         <AppSwitcher currentApp="dashboard" />
