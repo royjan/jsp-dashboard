@@ -20,6 +20,7 @@ import { ChartGrid, AXIS_PROPS, BAR_RADIUS, BAR_MAX, ACTIVE_BAR } from '@/compon
 import { formatNumber, formatCurrency } from '@/lib/format'
 import { cardVariants } from '@/lib/motion'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
+import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
 
 
 function LoadingSkeleton() {
@@ -34,6 +35,40 @@ function LoadingSkeleton() {
     </div>
   )
 }
+
+interface DemandRow {
+  code: string
+  name: string
+  request_count: number
+  total_qty_requested: number
+  stock_qty: number
+  price: number
+}
+
+const DEMAND_COLUMNS: DataTableColumn<DemandRow>[] = [
+  { key: 'code', header: 'Code', sortable: true,
+    cell: r => <ItemLink code={r.code} showCode />, exportValue: r => r.code,
+    cellClassName: 'font-mono text-xs' },
+  { key: 'name', header: 'Name', sortable: true, truncate: 'max-w-[200px]',
+    title: r => r.name,
+    cell: r => <span dir="rtl"><ItemLink code={r.code} name={r.name} /></span>,
+    exportValue: r => r.name },
+  { key: 'request_count', header: 'Quotes', align: 'end', sortable: true,
+    cell: r => formatNumber(r.request_count), exportValue: r => r.request_count },
+  { key: 'total_qty_requested', header: 'Qty', align: 'end', sortable: true,
+    cell: r => formatNumber(r.total_qty_requested), exportValue: r => r.total_qty_requested },
+  { key: 'stock_qty', header: 'Stock', align: 'end', sortable: true,
+    // Nothing in stock is the point of a demand table, so it stays red.
+    cell: r => (
+      <span className={r.stock_qty === 0 ? 'font-medium text-red-500' : undefined}>
+        {formatNumber(r.stock_qty)}
+      </span>
+    ),
+    exportValue: r => r.stock_qty },
+  { key: 'price', header: 'Price', align: 'end', sortable: true,
+    cell: r => (r.price > 0 ? formatCurrency(r.price) : '-'),
+    exportValue: r => (r.price > 0 ? r.price : null) },
+]
 
 export default function DemandPage() {
   // Subscribe to the demo-mode eye: formatCurrency() masks from a module
@@ -289,36 +324,26 @@ export default function DemandPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0">
-              <table className="w-full text-xs sm:text-sm min-w-[500px]">
-                <thead>
-                  <tr className="border-b text-muted-foreground text-xs">
-                    <th className="text-start py-2 px-2">Code</th>
-                    <th className="text-start py-2 px-2">Name</th>
-                    <th className="text-end py-2 px-2">Quotes</th>
-                    <th className="text-end py-2 px-2">Qty</th>
-                    <th className="text-end py-2 px-2">Stock</th>
-                    <th className="text-end py-2 px-2">Price</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {erpDemand.slice(0, 30).map((item: any) => (
-                    <tr key={item.code} className="border-b border-muted/50 hover:bg-muted/30 transition-colors">
-                      <td className="py-2 px-2 font-mono text-xs"><ItemLink code={item.code} showCode /></td>
-                      <td className="py-2 px-2 truncate max-w-[200px]" dir="rtl"><ItemLink code={item.code} name={item.name} /></td>
-                      <td className="py-2 px-2 text-end">{formatNumber(item.request_count)}</td>
-                      <td className="py-2 px-2 text-end">{formatNumber(item.total_qty_requested)}</td>
-                      <td className="py-2 px-2 text-end">
-                        <span className={item.stock_qty === 0 ? 'text-red-500 font-medium' : ''}>
-                          {formatNumber(item.stock_qty)}
-                        </span>
-                      </td>
-                      <td className="py-2 px-2 text-end">{item.price > 0 ? formatCurrency(item.price) : '-'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            {/* Was erpDemand.slice(0, 30): thirty rows with nothing saying the
+                list was cut. The cap is stated now, and the rest is one click. */}
+            <DataTable
+              rows={erpDemand as DemandRow[]}
+              columns={DEMAND_COLUMNS}
+              getRowKey={r => r.code}
+              defaultSort={{ field: 'request_count', dir: 'desc' }}
+              maxRows={30}
+              minWidth="min-w-[500px]"
+              exportFileName="ביקוש-מהצעות-מחיר"
+              mobileCard={{
+                title: r => r.name,
+                subtitle: r => r.code,
+                accent: r => formatNumber(r.request_count),
+                fields: [
+                  { label: 'Qty', value: r => formatNumber(r.total_qty_requested) },
+                  { label: 'Stock', value: r => formatNumber(r.stock_qty) },
+                ],
+              }}
+            />
           </CardContent>
         </Card>
       )}

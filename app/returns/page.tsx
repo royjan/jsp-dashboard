@@ -19,6 +19,7 @@ import { ChartGrid, AXIS_PROPS, BAR_RADIUS, BAR_MAX, ACTIVE_BAR } from '@/compon
 import { formatCurrency, formatNumber } from '@/lib/format'
 import { cardVariants } from '@/lib/motion'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
+import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
 
 
 function LoadingSkeleton() {
@@ -33,6 +34,50 @@ function LoadingSkeleton() {
     </div>
   )
 }
+
+interface ReturnCustomer {
+  code: string
+  name: string
+  total: number
+  count: number
+}
+
+const RETURN_COLUMNS = (isHe: boolean): DataTableColumn<ReturnCustomer>[] => [
+  {
+    key: 'name',
+    header: isHe ? 'לקוח' : 'Customer',
+    sortable: true,
+    cell: c => (
+      <div className="min-w-0">
+        <CustomerLink code={c.code} name={c.name} className="block truncate max-w-[200px] text-sm font-medium" />
+        <div className="font-mono text-xs text-muted-foreground">{c.code}</div>
+      </div>
+    ),
+    exportValue: c => c.name,
+  },
+  {
+    key: 'total',
+    header: isHe ? 'סכום זיכויים' : 'Credit Value',
+    align: 'end',
+    sortable: true,
+    cell: c => formatCurrency(Math.round(c.total || 0)),
+    exportValue: c => Math.round(c.total || 0),
+    cellClassName: 'font-mono font-medium',
+  },
+  {
+    key: 'count',
+    header: isHe ? 'החזרות' : 'Returns',
+    align: 'end',
+    sortable: true,
+    // Ten or more returns is the threshold this page treats as a problem.
+    cell: c => (
+      <Badge variant={c.count >= 10 ? 'destructive' : 'secondary'} className="text-xs">
+        {c.count}x
+      </Badge>
+    ),
+    exportValue: c => c.count,
+  },
+]
 
 export default function ReturnsPage() {
   return (
@@ -128,38 +173,25 @@ function ReturnsContent() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
-              <table className="w-full text-sm">
-                <thead className="sticky top-0 bg-background">
-                  <tr className="border-b text-muted-foreground text-xs">
-                    <th className="text-start py-2 px-2">{isHe ? 'לקוח' : 'Customer'}</th>
-                    <th className="text-end py-2 px-2">{isHe ? 'סכום זיכויים' : 'Credit Value'}</th>
-                    <th className="text-end py-2 px-2">{isHe ? 'החזרות' : 'Returns'}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {customers.slice(0, 20).map((c: any, i: number) => (
-                    <tr key={c.code || i} className="border-b border-muted/50 hover:bg-muted/30 transition-colors">
-                      <td className="py-2 px-2">
-                        <CustomerLink code={c.code} name={c.name} className="font-medium text-sm block truncate max-w-[200px]" />
-                        <div className="text-xs text-muted-foreground font-mono">{c.code}</div>
-                      </td>
-                      <td className="py-2 px-2 text-end font-mono tabular-nums font-medium">
-                        {formatCurrency(Math.round(c.total || 0))}
-                      </td>
-                      <td className="py-2 px-2 text-end">
-                        <Badge variant={c.count >= 10 ? 'destructive' : 'secondary'} className="text-xs">
-                          {c.count}x
-                        </Badge>
-                      </td>
-                    </tr>
-                  ))}
-                  {customers.length === 0 && (
-                    <tr><td colSpan={3} className="py-8 text-center text-muted-foreground">No credit note data</td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+            {/* Was customers.slice(0, 20) — twenty rows shown with nothing on
+                screen to say the list was cut. maxRows keeps the cap (these rows
+                are not virtualised) but states it and offers the rest. */}
+            <DataTable
+              rows={customers as ReturnCustomer[]}
+              columns={RETURN_COLUMNS(isHe)}
+              getRowKey={(c, i) => c.code || String(i)}
+              defaultSort={{ field: 'total', dir: 'desc' }}
+              maxRows={20}
+              minWidth="min-w-[420px]"
+              exportFileName={isHe ? 'לקוחות-עם-החזרות' : 'returning-customers'}
+              labels={{ empty: isHe ? 'אין נתוני זיכויים' : 'No credit note data' }}
+              mobileCard={{
+                title: c => c.name || c.code,
+                subtitle: c => c.code,
+                accent: c => formatCurrency(Math.round(c.total || 0)),
+                fields: [{ label: isHe ? 'החזרות' : 'Returns', value: c => `${c.count}x` }],
+              }}
+            />
           </CardContent>
         </Card>
 
