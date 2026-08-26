@@ -1,6 +1,5 @@
 'use client'
 
-import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { usePathname } from 'next/navigation'
 import { pageTransition } from '@/lib/motion'
@@ -9,12 +8,15 @@ import { TopBar } from '@/components/layout/TopBar'
 import { MobileNav } from '@/components/layout/MobileNav'
 import { QueryLoadingBar } from '@/components/layout/QueryLoadingBar'
 import { cn } from '@/lib/utils'
+import { usePersisted } from '@/hooks/use-persisted'
 
 // Pages that render their own full-screen layout (no sidebar/topbar/mobile-nav)
 const FULLSCREEN_PATHS = ['/deliveries/driver', '/login']
 
 export function AppShell({ children }: { children: React.ReactNode }) {
-  const [collapsed, setCollapsed] = useState(false)
+  // Persisted: this was plain useState, so the sidebar sprang back open on
+  // every reload and every full navigation.
+  const [collapsed, setCollapsed] = usePersisted('ui.sidebar.collapsed', false)
   const pathname = usePathname()
 
   const isFullscreen = FULLSCREEN_PATHS.some((p) => pathname.startsWith(p))
@@ -34,7 +36,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <>
       <QueryLoadingBar />
-      <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} />
+      <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(c => !c)} />
       <div className={cn('min-h-screen transition-all duration-300', marginClass)}>
         <TopBar />
         {/* Bottom clearance = nav (3.5rem) + breathing room + the home-indicator

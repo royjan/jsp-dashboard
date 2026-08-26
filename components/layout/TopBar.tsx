@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { AppSwitcher } from '@/components/layout/AppSwitcher'
 import { CommandPalette } from '@/components/layout/CommandPalette'
 import { MoneyToggle } from '@/components/layout/MoneyToggle'
+import { DensityToggle } from '@/components/layout/DensityToggle'
 import type { TranslationKey } from '@/lib/i18n'
 
 const pageTitleKeys: Record<string, TranslationKey> = {
@@ -96,6 +97,8 @@ export function TopBar() {
   const actions = (labelled: boolean) => (
     <>
       <MoneyToggle labelled={labelled} />
+
+      <DensityToggle labelled={labelled} />
 
       <Button
         variant="ghost"

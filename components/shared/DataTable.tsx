@@ -10,7 +10,12 @@
  *  - Explicit loading / empty / error+retry states so a table can NEVER render blank
  *    on failure (3 hand-rolled tables currently do).
  *  - Sticky header, horizontal-overflow container, cell truncation WITH title= tooltip,
- *    and tabular-nums on numeric cells.
+ *    and tabular-nums on numeric cells. NOTE: `position: sticky` needs a scroll
+ *    container with a BOUNDED height. The wrapper is `overflow-x-auto`, which per
+ *    spec forces overflow-y to `auto` too — so it is already a scroll container,
+ *    and without a height cap it just grows and the header never sticks. Long
+ *    tables therefore get a default cap (see STICKY_MIN_ROWS below); 7 of the 16
+ *    call sites passed no maxHeight and had an inert sticky header because of this.
  *  - Optional checkbox row-selection in the API (unused for now, but ready).
  *
  * It is intentionally presentational: sorting state is owned by the caller
@@ -21,12 +26,14 @@
  */
 
 import * as React from 'react'
-import { ArrowUpDown, Loader2 } from 'lucide-react'
+import { ArrowUpDown, Download, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ErrorState, EmptyState } from '@/components/ui/feedback-state'
 import { sortRows, type SortDir } from '@/lib/sort'
 import { formatNumber } from '@/lib/format'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
+import { useDensity, type Density } from '@/lib/use-density'
+import { exportRowsToXlsx, type ExportColumn } from '@/lib/export-table'
 
 export type { SortDir }
 
@@ -78,6 +85,18 @@ export interface DataTableColumn<TRow, TSortKey extends string = string> {
   cellClassName?: string
   /** Hide on small screens (applies `hidden sm:table-cell`). */
   hideOnMobile?: boolean
+  /**
+   * RAW value for the xlsx export — a number for anything numeric, never a
+   * formatted string. Without it the export falls back to `cell()`, which is
+   * correct only when that returns a primitive; a column whose cell renders a
+   * badge or a link needs this.
+   *
+   * Return `null` to omit the column from the export entirely (row actions,
+   * checkboxes, expand carets).
+   */
+  exportValue?: ((row: TRow, index: number) => string | number | null | undefined) | null
+  /** Header text in the sheet. Defaults to `header` when it is a plain string. */
+  exportHeader?: string
 }
 
 export interface DataTableProps<TRow, TSortKey extends string = string> {
@@ -120,8 +139,20 @@ export interface DataTableProps<TRow, TSortKey extends string = string> {
   // --- presentation ---
   /** Min width to force horizontal scroll rather than column crush. Default 'min-w-[700px]'. */
   minWidth?: string
-  /** Max height for the vertical scroll area (keeps the sticky header useful). */
+  /**
+   * Max height for the vertical scroll area (keeps the sticky header useful).
+   * Omit it and a table longer than STICKY_MIN_ROWS gets DEFAULT_MAX_HEIGHT so
+   * its header actually sticks; short tables are left to flow with the page.
+   * Pass `'none'` to opt out entirely (e.g. a table that is already inside its
+   * own scroll area, where a second one traps the wheel).
+   */
   maxHeight?: string
+  /**
+   * Row padding. Defaults to the app-wide density preference, so the toggle in
+   * the top bar reaches every table without a per-page edit. Pass a value to
+   * pin one table regardless of the preference.
+   */
+  density?: Density
   /** Number of skeleton rows while loading. Default 8. */
   loadingRows?: number
   /**
@@ -137,6 +168,18 @@ export interface DataTableProps<TRow, TSortKey extends string = string> {
    */
   maxRows?: number
   className?: string
+  /**
+   * Setting this turns on the "ייצוא" button above the table. The file name is
+   * suffixed with the date. The export always covers EVERY row the table holds,
+   * not the visible page and not the `maxRows` slice — an export that silently
+   * matched the truncation would be the same "these are all the rows" lie the
+   * cap exists to avoid.
+   */
+  exportFileName?: string
+  /** Sheet tab name; defaults to `exportFileName`. */
+  exportSheetName?: string
+  /** Extra controls rendered in the toolbar, before the export button. */
+  toolbar?: React.ReactNode
   /** Localized strings (Hebrew-first by default). */
   labels?: Partial<DataTableLabels>
 }
@@ -149,6 +192,7 @@ export interface DataTableLabels {
   /** `(shown, total)` → e.g. "מוצגות 100 שורות מתוך 1,240" */
   truncated: (shown: number, total: number) => string
   showAll: string
+  exportLabel: string
 }
 
 const DEFAULT_LABELS: DataTableLabels = {
@@ -159,7 +203,19 @@ const DEFAULT_LABELS: DataTableLabels = {
   truncated: (shown, total) =>
     `מוצגות ${formatNumber(shown)} שורות מתוך ${formatNumber(total)}`,
   showAll: 'הצג הכל',
+  exportLabel: 'ייצוא',
 }
+
+/**
+ * Below this many rows a sticky header buys nothing — the table fits on screen —
+ * and capping the height would add a scrollbar for no reason.
+ */
+const STICKY_MIN_ROWS = 18
+/** Tall enough to be worth scrolling, short enough to leave the page usable. */
+const DEFAULT_MAX_HEIGHT = '70vh'
+
+const CELL_PAD = { comfortable: 'py-2.5', compact: 'py-1' } as const
+const HEAD_PAD = { comfortable: 'py-2', compact: 'py-1' } as const
 
 const alignClass = (align: DataTableColumn<unknown>['align']) =>
   align === 'end' ? 'text-end' : align === 'center' ? 'text-center' : 'text-start'
@@ -191,15 +247,25 @@ export function DataTable<TRow, TSortKey extends string = string>({
   onSelectionChange,
   minWidth = 'min-w-[700px]',
   maxHeight,
+  density: densityProp,
   loadingRows = 8,
   maxRows,
   className,
+  exportFileName,
+  exportSheetName,
+  toolbar,
   labels,
 }: DataTableProps<TRow, TSortKey>) {
   // Column `cell` renderers call formatCurrency() from here, and that reads the
   // demo-mode mask from a module store React cannot see. Subscribing once in
   // the table re-renders every money cell in the app when the eye is toggled.
   useMoneyHidden()
+  // The hook must run unconditionally — `densityProp ?? useDensity()` would
+  // skip it whenever a caller pins the density, and React counts hooks.
+  const preferredDensity = useDensity()
+  const density = densityProp ?? preferredDensity
+  const cellPad = CELL_PAD[density]
+  const headPad = HEAD_PAD[density]
   const L = { ...DEFAULT_LABELS, ...labels }
   const colCount = columns.length + (selectable ? 1 : 0)
 
@@ -247,6 +313,13 @@ export function DataTable<TRow, TSortKey extends string = string>({
   const rows = truncating ? sortedRows.slice(0, maxRows) : sortedRows
   const hiddenCount = sortedRows.length - rows.length
 
+  // A sticky header is inert without a bounded scroll container, so give long
+  // tables a cap by default rather than leaving the header silently broken.
+  const effectiveMaxHeight =
+    maxHeight === 'none'
+      ? undefined
+      : (maxHeight ?? (rows.length > STICKY_MIN_ROWS ? DEFAULT_MAX_HEIGHT : undefined))
+
   // ----- selection helpers -----
   // NOTE: every hook must run before the `error` early-return below. This
   // useMemo used to sit AFTER it, so the first render that errored called one
@@ -260,6 +333,36 @@ export function DataTable<TRow, TSortKey extends string = string>({
     if (!onSelectionChange) return
     onSelectionChange(allSelected ? new Set() : new Set(allKeys))
   }
+  const [exporting, setExporting] = React.useState(false)
+  const handleExport = React.useCallback(async () => {
+    if (!exportFileName) return
+    const exportColumns: ExportColumn<TRow>[] = columns
+      .filter(col => col.exportValue !== null)
+      .map(col => ({
+        header:
+          col.exportHeader ?? (typeof col.header === 'string' ? col.header : col.key),
+        value: (row: TRow, i: number) => {
+          if (col.exportValue) return col.exportValue(row, i)
+          const v = col.cell(row, i)
+          // Only a primitive is safe to write straight into a cell; a node
+          // would stringify to "[object Object]".
+          return typeof v === 'string' || typeof v === 'number' ? v : null
+        },
+      }))
+    setExporting(true)
+    try {
+      // sortedRows, not `rows`: the export is not subject to the display cap.
+      await exportRowsToXlsx(sortedRows, exportColumns, {
+        fileName: exportFileName,
+        sheetName: exportSheetName,
+      })
+    } catch (e) {
+      console.error('[DataTable] export failed', e)
+    } finally {
+      setExporting(false)
+    }
+  }, [columns, sortedRows, exportFileName, exportSheetName])
+
   const toggleRow = (key: string | number) => {
     if (!onSelectionChange) return
     const next = new Set(selectedKeys)
@@ -280,8 +383,17 @@ export function DataTable<TRow, TSortKey extends string = string>({
     )
   }
 
-  return (
-    <div className={cn('overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0', maxHeight && 'overflow-y-auto', className)} style={maxHeight ? { maxHeight } : undefined}>
+  const showToolbar = Boolean(toolbar || exportFileName)
+
+  const table = (
+    <div
+      className={cn(
+        'overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0',
+        effectiveMaxHeight && 'overflow-y-auto',
+        !showToolbar && className,
+      )}
+      style={effectiveMaxHeight ? { maxHeight: effectiveMaxHeight } : undefined}
+    >
       <table className={cn('w-full text-xs sm:text-sm', minWidth)}>
         {/* A sticky header needs an opaque background, and it has to be the
             surface it actually sits on — `bg-background` is darker than `bg-card`,
@@ -289,7 +401,7 @@ export function DataTable<TRow, TSortKey extends string = string>({
         <thead className="sticky top-0 z-10 bg-card">
           <tr className="border-b text-muted-foreground">
             {selectable && (
-              <th className="w-8 py-2 ps-1 text-start">
+              <th className={cn('w-8 ps-1 text-start', headPad)}>
                 <input
                   type="checkbox"
                   aria-label="select all rows"
@@ -307,7 +419,8 @@ export function DataTable<TRow, TSortKey extends string = string>({
                 <th
                   key={col.key}
                   className={cn(
-                    'py-2 font-medium whitespace-nowrap',
+                    headPad,
+                    'font-medium whitespace-nowrap',
                     alignClass(col.align),
                     col.sortable && 'cursor-pointer select-none hover:text-foreground transition-colors',
                     col.hideOnMobile && 'hidden sm:table-cell',
@@ -334,9 +447,9 @@ export function DataTable<TRow, TSortKey extends string = string>({
           {loading ? (
             Array.from({ length: loadingRows }).map((_, r) => (
               <tr key={`sk-${r}`} className="border-b">
-                {selectable && <td className="py-2.5 ps-1"><div className="h-4 w-4 animate-pulse rounded bg-primary/10" /></td>}
+                {selectable && <td className={cn('ps-1', cellPad)}><div className="h-4 w-4 animate-pulse rounded bg-primary/10" /></td>}
                 {columns.map(col => (
-                  <td key={col.key} className={cn('py-2.5', col.hideOnMobile && 'hidden sm:table-cell')}>
+                  <td key={col.key} className={cn(cellPad, col.hideOnMobile && 'hidden sm:table-cell')}>
                     <div className={cn('h-4 animate-pulse rounded bg-primary/10', col.align === 'end' ? 'ms-auto w-12' : col.align === 'center' ? 'mx-auto w-12' : 'w-3/4')} />
                   </td>
                 ))}
@@ -364,7 +477,7 @@ export function DataTable<TRow, TSortKey extends string = string>({
                   onClick={onRowClick ? () => onRowClick(row, i) : undefined}
                 >
                   {selectable && (
-                    <td className="py-2.5 ps-1" onClick={e => e.stopPropagation()}>
+                    <td className={cn('ps-1', cellPad)} onClick={e => e.stopPropagation()}>
                       <input
                         type="checkbox"
                         aria-label="select row"
@@ -382,7 +495,7 @@ export function DataTable<TRow, TSortKey extends string = string>({
                       <td
                         key={col.key}
                         className={cn(
-                          'py-2.5',
+                          cellPad,
                           alignClass(col.align),
                           isNumeric && 'tabular-nums',
                           col.hideOnMobile && 'hidden sm:table-cell',
@@ -421,6 +534,33 @@ export function DataTable<TRow, TSortKey extends string = string>({
           </button>
         </div>
       )}
+    </div>
+  )
+
+  if (!showToolbar) return table
+
+  return (
+    <div className={cn('space-y-2', className)}>
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        {toolbar}
+        {exportFileName && (
+          <button
+            type="button"
+            onClick={handleExport}
+            disabled={exporting || loading || sortedRows.length === 0}
+            className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+            title={`${L.exportLabel} (${formatNumber(sortedRows.length)})`}
+          >
+            {exporting ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Download className="h-3.5 w-3.5" />
+            )}
+            {L.exportLabel}
+          </button>
+        )}
+      </div>
+      {table}
     </div>
   )
 }
