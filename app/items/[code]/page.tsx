@@ -3,6 +3,7 @@
 import { use, useState } from 'react'
 import { motion } from 'framer-motion'
 import { useItemDetail, useItemDocuments, useItemLinks, HttpError } from '@/hooks/use-analytics'
+import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
 import { deriveBrand, brandChipClasses } from '@/lib/brand'
 import { ItemLink } from '@/components/shared/ItemLink'
 import { PartLinksCard } from '@/components/items/PartLinksCard'
@@ -29,13 +30,22 @@ const DOC_LABELS: Record<DocType, { he: string; en: string }> = {
   purchases: { he: 'קניות מספק', en: 'Purchases' },
 }
 
+/** One movement of this item — a line off an invoice, order or delivery note. */
+interface MovementRow {
+  date: string | null
+  doc_number: string | null
+  party: string | null
+  qty: number
+  total: number | null
+}
+
 function ItemDocsPanel({ code, type, isHe, onClose }: { code: string; type: DocType; isHe: boolean; onClose: () => void }) {
   // Subscribe to the demo-mode eye: formatCurrency() masks from a module
   // store, so without this the amounts here would not re-render on toggle.
   useMoneyHidden()
 
   const { data, isLoading } = useItemDocuments(code, type)
-  const rows: any[] = data?.rows || []
+  const rows: MovementRow[] = data?.rows ?? []
   const label = DOC_LABELS[type]
   return (
     <Card>
@@ -56,28 +66,68 @@ function ItemDocsPanel({ code, type, isHe, onClose }: { code: string; type: DocT
           <p className="text-sm text-muted-foreground py-2">{isHe ? 'לא נמצאו מסמכים' : 'No documents found'}</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-xs sm:text-sm">
-              <thead>
-                <tr className="border-b text-muted-foreground">
-                  <th className="text-start p-2">{isHe ? 'תאריך' : 'Date'}</th>
-                  <th className="text-start p-2">{isHe ? 'מסמך' : 'Doc'}</th>
-                  <th className="text-start p-2">{isHe ? 'לקוח/ספק' : 'Party'}</th>
-                  <th className="text-end p-2">{isHe ? 'כמות' : 'Qty'}</th>
-                  <th className="text-end p-2">{isHe ? 'סה"כ' : 'Total'}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r, i) => (
-                  <tr key={`${r.doc_number}-${i}`} className="border-b last:border-0">
-                    <td className="p-2 whitespace-nowrap tabular-nums">{formatErpDate(r.date)}</td>
-                    <td className="p-2 font-mono">{r.doc_number ?? '-'}</td>
-                    <td className="p-2 truncate max-w-[200px]" dir="rtl">{r.party || '-'}</td>
-                    <td className="p-2 text-end tabular-nums">{formatNumber(r.qty)}</td>
-                    <td className="p-2 text-end tabular-nums">{r.total ? formatCurrency(r.total) : '-'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <DataTable<MovementRow>
+              rows={rows}
+              columns={[
+                {
+                  key: 'date',
+                  header: isHe ? 'תאריך' : 'Date',
+                  sortable: true,
+                  // The ERP date is sortable as stored; formatErpDate() renders
+                  // it dd/mm/yyyy, which does not sort chronologically.
+                  sortValue: r => r.date ?? '',
+                  cell: r => <span className="whitespace-nowrap">{formatErpDate(r.date)}</span>,
+                  exportValue: r => r.date ?? '',
+                },
+                {
+                  key: 'doc_number',
+                  header: isHe ? 'מסמך' : 'Doc',
+                  sortable: true,
+                  cell: r => <span className="font-mono">{r.doc_number ?? '-'}</span>,
+                  exportValue: r => r.doc_number ?? '',
+                },
+                {
+                  key: 'party',
+                  header: isHe ? 'לקוח/ספק' : 'Party',
+                  sortable: true,
+                  truncate: 'max-w-[200px]',
+                  title: r => r.party ?? '',
+                  cell: r => <span dir="rtl">{r.party || '-'}</span>,
+                  exportValue: r => r.party ?? '',
+                },
+                {
+                  key: 'qty',
+                  header: isHe ? 'כמות' : 'Qty',
+                  align: 'end',
+                  sortable: true,
+                  cell: r => formatNumber(r.qty),
+                  exportValue: r => r.qty,
+                },
+                {
+                  key: 'total',
+                  header: isHe ? 'סה"כ' : 'Total',
+                  align: 'end',
+                  sortable: true,
+                  sortValue: r => r.total ?? 0,
+                  cell: r => (r.total ? formatCurrency(r.total) : '-'),
+                  exportValue: r => r.total ?? '',
+                },
+              ] satisfies DataTableColumn<MovementRow>[]}
+              // A document can carry the same item on more than one line, so
+              // the document number alone is not a unique key.
+              getRowKey={(r, i) => `${r.doc_number}-${i}`}
+              defaultSort={{ field: 'date', dir: 'desc' }}
+              pageSize={25}
+              minWidth="min-w-[560px]"
+              density="compact"
+              exportFileName={isHe ? 'תנועות-פריט' : 'item-movements'}
+              mobileCard={{
+                title: r => r.party || '-',
+                subtitle: r => `${formatErpDate(r.date)} · ${r.doc_number ?? '-'}`,
+                accent: r => (r.total ? formatCurrency(r.total) : '-'),
+                fields: [{ label: isHe ? 'כמות' : 'Qty', value: r => formatNumber(r.qty) }],
+              }}
+            />
           </div>
         )}
       </CardContent>

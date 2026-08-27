@@ -26,3 +26,22 @@
 @media (prefers-reduced-motion: reduce){
   .jan-anim,.jan-anim *{animation-duration:.001ms!important;transition-duration:.001ms!important}
 }
+
+/* Table rows enter in a short stagger.
+
+   The delay is driven by --jan-row-i, which <DataTable> sets per row and
+   CLAMPS: past the first dozen rows a stagger stops reading as choreography
+   and starts reading as lag, and on a 50-row page an uncapped 18ms step would
+   take nearly a second to finish painting.
+
+   Because React reuses a <tr> by key, this plays on mount and on a page
+   change — where the rows really are new elements — and NOT on every re-render
+   or sort click, which would flicker the whole table on each header press. */
+@keyframes jan-row-in{
+  from{opacity:0;transform:translateY(4px)}
+  to{opacity:1;transform:none}
+}
+.jan-row-in{
+  animation:jan-row-in var(--jan-row-dur,.22s) cubic-bezier(.25,.46,.45,.94) both;
+  animation-delay:calc(var(--jan-row-i,0) * var(--jan-row-stagger,18ms));
+}

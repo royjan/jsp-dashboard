@@ -14,6 +14,7 @@ import {
   MessageSquare, Search, XCircle, PackageX, PackageCheck, Zap, Users, Gauge,
   ThumbsUp, ThumbsDown, Pin, Server, AlertTriangle, Activity,
 } from 'lucide-react'
+import { DataTable } from '@/components/shared/DataTable'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
   AreaChart, Area,
@@ -338,21 +339,40 @@ function ChatInsightsContent() {
           </CardHeader>
           <CardContent>
             {(d.top_not_found?.length ?? 0) === 0 ? <EmptyState /> : (
-              <div className="max-h-[320px] overflow-y-auto">
-                <table className="w-full text-sm">
-                  <tbody>
-                    {d.top_not_found.map((r, idx) => (
-                      <motion.tr key={`${r.query}-${idx}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: idx * 0.02 }} className="border-b last:border-0 hover:bg-muted/40 transition-colors">
-                        <td className="py-2 ps-1 w-7 text-muted-foreground tabular-nums">{idx + 1}</td>
-                        <td className="py-2 text-start" dir="rtl">{r.query || '—'}</td>
-                        <td className="py-2 pe-1 text-end">
-                          <Badge variant="destructive" className="h-5 tabular-nums">{formatNumber(r.count)}</Badge>
-                        </td>
-                      </motion.tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <DataTable
+                rows={d.top_not_found}
+                columns={[
+                  {
+                    key: 'rank',
+                    header: '#',
+                    headerClassName: 'w-7',
+                    cell: (_r, idx) => <span className="text-muted-foreground">{idx + 1}</span>,
+                    exportValue: (_r, idx) => idx + 1,
+                  },
+                  {
+                    key: 'query',
+                    header: 'שאילתה',
+                    sortable: true,
+                    cell: r => <span dir="rtl">{r.query || '—'}</span>,
+                    exportValue: r => r.query,
+                  },
+                  {
+                    key: 'count',
+                    header: 'כשלונות',
+                    align: 'end',
+                    sortable: true,
+                    cell: r => <Badge variant="destructive" className="h-5 tabular-nums">{formatNumber(r.count)}</Badge>,
+                    exportValue: r => r.count,
+                  },
+                ]}
+                getRowKey={(r, idx) => `${r.query}-${idx}`}
+                // No defaultSort — the endpoint already ranks these, and this
+                // list IS the failure queue in priority order.
+                maxHeight="320px"
+                minWidth="min-w-[280px]"
+                density="compact"
+                exportFileName="שאילתות-שלא-נמצאו"
+              />
             )}
           </CardContent>
         </Card>
@@ -409,32 +429,48 @@ function ChatInsightsContent() {
           <CardContent>
             {flowMatrix.list.length === 0 ? <EmptyState /> : (
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b text-xs text-muted-foreground">
-                      <th className="pb-2 text-start font-medium">מקור</th>
-                      {flowMatrix.statuses.map(s => (
-                        <th key={s} className="pb-2 text-end font-medium">{statusLabel(s)}</th>
-                      ))}
-                      <th className="pb-2 text-end font-medium pe-1">סה׳׳כ</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {flowMatrix.list.map((row, idx) => (
-                      <motion.tr key={row.source ?? `null-${idx}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: idx * 0.03 }} className="border-b last:border-0 hover:bg-muted/40 transition-colors">
-                        <td className="py-2">
-                          <Badge variant="secondary" className="font-normal">{sourceLabel(row.source)}</Badge>
-                        </td>
-                        {flowMatrix.statuses.map(s => (
-                          <td key={s} className="py-2 text-end tabular-nums text-muted-foreground">
-                            {row.counts[s] ? formatNumber(row.counts[s]) : '·'}
-                          </td>
-                        ))}
-                        <td className="py-2 text-end tabular-nums font-semibold pe-1">{formatNumber(row.total)}</td>
-                      </motion.tr>
-                    ))}
-                  </tbody>
-                </table>
+                <DataTable
+                  rows={flowMatrix.list}
+                  columns={[
+                    {
+                      key: 'source',
+                      header: 'מקור',
+                      sortable: true,
+                      sortValue: row => row.source ?? '',
+                      cell: row => <Badge variant="secondary" className="font-normal">{sourceLabel(row.source)}</Badge>,
+                      exportValue: row => sourceLabel(row.source),
+                    },
+                    // One column per status the data actually contains — the
+                    // status set is discovered from the rows, not hardcoded, so
+                    // a new status shows up here without a code change.
+                    ...flowMatrix.statuses.map(st => ({
+                      key: `status_${st}`,
+                      header: statusLabel(st),
+                      align: 'end' as const,
+                      sortable: true,
+                      sortValue: (row: (typeof flowMatrix.list)[number]) => row.counts[st] ?? 0,
+                      cell: (row: (typeof flowMatrix.list)[number]) => (
+                        <span className="text-muted-foreground">
+                          {row.counts[st] ? formatNumber(row.counts[st]) : '·'}
+                        </span>
+                      ),
+                      exportValue: (row: (typeof flowMatrix.list)[number]) => row.counts[st] ?? 0,
+                    })),
+                    {
+                      key: 'total',
+                      header: 'סה׳׳כ',
+                      align: 'end',
+                      sortable: true,
+                      cell: row => <span className="font-semibold">{formatNumber(row.total)}</span>,
+                      exportValue: row => row.total,
+                    },
+                  ]}
+                  getRowKey={(row, idx) => row.source ?? `null-${idx}`}
+                  defaultSort={{ field: 'total', dir: 'desc' }}
+                  minWidth="min-w-[520px]"
+                  density="compact"
+                  exportFileName="מקור-מול-סטטוס"
+                />
               </div>
             )}
           </CardContent>
@@ -447,36 +483,61 @@ function ChatInsightsContent() {
           <CardContent>
             {(d.recent_pins?.length ?? 0) === 0 ? <EmptyState /> : (
               <div className="max-h-[320px] overflow-y-auto -mx-1">
-                <table className="w-full text-sm">
-                  <thead className="sticky top-0 bg-background z-10">
-                    <tr className="border-b text-xs text-muted-foreground">
-                      <th className="pb-2 px-1 text-start font-medium">מונח → שרטוט</th>
-                      <th className="pb-2 px-1 text-start font-medium">מקור</th>
-                      <th className="pb-2 px-1 text-end font-medium">פורטל</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {d.recent_pins.map((p, idx) => (
-                      <motion.tr key={idx} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: idx * 0.02 }} className="border-b last:border-0 hover:bg-muted/40 transition-colors align-top">
-                        <td className="py-2 px-1">
-                          <div className="font-medium" dir="rtl">{p.part_description || '—'}</div>
-                          <div className="text-xs text-muted-foreground font-mono truncate max-w-[180px]" dir="ltr">{p.schema || '—'}</div>
-                          <div className="flex items-center gap-1.5 mt-0.5">
-                            {p.vehicle_model && <span className="text-[10px] text-muted-foreground">{p.vehicle_model}</span>}
-                            <span className="text-[10px] text-muted-foreground/70">{formatDate(p.created_at)}</span>
+                <DataTable
+                  rows={d.recent_pins}
+                  columns={[
+                    {
+                      key: 'part_description',
+                      header: 'מונח → שרטוט',
+                      sortable: true,
+                      sortValue: pin => pin.part_description || '',
+                      cell: pin => (
+                        <div>
+                          <div className="font-medium" dir="rtl">{pin.part_description || '—'}</div>
+                          <div className="max-w-[180px] truncate font-mono text-xs text-muted-foreground" dir="ltr">
+                            {pin.schema || '—'}
                           </div>
-                        </td>
-                        <td className="py-2 px-1">
-                          <Badge variant="secondary" className="font-normal whitespace-nowrap">{sourceLabel(p.source)}</Badge>
-                          {p.status && p.status !== 'approved' && (
-                            <Badge variant={statusVariant(p.status)} className="mt-1 font-normal whitespace-nowrap">{statusLabel(p.status)}</Badge>
+                          <div className="mt-0.5 flex items-center gap-1.5">
+                            {pin.vehicle_model && <span className="text-[10px] text-muted-foreground">{pin.vehicle_model}</span>}
+                            <span className="text-[10px] text-muted-foreground/70">{formatDate(pin.created_at)}</span>
+                          </div>
+                        </div>
+                      ),
+                      exportValue: pin => pin.part_description,
+                    },
+                    {
+                      key: 'source',
+                      header: 'מקור',
+                      sortable: true,
+                      cell: pin => (
+                        <div>
+                          <Badge variant="secondary" className="whitespace-nowrap font-normal">{sourceLabel(pin.source)}</Badge>
+                          {pin.status && pin.status !== 'approved' && (
+                            <Badge variant={statusVariant(pin.status)} className="mt-1 whitespace-nowrap font-normal">
+                              {statusLabel(pin.status)}
+                            </Badge>
                           )}
-                        </td>
-                        <td className="py-2 px-1 text-end font-mono text-xs" dir="ltr">{p.lambda_target || '—'}</td>
-                      </motion.tr>
-                    ))}
-                  </tbody>
-                </table>
+                        </div>
+                      ),
+                      exportValue: pin => sourceLabel(pin.source),
+                    },
+                    {
+                      key: 'lambda_target',
+                      header: 'פורטל',
+                      align: 'end',
+                      sortable: true,
+                      cell: pin => <span className="font-mono text-xs" dir="ltr">{pin.lambda_target || '—'}</span>,
+                      exportValue: pin => pin.lambda_target,
+                    },
+                  ]}
+                  getRowKey={(_pin, idx) => idx}
+                  // The feed arrives newest-first and there is no column that
+                  // reproduces that order, so it is left as received.
+                  maxHeight="320px"
+                  minWidth="min-w-[380px]"
+                  density="compact"
+                  exportFileName="הצמדות-אחרונות"
+                />
               </div>
             )}
           </CardContent>
@@ -525,27 +586,51 @@ function ChatInsightsContent() {
         <CardContent>
           {(d.top_users?.length ?? 0) === 0 ? <EmptyState /> : (
             <div className="overflow-x-auto max-h-[360px] overflow-y-auto">
-              <table className="w-full text-sm">
-                <thead className="sticky top-0 bg-background z-10">
-                  <tr className="border-b text-xs text-muted-foreground">
-                    <th className="pb-2 text-start font-medium">משתמש</th>
-                    <th className="pb-2 text-end font-medium">שיחות</th>
-                    <th className="pb-2 text-end font-medium">פעיל לאחרונה</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {d.top_users.map((u, idx) => (
-                    <motion.tr key={u.user_id || idx} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: idx * 0.02 }} className="border-b last:border-0 hover:bg-muted/40 transition-colors">
-                      <td className="py-2">
-                        <div className="font-medium truncate max-w-[220px]" dir="rtl">{u.display_name || u.user_id}</div>
-                        {u.email && <div className="text-xs text-muted-foreground truncate max-w-[220px]" dir="ltr">{u.email}</div>}
-                      </td>
-                      <td className="py-2 text-end tabular-nums font-semibold">{formatNumber(u.conversation_count)}</td>
-                      <td className="py-2 text-end text-muted-foreground text-xs">{formatDate(u.last_active)}</td>
-                    </motion.tr>
-                  ))}
-                </tbody>
-              </table>
+              <DataTable
+                rows={d.top_users}
+                columns={[
+                  {
+                    key: 'user',
+                    header: 'משתמש',
+                    sortable: true,
+                    sortValue: u => u.display_name || u.user_id,
+                    cell: u => (
+                      <div>
+                        <div className="max-w-[220px] truncate font-medium" dir="rtl">{u.display_name || u.user_id}</div>
+                        {u.email && (
+                          <div className="max-w-[220px] truncate text-xs text-muted-foreground" dir="ltr">{u.email}</div>
+                        )}
+                      </div>
+                    ),
+                    exportValue: u => u.display_name || u.user_id,
+                  },
+                  {
+                    key: 'conversation_count',
+                    header: 'שיחות',
+                    align: 'end',
+                    sortable: true,
+                    cell: u => <span className="font-semibold">{formatNumber(u.conversation_count)}</span>,
+                    exportValue: u => u.conversation_count,
+                  },
+                  {
+                    key: 'last_active',
+                    header: 'פעיל לאחרונה',
+                    align: 'end',
+                    sortable: true,
+                    // The stored timestamp, not the rendered date — formatDate
+                    // produces dd/mm/yyyy, which does not sort chronologically.
+                    sortValue: u => u.last_active,
+                    cell: u => <span className="text-xs text-muted-foreground">{formatDate(u.last_active)}</span>,
+                    exportValue: u => u.last_active,
+                  },
+                ]}
+                getRowKey={(u, idx) => u.user_id || idx}
+                defaultSort={{ field: 'conversation_count', dir: 'desc' }}
+                maxHeight="320px"
+                minWidth="min-w-[360px]"
+                density="compact"
+                exportFileName="משתמשים-מובילים"
+              />
             </div>
           )}
         </CardContent>

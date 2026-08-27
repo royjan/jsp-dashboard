@@ -37,6 +37,9 @@ import { useJanUI } from './provider'
 
 export type { SortDir }
 
+/** Rows past this index all share one entrance delay — see `.jan-row-in`. */
+const ROW_STAGGER_CAP = 12
+
 export interface DataTableSort<TSortKey extends string = string> {
   field: TSortKey
   dir: SortDir
@@ -193,6 +196,19 @@ export interface DataTableProps<TRow, TSortKey extends string = string> {
   /** Extra controls rendered in the toolbar, before the export button. */
   toolbar?: React.ReactNode
   /**
+   * Stagger the rows in as they mount. On by default — it is what makes a
+   * table land rather than blink into place, and it costs nothing on a table
+   * that is already painted, because React reuses a <tr> by key and CSS
+   * animations only replay for genuinely new elements.
+   *
+   * Turn it off for a table that is nested inside something already animating,
+   * where two entrances fight each other.
+   *
+   * Reduced-motion is handled globally by the `.jan-anim` rule in tokens.css;
+   * no call site has to think about it.
+   */
+  animateRows?: boolean
+  /**
    * Below `lg`, render each row as a stacked card instead of a table row.
    *
    * The dense tables on this app are 6-8 columns wide, and on a 390px screen
@@ -299,6 +315,7 @@ export function DataTable<TRow, TSortKey extends string = string>({
   selectable,
   selectedKeys,
   onSelectionChange,
+  animateRows = true,
   minWidth = 'min-w-[700px]',
   maxHeight,
   density: densityProp,
@@ -591,10 +608,19 @@ export function DataTable<TRow, TSortKey extends string = string>({
                   key={key}
                   className={cn(
                     'border-b transition-colors',
+                    animateRows && 'jan-anim jan-row-in',
                     onRowClick && 'cursor-pointer hover:bg-muted/50',
                     selected && 'bg-primary/5',
                     rowClassName?.(row, i),
                   )}
+                  // Capped: see the note on .jan-row-in. Beyond ROW_STAGGER_CAP
+                  // every remaining row shares the last delay and they land
+                  // together, which is what you want at the bottom of a long page.
+                  style={
+                    animateRows
+                      ? ({ '--jan-row-i': Math.min(i, ROW_STAGGER_CAP) } as React.CSSProperties)
+                      : undefined
+                  }
                   onClick={onRowClick ? () => onRowClick(row, i) : undefined}
                 >
                   {selectable && (

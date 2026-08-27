@@ -19,6 +19,7 @@ import { Snowflake, Sun, Sparkles, Loader2 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { useQueryClient } from '@tanstack/react-query'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
+import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
 
 function SeasonalItemsSection({ dateFrom, dateTo }: { dateFrom: string; dateTo: string }) {
   // Subscribe to the demo-mode eye: formatCurrency() masks from a module
@@ -116,41 +117,16 @@ function SeasonalItemsSection({ dateFrom, dateTo }: { dateFrom: string; dateTo: 
                   : 'אין נתוני פריטים עונתיים בטווח זה'}
               </p>
             ) : (
-              <div className="overflow-auto max-h-[360px]">
-                <table className="w-full text-xs">
-                  <thead className="sticky top-0 bg-muted/80 backdrop-blur-sm">
-                    <tr>
-                      <th className="text-right px-3 py-2 font-medium">פריט</th>
-                      <th className="text-center px-2 py-2 font-medium whitespace-nowrap">% חורף</th>
-                      <th className="text-right px-3 py-2 font-medium">סה"כ</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {winterItems.map((item: any, i: number) => (
-                      <tr key={item.item_code} className={i % 2 === 0 ? 'bg-background' : 'bg-muted/20'}>
-                        <td className="px-3 py-2 max-w-[180px]" title={item.item_name}>
-                          <div className="truncate">{item.item_name}</div>
-                          <ItemLink code={item.item_code} showCode className="text-[11px]" />
-                        </td>
-                        <td className="px-2 py-2 text-center">
-                          <div className="flex items-center justify-center gap-1">
-                            <div
-                              className="h-1.5 rounded-full bg-blue-500"
-                              style={{ width: `${Math.round(item.winter_share * 40)}px` }}
-                            />
-                            <span className="text-blue-600 font-medium">
-                              {Math.round(item.winter_share * 100)}%
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-3 py-2 text-right text-muted-foreground">
-                          {formatCurrency(item.total_revenue)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <DataTable<SeasonalItem>
+                rows={winterItems}
+                columns={seasonColumns('winter')}
+                getRowKey={i => i.item_code}
+                defaultSort={{ field: 'share', dir: 'desc' }}
+                maxHeight="360px"
+                minWidth="min-w-[320px]"
+                density="compact"
+                exportFileName="פריטי-חורף"
+              />
             )}
           </CardContent>
         </Card>
@@ -198,41 +174,16 @@ function SeasonalItemsSection({ dateFrom, dateTo }: { dateFrom: string; dateTo: 
                 )}
               </div>
             ) : (
-              <div className="overflow-auto max-h-[360px]">
-                <table className="w-full text-xs">
-                  <thead className="sticky top-0 bg-muted/80 backdrop-blur-sm">
-                    <tr>
-                      <th className="text-right px-3 py-2 font-medium">פריט</th>
-                      <th className="text-center px-2 py-2 font-medium whitespace-nowrap">% קיץ</th>
-                      <th className="text-right px-3 py-2 font-medium">סה"כ</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {summerItems.map((item: any, i: number) => (
-                      <tr key={item.item_code} className={i % 2 === 0 ? 'bg-background' : 'bg-muted/20'}>
-                        <td className="px-3 py-2 max-w-[180px]" title={item.item_name}>
-                          <div className="truncate">{item.item_name}</div>
-                          <ItemLink code={item.item_code} showCode className="text-[11px]" />
-                        </td>
-                        <td className="px-2 py-2 text-center">
-                          <div className="flex items-center justify-center gap-1">
-                            <div
-                              className="h-1.5 rounded-full bg-yellow-500"
-                              style={{ width: `${Math.round(item.summer_share * 40)}px` }}
-                            />
-                            <span className="text-yellow-600 font-medium">
-                              {Math.round(item.summer_share * 100)}%
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-3 py-2 text-right text-muted-foreground">
-                          {formatCurrency(item.total_revenue)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <DataTable<SeasonalItem>
+                rows={summerItems}
+                columns={seasonColumns('summer')}
+                getRowKey={i => i.item_code}
+                defaultSort={{ field: 'share', dir: 'desc' }}
+                maxHeight="360px"
+                minWidth="min-w-[320px]"
+                density="compact"
+                exportFileName="פריטי-קיץ"
+              />
             )}
           </CardContent>
         </Card>
@@ -469,6 +420,68 @@ function SeasonalPageContent() {
       <PerMonthItemsSection dateFrom={dateFrom} dateTo={dateTo} />
     </div>
   )
+}
+
+/** A seasonally-skewed item, as the seasonal-items endpoint returns it. */
+interface SeasonalItem {
+  item_code: string
+  item_name: string
+  total_revenue: number
+  winter_share?: number
+  summer_share?: number
+}
+
+/**
+ * The winter and summer lists are the same table with a different season, so
+ * they share one column set rather than two near-identical copies that drift.
+ */
+function seasonColumns(season: 'winter' | 'summer'): DataTableColumn<SeasonalItem>[] {
+  const share = (i: SeasonalItem) => (season === 'winter' ? i.winter_share : i.summer_share) ?? 0
+  return [
+    {
+      key: 'item',
+      header: 'פריט',
+      sortable: true,
+      sortValue: i => i.item_name || '',
+      truncate: 'max-w-[180px]',
+      title: i => i.item_name,
+      cell: i => (
+        <div>
+          <div className="truncate">{i.item_name}</div>
+          <ItemLink code={i.item_code} showCode className="text-[11px]" />
+        </div>
+      ),
+      exportValue: i => i.item_name,
+    },
+    {
+      key: 'share',
+      header: season === 'winter' ? '% חורף' : '% קיץ',
+      align: 'center',
+      sortable: true,
+      sortValue: share,
+      cell: i => (
+        <div className="flex items-center justify-center gap-1">
+          <div
+            className={`h-1.5 rounded-full ${season === 'winter' ? 'bg-blue-500' : 'bg-yellow-500'}`}
+            style={{ width: `${Math.round(share(i) * 40)}px` }}
+          />
+          <span className={`font-medium ${season === 'winter' ? 'text-blue-600' : 'text-yellow-600'}`}>
+            {Math.round(share(i) * 100)}%
+          </span>
+        </div>
+      ),
+      // The fraction, not the "63%" string — so the column stays averageable.
+      exportValue: i => share(i),
+    },
+    {
+      key: 'total_revenue',
+      header: 'סה"כ',
+      align: 'end',
+      sortable: true,
+      cell: i => <span className="text-muted-foreground">{formatCurrency(i.total_revenue)}</span>,
+      exportValue: i => i.total_revenue,
+    },
+  ]
 }
 
 export default function SeasonalPage() {
