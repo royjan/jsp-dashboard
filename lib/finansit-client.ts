@@ -272,6 +272,55 @@ export async function fetchAllItemChainLinks(): Promise<Array<{ code: string; ne
   return links
 }
 
+/**
+ * One pass over /api/stream/items that keeps every code, not just the ones
+ * carrying a supersession link.
+ *
+ * fetchAllItemChainLinks() above drops link-less rows because the chain map has
+ * no use for them, but the Xpart sync needs the full catalog code set to tell a
+ * part number we already have a code for from one we have never opened — and
+ * the stream takes ~70s, so it is worth getting both from a single call.
+ */
+export async function fetchCatalogCodesAndLinks(): Promise<{
+  codes: Set<string>
+  links: Array<{ code: string; new_item_id?: string; old_item_id?: string }>
+}> {
+  const res = await bulkClient.getRaw('/api/stream/items')
+  const codes = new Set<string>()
+  const links: Array<{ code: string; new_item_id?: string; old_item_id?: string }> = []
+  if (!res.body) return { codes, links }
+  const push = (line: string) => {
+    if (!line) return
+    try {
+      const row = JSON.parse(line)
+      if (!row?.code) return
+      codes.add(String(row.code).trim())
+      if (row.new_item_id || row.old_item_id) {
+        links.push({
+          code: row.code,
+          new_item_id: row.new_item_id || undefined,
+          old_item_id: row.old_item_id || undefined,
+        })
+      }
+    } catch { /* skip malformed NDJSON line */ }
+  }
+  const reader = (res.body as ReadableStream<Uint8Array>).getReader()
+  const decoder = new TextDecoder()
+  let buf = ''
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buf += decoder.decode(value, { stream: true })
+    let nl
+    while ((nl = buf.indexOf('\n')) >= 0) {
+      push(buf.slice(0, nl).trim())
+      buf = buf.slice(nl + 1)
+    }
+  }
+  push(buf.trim())
+  return { codes, links }
+}
+
 export async function fetchItemDetail(code: string): Promise<any> {
   return client.items.get(code)
 }

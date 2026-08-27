@@ -1,4 +1,4 @@
-import { pgSchema, pgTable, integer, text, numeric, date, real, timestamp, serial, primaryKey, boolean, uuid, varchar, jsonb, index, uniqueIndex } from 'drizzle-orm/pg-core'
+import { pgSchema, pgTable, integer, text, numeric, date, real, timestamp, serial, bigserial, primaryKey, boolean, uuid, varchar, jsonb, index, uniqueIndex } from 'drizzle-orm/pg-core'
 
 // All tables live in the "dashboard" schema
 export const dashboardSchema = pgSchema('dashboard')
@@ -587,6 +587,141 @@ export type CompetitorUpload = typeof competitorUploads.$inferSelect
 export type NewCompetitorUpload = typeof competitorUploads.$inferInsert
 export type CompetitorItem = typeof competitorItems.$inferSelect
 export type NewCompetitorItem = typeof competitorItems.$inferInsert
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * Xpart mirror (source: Xpart-v2's Supabase, read-only via XPART_DB_URL).
+ *
+ * Xpart-v2 is the procurement app: it owns the supplier price lists — 1.16M
+ * active rows across 11 suppliers — that this dashboard never had. We mirror
+ * the slice covering parts the ERP already knows, plus the supersessions and
+ * unlisted part numbers its imports turned up. Written only by
+ * app/api/cron/xpart-sync; our own cost/retail still come from FINAPI.
+ * Applied by drizzle/add_xpart_tables.sql.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+export const xpartSyncs = dashboardSchema.table('xpart_syncs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  startedAt: timestamp('started_at', { withTimezone: true }).defaultNow().notNull(),
+  finishedAt: timestamp('finished_at', { withTimezone: true }),
+  status: varchar('status').$type<'running' | 'completed' | 'failed'>().notNull().default('running'),
+  erpCodes: integer('erp_codes').notNull().default(0),
+  suppliersUpserted: integer('suppliers_upserted').notNull().default(0),
+  pricesUpserted: integer('prices_upserted').notNull().default(0),
+  pricesRemoved: integer('prices_removed').notNull().default(0),
+  chainsNew: integer('chains_new').notNull().default(0),
+  newPartsUpserted: integer('new_parts_upserted').notNull().default(0),
+  error: text('error'),
+})
+
+/**
+ * Xpart's supplier records. finansit_code is the join back to our own
+ * dashboard.supplier_profiles.supplier_code — the sync merges the two, filling
+ * blanks on existing profiles and inserting the suppliers we had no row for.
+ * Lubinski, ORLYD and SOEX have no ERP account and so carry a NULL code.
+ */
+export const xpartSuppliers = dashboardSchema.table('xpart_suppliers', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  xpartSupplierId: uuid('xpart_supplier_id').notNull().unique(),
+  code: text('code').notNull(),
+  name: text('name').notNull(),
+  role: text('role'),
+  currency: text('currency'),
+  defaultPriceTerm: text('default_price_term'),
+  paymentTerms: text('payment_terms'),
+  leadTimeDays: integer('lead_time_days'),
+  finansitCode: text('finansit_code'),
+  finansitPriceCode: text('finansit_price_code'),
+  active: boolean('active').notNull().default(true),
+  syncedAt: timestamp('synced_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index('xpart_suppliers_finansit_code_idx').on(table.finansitCode),
+])
+
+/**
+ * Current supplier price per (supplier, item) — not history. Xpart keeps its
+ * own 1.48M-row price_history, so duplicating it here would buy nothing; rows
+ * the latest sync did not see are deleted instead, so an upstream list going
+ * inactive disappears here too.
+ *
+ * landedIls is Xpart's own cost formula: price x import_markup x FX-to-ILS
+ * (supabase/migrations/00007_functions.sql, calculate_item_cost).
+ */
+export const xpartSupplierPrices = dashboardSchema.table('xpart_supplier_prices', {
+  id: bigserial('id', { mode: 'number' }).primaryKey(),
+  syncId: uuid('sync_id').notNull().references(() => xpartSyncs.id),
+  itemCode: text('item_code').notNull(),
+  supplierCode: text('supplier_code').notNull(),
+  supplierName: text('supplier_name').notNull(),
+  // Lubinski is the official PSA distributor: its list is the retail baseline
+  // margin is measured against, not a purchase option like the others.
+  isRetail: boolean('is_retail').notNull().default(false),
+  price: numeric('price').notNull(),
+  currency: text('currency').notNull(),
+  fxToIls: numeric('fx_to_ils'),
+  importMarkup: numeric('import_markup'),
+  landedIls: numeric('landed_ils'),
+  priceTerm: text('price_term'),
+  availabilityStatus: text('availability_status'),
+  leadTimeDays: integer('lead_time_days'),
+  minimumQuantity: integer('minimum_quantity'),
+  priceListName: text('price_list_name'),
+  effectiveDate: date('effective_date'),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex('xpart_supplier_prices_supplier_item_uq').on(table.supplierCode, table.itemCode),
+  index('xpart_supplier_prices_item_idx').on(table.itemCode),
+  index('xpart_supplier_prices_sync_idx').on(table.syncId),
+])
+
+/**
+ * Supersession links Xpart's price-list imports discovered. inErp records
+ * whether FINAPI's item_id_history already carried the link at sync time — the
+ * rows where it is false are the ones this table exists for, and the ones
+ * getExtraChainLinks() feeds into the analytics chain map.
+ */
+export const xpartChains = dashboardSchema.table('xpart_chains', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  oldCode: text('old_code').notNull(),
+  newCode: text('new_code').notNull(),
+  replacementType: text('replacement_type'),
+  inErp: boolean('in_erp').notNull().default(false),
+  oldInErp: boolean('old_in_erp').notNull().default(false),
+  newInErp: boolean('new_in_erp').notNull().default(false),
+  firstSeenAt: timestamp('first_seen_at', { withTimezone: true }).defaultNow().notNull(),
+  lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex('xpart_chains_pair_uq').on(table.oldCode, table.newCode),
+])
+
+/**
+ * Part numbers our suppliers quote that have no ERP item code at all — parts we
+ * could sell but have never opened a code for. inRetailList means the official
+ * distributor lists it too, i.e. a real sellable PSA/Opel/MG part rather than
+ * one wholesaler's private reference.
+ */
+export const xpartNewParts = dashboardSchema.table('xpart_new_parts', {
+  id: bigserial('id', { mode: 'number' }).primaryKey(),
+  partNumber: text('part_number').notNull().unique(),
+  brand: text('brand'),
+  description: text('description'),
+  supplierCount: integer('supplier_count').notNull().default(0),
+  cheapestSupplierCode: text('cheapest_supplier_code'),
+  cheapestPrice: numeric('cheapest_price'),
+  cheapestCurrency: text('cheapest_currency'),
+  cheapestLandedIls: numeric('cheapest_landed_ils'),
+  retailIls: numeric('retail_ils'),
+  inRetailList: boolean('in_retail_list').notNull().default(false),
+  firstSeenAt: timestamp('first_seen_at', { withTimezone: true }).defaultNow().notNull(),
+  lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index('xpart_new_parts_rank_idx').on(table.inRetailList, table.supplierCount),
+])
+
+export type XpartSync = typeof xpartSyncs.$inferSelect
+export type XpartSupplier = typeof xpartSuppliers.$inferSelect
+export type XpartSupplierPrice = typeof xpartSupplierPrices.$inferSelect
+export type XpartChain = typeof xpartChains.$inferSelect
+export type XpartNewPart = typeof xpartNewParts.$inferSelect
 
 /* ──────────────────────────────────────────────────────────────────────────
  * Chat-admin tables (owned by jsp-chat-js, public schema, shared Neon DB).
