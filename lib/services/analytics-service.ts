@@ -314,7 +314,43 @@ async function getChainLinks(): Promise<ChainLink[]> {
   if (!inMemoryChainLinks || Date.now() - inMemoryChainLinks.fetchedAt > CHAIN_LINKS_REFRESH_MS) {
     refreshChainLinksInBackground()
   }
-  return inMemoryChainLinks?.links ?? []
+  const erpLinks = inMemoryChainLinks?.links ?? []
+  return erpLinks.concat(await getXpartChainLinks())
+}
+
+// ── Supersessions the ERP does not know ──
+//
+// Xpart's price-list imports pick up supersessions from the supplier sheets,
+// and ~1.5k of them never made it into Finansit's item_id_history. Without them
+// the old code keeps its own (usually zero) shelf qty while the successor holds
+// the real stock — the same false-critical on /stock-forecast that the full ERP
+// link set was fetched to fix, just for the links Finansit is missing.
+//
+// Only pairs where both codes exist in the ERP catalog are fed in: a link to a
+// part we have no code for cannot merge anything, and unioning it would just
+// grow the map. Mirrored nightly by app/api/cron/xpart-sync.
+
+const XPART_CHAIN_LINKS_CACHE_KEY = 'items:xpart-chain-links:v1'
+const XPART_CHAIN_LINKS_TTL = 24 * 60 * 60
+
+async function getXpartChainLinks(): Promise<ChainLink[]> {
+  const cached = await getCached<ChainLink[]>(XPART_CHAIN_LINKS_CACHE_KEY)
+  if (cached) return cached
+  try {
+    const res = await readQueryAsync(
+      `SELECT old_code, new_code FROM dashboard.xpart_chains
+        WHERE in_erp = false AND old_in_erp AND new_in_erp`,
+    )
+    const links: ChainLink[] = (res.rows as Array<{ old_code: string; new_code: string }>).map(
+      (r) => ({ code: r.old_code, new_item_id: r.new_code }),
+    )
+    await setCache(XPART_CHAIN_LINKS_CACHE_KEY, links, XPART_CHAIN_LINKS_TTL)
+    return links
+  } catch (e) {
+    // Never let a missing mirror table break the chain map.
+    console.warn('[Analytics] xpart chain links unavailable:', e instanceof Error ? e.message : e)
+    return []
+  }
 }
 
 // ── Chain Resolution (Union-Find) ──
