@@ -20,8 +20,6 @@ import {
   Loader2,
   Ban,
   ExternalLink,
-  ChevronLeft,
-  ChevronRight,
   Copy,
   Check,
   AlertTriangle,
@@ -33,6 +31,7 @@ import { toast } from '@/lib/toast'
 import { copyText } from '@/lib/clipboard'
 import { AdminStatCard, StatusBadge } from '@/components/chat-admin/shared'
 import type { LambdaType } from '@/lib/chat-admin/queue-config'
+import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
 
 // Lambda Status types
 interface LambdaStatus {
@@ -181,6 +180,11 @@ function getElapsedTime(startedAt?: number): string {
 
 const ITEMS_PER_PAGE = 10
 
+/** The three tables below all render a user and a parts list the same way. */
+const userCell = (s: TrackedSearch) => s.userEmail || s.userId.slice(0, 8)
+const partsCell = (s: TrackedSearch) =>
+  `${s.parts.slice(0, 2).join(', ')}${s.parts.length > 2 ? ` +${s.parts.length - 2}` : ''}`
+
 function CopyableVin({ vin }: { vin: string }) {
   const [copied, setCopied] = useState(false)
 
@@ -239,7 +243,6 @@ export function SystemMonitoringTab() {
   // UI state
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
-  const [currentPage, setCurrentPage] = useState(1)
 
   const fetchData = useCallback(async (showRefreshIndicator = false) => {
     try {
@@ -546,61 +549,50 @@ export function SystemMonitoringTab() {
           <h3 className="font-semibold text-lg text-slate-800 dark:text-slate-100">Active Searches ({activeSearches.length})</h3>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="text-muted-foreground bg-muted/40">
-              <tr>
-                <th className="px-3 sm:px-6 py-4 text-left font-medium text-xs uppercase tracking-wider whitespace-nowrap">User</th>
-                <th className="px-3 sm:px-6 py-4 text-left font-medium text-xs uppercase tracking-wider whitespace-nowrap">VIN</th>
-                <th className="px-3 sm:px-6 py-4 text-left font-medium text-xs uppercase tracking-wider whitespace-nowrap">Lambda</th>
-                <th className="px-3 sm:px-6 py-4 text-left font-medium text-xs uppercase tracking-wider whitespace-nowrap">Parts</th>
-                <th className="px-3 sm:px-6 py-4 text-left font-medium text-xs uppercase tracking-wider whitespace-nowrap">Duration</th>
-                <th className="px-3 sm:px-6 py-4 text-left font-medium text-xs uppercase tracking-wider whitespace-nowrap">Actions</th>
-                <th className="px-3 sm:px-6 py-4 text-left w-10"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
-              {activeSearches.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-6 py-10 text-center text-slate-400 dark:text-slate-500">
-                    No active searches
-                  </td>
-                </tr>
-              ) : (
-                activeSearches.map((search) => (
-                  <tr key={search.searchId} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 group">
-                    <td className="px-6 py-4 text-slate-700 dark:text-slate-300">
-                      {search.userEmail || search.userId.slice(0, 8)}
-                    </td>
-                    <td className="px-6 py-4">
-                      <CopyableVin vin={search.vin} />
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`px-2.5 py-1 rounded text-xs ${LAMBDA_BADGE_STYLES}`}>
-                        {LAMBDA_NAMES[search.lambdaType]}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-slate-600 dark:text-slate-400">
-                      {search.parts.slice(0, 2).join(', ')}
-                      {search.parts.length > 2 && ` +${search.parts.length - 2}`}
-                    </td>
-                    <td className="px-6 py-4 font-mono text-slate-700 dark:text-slate-300">
-                      {getElapsedTime(search.startedAt)}
-                    </td>
-                    <td className="px-6 py-4">
-                      <button
-                        onClick={() => handleCancelSearch(search.searchId, true)}
-                        className="text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300 p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                        title="Force kill search"
-                      >
-                        <XCircle className="w-4 h-4" />
-                      </button>
-                    </td>
-                    <td className="px-6 py-4" />
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+          <DataTable<TrackedSearch>
+            rows={activeSearches}
+            columns={[
+              { key: 'user', header: 'User', sortable: true, sortValue: userCell, cell: userCell, exportValue: userCell },
+              { key: 'vin', header: 'VIN', sortable: true, cell: s => <CopyableVin vin={s.vin} />, exportValue: s => s.vin },
+              {
+                key: 'lambdaType',
+                header: 'Lambda',
+                sortable: true,
+                cell: s => <span className={`rounded px-2.5 py-1 text-xs ${LAMBDA_BADGE_STYLES}`}>{LAMBDA_NAMES[s.lambdaType]}</span>,
+                exportValue: s => LAMBDA_NAMES[s.lambdaType],
+              },
+              { key: 'parts', header: 'Parts', cell: partsCell, exportValue: s => s.parts.join(', ') },
+              {
+                key: 'duration',
+                header: 'Duration',
+                sortable: true,
+                // Sort on the START time, not the rendered "4m 12s" string —
+                // that sorts "10s" before "4m" and puts the longest-running
+                // search, the one you are here to kill, in the middle.
+                sortValue: s => s.startedAt,
+                cell: s => <span className="font-mono">{getElapsedTime(s.startedAt)}</span>,
+                exportValue: s => s.startedAt,
+              },
+              {
+                key: 'actions',
+                header: 'Actions',
+                cell: s => (
+                  <button
+                    onClick={() => handleCancelSearch(s.searchId, true)}
+                    className="rounded p-1.5 text-red-500 transition-colors hover:bg-red-500/10 hover:text-red-600"
+                    title="Force kill search"
+                  >
+                    <XCircle className="h-4 w-4" />
+                  </button>
+                ),
+                exportValue: null,
+              },
+            ] satisfies DataTableColumn<TrackedSearch>[]}
+            getRowKey={s => s.searchId}
+            minWidth="min-w-[820px]"
+            maxHeight="none"
+            labels={{ empty: 'No active searches' }}
+          />
         </div>
       </div>
 
@@ -615,161 +607,134 @@ export function SystemMonitoringTab() {
             </span>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="text-slate-400 bg-slate-800/50 sticky top-0 z-10">
-                <tr>
-                  <th className="px-4 py-3 text-left font-medium">Position</th>
-                  <th className="px-4 py-3 text-left font-medium">User</th>
-                  <th className="px-4 py-3 text-left font-medium">VIN</th>
-                  <th className="px-4 py-3 text-left font-medium">Parts</th>
-                  <th className="px-4 py-3 text-left font-medium">Est. Wait</th>
-                  <th className="px-4 py-3 text-left font-medium">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-700/50">
-                {queuedSearches.map((search, index) => (
-                  <tr key={search.searchId} className="hover:bg-slate-700/30">
-                    <td className="px-4 py-2">
-                      <span className="text-orange-400 font-bold">#{index + 1}</span>
-                    </td>
-                    <td className="px-4 py-2 text-slate-300">
-                      {search.userEmail || search.userId.slice(0, 8)}
-                    </td>
-                    <td className="px-4 py-2">
-                      <CopyableVin vin={search.vin} />
-                    </td>
-                    <td className="px-4 py-2 text-slate-400">
-                      {search.parts.slice(0, 2).join(', ')}
-                      {search.parts.length > 2 && ` +${search.parts.length - 2}`}
-                    </td>
-                    <td className="px-4 py-2 text-slate-300">
-                      ~{formatDuration(search.estimatedWaitMs || 0)}
-                    </td>
-                    <td className="px-4 py-2">
-                      <button
-                        onClick={() => handleCancelSearch(search.searchId)}
-                        className="text-slate-400 hover:text-red-400 text-xs flex items-center gap-1"
-                        title="Cancel"
-                      >
-                        <Ban className="w-4 h-4" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <DataTable<TrackedSearch>
+              rows={queuedSearches}
+              columns={[
+                {
+                  key: 'position',
+                  header: 'Position',
+                  // The queue IS its order, so position is the row index and the
+                  // column is not sortable — sorting it would be a lie.
+                  cell: (_s, i) => <span className="font-bold text-orange-400">#{i + 1}</span>,
+                  exportValue: (_s, i) => i + 1,
+                },
+                { key: 'user', header: 'User', cell: userCell, exportValue: userCell },
+                { key: 'vin', header: 'VIN', cell: s => <CopyableVin vin={s.vin} />, exportValue: s => s.vin },
+                { key: 'parts', header: 'Parts', cell: partsCell, exportValue: s => s.parts.join(', ') },
+                {
+                  key: 'wait',
+                  header: 'Est. Wait',
+                  cell: s => `~${formatDuration(s.estimatedWaitMs || 0)}`,
+                  exportValue: s => s.estimatedWaitMs || 0,
+                },
+                {
+                  key: 'actions',
+                  header: 'Actions',
+                  cell: s => (
+                    <button
+                      onClick={() => handleCancelSearch(s.searchId)}
+                      className="flex items-center gap-1 text-xs text-slate-400 hover:text-red-400"
+                      title="Cancel"
+                    >
+                      <Ban className="h-4 w-4" />
+                    </button>
+                  ),
+                  exportValue: null,
+                },
+              ] satisfies DataTableColumn<TrackedSearch>[]}
+              getRowKey={s => s.searchId}
+              minWidth="min-w-[760px]"
+              maxHeight="none"
+              labels={{ empty: 'Queue is empty' }}
+            />
           </div>
         </div>
       )}
 
       {/* Recent Completed Table */}
-      {(() => {
-        const totalPages = Math.ceil(recentSearches.length / ITEMS_PER_PAGE)
-        const paginatedSearches = recentSearches.slice(
-          (currentPage - 1) * ITEMS_PER_PAGE,
-          currentPage * ITEMS_PER_PAGE
-        )
-
-        return (
-          <div className="rounded-xl bg-card border border-border overflow-hidden">
-            <div className="px-6 py-5 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-slate-100 dark:bg-slate-700/50 rounded-lg">
-                  <CheckCircle className="w-5 h-5 text-slate-500 dark:text-slate-400" />
-                </div>
-                <h3 className="font-semibold text-lg text-slate-800 dark:text-slate-100">Recent Completed ({recentSearches.length})</h3>
-              </div>
-              {totalPages > 1 && (
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                    disabled={currentPage === 1}
-                    className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  >
-                    <ChevronLeft className="w-5 h-5 text-slate-500 dark:text-slate-400" />
-                  </button>
-                  <span className="text-sm text-slate-600 dark:text-slate-400 tabular-nums min-w-[60px] text-center">
-                    {currentPage} / {totalPages}
-                  </span>
-                  <button
-                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                    disabled={currentPage === totalPages}
-                    className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  >
-                    <ChevronRight className="w-5 h-5 text-slate-500 dark:text-slate-400" />
-                  </button>
-                </div>
-              )}
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="text-muted-foreground bg-muted/40">
-                  <tr>
-                    <th className="px-6 py-4 text-left font-medium text-xs uppercase tracking-wider">Time</th>
-                    <th className="px-6 py-4 text-left font-medium text-xs uppercase tracking-wider">User</th>
-                    <th className="px-6 py-4 text-left font-medium text-xs uppercase tracking-wider">License Plate</th>
-                    <th className="px-6 py-4 text-left font-medium text-xs uppercase tracking-wider">VIN</th>
-                    <th className="px-6 py-4 text-left font-medium text-xs uppercase tracking-wider">Lambda</th>
-                    <th className="px-6 py-4 text-left font-medium text-xs uppercase tracking-wider">Duration</th>
-                    <th className="px-6 py-4 text-left font-medium text-xs uppercase tracking-wider">Status</th>
-                    <th className="px-6 py-4 text-left font-medium text-xs uppercase tracking-wider">Parts</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
-                  {paginatedSearches.length === 0 ? (
-                    <tr>
-                      <td colSpan={8} className="px-6 py-10 text-center text-slate-400 dark:text-slate-500">
-                        No recent searches
-                      </td>
-                    </tr>
-                  ) : (
-                    paginatedSearches.map((search) => (
-                      <tr
-                        key={search.searchId}
-                        className="hover:bg-slate-50 dark:hover:bg-slate-700/30 group transition-colors"
-                      >
-                        <td className="px-6 py-4 text-slate-500 dark:text-slate-400 text-xs">
-                          {formatTimeAgo(search.completedAt || search.createdAt)}
-                        </td>
-                        <td className="px-6 py-4 text-slate-700 dark:text-slate-300">
-                          {search.userEmail || search.userId.slice(0, 8)}
-                        </td>
-                        <td className="px-6 py-4 font-mono text-blue-600 dark:text-blue-400 text-xs">
-                          {search.licensePlate || '-'}
-                        </td>
-                        <td className="px-6 py-4 text-xs">
-                          <CopyableVin vin={search.vin} />
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className={`px-2.5 py-1 rounded text-xs ${LAMBDA_BADGE_STYLES}`}>
-                            {LAMBDA_NAMES[search.lambdaType]}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 font-mono text-slate-700 dark:text-slate-300 text-xs tabular-nums">
-                          {search.durationMs ? formatDuration(search.durationMs) : '-'}
-                        </td>
-                        <td className="px-6 py-4">
-                          {search.status === 'completed' ? (
-                            <CheckCircle className="w-5 h-5 text-emerald-500 dark:text-emerald-400" />
-                          ) : search.status === 'failed' ? (
-                            <AlertCircle className="w-5 h-5 text-red-500 dark:text-red-400"><title>{search.errorMessage || 'Failed'}</title></AlertCircle>
-                          ) : (
-                            <XCircle className="w-5 h-5 text-slate-400" />
-                          )}
-                        </td>
-                        <td className="px-6 py-4 text-slate-700 dark:text-slate-300 flex items-center gap-2">
-                          <span>{getPartsFound(search)}</span>
-                          <ExternalLink className="w-3.5 h-3.5 text-cyan-400 opacity-0 group-hover:opacity-100 transition-opacity" />
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
+      <div className="rounded-xl border border-border bg-card">
+        <div className="flex items-center gap-3 border-b border-border px-6 py-5">
+          <div className="rounded-lg bg-muted p-2.5">
+            <CheckCircle className="h-5 w-5 text-muted-foreground" />
           </div>
-        )
-      })()}
+          <h3 className="text-lg font-semibold">Recent Completed ({recentSearches.length})</h3>
+        </div>
+        <DataTable<TrackedSearch>
+          rows={recentSearches}
+          columns={[
+            {
+              key: 'time',
+              header: 'Time',
+              sortable: true,
+              // The timestamp, not "4 minutes ago" — the prose sorts wrong and
+              // is useless in the export.
+              sortValue: s => s.completedAt || s.createdAt,
+              cell: s => <span className="text-xs text-muted-foreground">{formatTimeAgo(s.completedAt || s.createdAt)}</span>,
+              exportValue: s => s.completedAt || s.createdAt,
+            },
+            { key: 'user', header: 'User', sortable: true, sortValue: userCell, cell: userCell, exportValue: userCell },
+            {
+              key: 'licensePlate',
+              header: 'License Plate',
+              sortable: true,
+              cell: s => <span className="font-mono text-xs text-blue-600 dark:text-blue-400">{s.licensePlate || '-'}</span>,
+              exportValue: s => s.licensePlate ?? '',
+            },
+            { key: 'vin', header: 'VIN', sortable: true, cell: s => <span className="text-xs"><CopyableVin vin={s.vin} /></span>, exportValue: s => s.vin },
+            {
+              key: 'lambdaType',
+              header: 'Lambda',
+              sortable: true,
+              cell: s => <span className={`rounded px-2.5 py-1 text-xs ${LAMBDA_BADGE_STYLES}`}>{LAMBDA_NAMES[s.lambdaType]}</span>,
+              exportValue: s => LAMBDA_NAMES[s.lambdaType],
+            },
+            {
+              key: 'durationMs',
+              header: 'Duration',
+              align: 'end',
+              sortable: true,
+              sortValue: s => s.durationMs ?? -1,
+              cell: s => <span className="font-mono text-xs">{s.durationMs ? formatDuration(s.durationMs) : '-'}</span>,
+              exportValue: s => s.durationMs ?? '',
+            },
+            {
+              key: 'status',
+              header: 'Status',
+              align: 'center',
+              sortable: true,
+              cell: s =>
+                s.status === 'completed' ? (
+                  <CheckCircle className="h-5 w-5 text-emerald-500" />
+                ) : s.status === 'failed' ? (
+                  <span title={s.errorMessage || 'Failed'}>
+                    <AlertCircle className="h-5 w-5 text-red-500" />
+                  </span>
+                ) : (
+                  <XCircle className="h-5 w-5 text-slate-400" />
+                ),
+              exportValue: s => s.status,
+            },
+            {
+              key: 'parts',
+              header: 'Parts',
+              cell: s => (
+                <span className="flex items-center gap-2">
+                  <span>{getPartsFound(s)}</span>
+                  <ExternalLink className="h-3.5 w-3.5 text-cyan-400 opacity-0 transition-opacity group-hover:opacity-100" />
+                </span>
+              ),
+              exportValue: s => getPartsFound(s),
+            },
+          ] satisfies DataTableColumn<TrackedSearch>[]}
+          getRowKey={s => s.searchId}
+          defaultSort={{ field: 'time', dir: 'desc' }}
+          pageSize={ITEMS_PER_PAGE}
+          minWidth="min-w-[1000px]"
+          exportFileName="recent-searches"
+          rowClassName={() => 'group'}
+          labels={{ empty: 'No recent searches' }}
+        />
+      </div>
 
       {/* Confirmation Dialog for Disabling Lambda */}
       {confirmDisable && (
