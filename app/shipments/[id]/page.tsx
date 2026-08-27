@@ -9,8 +9,8 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useLocale } from '@/lib/locale-context'
 import { formatNumber } from '@/lib/constants'
-import { useSortable, SortableTh } from '@/components/shared/sortable-table'
 import { ItemLink } from '@/components/shared/ItemLink'
+import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
 import { ArrowRight, ArrowLeft, AlertTriangle, PackageCheck, Container } from 'lucide-react'
 import { formatDate } from '@/lib/format'
 
@@ -56,7 +56,52 @@ export default function ShipmentDetailPage() {
   })
 
   const sh = data?.shipment
-  const { sorted, sortKey, sortDir, toggleSort } = useSortable<Product>(data?.products ?? [])
+  const products = data?.products ?? []
+
+  const productColumns: DataTableColumn<Product>[] = [
+    {
+      key: 'part_id',
+      header: t('קוד', 'Code'),
+      sortable: true,
+      cell: p => <ItemLink code={p.part_id} name={p.description} showCode />,
+      exportValue: p => p.part_id,
+    },
+    {
+      key: 'description',
+      header: t('תיאור', 'Description'),
+      sortable: true,
+      truncate: 'max-w-[280px]',
+      title: p => p.description,
+      cell: p => (
+        <>
+          {p.description}
+          {p.faulty && <Badge variant="destructive" className="ms-2 text-[10px]">{t('פגום', 'faulty')}</Badge>}
+        </>
+      ),
+      exportValue: p => p.description,
+    },
+    {
+      key: 'scanned',
+      header: t('נסרק', 'Scanned'),
+      align: 'end',
+      sortable: true,
+      cell: p => `${formatNumber(p.scanned)} / ${formatNumber(p.total)}`,
+      exportValue: p => p.scanned,
+    },
+    {
+      key: 'missing',
+      header: t('חוסר', 'Missing'),
+      align: 'end',
+      sortable: true,
+      cell: p =>
+        p.missing > 0 ? (
+          <span className="font-semibold text-amber-500">{formatNumber(p.missing)}</span>
+        ) : (
+          <span className="text-muted-foreground">0</span>
+        ),
+      exportValue: p => p.missing,
+    },
+  ]
   const BackIcon = isHe ? ArrowRight : ArrowLeft
 
   return (
@@ -122,29 +167,25 @@ export default function ShipmentDetailPage() {
           )}
 
           <Card>
-            <CardHeader className="pb-2"><CardTitle className="text-base">{t('פריטים', 'Products')} ({formatNumber(sorted.length)})</CardTitle></CardHeader>
+            <CardHeader className="pb-2"><CardTitle className="text-base">{t('פריטים', 'Products')} ({formatNumber(products.length)})</CardTitle></CardHeader>
             <CardContent>
               <div className="overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0">
-                <table className="w-full text-xs sm:text-sm min-w-[640px]">
-                  <thead>
-                    <tr className="border-b text-muted-foreground">
-                      <SortableTh<Product> label={t('קוד', 'Code')} sortKey="part_id" align="start" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                      <SortableTh<Product> label={t('תיאור', 'Description')} sortKey="description" align="start" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                      <SortableTh<Product> label={t('נסרק', 'Scanned')} sortKey="scanned" align="end" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                      <SortableTh<Product> label={t('חוסר', 'Missing')} sortKey="missing" align="end" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sorted.map((p) => (
-                      <tr key={p.part_id} className={`border-b last:border-0 ${p.faulty ? 'bg-red-500/5' : ''}`}>
-                        <td className="p-2"><ItemLink code={p.part_id} name={p.description} showCode /></td>
-                        <td className="p-2 truncate max-w-[280px]">{p.description}{p.faulty && <Badge variant="destructive" className="ms-2 text-[10px]">{t('פגום', 'faulty')}</Badge>}</td>
-                        <td className="p-2 text-end tabular-nums">{formatNumber(p.scanned)} / {formatNumber(p.total)}</td>
-                        <td className="p-2 text-end tabular-nums">{p.missing > 0 ? <span className="text-amber-500 font-semibold">{formatNumber(p.missing)}</span> : <span className="text-muted-foreground">0</span>}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <DataTable<Product>
+                  rows={products}
+                  columns={productColumns}
+                  getRowKey={p => p.part_id}
+                  minWidth="min-w-[640px]"
+                  maxHeight="none"
+                  exportFileName={`משלוח-${id}`}
+                  // A faulty line is the reason someone opens this screen, so it
+                  // stays marked wherever the sort puts it.
+                  rowClassName={p => (p.faulty ? 'bg-red-500/5' : undefined)}
+                  mobileCard={{
+                    title: p => p.description,
+                    subtitle: p => p.part_id,
+                    accent: p => `${formatNumber(p.scanned)} / ${formatNumber(p.total)}`,
+                  }}
+                />
               </div>
             </CardContent>
           </Card>

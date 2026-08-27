@@ -15,7 +15,66 @@ import {
 import { ItemLink } from '@/components/shared/ItemLink'
 import { formatNumber } from '@/lib/format'
 import { cardVariants } from '@/lib/motion'
+import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
 
+
+/** A recent eBay listing as the analytics endpoint returns it. */
+interface EbayListing {
+  id: string
+  sku: string
+  title?: string | null
+  price?: number | null
+  upload_status: string
+  batch_name?: string | null
+}
+
+const LISTING_COLUMNS: DataTableColumn<EbayListing>[] = [
+  {
+    key: 'sku',
+    header: 'SKU',
+    sortable: true,
+    cell: l => <ItemLink code={l.sku} showCode />,
+    exportValue: l => l.sku,
+  },
+  {
+    key: 'title',
+    header: 'Title',
+    sortable: true,
+    truncate: 'max-w-[200px]',
+    title: l => l.title ?? '',
+    cell: l => l.title || '-',
+    exportValue: l => l.title ?? '',
+  },
+  {
+    key: 'price',
+    header: 'Price',
+    align: 'end',
+    sortable: true,
+    sortValue: l => l.price ?? 0,
+    cell: l => (l.price ? `$${formatNumber(l.price, 2)}` : '-'),
+    // Raw USD, not the "$12.34" string — the export is for summing.
+    exportValue: l => l.price ?? '',
+  },
+  {
+    key: 'upload_status',
+    header: 'Status',
+    align: 'center',
+    sortable: true,
+    cell: l => (
+      <Badge className={`text-[10px] ${STATUS_COLORS[l.upload_status] || ''}`}>{l.upload_status}</Badge>
+    ),
+    exportValue: l => l.upload_status,
+  },
+  {
+    key: 'batch_name',
+    header: 'Batch',
+    sortable: true,
+    truncate: 'max-w-[120px]',
+    title: l => l.batch_name ?? '',
+    cell: l => <span className="text-xs text-muted-foreground">{l.batch_name || '-'}</span>,
+    exportValue: l => l.batch_name ?? '',
+  },
+]
 
 const STATUS_COLORS: Record<string, string> = {
   success: 'bg-green-500/15 text-green-600',
@@ -169,35 +228,21 @@ function EbayContent() {
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
-              <table className="w-full text-sm">
-                <thead className="sticky top-0 bg-background">
-                  <tr className="border-b text-muted-foreground text-xs">
-                    <th className="text-start py-2 px-2">SKU</th>
-                    <th className="text-start py-2 px-2">Title</th>
-                    <th className="text-end py-2 px-2">Price</th>
-                    <th className="text-center py-2 px-2">Status</th>
-                    <th className="text-start py-2 px-2">Batch</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {listings.map((item: any) => (
-                    <tr key={item.id} className="border-b border-muted/50 hover:bg-muted/30 transition-colors">
-                      <td className="py-2 px-2 font-mono text-xs"><ItemLink code={item.sku} showCode /></td>
-                      <td className="py-2 px-2 truncate max-w-[200px]" title={item.title}>{item.title || '-'}</td>
-                      <td className="py-2 px-2 text-end">{item.price ? `$${formatNumber(item.price, 2)}` : '-'}</td>
-                      <td className="py-2 px-2 text-center">
-                        <Badge className={`text-[10px] ${STATUS_COLORS[item.upload_status] || ''}`}>
-                          {item.upload_status}
-                        </Badge>
-                      </td>
-                      <td className="py-2 px-2 text-xs text-muted-foreground truncate max-w-[120px]">{item.batch_name || '-'}</td>
-                    </tr>
-                  ))}
-                  {listings.length === 0 && (
-                    <tr><td colSpan={5} className="py-8 text-center text-muted-foreground">No listings yet</td></tr>
-                  )}
-                </tbody>
-              </table>
+              <DataTable<EbayListing>
+                rows={listings}
+                columns={LISTING_COLUMNS}
+                getRowKey={l => l.id}
+                pageSize={25}
+                minWidth="min-w-[640px]"
+                maxHeight="none"
+                exportFileName="ebay-listings"
+                labels={{ empty: 'No listings yet' }}
+                mobileCard={{
+                  title: l => l.sku,
+                  subtitle: l => l.title || '-',
+                  accent: l => (l.price ? `$${formatNumber(l.price, 2)}` : '-'),
+                }}
+              />
             </div>
           </CardContent>
         </Card>

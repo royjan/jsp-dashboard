@@ -8,10 +8,10 @@ import { formatNumber, formatCurrency } from '@/lib/constants'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { ItemLink } from '@/components/shared/ItemLink'
-import { useSortable, SortableTh } from '@/components/shared/sortable-table'
-import { Loader2, TrendingDown, Search } from 'lucide-react'
+import { Search } from 'lucide-react'
 import { formatDate } from '@/lib/format'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
+import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
 
 interface DemandItem {
   itemCode: string
@@ -76,28 +76,79 @@ export default function SupplierDemandPage() {
     })
   }, [items, q, quick])
 
-  const { sorted, sortKey, sortDir, toggleSort } = useSortable<DemandItem>(filtered, {
-    key: 'purchasedQty',
-    dir: 'desc',
-  })
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-32 text-muted-foreground gap-2">
-        <Loader2 className="h-4 w-4 animate-spin" />
-        <span>{t('suppliers.loadingDemand')}</span>
-      </div>
-    )
-  }
-
-  if (items.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center h-32 text-muted-foreground gap-2">
-        <TrendingDown className="h-6 w-6" />
-        <span>{t('suppliers.noDemand')}</span>
-      </div>
-    )
-  }
+  const columns: DataTableColumn<DemandItem>[] = [
+    {
+      key: 'itemCode',
+      header: t('suppliers.itemCode'),
+      sortable: true,
+      cell: i => <ItemLink code={i.itemCode} showCode />,
+      exportValue: i => i.itemCode,
+    },
+    {
+      key: 'itemName',
+      header: t('suppliers.itemName'),
+      sortable: true,
+      truncate: 'max-w-[240px]',
+      title: i => i.itemName,
+      cell: i => <ItemLink code={i.itemCode} name={i.itemName} />,
+      exportValue: i => i.itemName,
+    },
+    {
+      key: 'purchasedQty',
+      header: t('suppliers.bought'),
+      align: 'end',
+      sortable: true,
+      cell: i => formatNumber(i.purchasedQty),
+      exportValue: i => i.purchasedQty,
+    },
+    {
+      key: 'avgMonthlySales',
+      header: t('suppliers.soldPerMonth'),
+      align: 'end',
+      sortable: true,
+      cell: i => i.avgMonthlySales || '—',
+      exportValue: i => i.avgMonthlySales,
+    },
+    {
+      key: 'stockQty',
+      header: t('suppliers.stock'),
+      align: 'end',
+      sortable: true,
+      // Unknown stock sorts below zero — see the note on cover below; the two
+      // are different answers and must not collapse into one another.
+      sortValue: i => i.stockQty ?? -1,
+      cell: i => (i.stockQty == null ? '—' : formatNumber(i.stockQty)),
+      exportValue: i => i.stockQty ?? '',
+    },
+    {
+      key: 'coverMonths',
+      header: <span title={t('suppliers.coverHint')}>{t('suppliers.cover')}</span>,
+      exportHeader: t('suppliers.cover'),
+      align: 'end',
+      sortable: true,
+      // "—" means NO SALES HISTORY, not "plenty of cover". Sorting it as
+      // Infinity keeps it out of the running-out end of the list, which is the
+      // end this column is read from.
+      sortValue: i => i.coverMonths ?? Infinity,
+      cell: i =>
+        i.coverMonths == null ? (
+          <span className="text-muted-foreground">—</span>
+        ) : i.coverMonths < 1 ? (
+          <span className="font-semibold text-amber-500">{i.coverMonths}</span>
+        ) : (
+          i.coverMonths
+        ),
+      exportValue: i => i.coverMonths ?? '',
+    },
+    {
+      key: 'lastOrder',
+      header: t('suppliers.lastOrder'),
+      sortable: true,
+      sortValue: i => i.lastOrder ?? '',
+      cell: i => <span className="whitespace-nowrap">{formatDate(i.lastOrder)}</span>,
+      exportValue: i => i.lastOrder ?? '',
+    },
+  ]
 
   return (
     <div className="space-y-3">
@@ -146,51 +197,33 @@ export default function SupplierDemandPage() {
           </Button>
         ))}
         <span className="text-xs text-muted-foreground tabular-nums ms-auto">
-          {formatNumber(sorted.length)} / {formatNumber(items.length)}
+          {formatNumber(filtered.length)} / {formatNumber(items.length)}
         </span>
       </div>
 
-      {/* Bounded height makes THIS the scroll container, which is what a sticky
-          thead latches onto — inside a plain overflow-x-auto wrapper the header
-          has nothing to stick to. Header background must be opaque. */}
-      <div className="rounded border overflow-auto max-h-[calc(100vh-24rem)]">
-        <table className="w-full text-sm min-w-[720px]">
-          <thead className="sticky top-0 z-20 bg-card">
-            <tr className="border-b">
-              <SortableTh<DemandItem> label={t('suppliers.itemCode')} sortKey="itemCode" align="start" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="px-3 py-2 text-xs" />
-              <SortableTh<DemandItem> label={t('suppliers.itemName')} sortKey="itemName" align="start" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="px-3 py-2 text-xs" />
-              <SortableTh<DemandItem> label={t('suppliers.bought')} sortKey="purchasedQty" align="end" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="px-3 py-2 text-xs" />
-              <SortableTh<DemandItem> label={t('suppliers.soldPerMonth')} sortKey="avgMonthlySales" align="end" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="px-3 py-2 text-xs" />
-              <SortableTh<DemandItem> label={t('suppliers.stock')} sortKey="stockQty" align="end" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="px-3 py-2 text-xs" />
-              <SortableTh<DemandItem> label={t('suppliers.cover')} sortKey="coverMonths" align="end" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="px-3 py-2 text-xs" hint={t('suppliers.coverHint')} />
-              <SortableTh<DemandItem> label={t('suppliers.lastOrder')} sortKey="lastOrder" align="start" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="px-3 py-2 text-xs" />
-            </tr>
-          </thead>
-          <tbody>
-            {sorted.map((i) => (
-              <tr key={i.itemCode} className="border-t hover:bg-accent/50">
-                <td className="px-3 py-2"><ItemLink code={i.itemCode} showCode /></td>
-                <td className="px-3 py-2 max-w-[240px]"><ItemLink code={i.itemCode} name={i.itemName} /></td>
-                <td className="px-3 py-2 text-end tabular-nums">{formatNumber(i.purchasedQty)}</td>
-                <td className="px-3 py-2 text-end tabular-nums">{i.avgMonthlySales || '—'}</td>
-                <td className="px-3 py-2 text-end tabular-nums">
-                  {i.stockQty == null ? '—' : formatNumber(i.stockQty)}
-                </td>
-                <td className="px-3 py-2 text-end tabular-nums">
-                  {i.coverMonths == null ? (
-                    <span className="text-muted-foreground">—</span>
-                  ) : i.coverMonths < 1 ? (
-                    <span className="text-amber-500 font-semibold">{i.coverMonths}</span>
-                  ) : (
-                    i.coverMonths
-                  )}
-                </td>
-                <td className="px-3 py-2 tabular-nums whitespace-nowrap">{formatDate(i.lastOrder)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <DataTable<DemandItem>
+        rows={filtered}
+        columns={columns}
+        getRowKey={i => i.itemCode}
+        loading={isLoading}
+        defaultSort={{ field: 'purchasedQty', dir: 'desc' }}
+        pageSize={50}
+        minWidth="min-w-[720px]"
+        exportFileName={`ביקוש-ספק-${code}`}
+        labels={{
+          loading: t('suppliers.loadingDemand'),
+          empty: t('suppliers.noDemand'),
+        }}
+        mobileCard={{
+          title: i => i.itemName || i.itemCode,
+          subtitle: i => i.itemCode,
+          accent: i => formatNumber(i.purchasedQty),
+          fields: [
+            { label: t('suppliers.stock'), value: i => (i.stockQty == null ? '—' : formatNumber(i.stockQty)) },
+            { label: t('suppliers.cover'), value: i => i.coverMonths ?? '—' },
+          ],
+        }}
+      />
     </div>
   )
 }

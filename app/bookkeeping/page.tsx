@@ -22,6 +22,16 @@ import { MonthlyFlowChart } from '@/components/books/BooksCharts'
 import { BooksInsights } from '@/components/books/BooksInsights'
 import { Sparkline } from '@/components/charts/kit'
 import { CHART_PALETTE } from '@/lib/chart-colors'
+import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
+
+/** One account in the "biggest balances" list. */
+interface TopAccount {
+  account: string
+  name?: string
+  class_code?: string
+  movements: number
+  balance: number
+}
 
 function OverviewInner() {
   useMoneyHidden()
@@ -67,42 +77,64 @@ function OverviewInner() {
 
       <section className="rounded-xl border bg-card p-3 shadow-sm sm:p-4">
         <h2 className="mb-2 text-sm font-semibold">{t('biggestBalances')}</h2>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b text-xs text-muted-foreground">
-                <th className="pb-2 pe-4 text-start">{t('account')}</th>
-                <th className="pb-2 pe-4 text-start">{t('balanceCode')}</th>
-                <th className="pb-2 pe-4 text-end">{t('movements')}</th>
-                <th className="pb-2 text-end">{t('balance')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(data?.topAccounts ?? []).map((row: any) => {
-                const balance = Number(row.balance ?? 0)
+        <DataTable<TopAccount>
+          rows={(data?.topAccounts ?? []) as TopAccount[]}
+          columns={[
+            {
+              key: 'account',
+              header: t('account'),
+              sortable: true,
+              cell: r => <AccountLink code={r.account} name={r.name} classCode={r.class_code} year={scope.year} />,
+              exportValue: r => `${r.account} ${r.name ?? ''}`.trim(),
+            },
+            {
+              key: 'class_code',
+              header: t('balanceCode'),
+              sortable: true,
+              hideOnMobile: true,
+              cell: r => (
+                <span className="text-xs text-muted-foreground">
+                  {accountClassLabel(r.class_code ?? '', lang) || r.class_code}
+                </span>
+              ),
+              exportValue: r => accountClassLabel(r.class_code ?? '', lang) || r.class_code || '',
+            },
+            {
+              key: 'movements',
+              header: t('movements'),
+              align: 'end',
+              sortable: true,
+              sortValue: r => Number(r.movements ?? 0),
+              cell: r => formatId(r.movements),
+              exportValue: r => Number(r.movements ?? 0),
+            },
+            {
+              key: 'balance',
+              header: t('balance'),
+              align: 'end',
+              sortable: true,
+              sortValue: r => Number(r.balance ?? 0),
+              cell: r => {
+                const balance = Number(r.balance ?? 0)
                 return (
-                  <tr key={row.account} className="border-b last:border-0 hover:bg-muted/40">
-                    <td className="py-1.5 pe-4">
-                      <AccountLink code={row.account} name={row.name}
-                        classCode={row.class_code} year={scope.year} />
-                    </td>
-                    <td className="py-1.5 pe-4 text-xs text-muted-foreground">
-                      {accountClassLabel(row.class_code, lang) || row.class_code}
-                    </td>
-                    <td className="py-1.5 pe-4 text-end tabular-nums">
-                      {formatId(row.movements)}
-                    </td>
-                    <td className={`py-1.5 text-end tabular-nums ${
-                      balance < 0 ? 'text-red-600 dark:text-red-400'
-                                  : 'text-emerald-600 dark:text-emerald-400'}`}>
-                      {formatCurrency(balance)}
-                    </td>
-                  </tr>
+                  <span className={balance < 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}>
+                    {formatCurrency(balance)}
+                  </span>
                 )
-              })}
-            </tbody>
-          </table>
-        </div>
+              },
+              exportValue: r => Number(r.balance ?? 0),
+            },
+          ] satisfies DataTableColumn<TopAccount>[]}
+          getRowKey={r => r.account}
+          loading={isLoading}
+          minWidth="min-w-[560px]"
+          exportFileName="יתרות-גדולות"
+          mobileCard={{
+            title: r => r.name || r.account,
+            subtitle: r => r.account,
+            accent: r => formatCurrency(Number(r.balance ?? 0)),
+          }}
+        />
       </section>
 
       <div className="flex items-center gap-3 text-xs text-muted-foreground">

@@ -11,6 +11,93 @@ import { useBooksYears } from '@/hooks/use-books'
 import { useBooksScope } from '@/components/books/use-books-scope'
 import { useBooksText } from '@/components/books/BooksChrome'
 import { YearsChart } from '@/components/books/BooksCharts'
+import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
+
+/** One fiscal year's totals, joined with the metadata about how it is served. */
+interface YearRow {
+  year: number
+  movements: number
+  sales: number
+  receipts: number
+  debit: number
+  credit: number
+  state?: string
+  refreshed_at?: string | null
+}
+
+type BooksT = ReturnType<typeof useBooksText>['t']
+
+function buildColumns(
+  t: BooksT,
+  onPickYear: (y: number) => void,
+): DataTableColumn<YearRow>[] {
+  return [
+    {
+      key: 'year',
+      header: t('year'),
+      sortable: true,
+      cell: r => (
+        <button type="button" onClick={() => onPickYear(r.year)} className="font-mono text-primary hover:underline">
+          {formatId(r.year)}
+        </button>
+      ),
+      exportValue: r => r.year,
+    },
+    {
+      key: 'state',
+      header: t('live'),
+      sortable: true,
+      cell: r => (
+        <span
+          className={`rounded-full px-2 py-0.5 text-xs ${
+            r.state === 'live'
+              ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
+              : 'bg-muted text-muted-foreground'
+          }`}
+        >
+          {r.state === 'live' ? t('live') : t('closedYear')}
+        </span>
+      ),
+      exportValue: r => (r.state === 'live' ? 'live' : 'closed'),
+    },
+    { key: 'movements', header: t('movements'), align: 'end', sortable: true, cell: r => formatId(r.movements), exportValue: r => r.movements },
+    { key: 'sales', header: t('sales'), align: 'end', sortable: true, cell: r => formatCurrency(r.sales), exportValue: r => r.sales },
+    { key: 'receipts', header: t('receipts'), align: 'end', sortable: true, cell: r => formatCurrency(r.receipts), exportValue: r => r.receipts },
+    { key: 'debit', header: t('debit'), align: 'end', sortable: true, cell: r => formatCurrency(r.debit), exportValue: r => r.debit },
+    { key: 'credit', header: t('credit'), align: 'end', sortable: true, cell: r => formatCurrency(r.credit), exportValue: r => r.credit },
+    {
+      key: 'balanced',
+      header: t('balanced'),
+      align: 'center',
+      sortable: true,
+      // Sorted by how far OUT of balance the year is, so the years that need
+      // looking at come to the top — a boolean would bury the size of the gap.
+      sortValue: r => Math.abs(r.debit - r.credit),
+      cell: r => {
+        const diff = r.debit - r.credit
+        return Math.abs(diff) < 0.01 ? (
+          <span className="text-emerald-600 dark:text-emerald-400">✓</span>
+        ) : (
+          <span className="text-red-600 dark:text-red-400">{formatCurrency(diff)}</span>
+        )
+      },
+      exportValue: r => r.debit - r.credit,
+    },
+    {
+      key: 'refreshed',
+      header: t('refreshed'),
+      hideOnMobile: true,
+      sortable: true,
+      sortValue: r => r.refreshed_at ?? '',
+      cell: r => (
+        <span className="text-xs text-muted-foreground">
+          {r.refreshed_at ? formatDate(r.refreshed_at, 'datetime') : '—'}
+        </span>
+      ),
+      exportValue: r => r.refreshed_at ?? '',
+    },
+  ]
+}
 
 function YearsInner() {
   useMoneyHidden()
@@ -21,65 +108,46 @@ function YearsInner() {
   if (error) return <ErrorState onRetry={() => refetch()} className="mt-6" />
   if (isLoading) return <Skeleton className="h-96 w-full" />
 
-  const meta = new Map<number, any>((data?.years ?? []).map((y: any) => [y.year, y]))
-  const totals = [...(data?.totals ?? [])].map((r: any) => ({ ...r, year: Number(r.year) }))
+  // The totals and the per-year metadata arrive as two lists; join them once so
+  // the table has one row shape rather than a lookup inside every cell.
+  const meta = new Map<number, { state?: string; refreshed_at?: string | null }>(
+    (data?.years ?? []).map((y: { year: number; state?: string; refreshed_at?: string | null }) => [y.year, y]),
+  )
+  const totals = [...(data?.totals ?? [])].map((r: Record<string, unknown>) => ({ ...r, year: Number(r.year) }))
+  const rows: YearRow[] = (data?.totals ?? []).map((r: Record<string, unknown>) => {
+    const year = Number(r.year)
+    return {
+      year,
+      movements: Number(r.movements ?? 0),
+      sales: Number(r.sales ?? 0),
+      receipts: Number(r.receipts ?? 0),
+      debit: Number(r.debit ?? 0),
+      credit: Number(r.credit ?? 0),
+      state: meta.get(year)?.state,
+      refreshed_at: meta.get(year)?.refreshed_at ?? null,
+    }
+  })
 
   return (
     <div className="space-y-3">
       <YearsChart totals={totals} />
       <section className="rounded-xl border bg-card p-3 shadow-sm sm:p-4">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b text-xs text-muted-foreground">
-                <th className="pb-2 pe-4 text-start">{t('year')}</th>
-                <th className="pb-2 pe-4 text-start">{t('live')}</th>
-                <th className="pb-2 pe-4 text-end">{t('movements')}</th>
-                <th className="pb-2 pe-4 text-end">{t('sales')}</th>
-                <th className="pb-2 pe-4 text-end">{t('receipts')}</th>
-                <th className="pb-2 pe-4 text-end">{t('debit')}</th>
-                <th className="pb-2 pe-4 text-end">{t('credit')}</th>
-                <th className="pb-2 pe-4 text-center">{t('balanced')}</th>
-                <th className="pb-2 text-start">{t('refreshed')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {[...totals].reverse().map((r) => {
-                const info = meta.get(r.year)
-                const diff = Number(r.debit ?? 0) - Number(r.credit ?? 0)
-                return (
-                  <tr key={r.year} className="border-b last:border-0 hover:bg-muted/40">
-                    <td className="py-1.5 pe-4">
-                      <button type="button" onClick={() => scope.setYear(r.year)}
-                        className="font-mono text-primary hover:underline">{formatId(r.year)}</button>
-                    </td>
-                    <td className="py-1.5 pe-4">
-                      <span className={`rounded-full px-2 py-0.5 text-xs ${
-                        info?.state === 'live'
-                          ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
-                          : 'bg-muted text-muted-foreground'}`}>
-                        {info?.state === 'live' ? t('live') : t('closedYear')}
-                      </span>
-                    </td>
-                    <td className="py-1.5 pe-4 text-end tabular-nums">{formatId(r.movements)}</td>
-                    <td className="py-1.5 pe-4 text-end tabular-nums">{formatCurrency(Number(r.sales))}</td>
-                    <td className="py-1.5 pe-4 text-end tabular-nums">{formatCurrency(Number(r.receipts))}</td>
-                    <td className="py-1.5 pe-4 text-end tabular-nums">{formatCurrency(Number(r.debit))}</td>
-                    <td className="py-1.5 pe-4 text-end tabular-nums">{formatCurrency(Number(r.credit))}</td>
-                    <td className="py-1.5 pe-4 text-center">
-                      {Math.abs(diff) < 0.01
-                        ? <span className="text-emerald-600 dark:text-emerald-400">✓</span>
-                        : <span className="text-red-600 dark:text-red-400">{formatCurrency(diff)}</span>}
-                    </td>
-                    <td className="py-1.5 text-xs text-muted-foreground">
-                      {info?.refreshed_at ? formatDate(info.refreshed_at, 'datetime') : '—'}
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
+        <DataTable<YearRow>
+          rows={rows}
+          columns={buildColumns(t, scope.setYear)}
+          getRowKey={r => r.year}
+          // Newest year first — the same order the reversed list produced, now
+          // stated rather than achieved by reversing.
+          defaultSort={{ field: 'year', dir: 'desc' }}
+          minWidth="min-w-[820px]"
+          exportFileName="שנים"
+          mobileCard={{
+            title: r => formatId(r.year),
+            subtitle: r => (r.state === 'live' ? t('live') : t('closedYear')),
+            accent: r => formatCurrency(r.sales),
+            fields: [{ label: t('movements'), value: r => formatId(r.movements) }],
+          }}
+        />
       </section>
       <p className="text-xs text-muted-foreground">
         שנים סגורות נטענות פעם אחת ואינן משתנות; השנה הפעילה נקראת מה-ERP ומתעדכנת שוב ושוב.
