@@ -37,6 +37,60 @@ import { useJanUI } from './provider'
 
 export type { SortDir }
 
+
+/** Best-effort label for a column, for the derived mobile card's field list. */
+function columnLabel<TRow, K extends string>(col: DataTableColumn<TRow, K>): string {
+  if (col.exportHeader) return col.exportHeader
+  if (typeof col.header === 'string') return col.header
+  if (typeof col.header === 'number') return String(col.header)
+  return col.key
+}
+
+/**
+ * Build a card from the columns when the caller did not supply one.
+ *
+ * The picks: the first real column is the title, the LAST numeric column is
+ * the accent — on these screens the number a row is really about (a total, a
+ * balance, a count) sits at the end — and up to four more become labelled
+ * fields.
+ *
+ * Four, not two, because this is a FALLBACK: a hand-written card drops the
+ * columns its author judged unimportant, but a derived card that drops columns
+ * is just losing data, and on a six-column table a cap of two was enough to
+ * hide the headline metric (a retention rate, a margin) while keeping the
+ * incidental ones.
+ *
+ * Action, checkbox and caret columns are skipped using the same marker the
+ * export already uses for them: `exportValue: null` means "this column is
+ * chrome, not data", and chrome does not belong on a card either.
+ */
+function deriveMobileCard<TRow, K extends string>(
+  columns: DataTableColumn<TRow, K>[],
+): DataTableProps<TRow, K>['mobileCard'] {
+  const usable = columns.filter(c => c.exportValue !== null)
+  if (usable.length === 0) return undefined
+
+  const [titleCol, ...rest] = usable
+
+  // Last numeric column, found without Array.findLastIndex so this keeps
+  // working on the older lib targets two of the three consumers build against.
+  let accentIdx = -1
+  for (let i = rest.length - 1; i >= 0; i--) {
+    if (rest[i].numeric ?? rest[i].align === 'end') { accentIdx = i; break }
+  }
+  const accentCol = accentIdx >= 0 ? rest[accentIdx] : undefined
+  const remaining = rest.filter((_c, i) => i !== accentIdx)
+  const subtitleCol = remaining[0]
+  const fieldCols = remaining.slice(1).filter(c => !c.hideOnMobile).slice(0, 4)
+
+  return {
+    title: (row, i) => titleCol.cell(row, i),
+    subtitle: subtitleCol ? (row, i) => subtitleCol.cell(row, i) : undefined,
+    accent: accentCol ? (row, i) => accentCol.cell(row, i) : undefined,
+    fields: fieldCols.map(c => ({ label: columnLabel(c), value: (row: TRow, i: number) => c.cell(row, i) })),
+  }
+}
+
 /** Rows past this index all share one entrance delay — see `.jan-row-in`. */
 const ROW_STAGGER_CAP = 12
 
@@ -236,10 +290,20 @@ export interface DataTableProps<TRow, TSortKey extends string = string> {
    * zoom is the a11y fallback, not the design.
    *
    * `title` and `subtitle` are the always-visible line; `fields` are the
-   * labelled pairs beneath. Columns are NOT reused automatically because a
-   * card is a different information hierarchy from a row, not a narrower one.
+   * labelled pairs beneath.
+   *
+   * OMIT IT and the table derives a card from the columns (see
+   * `deriveMobileCard`). A hand-written card is still better — a card is a
+   * different information hierarchy from a row, not a narrower one — but this
+   * prop used to be the only way to get one, and the result was that most
+   * tables silently had none and shipped a 900px-wide grid to a phone. A
+   * derived card beats no card.
+   *
+   * Pass `false` to keep the scrolling table on small screens. That is the
+   * right choice when the table's SHAPE is the information — a month-by-month
+   * matrix or a source×status crosstab reads as a grid or not at all.
    */
-  mobileCard?: {
+  mobileCard?: false | {
     title: (row: TRow, index: number) => React.ReactNode
     subtitle?: (row: TRow, index: number) => React.ReactNode
     /** Trailing value on the title line — the number the row is really about. */
@@ -517,7 +581,13 @@ export function DataTable<TRow, TSortKey extends string = string>({
 
   const showToolbar = Boolean(toolbar || exportFileName)
 
-  const cards = mobileCard && !loading && pagedRows.length > 0 && (
+  // `undefined` means "derive one"; `false` means "keep the scrolling table".
+  const effectiveCard = React.useMemo(
+    () => (mobileCard === false ? undefined : (mobileCard ?? deriveMobileCard(columns))),
+    [mobileCard, columns],
+  )
+
+  const cards = effectiveCard && !loading && pagedRows.length > 0 && (
     <div className="flex flex-col gap-2 lg:hidden">
       {pagedRows.map((row, i) => {
         const key = getRowKey(row, i)
@@ -533,19 +603,19 @@ export function DataTable<TRow, TSortKey extends string = string>({
             )}
           >
             <div className="flex items-baseline justify-between gap-3">
-              <span className="min-w-0 flex-1 truncate font-medium">{mobileCard.title(row, i)}</span>
-              {mobileCard.accent && (
-                <span className="shrink-0 tabular-nums font-semibold">{mobileCard.accent(row, i)}</span>
+              <span className="min-w-0 flex-1 truncate font-medium">{effectiveCard.title(row, i)}</span>
+              {effectiveCard.accent && (
+                <span className="shrink-0 tabular-nums font-semibold">{effectiveCard.accent(row, i)}</span>
               )}
             </div>
-            {mobileCard.subtitle && (
+            {effectiveCard.subtitle && (
               <div className="mt-0.5 truncate text-xs text-muted-foreground">
-                {mobileCard.subtitle(row, i)}
+                {effectiveCard.subtitle(row, i)}
               </div>
             )}
-            {mobileCard.fields && mobileCard.fields.length > 0 && (
+            {effectiveCard.fields && effectiveCard.fields.length > 0 && (
               <dl className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs">
-                {mobileCard.fields.map(f => (
+                {effectiveCard.fields.map(f => (
                   <div key={f.label} className="flex gap-1.5">
                     <dt className="text-muted-foreground">{f.label}</dt>
                     <dd className="tabular-nums">{f.value(row, i)}</dd>
@@ -564,7 +634,7 @@ export function DataTable<TRow, TSortKey extends string = string>({
       className={cn(
         'overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0',
         // When cards are configured the table is the desktop presentation only.
-        mobileCard && 'hidden lg:block',
+        effectiveCard && 'hidden lg:block',
         effectiveMaxHeight && 'overflow-y-auto',
         !showToolbar && className,
       )}

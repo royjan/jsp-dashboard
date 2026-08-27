@@ -467,6 +467,11 @@ function ChatInsightsContent() {
                   ]}
                   getRowKey={(row, idx) => row.source ?? `null-${idx}`}
                   defaultSort={{ field: 'total', dir: 'desc' }}
+                  // A crosstab cannot become a card: the status columns are
+                  // discovered from the data, so there is no fixed set to pick
+                  // the important ones from, and reading source-by-status means
+                  // comparing across the row. It stays a scrolling grid.
+                  mobileCard={false}
                   minWidth="min-w-[520px]"
                   density="compact"
                   exportFileName="מקור-מול-סטטוס"
