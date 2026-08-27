@@ -12,7 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { useSortable, SortableTh } from '@/components/shared/sortable-table'
+import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
 import { ActionPlaybook } from '@/components/report/ActionPlaybook'
 import {
   TrendingUp, TrendingDown, AlertTriangle, Package, Users, FileText,
@@ -167,15 +167,7 @@ function ReportContent() {
     })
   }, [revenueChartData])
 
-  const { sorted: sortedRevenue, sortKey: revSortKey, sortDir: revSortDir, toggleSort: revToggle } =
-    useSortable<any>(revenueRows)
-
-  const { sorted: sortedRetention, sortKey: retSortKey, sortDir: retSortDir, toggleSort: retToggle } =
-    useSortable<any>(retentionData)
-
   const concentrationData = useMemo(() => data?.customer_concentration ?? [], [data])
-  const { sorted: sortedConcentration, sortKey: concSortKey, sortDir: concSortDir, toggleSort: concToggle } =
-    useSortable<any>(concentrationData)
 
   const dayOfWeekData = useMemo(() => {
     if (!data?.day_of_week) return []
@@ -324,34 +316,37 @@ function ReportContent() {
             </CardHeader>
             <CardContent>
               <div className="overflow-x-auto -mx-4 md:mx-0">
-                <table className="w-full text-sm min-w-[600px]">
-                  <thead>
-                    <tr className="border-b [&>th]:pb-2">
-                      <th className="font-medium text-start ps-4 md:ps-0">{isHe ? 'שנה' : 'Year'}</th>
-                      <SortableTh<any> label={isHe ? 'הכנסות' : 'Revenue'} sortKey="revenue" align="end" activeKey={revSortKey} sortDir={revSortDir} onSort={revToggle} />
-                      <SortableTh<any> label={t('yearOverYear')} sortKey="change" align="end" activeKey={revSortKey} sortDir={revSortDir} onSort={revToggle} />
-                      <SortableTh<any> label={t('invoiceCount')} sortKey="invoices" align="end" activeKey={revSortKey} sortDir={revSortDir} onSort={revToggle} />
-                      <SortableTh<any> label={t('avgInvoiceValue')} sortKey="avgValue" align="end" activeKey={revSortKey} sortDir={revSortDir} onSort={revToggle} className="pe-4 md:pe-0" />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sortedRevenue.map((r: any) => (
-                      <tr key={r.year} className="border-b hover:bg-muted/50 transition-colors">
-                        <td className="py-2.5 ps-4 md:ps-0 font-medium">{r.year}</td>
-                        <td className="py-2.5 text-end font-mono tabular-nums">{formatCurrency(r.revenue)}</td>
-                        <td className="py-2.5 text-end">
-                          {r.change !== null && (
-                            <Badge variant={r.change > 0 ? 'success' : 'destructive'}>
-                              {r.change > 0 ? '+' : ''}{r.change}%
-                            </Badge>
-                          )}
-                        </td>
-                        <td className="py-2.5 text-end tabular-nums">{formatNumber(r.invoices)}</td>
-                        <td className="py-2.5 text-end font-mono tabular-nums pe-4 md:pe-0">{formatCurrency(r.avgValue)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <DataTable<RevenueRow>
+                  rows={revenueRows}
+                  columns={[
+                    { key: 'year', header: isHe ? 'שנה' : 'Year', sortable: true, cell: r => <span className="font-medium">{r.year}</span>, exportValue: r => r.year },
+                    { key: 'revenue', header: isHe ? 'הכנסות' : 'Revenue', align: 'end', sortable: true, cell: r => <span className="font-mono">{formatCurrency(r.revenue)}</span>, exportValue: r => r.revenue },
+                    {
+                      key: 'change',
+                      header: t('yearOverYear'),
+                      align: 'end',
+                      sortable: true,
+                      // The first year has no prior year to compare against, so
+                      // it has no change — sorted below every real figure rather
+                      // than being read as 0% growth.
+                      sortValue: r => r.change ?? -Infinity,
+                      cell: r =>
+                        r.change !== null && (
+                          <Badge variant={r.change > 0 ? 'success' : 'destructive'}>
+                            {r.change > 0 ? '+' : ''}{r.change}%
+                          </Badge>
+                        ),
+                      exportValue: r => r.change ?? '',
+                    },
+                    { key: 'invoices', header: t('invoiceCount'), align: 'end', sortable: true, cell: r => formatNumber(r.invoices), exportValue: r => r.invoices },
+                    { key: 'avgValue', header: t('avgInvoiceValue'), align: 'end', sortable: true, cell: r => <span className="font-mono">{formatCurrency(r.avgValue)}</span>, exportValue: r => r.avgValue },
+                  ] satisfies DataTableColumn<RevenueRow>[]}
+                  getRowKey={r => r.year}
+                  defaultSort={{ field: 'year', dir: 'asc' }}
+                  minWidth="min-w-[600px]"
+                  maxHeight="none"
+                  exportFileName={isHe ? 'הכנסות-לפי-שנה' : 'revenue-by-year'}
+                />
               </div>
             </CardContent>
           </Card>
@@ -516,42 +511,41 @@ function ReportContent() {
             </CardHeader>
             <CardContent>
               <div className="overflow-x-auto max-h-[600px] overflow-y-auto -mx-4 md:mx-0">
-                <table className="w-full text-sm min-w-[600px]">
-                  <thead className="sticky top-0 bg-background z-10">
-                    <tr className="border-b">
-                      <th className="pb-2 font-medium text-start ps-4 md:ps-0">#</th>
-                      <th className="pb-2 font-medium text-start">{isHe ? 'קוד' : 'Code'}</th>
-                      <th className="pb-2 font-medium text-start">{isHe ? 'תיאור' : 'Description'}</th>
-                      <th className="pb-2 font-medium text-end">{isHe ? 'כמות' : 'Qty'}</th>
-                      <th className="pb-2 font-medium text-end">{isHe ? 'מחיר' : 'Price'}</th>
-                      <th className="pb-2 font-medium text-end pe-4 md:pe-0">{isHe ? 'הון כלוא' : 'Capital Tied'}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.top_dead_stock.map((item: any, i: number) => (
-                      <tr key={item.item_code} className="border-b hover:bg-muted/50 transition-colors">
-                        <td className="py-2 ps-4 md:ps-0 text-muted-foreground">{i + 1}</td>
-                        <td className="py-2 font-mono text-xs">{item.item_code}</td>
-                        <td className="py-2 truncate max-w-[200px]">{item.item_name}</td>
-                        <td className="py-2 text-end tabular-nums">{formatNumber(item.qty)}</td>
-                        <td className="py-2 text-end font-mono tabular-nums">{formatCurrency(Math.round(item.retail_price))}</td>
-                        <td className="py-2 text-end font-mono tabular-nums font-semibold text-destructive pe-4 md:pe-0">
-                          {formatCurrency(Math.round(item.capital_tied))}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  {data.top_dead_stock.length > 0 && (
-                    <tfoot>
+                <DataTable<ReportDeadStockRow>
+                  rows={data.top_dead_stock}
+                  columns={[
+                    { key: 'rank', header: '#', cell: (_r, i) => <span className="text-muted-foreground">{i + 1}</span>, exportValue: (_r, i) => i + 1 },
+                    { key: 'item_code', header: isHe ? 'קוד' : 'Code', sortable: true, cell: item => <span className="font-mono text-xs">{item.item_code}</span>, exportValue: item => item.item_code },
+                    { key: 'item_name', header: isHe ? 'תיאור' : 'Description', sortable: true, truncate: 'max-w-[200px]', title: item => item.item_name, cell: item => item.item_name, exportValue: item => item.item_name },
+                    { key: 'qty', header: isHe ? 'כמות' : 'Qty', align: 'end', sortable: true, cell: item => formatNumber(item.qty), exportValue: item => item.qty },
+                    { key: 'retail_price', header: isHe ? 'מחיר' : 'Price', align: 'end', sortable: true, cell: item => <span className="font-mono">{formatCurrency(Math.round(item.retail_price))}</span>, exportValue: item => item.retail_price },
+                    {
+                      key: 'capital_tied',
+                      header: isHe ? 'הון כלוא' : 'Capital Tied',
+                      align: 'end',
+                      sortable: true,
+                      cell: item => <span className="font-mono font-semibold text-destructive">{formatCurrency(Math.round(item.capital_tied))}</span>,
+                      exportValue: item => item.capital_tied,
+                    },
+                  ] satisfies DataTableColumn<ReportDeadStockRow>[]}
+                  getRowKey={item => item.item_code}
+                  defaultSort={{ field: 'capital_tied', dir: 'desc' }}
+                  minWidth="min-w-[600px]"
+                  maxHeight="none"
+                  exportFileName={isHe ? 'מלאי-מת-Top50' : 'top-dead-stock'}
+                  // Totals the WHOLE list, not the visible page — a "Top 50"
+                  // total that moved when you sorted would be worse than none.
+                  footer={(_shown, all) =>
+                    all.length > 0 ? (
                       <tr className="border-t-2 font-semibold">
-                        <td colSpan={5} className="py-2 ps-4 md:ps-0">{isHe ? 'סה"כ Top 50' : 'Total Top 50'}</td>
-                        <td className="py-2 text-end font-mono tabular-nums text-destructive pe-4 md:pe-0">
-                          {formatCurrency(Math.round(data.top_dead_stock.reduce((s: number, i: any) => s + i.capital_tied, 0)))}
+                        <td colSpan={5} className="py-2">{isHe ? 'סה"כ Top 50' : 'Total Top 50'}</td>
+                        <td className="py-2 text-end font-mono text-destructive">
+                          {formatCurrency(Math.round(all.reduce((sum, i) => sum + i.capital_tied, 0)))}
                         </td>
                       </tr>
-                    </tfoot>
-                  )}
-                </table>
+                    ) : null
+                  }
+                />
               </div>
             </CardContent>
           </Card>
@@ -620,35 +614,38 @@ function ReportContent() {
             </CardHeader>
             <CardContent>
               <div className="overflow-x-auto -mx-4 md:mx-0">
-                <table className="w-full text-sm min-w-[500px]">
-                  <thead>
-                    <tr className="border-b">
-                      <th className="pb-2 font-medium text-start ps-4 md:ps-0">{isHe ? 'חודש' : 'Month'}</th>
-                      <th className="pb-2 font-medium text-end">2024</th>
-                      <th className="pb-2 font-medium text-end">2025</th>
-                      <th className="pb-2 font-medium text-end pe-4 md:pe-0">{isHe ? 'שינוי' : 'Change'}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {monthlyCompare.map((m: any, i: number) => {
-                      const change = m['2024'] > 0 ? Math.round((m['2025'] - m['2024']) / m['2024'] * 1000) / 10 : null
-                      return (
-                        <tr key={i} className="border-b hover:bg-muted/50 transition-colors">
-                          <td className="py-2 ps-4 md:ps-0">{m.month}</td>
-                          <td className="py-2 text-end font-mono tabular-nums">{m['2024'] > 0 ? formatCurrency(m['2024']) : '—'}</td>
-                          <td className="py-2 text-end font-mono tabular-nums">{m['2025'] > 0 ? formatCurrency(m['2025']) : '—'}</td>
-                          <td className="py-2 text-end pe-4 md:pe-0">
-                            {change !== null && m['2025'] > 0 && (
-                              <Badge variant={change > 0 ? 'success' : 'destructive'}>
-                                {change > 0 ? '+' : ''}{change}%
-                              </Badge>
-                            )}
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
+                <DataTable<MonthlyCompareRow>
+                  rows={monthlyCompare}
+                  columns={[
+                    { key: 'month', header: isHe ? 'חודש' : 'Month', cell: m => m.month, exportValue: m => m.month },
+                    { key: 'y2024', header: '2024', align: 'end', sortable: true, sortValue: m => m['2024'], cell: m => <span className="font-mono">{m['2024'] > 0 ? formatCurrency(m['2024']) : '—'}</span>, exportValue: m => m['2024'] },
+                    { key: 'y2025', header: '2025', align: 'end', sortable: true, sortValue: m => m['2025'], cell: m => <span className="font-mono">{m['2025'] > 0 ? formatCurrency(m['2025']) : '—'}</span>, exportValue: m => m['2025'] },
+                    {
+                      key: 'change',
+                      header: isHe ? 'שינוי' : 'Change',
+                      align: 'end',
+                      sortable: true,
+                      // A month with no 2024 base has no percentage change; it
+                      // sorts below the real ones instead of reading as flat.
+                      sortValue: m => (m['2024'] > 0 && m['2025'] > 0 ? (m['2025'] - m['2024']) / m['2024'] : -Infinity),
+                      cell: m => {
+                        const change = m['2024'] > 0 ? Math.round(((m['2025'] - m['2024']) / m['2024']) * 1000) / 10 : null
+                        return change !== null && m['2025'] > 0 ? (
+                          <Badge variant={change > 0 ? 'success' : 'destructive'}>
+                            {change > 0 ? '+' : ''}{change}%
+                          </Badge>
+                        ) : null
+                      },
+                      exportValue: m => (m['2024'] > 0 ? Math.round(((m['2025'] - m['2024']) / m['2024']) * 1000) / 10 : ''),
+                    },
+                  ] satisfies DataTableColumn<MonthlyCompareRow>[]}
+                  getRowKey={(m, i) => m.month ?? i}
+                  // No defaultSort: the rows are already in calendar order, and
+                  // a month table read out of calendar order is a puzzle.
+                  minWidth="min-w-[500px]"
+                  maxHeight="none"
+                  exportFileName={isHe ? 'השוואה-חודשית' : 'monthly-comparison'}
+                />
               </div>
             </CardContent>
           </Card>
@@ -789,36 +786,43 @@ function ReportContent() {
             </CardHeader>
             <CardContent>
               <div className="overflow-x-auto -mx-4 md:mx-0">
-                <table className="w-full text-sm min-w-[600px]">
-                  <thead>
-                    <tr className="border-b">
-                      <th className="pb-2 font-medium text-start ps-4 md:ps-0">{isHe ? 'שנה' : 'Year'}</th>
-                      <th className="pb-2 font-medium text-end">{isHe ? 'חשבוניות' : 'Invoices'}</th>
-                      <th className="pb-2 font-medium text-end">{isHe ? 'זיכויים' : 'Credits'}</th>
-                      <th className="pb-2 font-medium text-end">{isHe ? '% כמות' : '% Count'}</th>
-                      <th className="pb-2 font-medium text-end pe-4 md:pe-0">{isHe ? '% ערך' : '% Value'}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.credits_by_year.map((r: any) => {
-                      const countPct = r.invoice_count > 0 ? Math.round(r.credit_count / r.invoice_count * 1000) / 10 : 0
-                      const valuePct = r.invoice_total > 0 ? Math.round(r.credit_total / r.invoice_total * 1000) / 10 : 0
-                      return (
-                        <tr key={r.year} className="border-b hover:bg-muted/50 transition-colors">
-                          <td className="py-2.5 ps-4 md:ps-0 font-medium">{r.year}</td>
-                          <td className="py-2.5 text-end tabular-nums">{formatNumber(r.invoice_count)}</td>
-                          <td className="py-2.5 text-end tabular-nums">{formatNumber(r.credit_count)}</td>
-                          <td className="py-2.5 text-end">
-                            <Badge variant={countPct > 18 ? 'destructive' : countPct > 15 ? 'warning' : 'success'}>{countPct}%</Badge>
-                          </td>
-                          <td className="py-2.5 text-end pe-4 md:pe-0">
-                            <Badge variant={valuePct > 12 ? 'destructive' : valuePct > 10 ? 'warning' : 'success'}>{valuePct}%</Badge>
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
+                <DataTable<CreditsByYearRow>
+                  rows={data.credits_by_year}
+                  columns={[
+                    { key: 'year', header: isHe ? 'שנה' : 'Year', sortable: true, cell: r => <span className="font-medium">{r.year}</span>, exportValue: r => r.year },
+                    { key: 'invoice_count', header: isHe ? 'חשבוניות' : 'Invoices', align: 'end', sortable: true, cell: r => formatNumber(r.invoice_count), exportValue: r => r.invoice_count },
+                    { key: 'credit_count', header: isHe ? 'זיכויים' : 'Credits', align: 'end', sortable: true, cell: r => formatNumber(r.credit_count), exportValue: r => r.credit_count },
+                    {
+                      key: 'countPct',
+                      header: isHe ? '% כמות' : '% Count',
+                      align: 'end',
+                      sortable: true,
+                      sortValue: r => (r.invoice_count > 0 ? r.credit_count / r.invoice_count : 0),
+                      cell: r => {
+                        const pct = r.invoice_count > 0 ? Math.round((r.credit_count / r.invoice_count) * 1000) / 10 : 0
+                        return <Badge variant={pct > 18 ? 'destructive' : pct > 15 ? 'warning' : 'success'}>{pct}%</Badge>
+                      },
+                      exportValue: r => (r.invoice_count > 0 ? Math.round((r.credit_count / r.invoice_count) * 1000) / 10 : 0),
+                    },
+                    {
+                      key: 'valuePct',
+                      header: isHe ? '% ערך' : '% Value',
+                      align: 'end',
+                      sortable: true,
+                      sortValue: r => (r.invoice_total > 0 ? r.credit_total / r.invoice_total : 0),
+                      cell: r => {
+                        const pct = r.invoice_total > 0 ? Math.round((r.credit_total / r.invoice_total) * 1000) / 10 : 0
+                        return <Badge variant={pct > 12 ? 'destructive' : pct > 10 ? 'warning' : 'success'}>{pct}%</Badge>
+                      },
+                      exportValue: r => (r.invoice_total > 0 ? Math.round((r.credit_total / r.invoice_total) * 1000) / 10 : 0),
+                    },
+                  ] satisfies DataTableColumn<CreditsByYearRow>[]}
+                  getRowKey={r => r.year}
+                  defaultSort={{ field: 'year', dir: 'asc' }}
+                  minWidth="min-w-[600px]"
+                  maxHeight="none"
+                  exportFileName={isHe ? 'זיכויים-לפי-שנה' : 'credits-by-year'}
+                />
               </div>
             </CardContent>
           </Card>
@@ -888,38 +892,48 @@ function ReportContent() {
             </CardHeader>
             <CardContent>
               <div className="overflow-x-auto -mx-4 md:mx-0">
-                <table className="w-full text-sm min-w-[600px]">
-                  <thead>
-                    <tr className="border-b [&>th]:pb-2">
-                      <th className="font-medium text-start ps-4 md:ps-0">{isHe ? 'שנה' : 'Year'}</th>
-                      <SortableTh<any> label={isHe ? 'לקוחות' : 'Customers'} sortKey="total_customers" align="end" activeKey={retSortKey} sortDir={retSortDir} onSort={retToggle} />
-                      <SortableTh<any> label={t('newCustomers')} sortKey="new_customers" align="end" activeKey={retSortKey} sortDir={retSortDir} onSort={retToggle} />
-                      <SortableTh<any> label={t('returningCustomers')} sortKey="returning_customers" align="end" activeKey={retSortKey} sortDir={retSortDir} onSort={retToggle} />
-                      <SortableTh<any> label={t('retentionRate')} sortKey="retention_pct" align="end" activeKey={retSortKey} sortDir={retSortDir} onSort={retToggle} />
-                      <SortableTh<any> label={isHe ? 'הכנסות' : 'Revenue'} sortKey="total_revenue" align="end" activeKey={retSortKey} sortDir={retSortDir} onSort={retToggle} className="pe-4 md:pe-0" />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sortedRetention.map((r: any) => (
-                      <tr key={r.year} className="border-b hover:bg-muted/50 transition-colors">
-                        <td className="py-2.5 ps-4 md:ps-0 font-medium">{r.year}</td>
-                        <td className="py-2.5 text-end tabular-nums">{formatNumber(r.total_customers)}</td>
-                        <td className="py-2.5 text-end">
-                          <Badge variant={r.new_customers >= 50 ? 'success' : r.new_customers >= 30 ? 'warning' : 'destructive'}>
-                            {formatNumber(r.new_customers)}
-                          </Badge>
-                        </td>
-                        <td className="py-2.5 text-end tabular-nums">{formatNumber(r.returning_customers)}</td>
-                        <td className="py-2.5 text-end">
-                          {r.retention_pct !== null ? (
-                            <Badge variant={r.retention_pct >= 80 ? 'success' : 'warning'}>{r.retention_pct}%</Badge>
-                          ) : '—'}
-                        </td>
-                        <td className="py-2.5 text-end font-mono tabular-nums pe-4 md:pe-0">{formatCurrency(Math.round(r.total_revenue))}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <DataTable<RetentionRow>
+                  rows={retentionData}
+                  columns={[
+                    { key: 'year', header: isHe ? 'שנה' : 'Year', sortable: true, cell: r => <span className="font-medium">{r.year}</span>, exportValue: r => r.year },
+                    { key: 'total_customers', header: isHe ? 'לקוחות' : 'Customers', align: 'end', sortable: true, cell: r => formatNumber(r.total_customers), exportValue: r => r.total_customers },
+                    {
+                      key: 'new_customers',
+                      header: t('newCustomers'),
+                      align: 'end',
+                      sortable: true,
+                      cell: r => (
+                        <Badge variant={r.new_customers >= 50 ? 'success' : r.new_customers >= 30 ? 'warning' : 'destructive'}>
+                          {formatNumber(r.new_customers)}
+                        </Badge>
+                      ),
+                      exportValue: r => r.new_customers,
+                    },
+                    { key: 'returning_customers', header: t('returningCustomers'), align: 'end', sortable: true, cell: r => formatNumber(r.returning_customers), exportValue: r => r.returning_customers },
+                    {
+                      key: 'retention_pct',
+                      header: t('retentionRate'),
+                      align: 'end',
+                      sortable: true,
+                      // The first year has nothing to retain FROM, so its rate
+                      // is null — kept below the real rates rather than 0%.
+                      sortValue: r => r.retention_pct ?? -Infinity,
+                      cell: r =>
+                        r.retention_pct !== null ? (
+                          <Badge variant={r.retention_pct >= 80 ? 'success' : 'warning'}>{r.retention_pct}%</Badge>
+                        ) : (
+                          '—'
+                        ),
+                      exportValue: r => r.retention_pct ?? '',
+                    },
+                    { key: 'total_revenue', header: isHe ? 'הכנסות' : 'Revenue', align: 'end', sortable: true, cell: r => <span className="font-mono">{formatCurrency(Math.round(r.total_revenue))}</span>, exportValue: r => r.total_revenue },
+                  ] satisfies DataTableColumn<RetentionRow>[]}
+                  getRowKey={r => r.year}
+                  defaultSort={{ field: 'year', dir: 'asc' }}
+                  minWidth="min-w-[600px]"
+                  maxHeight="none"
+                  exportFileName={isHe ? 'שימור-לקוחות' : 'customer-retention'}
+                />
               </div>
             </CardContent>
           </Card>
@@ -931,30 +945,34 @@ function ReportContent() {
             </CardHeader>
             <CardContent>
               <div className="overflow-x-auto -mx-4 md:mx-0">
-                <table className="w-full text-sm min-w-[500px]">
-                  <thead>
-                    <tr className="border-b [&>th]:pb-2">
-                      <th className="font-medium text-start ps-4 md:ps-0">{isHe ? 'שנה' : 'Year'}</th>
-                      <SortableTh<any> label="Top 5 %" sortKey="top5_pct" align="end" activeKey={concSortKey} sortDir={concSortDir} onSort={concToggle} />
-                      <SortableTh<any> label="Top 10 %" sortKey="top10_pct" align="end" activeKey={concSortKey} sortDir={concSortDir} onSort={concToggle} />
-                      <SortableTh<any> label={isHe ? 'סה"כ לקוחות' : 'Total Customers'} sortKey="total_customers" align="end" activeKey={concSortKey} sortDir={concSortDir} onSort={concToggle} className="pe-4 md:pe-0" />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sortedConcentration.map((r: any) => (
-                      <tr key={r.year} className="border-b hover:bg-muted/50 transition-colors">
-                        <td className="py-2.5 ps-4 md:ps-0 font-medium">{r.year}</td>
-                        <td className="py-2.5 text-end">
-                          <Badge variant={r.top5_pct >= 70 ? 'destructive' : r.top5_pct >= 50 ? 'warning' : 'success'}>{r.top5_pct}%</Badge>
-                        </td>
-                        <td className="py-2.5 text-end">
-                          <Badge variant={r.top10_pct >= 80 ? 'destructive' : r.top10_pct >= 60 ? 'warning' : 'success'}>{r.top10_pct}%</Badge>
-                        </td>
-                        <td className="py-2.5 text-end tabular-nums pe-4 md:pe-0">{formatNumber(r.total_customers)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <DataTable<ConcentrationRow>
+                  rows={concentrationData}
+                  columns={[
+                    { key: 'year', header: isHe ? 'שנה' : 'Year', sortable: true, cell: r => <span className="font-medium">{r.year}</span>, exportValue: r => r.year },
+                    {
+                      key: 'top5_pct',
+                      header: 'Top 5 %',
+                      align: 'end',
+                      sortable: true,
+                      cell: r => <Badge variant={r.top5_pct >= 70 ? 'destructive' : r.top5_pct >= 50 ? 'warning' : 'success'}>{r.top5_pct}%</Badge>,
+                      exportValue: r => r.top5_pct,
+                    },
+                    {
+                      key: 'top10_pct',
+                      header: 'Top 10 %',
+                      align: 'end',
+                      sortable: true,
+                      cell: r => <Badge variant={r.top10_pct >= 80 ? 'destructive' : r.top10_pct >= 60 ? 'warning' : 'success'}>{r.top10_pct}%</Badge>,
+                      exportValue: r => r.top10_pct,
+                    },
+                    { key: 'total_customers', header: isHe ? 'סה"כ לקוחות' : 'Total Customers', align: 'end', sortable: true, cell: r => formatNumber(r.total_customers), exportValue: r => r.total_customers },
+                  ] satisfies DataTableColumn<ConcentrationRow>[]}
+                  getRowKey={r => r.year}
+                  defaultSort={{ field: 'year', dir: 'asc' }}
+                  minWidth="min-w-[500px]"
+                  maxHeight="none"
+                  exportFileName={isHe ? 'ריכוזיות-לקוחות' : 'customer-concentration'}
+                />
               </div>
             </CardContent>
           </Card>
@@ -1155,6 +1173,50 @@ function ReportContent() {
       )}
     </div>
   )
+}
+
+/** Rows of the six data tables on this page. The endpoint is loosely typed;
+ *  these name only the fields the tables actually read. */
+interface RevenueRow {
+  year: number | string
+  revenue: number
+  invoices: number
+  /** Year-over-year %, null for the first year — nothing to compare against. */
+  change: number | null
+  avgValue: number
+}
+interface ReportDeadStockRow {
+  item_code: string
+  item_name: string
+  qty: number
+  retail_price: number
+  capital_tied: number
+}
+interface MonthlyCompareRow {
+  month: string
+  '2024': number
+  '2025': number
+}
+interface CreditsByYearRow {
+  year: number | string
+  invoice_count: number
+  credit_count: number
+  invoice_total: number
+  credit_total: number
+}
+interface RetentionRow {
+  year: number | string
+  total_customers: number
+  new_customers: number
+  returning_customers: number
+  retention_pct: number | null
+  total_revenue: number
+}
+interface ConcentrationRow {
+  year: number | string
+  top5_pct: number
+  top10_pct: number
+  total_customers: number
 }
 
 export default function ReportPage() {

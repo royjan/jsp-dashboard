@@ -3,16 +3,9 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import { Button } from '@/components/chat-admin/ui/button'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/chat-admin/ui/table'
+import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
 import WordMappingForm from './WordMappingForm'
-import { Plus, Edit, Trash2, RefreshCw, CheckCircle, XCircle, Square, CheckSquare, Star, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react'
+import { Plus, Edit, Trash2, RefreshCw, CheckCircle, XCircle, Square, CheckSquare, Star } from 'lucide-react'
 import { AdminPagination } from '@/components/chat-admin/shared'
 import { logger } from '@/lib/logger'
 import { toast } from '@/lib/toast'
@@ -33,6 +26,17 @@ interface WordMapping {
   createdAt: string
   updatedAt: string
 }
+
+/** The neutral chip the language and type columns share. */
+function Pill({ children, className = '' }: { children: React.ReactNode; className?: string }) {
+  return (
+    <span className={`inline-flex items-center rounded-full bg-white/5 px-2 py-0.5 text-xs font-medium ring-1 ring-inset ring-white/10 ${className}`}>
+      {children}
+    </span>
+  )
+}
+
+type MappingSortKey = 'sourceWord' | 'targetWord' | 'usageCount' | 'createdAt'
 
 interface WordMappingSuggestion {
   id: string
@@ -456,6 +460,131 @@ export default function WordMappingDashboard() {
       )
     : mappings
 
+  const columns: DataTableColumn<WordMapping, MappingSortKey>[] = [
+    {
+      key: 'sourceWord',
+      header: 'Source',
+      sortable: true,
+      sortKey: 'sourceWord',
+      cell: m => (
+        <button
+          type="button"
+          onClick={() => handleWordClick(m.sourceWord)}
+          title="Click to filter related mappings"
+          dir="auto"
+          className="font-medium transition-colors hover:text-cyan-400"
+        >
+          {m.sourceWord}
+        </button>
+      ),
+      exportValue: m => m.sourceWord,
+    },
+    {
+      key: 'sourceLanguage',
+      header: 'Language',
+      cell: m => <Pill>{m.sourceLanguage}</Pill>,
+      exportValue: m => m.sourceLanguage,
+    },
+    {
+      key: 'targetWord',
+      header: 'Target',
+      sortable: true,
+      sortKey: 'targetWord',
+      cell: m => (
+        <button
+          type="button"
+          onClick={() => handleWordClick(m.targetWord)}
+          title="Click to filter related mappings"
+          dir="auto"
+          className="font-medium transition-colors hover:text-cyan-400"
+        >
+          {m.targetWord}
+        </button>
+      ),
+      exportValue: m => m.targetWord,
+    },
+    {
+      key: 'targetLanguage',
+      header: 'Language',
+      cell: m => <Pill>{m.targetLanguage}</Pill>,
+      exportValue: m => m.targetLanguage,
+    },
+    {
+      key: 'mappingType',
+      header: 'Type',
+      cell: m => <Pill className="capitalize">{m.mappingType}</Pill>,
+      exportValue: m => m.mappingType,
+    },
+    {
+      key: 'usageCount',
+      header: 'Usage',
+      sortable: true,
+      sortKey: 'usageCount',
+      cell: m => <span className="tabular-nums">{m.usageCount}</span>,
+      exportValue: m => m.usageCount,
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      cell: m => (
+        <div className="flex gap-2">
+          <span
+            className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${
+              m.isActive
+                ? 'bg-emerald-500/15 text-emerald-400 ring-emerald-400/20'
+                : 'bg-rose-500/15 text-rose-400 ring-rose-400/20'
+            }`}
+          >
+            {m.isActive ? 'Active' : 'Inactive'}
+          </span>
+          {m.isDefault && (
+            <span className="inline-flex items-center rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-400 ring-1 ring-inset ring-amber-400/20">
+              <Star className="me-1 h-3 w-3 fill-current" />
+              Default
+            </span>
+          )}
+        </div>
+      ),
+      exportValue: m => (m.isActive ? 'active' : 'inactive'),
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      cell: m => (
+        <div className="flex gap-2">
+          {!m.isDefault && (
+            <button
+              onClick={() => handleSetDefault(m.id)}
+              className="grid h-11 w-11 place-items-center rounded-lg text-amber-400 transition-colors hover:bg-amber-500/15 hover:text-amber-300 focus:outline-none focus:ring-2 focus:ring-ring"
+              aria-label="Set as default mapping"
+              title="Set as default mapping"
+            >
+              <Star className="h-4 w-4" />
+            </button>
+          )}
+          <button
+            onClick={() => handleEditMapping(m)}
+            className="grid h-11 w-11 place-items-center rounded-lg text-cyan-400 transition-colors hover:bg-cyan-500/15 hover:text-cyan-300 focus:outline-none focus:ring-2 focus:ring-ring"
+            aria-label="Edit mapping"
+            title="Edit mapping"
+          >
+            <Edit className="h-4 w-4" />
+          </button>
+          <button
+            onClick={() => handleDeleteMapping(m.id)}
+            className="grid h-11 w-11 place-items-center rounded-lg text-rose-400 transition-colors hover:bg-rose-500/15 hover:text-rose-300 focus:outline-none focus:ring-2 focus:ring-ring"
+            aria-label="Delete mapping"
+            title="Delete mapping"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+        </div>
+      ),
+      exportValue: null,
+    },
+  ]
+
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
       {/* Action Buttons */}
@@ -630,146 +759,22 @@ export default function WordMappingDashboard() {
             the sticky header below had nothing to latch onto. A bounded height
             with overflow-auto scrolls the rows under a pinned header. */}
         <div dir="ltr" className="bg-card rounded-2xl border border-border overflow-auto max-h-[calc(100vh-24rem)]">
-          <Table className="divide-y divide-white/10">
-            {/* Opaque background — a translucent header lets rows show through as they scroll under it. */}
-            <TableHeader className="sticky top-0 z-20 border-white/10 bg-card">
-              <TableRow className="border-white/10 bg-transparent hover:bg-transparent hover:translate-y-0 hover:shadow-none">
-                <TableHead
-                  className="text-xs font-semibold uppercase tracking-wide text-start cursor-pointer hover:bg-white/[0.04] select-none transition-colors"
-                  onClick={() => handleSort('sourceWord')}
-                >
-                  <div className={`flex items-center gap-1 ${sortBy === 'sourceWord' ? 'text-cyan-300' : 'text-slate-400'}`}>
-                    Source
-                    {sortBy === 'sourceWord' ? (
-                      sortOrder === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
-                    ) : (
-                      <ArrowUpDown className="w-3 h-3 opacity-30" />
-                    )}
-                  </div>
-                </TableHead>
-                <TableHead className="text-xs font-semibold uppercase tracking-wide text-start text-slate-400">Language</TableHead>
-                <TableHead
-                  className="text-xs font-semibold uppercase tracking-wide text-start cursor-pointer hover:bg-white/[0.04] select-none transition-colors"
-                  onClick={() => handleSort('targetWord')}
-                >
-                  <div className={`flex items-center gap-1 ${sortBy === 'targetWord' ? 'text-cyan-300' : 'text-slate-400'}`}>
-                    Target
-                    {sortBy === 'targetWord' ? (
-                      sortOrder === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
-                    ) : (
-                      <ArrowUpDown className="w-3 h-3 opacity-30" />
-                    )}
-                  </div>
-                </TableHead>
-                <TableHead className="text-xs font-semibold uppercase tracking-wide text-start text-slate-400">Language</TableHead>
-                <TableHead className="text-xs font-semibold uppercase tracking-wide text-start text-slate-400">Type</TableHead>
-                <TableHead
-                  className="text-xs font-semibold uppercase tracking-wide text-start cursor-pointer hover:bg-white/[0.04] select-none transition-colors"
-                  onClick={() => handleSort('usageCount')}
-                >
-                  <div className={`flex items-center gap-1 ${sortBy === 'usageCount' ? 'text-cyan-300' : 'text-slate-400'}`}>
-                    Usage
-                    {sortBy === 'usageCount' ? (
-                      sortOrder === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
-                    ) : (
-                      <ArrowUpDown className="w-3 h-3 opacity-30" />
-                    )}
-                  </div>
-                </TableHead>
-                <TableHead className="text-xs font-semibold uppercase tracking-wide text-start text-slate-400">Status</TableHead>
-                <TableHead className="text-xs font-semibold uppercase tracking-wide text-start text-slate-400">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody className="divide-y divide-white/5">
-              {loading ? (
-                <TableRow className="border-white/10 hover:bg-transparent hover:translate-y-0 hover:shadow-none">
-                  <TableCell colSpan={8} className="text-center text-slate-400 py-12">
-                    Loading...
-                  </TableCell>
-                </TableRow>
-              ) : mappings.length === 0 ? (
-                <TableRow className="border-white/10 hover:bg-transparent hover:translate-y-0 hover:shadow-none">
-                  <TableCell colSpan={8} className="text-center text-slate-400 py-12">
-                    No mappings found
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filteredMappings.map((mapping) => (
-                  <TableRow key={mapping.id} className="border-white/10 hover:bg-white/[0.04] hover:translate-y-0 hover:shadow-none transition-colors">
-                    <TableCell
-                      className="font-medium text-slate-100 text-start cursor-pointer hover:text-cyan-300 transition-colors"
-                      onClick={() => handleWordClick(mapping.sourceWord)}
-                      title="Click to filter related mappings"
-                      dir="auto"
-                    >
-                      {mapping.sourceWord}
-                    </TableCell>
-                    <TableCell className="text-start">
-                      <span className="inline-flex items-center rounded-full bg-white/5 px-2 py-0.5 text-xs font-medium text-slate-300 ring-1 ring-inset ring-white/10">{mapping.sourceLanguage}</span>
-                    </TableCell>
-                    <TableCell
-                      className="font-medium text-slate-100 text-start cursor-pointer hover:text-cyan-300 transition-colors"
-                      onClick={() => handleWordClick(mapping.targetWord)}
-                      title="Click to filter related mappings"
-                      dir="auto"
-                    >
-                      {mapping.targetWord}
-                    </TableCell>
-                    <TableCell className="text-start">
-                      <span className="inline-flex items-center rounded-full bg-white/5 px-2 py-0.5 text-xs font-medium text-slate-300 ring-1 ring-inset ring-white/10">{mapping.targetLanguage}</span>
-                    </TableCell>
-                    <TableCell className="text-start">
-                      <span className="inline-flex items-center rounded-full bg-white/5 px-2 py-0.5 text-xs font-medium capitalize text-slate-300 ring-1 ring-inset ring-white/10">{mapping.mappingType}</span>
-                    </TableCell>
-                    <TableCell className="text-start text-slate-200 tabular-nums">{mapping.usageCount}</TableCell>
-                    <TableCell className="text-start">
-                      <div className="flex gap-2">
-                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${mapping.isActive ? 'bg-emerald-500/15 text-emerald-300 ring-emerald-400/20' : 'bg-rose-500/15 text-rose-300 ring-rose-400/20'}`}>
-                          {mapping.isActive ? 'Active' : 'Inactive'}
-                        </span>
-                        {mapping.isDefault && (
-                          <span className="inline-flex items-center rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-300 ring-1 ring-inset ring-amber-400/20">
-                            <Star className="w-3 h-3 mr-1 fill-current" />
-                            Default
-                          </span>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-start">
-                      <div className="flex gap-2">
-                        {!mapping.isDefault && (
-                          <button
-                            onClick={() => handleSetDefault(mapping.id)}
-                            className="grid place-items-center h-11 w-11 text-amber-300 hover:text-amber-200 hover:bg-amber-500/15 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-ring"
-                            aria-label="Set as default mapping"
-                            title="Set as default mapping"
-                          >
-                            <Star className="w-4 h-4" />
-                          </button>
-                        )}
-                        <button
-                          onClick={() => handleEditMapping(mapping)}
-                          className="grid place-items-center h-11 w-11 text-cyan-300 hover:text-cyan-200 hover:bg-cyan-500/15 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-ring"
-                          aria-label="Edit mapping"
-                          title="Edit mapping"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteMapping(mapping.id)}
-                          className="grid place-items-center h-11 w-11 text-rose-300 hover:text-rose-200 hover:bg-rose-500/15 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-ring"
-                          aria-label="Delete mapping"
-                          title="Delete mapping"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+          <DataTable<WordMapping, MappingSortKey>
+            rows={filteredMappings}
+            columns={columns}
+            getRowKey={m => m.id}
+            loading={loading}
+            // CONTROLLED sort: these rows are one server-side page, and the
+            // sort is mirrored into the URL. Sorting in-memory here would
+            // re-rank the loaded page and present it as the whole ranking.
+            sort={{ field: sortBy, dir: sortOrder }}
+            onSortChange={next => handleSort(next.field)}
+            minWidth="min-w-[900px]"
+            // The page is bounded by the wrapper above; a second cap here would
+            // nest one scroll area inside another.
+            maxHeight="none"
+            labels={{ empty: 'No mappings found', loading: 'Loading...' }}
+          />
           {/* Pagination */}
           <AdminPagination
             currentPage={page}

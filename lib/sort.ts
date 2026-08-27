@@ -1,7 +1,7 @@
 /**
  * sort.ts — the one comparator the dashboard sorts by.
  *
- * Extracted from `components/shared/sortable-table.tsx` so that <DataTable>,
+ * Originally extracted from the app's old `sortable-table.tsx` (now deleted) so that <DataTable>,
  * <SortableTh> and any ad-hoc `.sort()` all order values identically. Getting
  * this wrong is subtle and user-visible: Hebrew names collating as raw code
  * points, "10" sorting before "9", empty cells floating to the top.

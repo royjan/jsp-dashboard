@@ -13,7 +13,7 @@ type UrgencyLevel = 'critical' | 'warning' | 'watch' | 'ok'
 /**
  * Column comparator for server-side sorting: nulls/blanks last, numbers
  * numerically, text with Hebrew-aware collation. Deliberately mirrors
- * `compareValues` in components/shared/sortable-table.tsx (including the way
+ * `compareValues` in lib/sort.ts (including the way
  * the caller's direction flip also flips the null placement) so moving the
  * sort to the server doesn't change the order users are used to.
  */
