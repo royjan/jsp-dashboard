@@ -91,6 +91,48 @@ function deriveMobileCard<TRow, K extends string>(
   }
 }
 
+
+/**
+ * Where the card layout gives way to the real table, chosen from the table's
+ * OWN width rather than fixed at `lg`.
+ *
+ * A fixed `lg` breakpoint means an 820px iPad gets the phone layout even for a
+ * 560px-wide table that would have fitted with room to spare — a tablet has the
+ * width for a real table and cards there throw it away. A 1200px table, on the
+ * other hand, fits no tablet at all and should stay cards until a desktop.
+ *
+ * So: swap at the first Tailwind breakpoint whose viewport can actually hold
+ * the table, allowing SWAP_GUTTER for page padding and any surrounding card.
+ *
+ * The class strings are literals because Tailwind's scanner reads source text —
+ * a computed `${bp}:hidden` would produce classes that never get generated.
+ */
+const SWAP_GUTTER = 48
+
+const SWAP_AT = {
+  sm: { cards: 'sm:hidden', table: 'hidden sm:block' },
+  md: { cards: 'md:hidden', table: 'hidden md:block' },
+  lg: { cards: 'lg:hidden', table: 'hidden lg:block' },
+  xl: { cards: 'xl:hidden', table: 'hidden xl:block' },
+} as const
+
+/** Tailwind's default breakpoints, smallest first. */
+const BREAKPOINTS: Array<[keyof typeof SWAP_AT, number]> = [
+  ['sm', 640],
+  ['md', 768],
+  ['lg', 1024],
+  ['xl', 1280],
+]
+
+function swapClasses(minWidth: string | undefined) {
+  // `min-w-[860px]` -> 860. Anything unparseable falls back to lg, the old
+  // behaviour, rather than guessing.
+  const px = Number(/min-w-\[(\d+)px\]/.exec(minWidth ?? '')?.[1])
+  if (!Number.isFinite(px)) return SWAP_AT.lg
+  const hit = BREAKPOINTS.find(([, w]) => w >= px + SWAP_GUTTER)
+  return SWAP_AT[hit ? hit[0] : 'xl']
+}
+
 /** Rows past this index all share one entrance delay — see `.jan-row-in`. */
 const ROW_STAGGER_CAP = 12
 
@@ -581,6 +623,9 @@ export function DataTable<TRow, TSortKey extends string = string>({
 
   const showToolbar = Boolean(toolbar || exportFileName)
 
+  // Where cards give way to the table, from this table's own minWidth.
+  const swap = swapClasses(minWidth)
+
   // `undefined` means "derive one"; `false` means "keep the scrolling table".
   const effectiveCard = React.useMemo(
     () => (mobileCard === false ? undefined : (mobileCard ?? deriveMobileCard(columns))),
@@ -588,7 +633,7 @@ export function DataTable<TRow, TSortKey extends string = string>({
   )
 
   const cards = effectiveCard && !loading && pagedRows.length > 0 && (
-    <div className="flex flex-col gap-2 lg:hidden">
+    <div data-jan-ui="cards" className={cn('flex flex-col gap-2', swap.cards)}>
       {pagedRows.map((row, i) => {
         const key = getRowKey(row, i)
         return (
@@ -631,10 +676,11 @@ export function DataTable<TRow, TSortKey extends string = string>({
 
   const table = (
     <div
+      data-jan-ui="table"
       className={cn(
         'overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0',
         // When cards are configured the table is the desktop presentation only.
-        effectiveCard && 'hidden lg:block',
+        effectiveCard && swap.table,
         effectiveMaxHeight && 'overflow-y-auto',
         !showToolbar && className,
       )}
