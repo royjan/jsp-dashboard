@@ -14,7 +14,46 @@ import {
 import { ChartGrid, AXIS_PROPS, BAR_RADIUS, BAR_MAX, PIE_PROPS, DonutCenter, ChartLegendChips, ACTIVE_BAR, ActivePieSector } from '@/components/charts/kit'
 import { formatNumber } from '@/lib/format'
 import { cardVariants } from '@/lib/motion'
+import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
 
+
+/** A row of the PSA-model table. The upstream feed is inconsistent about which
+ *  of these key pairs it uses, so both are accepted and normalised at render. */
+interface PsaModel {
+  manufacturer?: string
+  brand?: string
+  model?: string
+  count?: number
+  quantity?: number
+}
+
+const psaColumns = (isHe: boolean): DataTableColumn<PsaModel>[] => [
+  {
+    key: 'brand',
+    header: isHe ? 'מותג' : 'Brand',
+    sortable: true,
+    sortValue: m => m.manufacturer || m.brand || '',
+    cell: m => <Badge variant="outline" className="text-xs">{m.manufacturer || m.brand || '—'}</Badge>,
+    exportValue: m => m.manufacturer || m.brand || '',
+  },
+  {
+    key: 'model',
+    header: isHe ? 'דגם' : 'Model',
+    sortable: true,
+    sortValue: m => m.model || '',
+    cell: m => <span className="font-medium">{m.model || '—'}</span>,
+    exportValue: m => m.model || '',
+  },
+  {
+    key: 'count',
+    header: isHe ? 'רכבים' : 'Vehicles',
+    align: 'end',
+    sortable: true,
+    sortValue: m => m.count || m.quantity || 0,
+    cell: m => <span className="font-bold">{formatNumber(m.count || m.quantity || 0)}</span>,
+    exportValue: m => m.count || m.quantity || 0,
+  },
+]
 
 const PIE_COLORS = ['#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#f97316', '#ec4899']
 
@@ -209,28 +248,25 @@ export function MarketTab() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
-              <table className="w-full text-sm">
-                <thead className="sticky top-0 bg-background">
-                  <tr className="border-b text-muted-foreground text-xs">
-                    <th className="text-start py-2 px-2">{isHe ? 'מותג' : 'Brand'}</th>
-                    <th className="text-start py-2 px-2">{isHe ? 'דגם' : 'Model'}</th>
-                    <th className="text-end py-2 px-2">{isHe ? 'רכבים' : 'Vehicles'}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {psaModels.slice(0, 30).map((m: any, i: number) => (
-                    <tr key={i} className="border-b border-muted/50 hover:bg-muted/30 transition-colors">
-                      <td className="py-2 px-2">
-                        <Badge variant="outline" className="text-xs">{m.manufacturer || m.brand || '—'}</Badge>
-                      </td>
-                      <td className="py-2 px-2 font-medium">{m.model || '—'}</td>
-                      <td className="py-2 px-2 text-end font-bold">{formatNumber(m.count || m.quantity || 0)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <DataTable<PsaModel>
+              rows={psaModels}
+              columns={psaColumns(isHe)}
+              getRowKey={(m, i) => `${m.manufacturer || m.brand || '?'}/${m.model || i}`}
+              defaultSort={{ field: 'count', dir: 'desc' }}
+              // Was `slice(0, 30)` before the rows ever reached the table, which
+              // read as "these are all the PSA models in Israel" on a list that
+              // is routinely longer. maxRows keeps the cap but says so, and lets
+              // you open the rest.
+              maxRows={30}
+              maxHeight="400px"
+              minWidth="min-w-[420px]"
+              exportFileName={isHe ? 'דגמי-PSA' : 'psa-models'}
+              mobileCard={{
+                title: m => m.model || '—',
+                subtitle: m => m.manufacturer || m.brand || '—',
+                accent: m => formatNumber(m.count || m.quantity || 0),
+              }}
+            />
           </CardContent>
         </Card>
       )}

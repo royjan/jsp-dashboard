@@ -8,6 +8,64 @@ import { useLocale } from '@/lib/locale-context'
 import { formatNumber } from '@/lib/constants'
 import { useUploadPriceList, usePriceUploads } from '@/hooks/use-suppliers'
 import { Upload, FileSpreadsheet, CheckCircle2, AlertCircle, Loader2, X } from 'lucide-react'
+import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
+
+/** A parsed row from the uploaded price list, as the API echoes it back. */
+interface PreviewRow {
+  itemCode: string
+  description: string
+  price: number
+  currency: string
+}
+
+/** What the upload endpoint returns once the file has been parsed. */
+interface UploadResult {
+  summary: {
+    validItems: number
+    totalRows: number
+    errors: number
+    errorDetails?: string[]
+  }
+  preview?: PreviewRow[]
+}
+
+/** One past upload of a price list for this supplier. */
+interface UploadRow {
+  id: string
+  fileName: string
+  uploadDate: string
+  itemsCount: number
+  errorsCount: number
+  status: string
+}
+
+const previewColumns = (itemCodeLabel: string): DataTableColumn<PreviewRow>[] => [
+  {
+    key: 'itemCode',
+    header: itemCodeLabel,
+    sortable: true,
+    cell: r => <span className="font-mono">{r.itemCode}</span>,
+    exportValue: r => r.itemCode,
+  },
+  {
+    key: 'description',
+    header: 'Description',
+    sortable: true,
+    truncate: 'max-w-[280px]',
+    title: r => r.description,
+    cell: r => r.description,
+  },
+  {
+    key: 'price',
+    header: 'Price',
+    align: 'end',
+    sortable: true,
+    cell: r => formatNumber(r.price),
+    // The raw number, so a spreadsheet can sum the file you just uploaded.
+    exportValue: r => r.price,
+  },
+  { key: 'currency', header: 'Currency', align: 'end', sortable: true, cell: r => r.currency },
+]
 
 interface PriceUploaderProps {
   supplierCode: string
@@ -16,8 +74,8 @@ interface PriceUploaderProps {
 export function PriceUploader({ supplierCode }: PriceUploaderProps) {
   const { t } = useLocale()
   const [file, setFile] = useState<File | null>(null)
-  const [preview, setPreview] = useState<any[] | null>(null)
-  const [uploadResult, setUploadResult] = useState<any>(null)
+  const [preview, setPreview] = useState<PreviewRow[] | null>(null)
+  const [uploadResult, setUploadResult] = useState<UploadResult | null>(null)
   const [dragOver, setDragOver] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const uploadMutation = useUploadPriceList()
@@ -127,9 +185,9 @@ export function PriceUploader({ supplierCode }: PriceUploaderProps) {
                   <Badge variant="warning">{formatNumber(uploadResult.summary.errors)} {t('suppliers.errors')}</Badge>
                 )}
               </div>
-              {uploadResult.summary.errorDetails?.length > 0 && (
+              {(uploadResult.summary.errorDetails?.length ?? 0) > 0 && (
                 <div className="text-xs text-muted-foreground space-y-0.5">
-                  {uploadResult.summary.errorDetails.map((err: string, i: number) => (
+                  {uploadResult.summary.errorDetails?.map((err: string, i: number) => (
                     <div key={i}>{err}</div>
                   ))}
                 </div>
@@ -141,28 +199,20 @@ export function PriceUploader({ supplierCode }: PriceUploaderProps) {
           {preview && preview.length > 0 && (
             <div className="mt-3">
               <p className="text-xs text-muted-foreground mb-2">{t('suppliers.preview')}</p>
-              <div className="rounded border overflow-x-auto">
-                <table className="w-full text-xs min-w-[420px]">
-                  <thead className="bg-muted/50">
-                    <tr>
-                      <th className="px-2 py-1 text-start">{t('suppliers.itemCode')}</th>
-                      <th className="px-2 py-1 text-start">Description</th>
-                      <th className="px-2 py-1 text-end">Price</th>
-                      <th className="px-2 py-1 text-end">Currency</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {preview.map((row: any, i: number) => (
-                      <tr key={i} className="border-t">
-                        <td className="px-2 py-1 font-mono">{row.itemCode}</td>
-                        <td className="px-2 py-1">{row.description}</td>
-                        <td className="px-2 py-1 text-end">{formatNumber(row.price)}</td>
-                        <td className="px-2 py-1 text-end">{row.currency}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <DataTable<PreviewRow>
+                rows={preview}
+                columns={previewColumns(t('suppliers.itemCode'))}
+                getRowKey={(r, i) => `${r.itemCode}-${i}`}
+                pageSize={25}
+                minWidth="min-w-[420px]"
+                density="compact"
+                exportFileName="price-list-preview"
+                mobileCard={{
+                  title: r => r.itemCode,
+                  subtitle: r => r.description,
+                  accent: r => `${formatNumber(r.price)} ${r.currency}`,
+                }}
+              />
             </div>
           )}
         </CardContent>
@@ -175,38 +225,47 @@ export function PriceUploader({ supplierCode }: PriceUploaderProps) {
             <CardTitle className="text-sm">{t('suppliers.uploadHistory')}</CardTitle>
           </CardHeader>
           <CardContent className="p-3">
-            <div className="rounded border overflow-x-auto">
-              <table className="w-full text-xs min-w-[480px]">
-                <thead className="bg-muted/50">
-                  <tr>
-                    <th className="px-2 py-1 text-start">{t('suppliers.fileName')}</th>
-                    <th className="px-2 py-1 text-start">{t('suppliers.uploadDate')}</th>
-                    <th className="px-2 py-1 text-end">{t('suppliers.itemsProcessed')}</th>
-                    <th className="px-2 py-1 text-end">{t('suppliers.errors')}</th>
-                    <th className="px-2 py-1 text-center">{t('suppliers.status')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {uploadsData.uploads.map((upload: any) => (
-                    <tr key={upload.id} className="border-t">
-                      <td className="px-2 py-1">{upload.fileName}</td>
-                      <td className="px-2 py-1">
-                        {new Date(upload.uploadDate).toLocaleDateString('he-IL')}
-                      </td>
-                      <td className="px-2 py-1 text-end">{formatNumber(upload.itemsCount)}</td>
-                      <td className="px-2 py-1 text-end">{formatNumber(upload.errorsCount)}</td>
-                      <td className="px-2 py-1 text-center">
-                        <Badge
-                          variant={upload.status === 'completed' ? 'success' : upload.status === 'error' ? 'destructive' : 'secondary'}
-                        >
-                          {upload.status}
-                        </Badge>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <DataTable<UploadRow>
+              rows={uploadsData.uploads}
+              columns={[
+                { key: 'fileName', header: t('suppliers.fileName'), sortable: true, truncate: true, cell: u => u.fileName },
+                {
+                  key: 'uploadDate',
+                  header: t('suppliers.uploadDate'),
+                  sortable: true,
+                  // Sort on the ISO string, not the he-IL rendering — dd/mm/yyyy
+                  // sorts by day-of-month, which is not chronological.
+                  sortValue: u => u.uploadDate,
+                  cell: u => new Date(u.uploadDate).toLocaleDateString('he-IL'),
+                  exportValue: u => u.uploadDate,
+                },
+                { key: 'itemsCount', header: t('suppliers.itemsProcessed'), align: 'end', sortable: true, cell: u => formatNumber(u.itemsCount), exportValue: u => u.itemsCount },
+                { key: 'errorsCount', header: t('suppliers.errors'), align: 'end', sortable: true, cell: u => formatNumber(u.errorsCount), exportValue: u => u.errorsCount },
+                {
+                  key: 'status',
+                  header: t('suppliers.status'),
+                  align: 'center',
+                  sortable: true,
+                  cell: u => (
+                    <Badge variant={u.status === 'completed' ? 'success' : u.status === 'error' ? 'destructive' : 'secondary'}>
+                      {u.status}
+                    </Badge>
+                  ),
+                  exportValue: u => u.status,
+                },
+              ]}
+              getRowKey={u => u.id}
+              defaultSort={{ field: 'uploadDate', dir: 'desc' }}
+              pageSize={10}
+              minWidth="min-w-[480px]"
+              density="compact"
+              exportFileName="price-upload-history"
+              mobileCard={{
+                title: u => u.fileName,
+                subtitle: u => new Date(u.uploadDate).toLocaleDateString('he-IL'),
+                accent: u => u.status,
+              }}
+            />
           </CardContent>
         </Card>
       )}

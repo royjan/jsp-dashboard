@@ -5,20 +5,11 @@ import { useQuery } from '@tanstack/react-query'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Skeleton } from '@/components/ui/skeleton'
-import {
-  Search,
-  ArrowUpDown,
-  ArrowUp,
-  ArrowDown,
-  Package,
-  ExternalLink,
-  ShoppingCart,
-  FileSpreadsheet,
-} from 'lucide-react'
+import { Search, Package, ExternalLink, ShoppingCart, FileSpreadsheet } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatNumber, formatCurrency } from '@/lib/constants'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
+import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
 
 interface CatalogPart {
   globalPartId: string
@@ -41,7 +32,6 @@ interface CatalogPart {
 }
 
 type SortKey = 'itemNumber' | 'description' | 'stockQty' | 'price' | 'schemaNumber'
-type SortDir = 'asc' | 'desc'
 
 interface PartsGridProps {
   projectId: string
@@ -59,6 +49,124 @@ const STOCK_STATUS_CONFIG = {
   unknown: { label: '-', variant: 'secondary' as const, className: '' },
 }
 
+
+const COLUMNS: DataTableColumn<CatalogPart, SortKey>[] = [
+  {
+    key: 'itemNumber',
+    header: 'מק״ט OEM',
+    sortable: true,
+    sortKey: 'itemNumber',
+    cell: p => <span className="font-mono text-xs" dir="ltr">{p.itemNumber}</span>,
+    exportValue: p => p.itemNumber,
+  },
+  {
+    key: 'description',
+    header: 'תיאור',
+    sortable: true,
+    sortKey: 'description',
+    title: p => [p.description, p.hebrewDescription].filter(Boolean).join(' · '),
+    cell: p => (
+      <div className="max-w-[250px]">
+        <div className="truncate text-xs">{p.description}</div>
+        {p.hebrewDescription && (
+          <div className="truncate text-xs text-muted-foreground">{p.hebrewDescription}</div>
+        )}
+      </div>
+    ),
+    exportValue: p => p.description,
+  },
+  {
+    key: 'schemaNumber',
+    header: 'סכמה',
+    sortable: true,
+    sortKey: 'schemaNumber',
+    hideOnMobile: true,
+    cell: p =>
+      p.schemaName ? (
+        <span className="block max-w-[120px] truncate text-xs text-muted-foreground">
+          {p.schemaNumber} - {p.schemaName}
+        </span>
+      ) : null,
+    exportValue: p => (p.schemaName ? `${p.schemaNumber} - ${p.schemaName}` : ''),
+  },
+  {
+    key: 'quantity',
+    header: 'כמות',
+    align: 'end',
+    cell: p => <span className="text-xs">{formatNumber(p.quantity)}</span>,
+    exportValue: p => p.quantity,
+  },
+  {
+    key: 'stockQty',
+    header: 'מלאי',
+    align: 'end',
+    sortable: true,
+    sortKey: 'stockQty',
+    // Unknown stock sorts below zero stock rather than above it — "we do not
+    // know" is not the same as "we have none", and mixing them hides the
+    // genuinely-empty rows this screen is used to find.
+    sortValue: p => p.stockQty ?? -1,
+    cell: p =>
+      p.stockQty !== null ? (
+        <div className="text-xs">
+          <span className="font-medium">{formatNumber(p.stockQty)}</span>
+          {p.incomingQty !== null && p.incomingQty > 0 && (
+            <span className="ms-1 text-amber-600 dark:text-amber-400">(+{p.incomingQty})</span>
+          )}
+        </div>
+      ) : (
+        <span className="text-xs text-muted-foreground">-</span>
+      ),
+    exportValue: p => p.stockQty ?? '',
+  },
+  {
+    key: 'price',
+    header: 'מחיר',
+    align: 'end',
+    sortable: true,
+    sortKey: 'price',
+    sortValue: p => p.price ?? 0,
+    cell: p =>
+      p.price !== null ? (
+        <span className="text-xs font-medium" dir="ltr">{formatCurrency(p.price, 2)}</span>
+      ) : (
+        <span className="text-xs text-muted-foreground">-</span>
+      ),
+    exportValue: p => p.price ?? '',
+  },
+  {
+    key: 'stockStatus',
+    header: 'סטטוס',
+    cell: p => {
+      const c = STOCK_STATUS_CONFIG[p.stockStatus]
+      return <Badge variant={c.variant} className={cn('px-1.5 text-[10px]', c.className)}>{c.label}</Badge>
+    },
+    exportValue: p => STOCK_STATUS_CONFIG[p.stockStatus].label,
+  },
+  {
+    key: 'actions',
+    header: 'פעולות',
+    cell: p => (
+      <div className="flex items-center gap-1">
+        {p.stockStatus !== 'unknown' && (
+          <a
+            href={`/items?code=${encodeURIComponent(p.itemNumber)}`}
+            className="rounded p-1 transition-colors hover:bg-accent"
+            title="צפה בלוח בקרה"
+          >
+            <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
+          </a>
+        )}
+        <Button variant="ghost" size="sm" className="h-6 px-2 text-[10px]" disabled title="בקרוב">
+          <ShoppingCart className="me-1 h-3 w-3" />
+          הצעה
+        </Button>
+      </div>
+    ),
+    exportValue: null,
+  },
+]
+
 export function PartsGrid({
   projectId,
   categoryId,
@@ -71,8 +179,6 @@ export function PartsGrid({
   // store, so without this the amounts here would not re-render on toggle.
   useMoneyHidden()
 
-  const [sortKey, setSortKey] = useState<SortKey>('itemNumber')
-  const [sortDir, setSortDir] = useState<SortDir>('asc')
   const [localFilter, setLocalFilter] = useState('')
 
   const queryParams = new URLSearchParams({ projectId })
@@ -93,16 +199,7 @@ export function PartsGrid({
     staleTime: 5 * 60 * 1000,
   })
 
-  const handleSort = (key: SortKey) => {
-    if (sortKey === key) {
-      setSortDir(d => d === 'asc' ? 'desc' : 'asc')
-    } else {
-      setSortKey(key)
-      setSortDir('asc')
-    }
-  }
-
-  const sortedAndFiltered = useMemo(() => {
+  const filtered = useMemo(() => {
     let parts = data?.parts || []
 
     // Local filter
@@ -115,45 +212,8 @@ export function PartsGrid({
       )
     }
 
-    // Sort
-    parts = [...parts].sort((a, b) => {
-      let cmp = 0
-      switch (sortKey) {
-        case 'itemNumber':
-          cmp = (a.itemNumber || '').localeCompare(b.itemNumber || '')
-          break
-        case 'description':
-          cmp = (a.description || '').localeCompare(b.description || '')
-          break
-        case 'stockQty':
-          cmp = (a.stockQty ?? -1) - (b.stockQty ?? -1)
-          break
-        case 'price':
-          cmp = (a.price ?? 0) - (b.price ?? 0)
-          break
-        case 'schemaNumber':
-          cmp = (a.schemaNumber || '').localeCompare(b.schemaNumber || '')
-          break
-      }
-      return sortDir === 'desc' ? -cmp : cmp
-    })
-
     return parts
-  }, [data?.parts, localFilter, sortKey, sortDir])
-
-  const SortHeader = ({ label, field }: { label: string; field: SortKey }) => (
-    <button
-      onClick={() => handleSort(field)}
-      className="flex items-center gap-1 hover:text-foreground transition-colors"
-    >
-      {label}
-      {sortKey === field ? (
-        sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
-      ) : (
-        <ArrowUpDown className="h-3 w-3 opacity-40" />
-      )}
-    </button>
-  )
+  }, [data?.parts, localFilter])
 
   // Stock summary
   const stockSummary = useMemo(() => {
@@ -217,134 +277,37 @@ export function PartsGrid({
         </div>
       </CardHeader>
       <CardContent className="p-0">
-        {isLoading ? (
-          <div className="p-4 space-y-3">
-            {Array.from({ length: 8 }).map((_, i) => (
-              <Skeleton key={i} className="h-10 w-full" />
-            ))}
-          </div>
-        ) : sortedAndFiltered.length === 0 ? (
-          <div className="py-12 text-center text-muted-foreground">
-            {localFilter ? 'לא נמצאו חלקים עם הסינון הנוכחי' : 'אין חלקים בקטגוריה זו'}
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b bg-muted/50 text-muted-foreground">
-                  <th className="text-start px-3 py-2 font-medium">
-                    <SortHeader label="מק״ט OEM" field="itemNumber" />
-                  </th>
-                  <th className="text-start px-3 py-2 font-medium">
-                    <SortHeader label="תיאור" field="description" />
-                  </th>
-                  <th className="text-start px-3 py-2 font-medium hidden lg:table-cell">
-                    <SortHeader label="סכמה" field="schemaNumber" />
-                  </th>
-                  <th className="text-start px-3 py-2 font-medium">כמות</th>
-                  <th className="text-start px-3 py-2 font-medium">
-                    <SortHeader label="מלאי" field="stockQty" />
-                  </th>
-                  <th className="text-start px-3 py-2 font-medium">
-                    <SortHeader label="מחיר" field="price" />
-                  </th>
-                  <th className="text-start px-3 py-2 font-medium">סטטוס</th>
-                  <th className="text-start px-3 py-2 font-medium">פעולות</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sortedAndFiltered.map((part) => {
-                  const statusConfig = STOCK_STATUS_CONFIG[part.stockStatus]
-                  return (
-                    <tr
-                      key={`${part.globalPartId}-${part.schemaNumber}`}
-                      className={cn(
-                        'border-b hover:bg-accent/50 transition-colors',
-                        part.stockStatus === 'in_stock' && 'bg-emerald-500/5',
-                        part.stockStatus === 'out_of_stock' && 'bg-red-500/5',
-                        part.stockStatus === 'incoming' && 'bg-amber-500/5',
-                      )}
-                    >
-                      <td className="px-3 py-2">
-                        <span className="font-mono text-xs" dir="ltr">{part.itemNumber}</span>
-                      </td>
-                      <td className="px-3 py-2">
-                        <div className="max-w-[250px]">
-                          <div className="truncate text-xs">{part.description}</div>
-                          {part.hebrewDescription && (
-                            <div className="truncate text-xs text-muted-foreground">{part.hebrewDescription}</div>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-3 py-2 hidden lg:table-cell">
-                        {part.schemaName && (
-                          <span className="text-xs text-muted-foreground truncate max-w-[120px] block">
-                            {part.schemaNumber} - {part.schemaName}
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2 text-xs">{formatNumber(part.quantity)}</td>
-                      <td className="px-3 py-2">
-                        {part.stockQty !== null ? (
-                          <div className="text-xs">
-                            <span className="font-medium">{formatNumber(part.stockQty)}</span>
-                            {part.incomingQty !== null && part.incomingQty > 0 && (
-                              <span className="text-amber-600 dark:text-amber-400 ms-1">
-                                (+{part.incomingQty})
-                              </span>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">-</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2">
-                        {part.price !== null ? (
-                          <span className="text-xs font-medium" dir="ltr">
-                            {formatCurrency(part.price, 2)}
-                          </span>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">-</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2">
-                        <Badge
-                          variant={statusConfig.variant}
-                          className={cn('text-[10px] px-1.5', statusConfig.className)}
-                        >
-                          {statusConfig.label}
-                        </Badge>
-                      </td>
-                      <td className="px-3 py-2">
-                        <div className="flex items-center gap-1">
-                          {part.stockStatus !== 'unknown' && (
-                            <a
-                              href={`/items?code=${encodeURIComponent(part.itemNumber)}`}
-                              className="p-1 rounded hover:bg-accent transition-colors"
-                              title="צפה בלוח בקרה"
-                            >
-                              <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
-                            </a>
-                          )}
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-6 px-2 text-[10px]"
-                            disabled
-                            title="בקרוב"
-                          >
-                            <ShoppingCart className="h-3 w-3 me-1" />
-                            הצעה
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <DataTable<CatalogPart, SortKey>
+          rows={filtered}
+          columns={COLUMNS}
+          // A part can appear under more than one schema, so the part id alone
+          // is not unique — two rows sharing a key make one of them disappear.
+          getRowKey={p => `${p.globalPartId}-${p.schemaNumber}`}
+          loading={isLoading}
+          defaultSort={{ field: 'itemNumber', dir: 'asc' }}
+          pageSize={50}
+          minWidth="min-w-[900px]"
+          exportFileName={`חלקים-${categoryName || 'קטלוג'}`}
+          rowClassName={p =>
+            cn(
+              p.stockStatus === 'in_stock' && 'bg-emerald-500/5',
+              p.stockStatus === 'out_of_stock' && 'bg-red-500/5',
+              p.stockStatus === 'incoming' && 'bg-amber-500/5',
+            )
+          }
+          labels={{
+            empty: localFilter ? 'לא נמצאו חלקים עם הסינון הנוכחי' : 'אין חלקים בקטגוריה זו',
+          }}
+          mobileCard={{
+            title: p => p.itemNumber,
+            subtitle: p => p.hebrewDescription || p.description,
+            accent: p => (p.price !== null ? formatCurrency(p.price, 2) : '—'),
+            fields: [
+              { label: 'מלאי', value: p => (p.stockQty !== null ? formatNumber(p.stockQty) : '-') },
+              { label: 'סטטוס', value: p => STOCK_STATUS_CONFIG[p.stockStatus].label },
+            ],
+          }}
+        />
       </CardContent>
     </Card>
   )

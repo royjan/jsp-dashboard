@@ -8,6 +8,7 @@ import { useLocale } from '@/lib/locale-context'
 import { formatNumber } from '@/lib/constants'
 import { useUploadCompetitorFile, useCompetitorUploads, DuplicateUploadError } from '@/hooks/use-competitors'
 import { Upload, FileSpreadsheet, CheckCircle2, AlertCircle, Loader2, X } from 'lucide-react'
+import { DataTable } from '@/components/shared/DataTable'
 
 interface SheetSummary {
   sheet: string
@@ -16,6 +17,16 @@ interface SheetSummary {
   storedRows: number
   skippedRows: number
   errors: string[]
+}
+
+/** One past upload of a competitor price file. */
+interface CompetitorUpload {
+  id: string
+  fileName: string
+  uploadedAt: string
+  totalRows: number
+  errorsCount: number
+  status: string
 }
 
 export function CompetitorUploader() {
@@ -153,34 +164,47 @@ export function CompetitorUploader() {
             <CardTitle className="text-sm">{t('competitors.uploadHistory')}</CardTitle>
           </CardHeader>
           <CardContent className="p-3">
-            <div className="rounded border overflow-x-auto">
-              <table className="w-full text-xs min-w-[480px]">
-                <thead className="bg-muted/50">
-                  <tr>
-                    <th className="px-2 py-1 text-start">{t('suppliers.fileName')}</th>
-                    <th className="px-2 py-1 text-start">{t('suppliers.uploadDate')}</th>
-                    <th className="px-2 py-1 text-end">{t('suppliers.itemsProcessed')}</th>
-                    <th className="px-2 py-1 text-end">{t('suppliers.errors')}</th>
-                    <th className="px-2 py-1 text-center">{t('suppliers.status')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {uploadsData.uploads.map((upload: { id: string; fileName: string; uploadedAt: string; totalRows: number; errorsCount: number; status: string }) => (
-                    <tr key={upload.id} className="border-t">
-                      <td className="px-2 py-1">{upload.fileName}</td>
-                      <td className="px-2 py-1">{new Date(upload.uploadedAt).toLocaleDateString('he-IL')}</td>
-                      <td className="px-2 py-1 text-end">{formatNumber(upload.totalRows)}</td>
-                      <td className="px-2 py-1 text-end">{formatNumber(upload.errorsCount)}</td>
-                      <td className="px-2 py-1 text-center">
-                        <Badge variant={upload.status === 'completed' ? 'success' : upload.status === 'error' ? 'destructive' : 'secondary'}>
-                          {upload.status}
-                        </Badge>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <DataTable<CompetitorUpload>
+              rows={uploadsData.uploads}
+              columns={[
+                { key: 'fileName', header: t('suppliers.fileName'), sortable: true, truncate: true, cell: u => u.fileName },
+                {
+                  key: 'uploadedAt',
+                  header: t('suppliers.uploadDate'),
+                  sortable: true,
+                  // Sort and export the ISO value; the he-IL dd/mm/yyyy string
+                  // sorts by day-of-month rather than chronologically.
+                  sortValue: u => u.uploadedAt,
+                  cell: u => new Date(u.uploadedAt).toLocaleDateString('he-IL'),
+                  exportValue: u => u.uploadedAt,
+                },
+                { key: 'totalRows', header: t('suppliers.itemsProcessed'), align: 'end', sortable: true, cell: u => formatNumber(u.totalRows), exportValue: u => u.totalRows },
+                { key: 'errorsCount', header: t('suppliers.errors'), align: 'end', sortable: true, cell: u => formatNumber(u.errorsCount), exportValue: u => u.errorsCount },
+                {
+                  key: 'status',
+                  header: t('suppliers.status'),
+                  align: 'center',
+                  sortable: true,
+                  cell: u => (
+                    <Badge variant={u.status === 'completed' ? 'success' : u.status === 'error' ? 'destructive' : 'secondary'}>
+                      {u.status}
+                    </Badge>
+                  ),
+                  exportValue: u => u.status,
+                },
+              ]}
+              getRowKey={u => u.id}
+              defaultSort={{ field: 'uploadedAt', dir: 'desc' }}
+              pageSize={10}
+              minWidth="min-w-[480px]"
+              density="compact"
+              exportFileName="competitor-upload-history"
+              mobileCard={{
+                title: u => u.fileName,
+                subtitle: u => new Date(u.uploadedAt).toLocaleDateString('he-IL'),
+                accent: u => u.status,
+              }}
+            />
           </CardContent>
         </Card>
       )}
