@@ -31,6 +31,7 @@ import { ChartGrid, AXIS_PROPS, BAR_RADIUS, BAR_MAX, PIE_PROPS, DonutCenter, Cha
 import { incrementStreaming, decrementStreaming } from '@/lib/streaming-counter'
 import { formatCurrency, formatDate, formatNumber } from '@/lib/format'
 import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
+import type { DeadStockItem } from '@/lib/types'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
 import { isMoneyHidden } from '@/lib/privacy'
 import { PageHeader } from '@/components/shared/PageHeader'
@@ -791,7 +792,7 @@ function StockPageContent() {
 
   // Raw data
   const allItems: any[] = itemsData?.items || []
-  const deadItems = deadData?.items || []
+  const deadItems: DeadStockItem[] = deadData?.items ?? []
   const totalDeadCapital = deadData?.total_capital || 0
 
   // Stock health overview (based on items with stock)
@@ -1575,49 +1576,110 @@ function StockPageContent() {
                   ) : viewMode === 'map' ? (
                     <DeadStockTreemap data={deadItems} isLoading={false} bare page={treemapPage} pageSize={50} onPageChange={setTreemapPage} />
                   ) : (
-                    <div className="overflow-x-auto max-h-[450px] overflow-y-auto">
-                      <table className="w-full text-sm">
-                        <thead className="sticky top-0 bg-background z-10">
-                          <tr className="border-b">
-                            <th className="pb-2 font-medium text-start">{t('item')}</th>
-                            <th className="pb-2 font-medium text-end">{t('stock')}</th>
-                            <th className="pb-2 font-medium text-end">{t('price')}</th>
-                            <th className="pb-2 font-medium text-end">{t('capitalTiedShort')}</th>
-                            <th className="pb-2 font-medium text-end">{t('lastSale')}</th>
-                            <th className="pb-2 font-medium text-end">{t('lastCount')}</th>
-                            <th className="pb-2 font-medium text-end">{t('yearsDead2')}</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {deadItems.map((item: any, idx: number) => (
-                            <tr key={`${item.code}-${idx}`} className="border-b hover:bg-muted/50 transition-colors">
-                              <td className="py-2">
-                                <div className="flex items-center gap-1.5">
-                                  <EbayRecommendButton itemCode={item.code} itemName={item.name} source="dead_stock" />
-                                  <div>
-                                    <div className="font-medium"><ItemLink code={item.code} name={item.name} /></div>
-                                    <div className="text-xs text-muted-foreground font-mono"><ItemLink code={item.code} showCode className="text-muted-foreground hover:text-primary" /></div>
+                    <DataTable<DeadStockItem>
+                      rows={deadItems}
+                      columns={[
+                        {
+                          key: 'item',
+                          header: t('item'),
+                          sortable: true,
+                          sortValue: item => item.name || item.code,
+                          cell: item => (
+                            <div>
+                              <div className="flex items-center gap-1.5">
+                                <EbayRecommendButton itemCode={item.code} itemName={item.name} source="dead_stock" />
+                                <div>
+                                  <div className="font-medium"><ItemLink code={item.code} name={item.name} /></div>
+                                  <div className="font-mono text-xs text-muted-foreground">
+                                    <ItemLink code={item.code} showCode className="text-muted-foreground hover:text-primary" />
                                   </div>
                                 </div>
-                                {item.alias_codes && item.alias_codes.length > 0 && (
-                                  <div className="text-[10px] text-muted-foreground/70">{t('alsoKnownAs')}: {item.alias_codes.join(', ')}</div>
-                                )}
-                              </td>
-                              <td className="py-2 text-end">{formatNumber(item.stock_qty)}</td>
-                              <td className="py-2 text-end font-mono">{formatCurrency(item.price)}</td>
-                              <td className="py-2 text-end font-mono font-semibold">{formatCurrency(item.capital_tied)}</td>
-                              <td className="py-2 text-end text-xs text-muted-foreground">{item.sale_date ? formatDate(item.sale_date) : t('neverSold')}</td>
-                              <td className="py-2 text-end text-xs text-muted-foreground">{item.count_date ? formatDate(item.count_date) : t('neverCounted')}</td>
-                              <td className="py-2 text-end">
-                                <Badge variant={item.years_dead >= 3 ? 'destructive' : item.years_dead >= 2 ? 'warning' : 'secondary'}>{item.years_dead}</Badge>
-                              </td>
-                            </tr>
-                          ))}
-                          {deadItems.length === 0 && <tr><td colSpan={7} className="py-8 text-center text-muted-foreground">{t('noInsights')}</td></tr>}
-                        </tbody>
-                      </table>
-                      <div className="mt-2 text-xs text-muted-foreground text-end">{deadItems.length} {t('items')}</div>
-                    </div>
+                              </div>
+                              {/* This row folds a supersession chain; without the
+                                  old codes a merged row looks like the wrong item
+                                  to anyone who knew it by its previous number. */}
+                              {item.alias_codes && item.alias_codes.length > 0 && (
+                                <div className="text-[10px] text-muted-foreground/70">
+                                  {t('alsoKnownAs')}: {item.alias_codes.join(', ')}
+                                </div>
+                              )}
+                            </div>
+                          ),
+                          exportValue: item => `${item.code} ${item.name ?? ''}`.trim(),
+                        },
+                        { key: 'stock_qty', header: t('stock'), align: 'end', sortable: true, cell: item => formatNumber(item.stock_qty), exportValue: item => item.stock_qty },
+                        { key: 'price', header: t('price'), align: 'end', sortable: true, cell: item => <span className="font-mono">{formatCurrency(item.price)}</span>, exportValue: item => item.price },
+                        {
+                          key: 'capital_tied',
+                          header: t('capitalTiedShort'),
+                          align: 'end',
+                          sortable: true,
+                          cell: item => <span className="font-mono font-semibold">{formatCurrency(item.capital_tied)}</span>,
+                          exportValue: item => item.capital_tied,
+                        },
+                        {
+                          key: 'sale_date',
+                          header: t('lastSale'),
+                          align: 'end',
+                          sortable: true,
+                          // Never-sold sorts as the empty string, which the shared
+                          // comparator puts last — the right end for "no date".
+                          sortValue: item => item.sale_date ?? '',
+                          cell: item => (
+                            <span className="text-xs text-muted-foreground">
+                              {item.sale_date ? formatDate(item.sale_date) : t('neverSold')}
+                            </span>
+                          ),
+                          exportValue: item => item.sale_date ?? '',
+                        },
+                        {
+                          key: 'count_date',
+                          header: t('lastCount'),
+                          align: 'end',
+                          sortable: true,
+                          hideOnMobile: true,
+                          sortValue: item => item.count_date ?? '',
+                          cell: item => (
+                            <span className="text-xs text-muted-foreground">
+                              {item.count_date ? formatDate(item.count_date) : t('neverCounted')}
+                            </span>
+                          ),
+                          exportValue: item => item.count_date ?? '',
+                        },
+                        {
+                          key: 'years_dead',
+                          header: t('yearsDead2'),
+                          align: 'end',
+                          sortable: true,
+                          cell: item => (
+                            <Badge variant={item.years_dead >= 3 ? 'destructive' : item.years_dead >= 2 ? 'warning' : 'secondary'}>
+                              {item.years_dead}
+                            </Badge>
+                          ),
+                          exportValue: item => item.years_dead,
+                        },
+                      ] satisfies DataTableColumn<DeadStockItem>[]}
+                      getRowKey={(item, idx) => `${item.code}-${idx}`}
+                      defaultSort={{ field: 'capital_tied', dir: 'desc' }}
+                      maxHeight="450px"
+                      minWidth="min-w-[860px]"
+                      exportFileName="מלאי-מת"
+                      labels={{ empty: t('noInsights') }}
+                      footer={(_shown, all) => (
+                        <tr className="text-xs text-muted-foreground">
+                          <td colSpan={7} className="py-2 text-end">{all.length} {t('items')}</td>
+                        </tr>
+                      )}
+                      mobileCard={{
+                        title: item => item.name || item.code,
+                        subtitle: item => item.code,
+                        accent: item => formatCurrency(item.capital_tied),
+                        fields: [
+                          { label: t('stock'), value: item => formatNumber(item.stock_qty) },
+                          { label: t('yearsDead2'), value: item => item.years_dead },
+                        ],
+                      }}
+                    />
                   )}
                 </div>
               )}

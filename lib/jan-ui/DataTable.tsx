@@ -196,6 +196,25 @@ export interface DataTableProps<TRow, TSortKey extends string = string> {
   /** Extra controls rendered in the toolbar, before the export button. */
   toolbar?: React.ReactNode
   /**
+   * Render a detail panel underneath a row, in a full-width second `<tr>`.
+   *
+   * Return null for a row that has nothing to show and it stays un-expandable —
+   * no caret, no pointer cursor, no click target. That per-row decision is why
+   * this is a render function rather than a boolean: on a document list, only
+   * the rows that actually carry a document number can open.
+   *
+   * The panel is only MOUNTED while open, so a detail that fetches does not
+   * fire a request per row on first paint.
+   */
+  renderExpanded?: (row: TRow, index: number) => React.ReactNode
+  /**
+   * Which rows are open, keyed by `getRowKey`. Controlled by the caller so it
+   * can enforce whatever policy it wants — pass a one-element Set for an
+   * accordion, a growing Set to allow several open at once.
+   */
+  expandedKeys?: Set<string | number>
+  onExpandedChange?: (keys: Set<string | number>) => void
+  /**
    * Stagger the rows in as they mount. On by default — it is what makes a
    * table land rather than blink into place, and it costs nothing on a table
    * that is already painted, because React reuses a <tr> by key and CSS
@@ -316,6 +335,9 @@ export function DataTable<TRow, TSortKey extends string = string>({
   selectedKeys,
   onSelectionChange,
   animateRows = true,
+  renderExpanded,
+  expandedKeys,
+  onExpandedChange,
   minWidth = 'min-w-[700px]',
   maxHeight,
   density: densityProp,
@@ -419,6 +441,14 @@ export function DataTable<TRow, TSortKey extends string = string>({
   // useMemo used to sit AFTER it, so the first render that errored called one
   // hook fewer and React threw "rendered fewer hooks than expected" — the
   // error state could never actually paint.
+  const toggleExpanded = (key: string | number) => {
+    if (!onExpandedChange) return
+    const next = new Set(expandedKeys)
+    if (next.has(key)) next.delete(key)
+    else next.add(key)
+    onExpandedChange(next)
+  }
+
   const allKeys = React.useMemo(() => rows.map((r, i) => getRowKey(r, i)), [rows, getRowKey])
   const allSelected = selectable && allKeys.length > 0 && allKeys.every(k => selectedKeys?.has(k))
   const someSelected = selectable && !allSelected && allKeys.some(k => selectedKeys?.has(k))
@@ -603,16 +633,24 @@ export function DataTable<TRow, TSortKey extends string = string>({
             pagedRows.map((row, i) => {
               const key = getRowKey(row, i)
               const selected = selectedKeys?.has(key)
+              // Ask for the panel BEFORE deciding the row is expandable: a row
+              // whose detail comes back null gets no caret and no click target,
+              // which is how a document list keeps its number-less rows inert.
+              const expandedContent = renderExpanded?.(row, i)
+              const expandable = expandedContent != null
+              const isExpanded = expandable && !!expandedKeys?.has(key)
               return (
+                <React.Fragment key={key}>
                 <tr
-                  key={key}
                   className={cn(
                     'border-b transition-colors',
                     animateRows && 'jan-anim jan-row-in',
-                    onRowClick && 'cursor-pointer hover:bg-muted/50',
+                    (onRowClick || expandable) && 'cursor-pointer hover:bg-muted/50',
                     selected && 'bg-primary/5',
+                    isExpanded && 'bg-muted/30',
                     rowClassName?.(row, i),
                   )}
+                  aria-expanded={expandable ? isExpanded : undefined}
                   // Capped: see the note on .jan-row-in. Beyond ROW_STAGGER_CAP
                   // every remaining row shares the last delay and they land
                   // together, which is what you want at the bottom of a long page.
@@ -621,7 +659,14 @@ export function DataTable<TRow, TSortKey extends string = string>({
                       ? ({ '--jan-row-i': Math.min(i, ROW_STAGGER_CAP) } as React.CSSProperties)
                       : undefined
                   }
-                  onClick={onRowClick ? () => onRowClick(row, i) : undefined}
+                  onClick={
+                    onRowClick || expandable
+                      ? () => {
+                          onRowClick?.(row, i)
+                          if (expandable) toggleExpanded(key)
+                        }
+                      : undefined
+                  }
                 >
                   {selectable && (
                     <td className={cn('ps-1', cellPad)} onClick={e => e.stopPropagation()}>
@@ -658,6 +703,14 @@ export function DataTable<TRow, TSortKey extends string = string>({
                     )
                   })}
                 </tr>
+                {isExpanded && (
+                  <tr className="border-b">
+                    <td colSpan={colCount} className="bg-muted/30 p-0">
+                      {expandedContent}
+                    </td>
+                  </tr>
+                )}
+                </React.Fragment>
               )
             })
           )}

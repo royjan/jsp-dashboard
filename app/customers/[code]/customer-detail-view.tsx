@@ -12,7 +12,10 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
-import { useSortable, SortableTh } from '@/components/shared/sortable-table'
+import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
+
+/** Stable "nothing expanded" value — a fresh Set every render would churn. */
+const EMPTY_KEYS: Set<string | number> = new Set()
 import { ItemLink } from '@/components/shared/ItemLink'
 import Link from 'next/link'
 import {
@@ -278,7 +281,70 @@ function OpenDebtsTable({ docs, asOf, balance }: { docs: AgingDoc[]; asOf: strin
   useMoneyHidden()
 
   const { t } = useLocale()
-  const { sorted, sortKey, sortDir, toggleSort } = useSortable<AgingDoc>(docs, { key: 'days_overdue', dir: 'desc' })
+  const columns: DataTableColumn<AgingDoc>[] = [
+    {
+      key: 'doc_number',
+      header: t('docNumber'),
+      sortable: true,
+      cell: d => (
+        <span className="inline-flex items-center gap-1.5 font-mono">
+          <Link
+            href={`/documents/${encodeURIComponent(d.format)}/${encodeURIComponent(d.doc_number)}${d.doc_date ? `?year=${d.doc_date.slice(0, 4)}` : ''}`}
+            className="inline-flex items-center gap-1 text-primary hover:underline"
+          >
+            {d.doc_number}
+            <ExternalLink className="h-3 w-3" />
+          </Link>
+          {d.format !== '11' && (
+            <Badge variant="secondary" className="px-1 py-0 text-[10px]">
+              {DOC_TYPE_NAMES[Number(d.format)] || d.format}
+            </Badge>
+          )}
+        </span>
+      ),
+      exportValue: d => d.doc_number,
+    },
+    {
+      key: 'doc_date',
+      header: t('date'),
+      sortable: true,
+      sortValue: d => d.doc_date ?? '',
+      cell: d => <span className="text-muted-foreground">{formatDate(d.doc_date)}</span>,
+      exportValue: d => d.doc_date ?? '',
+    },
+    {
+      key: 'days_overdue',
+      header: t('customer.daysOverdue'),
+      align: 'end',
+      sortable: true,
+      cell: d => (d.days_overdue > 0 ? formatNumber(d.days_overdue) : '—'),
+      exportValue: d => d.days_overdue,
+    },
+    {
+      key: 'bucket',
+      header: t('agingBreakdown'),
+      sortable: true,
+      cell: d => (
+        <span className="inline-flex items-center gap-1.5">
+          <span
+            className="h-2.5 w-2.5 shrink-0 rounded-[3px]"
+            style={{ backgroundColor: BUCKET_COLORS[d.bucket] ?? AGING_COLORS[0] }}
+          />
+          <span className="text-muted-foreground">{BUCKET_LABEL(t, d.bucket)}</span>
+        </span>
+      ),
+      exportValue: d => BUCKET_LABEL(t, d.bucket),
+    },
+    {
+      key: 'amount',
+      header: t('amount'),
+      align: 'end',
+      sortable: true,
+      cell: d => <span className="font-medium">{formatCurrency(d.amount)}</span>,
+      exportValue: d => d.amount,
+    },
+  ]
+
   const total = docs.reduce((sum, d) => sum + d.amount, 0)
   // A mismatch means the open items don't explain the balance (unapplied
   // receipts, journal entries) — say so instead of showing a total that
@@ -301,52 +367,17 @@ function OpenDebtsTable({ docs, asOf, balance }: { docs: AgingDoc[]; asOf: strin
         </span>
       </div>
 
-      <div className="overflow-auto max-h-[60vh]">
-        <table className="w-full text-xs sm:text-sm">
-          <thead className="sticky top-0 z-10 bg-card">
-            <tr className="border-b text-muted-foreground [&>th]:p-2">
-              <SortableTh<AgingDoc> label={t('docNumber')} sortKey="doc_number" align="start" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-              <SortableTh<AgingDoc> label={t('date')} sortKey="doc_date" align="start" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-              <SortableTh<AgingDoc> label={t('customer.daysOverdue')} sortKey="days_overdue" align="end" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-              <SortableTh<AgingDoc> label={t('agingBreakdown')} sortKey="bucket" align="start" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-              <SortableTh<AgingDoc> label={t('amount')} sortKey="amount" align="end" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-            </tr>
-          </thead>
-          <tbody>
-            {sorted.map((d) => (
-              <tr key={`${d.format}-${d.doc_number}`} className="border-b last:border-0 hover:bg-accent/40">
-                <td className="p-2 font-mono">
-                  <span className="inline-flex items-center gap-1.5">
-                    <Link
-                      href={`/documents/${encodeURIComponent(d.format)}/${encodeURIComponent(d.doc_number)}${d.doc_date ? `?year=${d.doc_date.slice(0, 4)}` : ''}`}
-                      className="text-primary hover:underline inline-flex items-center gap-1"
-                    >
-                      {d.doc_number}
-                      <ExternalLink className="h-3 w-3" />
-                    </Link>
-                    {d.format !== '11' && (
-                      <Badge variant="secondary" className="text-[10px] px-1 py-0">
-                        {DOC_TYPE_NAMES[Number(d.format)] || d.format}
-                      </Badge>
-                    )}
-                  </span>
-                </td>
-                <td className="p-2 text-muted-foreground">{formatDate(d.doc_date)}</td>
-                <td className="p-2 text-end tabular-nums">
-                  {d.days_overdue > 0 ? formatNumber(d.days_overdue) : '—'}
-                </td>
-                <td className="p-2">
-                  <span className="inline-flex items-center gap-1.5">
-                    <span className="h-2.5 w-2.5 shrink-0 rounded-[3px]" style={{ backgroundColor: BUCKET_COLORS[d.bucket] ?? AGING_COLORS[0] }} />
-                    <span className="text-muted-foreground">{BUCKET_LABEL(t, d.bucket)}</span>
-                  </span>
-                </td>
-                <td className="p-2 text-end tabular-nums font-medium">{formatCurrency(d.amount)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <DataTable<AgingDoc>
+        rows={docs}
+        columns={columns}
+        // A customer can hold the same document number under two formats.
+        getRowKey={d => `${d.format}-${d.doc_number}`}
+        defaultSort={{ field: 'days_overdue', dir: 'desc' }}
+        maxHeight="60vh"
+        minWidth="min-w-[620px]"
+        density="compact"
+        exportFileName="חובות-פתוחים"
+      />
     </div>
   )
 }
@@ -384,9 +415,76 @@ function PurchasesTable({
 
   const { t } = useLocale()
   const items: PurchaseItem[] = data?.items ?? []
-  const { sorted, sortKey, sortDir, toggleSort } = useSortable<PurchaseItem>(items, { key: 'last_purchased', dir: 'desc' })
   const DAY_OPTIONS = [30, 60, 90, 180, 365]
+  // One at a time: two open invoice panels side by side are two concurrent
+  // fetches and a row you have to scroll past to reach the next one.
   const [openItem, setOpenItem] = useState<string | null>(null)
+
+  const columns: DataTableColumn<PurchaseItem>[] = [
+    {
+      key: 'item_code',
+      header: 'קוד',
+      sortable: true,
+      cell: item => <span className="font-mono text-xs"><ItemLink code={item.item_code} showCode /></span>,
+      exportValue: item => item.item_code,
+    },
+    {
+      key: 'item_name',
+      header: 'שם פריט',
+      sortable: true,
+      truncate: 'max-w-[220px]',
+      title: item => item.item_name,
+      cell: item => <ItemLink code={item.item_code} name={item.item_name} />,
+      exportValue: item => item.item_name,
+    },
+    {
+      key: 'total_qty',
+      header: 'כמות',
+      align: 'end',
+      sortable: true,
+      cell: item => (
+        <>
+          {formatNumber(item.total_qty)}
+          {item.returned_qty > 0 && (
+            <span className="ms-1 text-[10px] text-red-500">(-{formatNumber(item.returned_qty)})</span>
+          )}
+        </>
+      ),
+      exportValue: item => item.total_qty,
+    },
+    {
+      key: 'total_value',
+      header: 'שווי',
+      align: 'end',
+      sortable: true,
+      cell: item => <span className="font-medium">{formatCurrency(item.total_value)}</span>,
+      exportValue: item => item.total_value,
+    },
+    {
+      key: 'line_count',
+      header: 'חשבוניות',
+      align: 'end',
+      sortable: true,
+      cell: item => <span className="text-muted-foreground">{formatNumber(item.line_count)}</span>,
+      exportValue: item => item.line_count,
+    },
+    {
+      key: 'last_purchased',
+      header: 'אחרון',
+      align: 'end',
+      sortable: true,
+      sortValue: item => item.last_purchased ?? '',
+      cell: item => (
+        <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+          {formatDate(item.last_purchased)}
+          <ChevronDown
+            className={cn('h-3.5 w-3.5 transition-transform', openItem === item.item_code && 'rotate-180')}
+          />
+        </span>
+      ),
+      exportValue: item => item.last_purchased ?? '',
+    },
+  ]
 
   return (
     <div className="space-y-3">
@@ -414,69 +512,30 @@ function PurchasesTable({
       </div>
       <p className="text-[11px] text-muted-foreground">{t('customer.purchasesWindow').replace('{days}', String(days))}</p>
 
-      {isLoading ? (
-        <div className="space-y-2">{[...Array(5)].map((_, i) => <Skeleton key={i} className="h-9 w-full" />)}</div>
-      ) : sorted.length === 0 ? (
-        <p className="text-sm text-muted-foreground text-center py-6">אין קניות בתקופה זו</p>
-      ) : (
-        <div className="overflow-auto max-h-[60vh]">
-          <table className="w-full text-xs sm:text-sm">
-            <thead className="sticky top-0 z-10 bg-card">
-              <tr className="border-b text-muted-foreground [&>th]:p-2">
-                <SortableTh<PurchaseItem> label="קוד" sortKey="item_code" align="start" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                <SortableTh<PurchaseItem> label="שם פריט" sortKey="item_name" align="start" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                <SortableTh<PurchaseItem> label="כמות" sortKey="total_qty" align="end" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                <SortableTh<PurchaseItem> label="שווי" sortKey="total_value" align="end" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                <SortableTh<PurchaseItem> label="חשבוניות" sortKey="line_count" align="end" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                <SortableTh<PurchaseItem> label="אחרון" sortKey="last_purchased" align="end" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-              </tr>
-            </thead>
-            <tbody>
-              {sorted.map(item => {
-                const open = openItem === item.item_code
-                return (
-                  <Fragment key={item.item_code}>
-                    <tr
-                      className="border-b last:border-0 hover:bg-accent/40 cursor-pointer"
-                      aria-expanded={open}
-                      onClick={() => setOpenItem(open ? null : item.item_code)}
-                    >
-                      <td className="p-2 font-mono text-xs" onClick={(e) => e.stopPropagation()}><ItemLink code={item.item_code} showCode /></td>
-                      <td className="p-2 max-w-[220px] truncate" title={item.item_name} onClick={(e) => e.stopPropagation()}>
-                        <ItemLink code={item.item_code} name={item.item_name} />
-                      </td>
-                      <td className="p-2 text-end tabular-nums">
-                        {formatNumber(item.total_qty)}
-                        {item.returned_qty > 0 && <span className="text-red-500 text-[10px] ms-1">(-{formatNumber(item.returned_qty)})</span>}
-                      </td>
-                      <td className="p-2 text-end tabular-nums font-medium">{formatCurrency(item.total_value)}</td>
-                      <td className="p-2 text-end tabular-nums text-muted-foreground">{formatNumber(item.line_count)}</td>
-                      <td className="p-2 text-end tabular-nums text-muted-foreground">
-                        <span className="inline-flex items-center gap-1.5">
-                          {formatDate(item.last_purchased)}
-                          <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', open && 'rotate-180')} />
-                        </span>
-                      </td>
-                    </tr>
-                    {open && (
-                      <tr className="border-b last:border-0">
-                        <td colSpan={6} className="bg-muted/30 p-0">
-                          <PurchaseItemInvoices
-                            customerCode={customerCode}
-                            itemCode={item.item_code}
-                            days={days}
-                            expected={item.returned_qty > 0 ? 0 : item.line_count}
-                          />
-                        </td>
-                      </tr>
-                    )}
-                  </Fragment>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <DataTable<PurchaseItem>
+        rows={items}
+        columns={columns}
+        getRowKey={item => item.item_code}
+        loading={isLoading}
+        defaultSort={{ field: 'last_purchased', dir: 'desc' }}
+        maxHeight="60vh"
+        minWidth="min-w-[680px]"
+        density="compact"
+        exportFileName={`קניות-${customerCode}`}
+        expandedKeys={openItem ? new Set([openItem]) : EMPTY_KEYS}
+        onExpandedChange={keys => setOpenItem(([...keys][0] as string) ?? null)}
+        renderExpanded={item => (
+          <PurchaseItemInvoices
+            customerCode={customerCode}
+            itemCode={item.item_code}
+            days={days}
+            // A returned line makes the invoice count unreliable as a
+            // completeness check, so it is not asserted in that case.
+            expected={item.returned_qty > 0 ? 0 : item.line_count}
+          />
+        )}
+        labels={{ empty: 'אין קניות בתקופה זו' }}
+      />
     </div>
   )
 }
@@ -589,7 +648,6 @@ function DocumentTable({ items, t, isReceipt, isLoading, expandable, caption }: 
   // store, so without this the amounts here would not re-render on toggle.
   useMoneyHidden()
 
-  const [page, setPage] = useState(0)
   const [openKey, setOpenKey] = useState<string | null>(null)
   const rows: DocRow[] = useMemo(
     () =>
@@ -609,7 +667,74 @@ function DocumentTable({ items, t, isReceipt, isLoading, expandable, caption }: 
     [items]
   )
 
-  const { sorted, sortKey, sortDir, toggleSort } = useSortable<DocRow>(rows)
+  const columns: DataTableColumn<DocRow>[] = [
+    {
+      key: 'docNumber',
+      header: t('docNumber'),
+      sortable: true,
+      cell: row =>
+        row.docNumber && row.format ? (
+          <Link
+            href={`/documents/${encodeURIComponent(row.format)}/${encodeURIComponent(row.docNumber)}${row.year ? `?year=${row.year}` : ''}`}
+            className="inline-flex items-center gap-1 font-mono text-primary hover:underline"
+            title="צפייה במסמך"
+          >
+            {row.docNumber}
+            <ExternalLink className="h-3 w-3" />
+          </Link>
+        ) : (
+          <span className="font-mono">{row.docNumber || '-'}</span>
+        ),
+      exportValue: row => row.docNumber,
+    },
+    {
+      key: 'docType',
+      header: t('docType'),
+      sortable: true,
+      cell: row => <Badge variant="secondary">{row.docType || '-'}</Badge>,
+      exportValue: row => row.docType,
+    },
+    {
+      key: 'date',
+      header: t('date'),
+      sortable: true,
+      cell: row => <span className="text-muted-foreground">{formatDate(row.date)}</span>,
+      exportValue: row => row.date,
+    },
+    {
+      key: 'amount',
+      header: t('amount'),
+      align: 'end',
+      sortable: true,
+      cell: row => <span className="font-medium">{formatCurrency(row.amount)}</span>,
+      exportValue: row => row.amount,
+    },
+    // A receipt has no lines, so the column would be an empty strip.
+    ...(isReceipt
+      ? []
+      : [
+          {
+            key: 'itemCount',
+            header: t('items'),
+            align: 'end' as const,
+            sortable: true,
+            cell: (row: DocRow) => (
+              <span className="inline-flex items-center gap-1.5">
+                {row.itemCount ? formatNumber(row.itemCount) : '-'}
+                {expandable && row.docNumber && row.format && (
+                  <ChevronDown
+                    className={cn(
+                      'h-3.5 w-3.5 text-muted-foreground transition-transform',
+                      openKey === `${row.format}-${row.docNumber}` && 'rotate-180',
+                    )}
+                  />
+                )}
+              </span>
+            ),
+            exportValue: (row: DocRow) => row.itemCount,
+          },
+        ]),
+  ]
 
   if (isLoading) {
     return <div className="space-y-2 py-2">{[...Array(5)].map((_, i) => <Skeleton key={i} className="h-9 w-full" />)}</div>
@@ -619,103 +744,36 @@ function DocumentTable({ items, t, isReceipt, isLoading, expandable, caption }: 
     return <p className="text-muted-foreground text-sm py-4 text-center">-</p>
   }
 
-  const total = sorted.length
-  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE))
-  const current = Math.min(page, pageCount - 1)
-  const start = current * PAGE_SIZE
-  const pageRows = sorted.slice(start, start + PAGE_SIZE)
-
   return (
     <div className="space-y-2">
       {caption && <p className="text-[11px] text-muted-foreground">{caption}</p>}
-      <div className="overflow-auto max-h-[60vh]">
-        <table className="w-full text-sm">
-          <thead className="sticky top-0 z-10 bg-card">
-            <tr className="border-b text-muted-foreground [&>th]:p-2">
-              <SortableTh<DocRow> label={t('docNumber')} sortKey="docNumber" align="start" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-              <SortableTh<DocRow> label={t('docType')} sortKey="docType" align="start" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-              <SortableTh<DocRow> label={t('date')} sortKey="date" align="start" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-              <SortableTh<DocRow> label={t('amount')} sortKey="amount" align="end" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-              {!isReceipt && <SortableTh<DocRow> label={t('items')} sortKey="itemCount" align="end" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />}
-            </tr>
-          </thead>
-          <tbody>
-            {pageRows.map((row: DocRow, i: number) => {
-              const doc = row.doc
-              const rowKey = `${row.format}-${row.docNumber}`
-              const canExpand = !!(expandable && row.docNumber && row.format)
-              const open = canExpand && openKey === rowKey
-              return (
-                <Fragment key={`${doc.format || doc.type}-${doc.number || doc.doc_number}-${start + i}`}>
-                  <tr
-                    className={cn('border-b hover:bg-muted/50 transition-colors', canExpand && 'cursor-pointer')}
-                    aria-expanded={canExpand ? open : undefined}
-                    onClick={canExpand ? () => setOpenKey(open ? null : rowKey) : undefined}
-                  >
-                    <td className="p-2 font-mono" onClick={(e) => e.stopPropagation()}>
-                      {row.docNumber && row.format ? (
-                        <Link
-                          href={`/documents/${encodeURIComponent(row.format)}/${encodeURIComponent(row.docNumber)}${row.year ? `?year=${row.year}` : ''}`}
-                          className="text-primary hover:underline inline-flex items-center gap-1"
-                          title="צפייה במסמך"
-                        >
-                          {row.docNumber}
-                          <ExternalLink className="h-3 w-3" />
-                        </Link>
-                      ) : (
-                        row.docNumber || '-'
-                      )}
-                    </td>
-                    <td className="p-2">
-                      <Badge variant="secondary">{row.docType || '-'}</Badge>
-                    </td>
-                    <td className="p-2 text-muted-foreground">{formatDate(row.date)}</td>
-                    <td className="p-2 text-end font-medium">{formatCurrency(row.amount)}</td>
-                    {!isReceipt && (
-                      <td className="p-2 text-end">
-                        <span className="inline-flex items-center gap-1.5">
-                          {row.itemCount ? formatNumber(row.itemCount) : '-'}
-                          {canExpand && <ChevronDown className={cn('h-3.5 w-3.5 text-muted-foreground transition-transform', open && 'rotate-180')} />}
-                        </span>
-                      </td>
-                    )}
-                  </tr>
-                  {open && (
-                    <tr className="border-b">
-                      <td colSpan={isReceipt ? 4 : 5} className="bg-muted/30 p-0">
-                        <DocumentLinesPanel format={row.format} number={row.docNumber} year={row.year} t={t} />
-                      </td>
-                    </tr>
-                  )}
-                </Fragment>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
+      <DataTable<DocRow>
+        rows={rows}
+        columns={columns}
+        getRowKey={row => `${row.format}-${row.docNumber}`}
+        maxHeight="60vh"
+        minWidth="min-w-[560px]"
+        density="compact"
+        pageSize={PAGE_SIZE}
+        exportFileName={caption || 'מסמכים'}
+        labels={{
+          // The history API caps each list at 250, so a full page means "at
+          // least this many" rather than an exact count. Dropping the + would
+          // turn a floor into a claim.
+          pageRange: (from, to, count) =>
+            `${from}–${to} מתוך ${formatNumber(count)}${count >= 250 ? '+' : ''}`,
+        }}
+        expandedKeys={openKey ? new Set([openKey]) : EMPTY_KEYS}
+        onExpandedChange={keys => setOpenKey(([...keys][0] as string) ?? null)}
+        // Returning null for a row with no document number is what keeps those
+        // rows inert — no caret, no cursor, no click target.
+        renderExpanded={row =>
+          expandable && row.docNumber && row.format ? (
+            <DocumentLinesPanel format={row.format} number={row.docNumber} year={row.year} t={t} />
+          ) : null
+        }
+      />
 
-      {/* Pagination */}
-      <div className="flex items-center justify-between text-xs text-muted-foreground pt-1">
-        {/* The history API caps at 250 per list — a full page means "at least this many". */}
-        <span>{start + 1}–{Math.min(start + PAGE_SIZE, total)} מתוך {formatNumber(total)}{total >= 250 ? '+' : ''}</span>
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => { setOpenKey(null); setPage(Math.max(0, current - 1)) }}
-            disabled={current === 0}
-            className="px-2 py-1 rounded border disabled:opacity-40 hover:bg-accent"
-          >
-            הקודם
-          </button>
-          <span className="px-1">{current + 1}/{pageCount}</span>
-          <button
-            onClick={() => { setOpenKey(null); setPage(Math.min(pageCount - 1, current + 1)) }}
-            disabled={current >= pageCount - 1}
-            className="px-2 py-1 rounded border disabled:opacity-40 hover:bg-accent"
-          >
-            הבא
-          </button>
-        </div>
-      </div>
     </div>
   )
 }
