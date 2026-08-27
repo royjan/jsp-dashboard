@@ -1,0 +1,13 @@
+/** jan-ui — the shared surface. Copy `src/` into an app; there is no registry. */
+export { JanUIProvider, useJanUI, type JanUIConfig } from './provider'
+export { DataTable, type DataTableColumn, type DataTableSort, type SortDir } from './DataTable'
+export { CalloutMarker, isCalloutAbsent, type CalloutMarkerProps } from './CalloutMarker'
+export { StatTile, type StatTileProps } from './StatTile'
+export { Chip, type ChipTone } from './Chip'
+export { Button, type ButtonProps } from './Button'
+export { ErrorState, EmptyState } from './feedback-state'
+export { useDensity, setDensity, toggleDensity, type Density } from './density'
+export { exportRowsToXlsx, type ExportColumn } from './export-xlsx'
+export { sortRows, compareValues } from './sort'
+export { cn } from './cn'
+export * from './motion'

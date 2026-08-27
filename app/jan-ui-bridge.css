@@ -1,0 +1,28 @@
+/* jan-ui, wearing the dashboard's clothes.
+ *
+ * The dashboard IS the source these components were extracted from, so the
+ * mapping is near-identity — but it still goes through a bridge rather than
+ * letting the library define colour, because the moment it defines colour in
+ * one app it has to define it in all three, and the portal and partly are
+ * deliberately not dark. */
+:root{
+  --jan-plate:var(--background);
+  --jan-steel:var(--card);
+  --jan-raise:var(--muted);
+  --jan-rule:var(--border);
+  --jan-ink:var(--foreground);
+  --jan-dim:var(--muted-foreground);
+  --jan-faint:var(--muted-foreground);
+  --jan-callout:var(--primary);
+  --jan-callout-soft:color-mix(in srgb, var(--primary) 13%, transparent);
+  --jan-verdigris:#2FB086;
+  --jan-oxide:var(--destructive);
+
+  --jan-ease:cubic-bezier(.25,.46,.45,.94);
+  --jan-fast:.15s; --jan-base:.3s; --jan-slow:.4s;
+  --jan-stagger:50ms; --jan-radius:var(--radius, 6px);
+}
+@keyframes jan-rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion: reduce){
+  .jan-anim,.jan-anim *{animation-duration:.001ms!important;transition-duration:.001ms!important}
+}

@@ -5,6 +5,10 @@ import { ThemeProvider } from 'next-themes'
 import { MotionConfig } from 'framer-motion'
 import { Toaster } from 'sonner'
 import { LocaleProvider } from '@/lib/locale-context'
+import { JanUIProvider } from '@/lib/jan-ui/provider'
+import { formatNumber } from '@/lib/format'
+import { useMoneyHidden } from '@/lib/use-money-hidden'
+import { ErrorState, EmptyState } from '@/components/ui/feedback-state'
 import { useState, useEffect } from 'react'
 
 export function Providers({ children }: { children: React.ReactNode }) {
@@ -31,7 +35,19 @@ export function Providers({ children }: { children: React.ReactNode }) {
         <QueryClientProvider client={queryClient}>
           {/* Honor the OS "reduce motion" setting across all Framer Motion animations. */}
           <MotionConfig reducedMotion="user">
-            {children}
+            {/* jan-ui needs exactly two things from this app — how it formats a
+                number and whether it is masking money — plus this app's own
+                richer error/empty states, so adopting the shared table does not
+                restyle every error in the dashboard. */}
+            <JanUIProvider
+              formatNumber={formatNumber}
+              useMoneyHidden={useMoneyHidden}
+              ErrorState={ErrorState}
+              EmptyState={EmptyState}
+              locale="he"
+            >
+              {children}
+            </JanUIProvider>
             <Toaster richColors position="top-center" />
           </MotionConfig>
         </QueryClientProvider>

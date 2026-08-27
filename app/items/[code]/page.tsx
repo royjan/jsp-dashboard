@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import Link from 'next/link'
 import {
-  ArrowLeft, Package, DollarSign, Warehouse, TrendingUp, Tag, MapPin, Calendar, Layers, Hash,
+  ArrowLeft, ArrowRight, Package, DollarSign, Warehouse, TrendingUp, Tag, MapPin, Calendar, Layers, Hash,
   FileText, X, Link2,
   Car,
   ChevronDown,
@@ -642,28 +642,60 @@ export default function ItemDetailPage({ params }: { params: Promise<{ code: str
       {/* Cross-brand equivalent parts (partly.part_links) + manual linking */}
       <PartLinksCard code={decodedCode} links={partLinks} isHe={isHe} />
 
-      {/* Item History Chain */}
+      {/* Item History Chain — the array runs oldest → newest, and the row lays
+          out along the page's reading direction, so in RTL the newest code
+          lands leftmost. A hardcoded '→' therefore pointed back at the code
+          the part was RE-CODED FROM: on 1920LL it read as if 1675941280 (the
+          current id) became 1920LL, exactly backwards. The arrow follows the
+          locale, and drifts toward the newest code so the direction is
+          readable without decoding the glyph. */}
       {data.item_id_history?.length > 1 && (
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <Hash className="h-4 w-4 text-amber-500" />
               {isHe ? 'שרשרת קודים' : 'Code History'}
+              <span className="text-xs font-normal text-muted-foreground">
+                {isHe ? '(ישן ← עדכני)' : '(old → current)'}
+              </span>
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex flex-wrap items-center gap-2">
-              {data.item_id_history.map((histCode: string, i: number) => (
-                <span key={histCode} className="flex items-center gap-2">
-                  {i > 0 && <span className="text-muted-foreground">→</span>}
-                  <Badge
-                    variant={histCode === (data.canonical_code || data.code) ? 'default' : 'outline'}
-                    className="font-mono text-xs"
+              {data.item_id_history.map((histCode: string, i: number) => {
+                const isCurrent = histCode === (data.canonical_code || data.code)
+                const Arrow = isHe ? ArrowLeft : ArrowRight
+                return (
+                  <motion.span
+                    key={histCode}
+                    className="flex items-center gap-2"
+                    initial={{ opacity: 0, x: isHe ? 10 : -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: i * 0.12, duration: 0.3, ease: 'easeOut' }}
                   >
-                    {histCode}
-                  </Badge>
-                </span>
-              ))}
+                    {i > 0 && (
+                      <motion.span
+                        className="text-muted-foreground"
+                        animate={{ x: isHe ? [0, -3, 0] : [0, 3, 0] }}
+                        transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut', delay: i * 0.12 }}
+                      >
+                        <Arrow className="h-3.5 w-3.5" />
+                      </motion.span>
+                    )}
+                    <Badge
+                      variant={isCurrent ? 'default' : 'outline'}
+                      className="font-mono text-xs"
+                    >
+                      {histCode}
+                    </Badge>
+                    {isCurrent && (
+                      <span className="text-[10px] text-muted-foreground">
+                        {isHe ? 'עדכני' : 'current'}
+                      </span>
+                    )}
+                  </motion.span>
+                )
+              })}
             </div>
           </CardContent>
         </Card>
