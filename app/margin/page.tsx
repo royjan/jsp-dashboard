@@ -19,6 +19,7 @@ import {
   TrendingUp, Percent, Hourglass, BarChart3, AlertTriangle, Coins, Clock,
 } from 'lucide-react'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
+import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
 
 // Margin buckets, in the order FINAPI emits them. `below_cost` is deliberately
 // its own bucket and its own colour — a -3% part and a +3% part are not
@@ -323,38 +324,24 @@ function MarginContent() {
             </p>
           </CardHeader>
           <CardContent>
-            <div className="overflow-x-auto -mx-4 md:mx-0">
-              <table className="w-full text-sm min-w-[560px]">
-                <thead>
-                  <tr className="border-b text-muted-foreground">
-                    <th className="pb-2 font-medium text-start ps-4 md:ps-0">{isHe ? 'פריט' : 'Item'}</th>
-                    <th className="pb-2 font-medium text-end">{isHe ? 'הכנסה' : 'Revenue'}</th>
-                    <th className="pb-2 font-medium text-end">{isHe ? 'עלות' : 'Cost'}</th>
-                    <th className="pb-2 font-medium text-end">{isHe ? 'מרווח' : 'Margin'}</th>
-                    <th className="pb-2 font-medium text-end pe-4 md:pe-0">{isHe ? 'הפסד' : 'Loss'}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {below!.items.map((it) => (
-                    <tr key={it.item_code} className="border-b hover:bg-muted/50 transition-colors">
-                      <td className="py-2 ps-4 md:ps-0 max-w-[240px] truncate">
-                        <ItemLink code={it.item_code} name={it.item_name || undefined} />
-                      </td>
-                      <td className="py-2 text-end font-mono tabular-nums">{formatCurrency(it.revenue)}</td>
-                      <td className="py-2 text-end font-mono tabular-nums">
-                        <CostCell item={it} isHe={isHe} />
-                      </td>
-                      <td className="py-2 text-end font-semibold tabular-nums text-red-500">
-                        {formatMarginPercent(it.margin_pct)}
-                      </td>
-                      <td className="py-2 text-end pe-4 md:pe-0 font-mono tabular-nums text-red-500">
-                        {formatCurrency(it.profit)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <DataTable
+              rows={below!.items}
+              columns={BELOW_COST_COLUMNS(isHe)}
+              getRowKey={it => it.item_code}
+              defaultSort={{ field: 'profit', dir: 'asc' }}
+              minWidth="min-w-[560px]"
+              pageSize={25}
+              exportFileName={isHe ? 'נמכר-מתחת-לעלות' : 'sold-below-cost'}
+              mobileCard={{
+                title: it => it.item_name || it.item_code,
+                subtitle: it => it.item_code,
+                accent: it => formatCurrency(it.profit),
+                fields: [
+                  { label: isHe ? 'הכנסה' : 'Revenue', value: it => formatCurrency(it.revenue) },
+                  { label: isHe ? 'מרווח' : 'Margin', value: it => formatMarginPercent(it.margin_pct) },
+                ],
+              }}
+            />
           </CardContent>
         </Card>
       )}
@@ -428,54 +415,24 @@ function MarginContent() {
           </p>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto max-h-[600px] overflow-y-auto -mx-4 md:mx-0">
-            <table className="w-full text-sm min-w-[980px]">
-              <thead className="sticky top-0 bg-background z-10">
-                <tr className="border-b">
-                  <th className="pb-2 font-medium text-start ps-4 md:ps-0 w-8">#</th>
-                  <th className="pb-2 font-medium text-start">{isHe ? 'קוד' : 'Code'}</th>
-                  <th className="pb-2 font-medium text-start">{isHe ? 'תיאור' : 'Description'}</th>
-                  <th className="pb-2 font-medium text-start">{isHe ? 'קטגוריה' : 'Category'}</th>
-                  <th className="pb-2 font-medium text-end">{isHe ? 'הכנסה' : 'Revenue'}</th>
-                  <th className="pb-2 font-medium text-end">{isHe ? 'כמות' : 'Qty'}</th>
-                  <th className="pb-2 font-medium text-end">{isHe ? 'מחיר ממוצע' : 'Avg Price'}</th>
-                  <th className="pb-2 font-medium text-end">{isHe ? 'עלות (06)' : 'Cost (06)'}</th>
-                  <th className="pb-2 font-medium text-end">{isHe ? 'נטו (12)' : 'Net (12)'}</th>
-                  <th className="pb-2 font-medium text-end">{isHe ? 'רווח' : 'Profit'}</th>
-                  <th className="pb-2 font-medium text-end pe-4 md:pe-0">{isHe ? 'מרווח' : 'Margin'}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.byItem.map((item, i) => (
-                  <tr key={item.item_code} className="border-b hover:bg-muted/50 transition-colors">
-                    <td className="py-2 ps-4 md:ps-0 text-muted-foreground tabular-nums">{i + 1}</td>
-                    <td className="py-2 font-mono text-xs text-muted-foreground">
-                      <ItemLink code={item.item_code} showCode />
-                    </td>
-                    <td className="py-2 truncate max-w-[220px]">
-                      <ItemLink code={item.item_code} name={item.item_name || undefined} />
-                    </td>
-                    <td className="py-2 text-muted-foreground text-xs truncate max-w-[140px]">{item.category}</td>
-                    <td className="py-2 text-end font-mono tabular-nums font-semibold">{formatCurrency(item.revenue)}</td>
-                    <td className="py-2 text-end tabular-nums">{formatNumber(item.quantity)}</td>
-                    <td className="py-2 text-end font-mono tabular-nums">{formatCurrency(item.avg_price)}</td>
-                    <td className="py-2 text-end font-mono tabular-nums">
-                      <CostCell item={item} isHe={isHe} />
-                    </td>
-                    <td className="py-2 text-end font-mono tabular-nums text-muted-foreground">
-                      {item.compare_price != null ? formatCurrency(item.compare_price) : '—'}
-                    </td>
-                    <td className="py-2 text-end font-mono tabular-nums">
-                      {item.profit != null ? formatCurrency(item.profit) : '—'}
-                    </td>
-                    <td className="py-2 text-end pe-4 md:pe-0">
-                      <MarginCell item={item} isHe={isHe} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            rows={data.byItem}
+            columns={ITEM_COLUMNS(isHe)}
+            getRowKey={it => it.item_code}
+            defaultSort={{ field: 'revenue', dir: 'desc' }}
+            minWidth="min-w-[980px]"
+            pageSize={50}
+            exportFileName={isHe ? 'רווחיות-לפי-פריט' : 'margin-by-item'}
+            mobileCard={{
+              title: it => it.item_name || it.item_code,
+              subtitle: it => it.item_code,
+              accent: it => formatCurrency(it.revenue),
+              fields: [
+                { label: isHe ? 'רווח' : 'Profit', value: it => (it.profit != null ? formatCurrency(it.profit) : '—') },
+                { label: isHe ? 'מרווח' : 'Margin', value: it => <MarginCell item={it} isHe={isHe} /> },
+              ],
+            }}
+          />
           {costPending && (
             <p className="text-[11px] text-muted-foreground mt-3">
               {isHe ? 'עמודת המרווח תתמלא כשמחיר העלות יחובר מ-FINAPI (7ITP).'
@@ -489,6 +446,142 @@ function MarginContent() {
 }
 
 /** Cost with its age. A stale cost still computes a margin — it is flagged, not dropped. */
+const BELOW_COST_COLUMNS = (isHe: boolean): DataTableColumn<MarginItem>[] => [
+  {
+    key: 'item_name',
+    header: isHe ? 'פריט' : 'Item',
+    sortable: true,
+    truncate: 'max-w-[240px]',
+    title: it => it.item_name || it.item_code,
+    cell: it => <ItemLink code={it.item_code} name={it.item_name || undefined} />,
+    exportValue: it => it.item_name || it.item_code,
+  },
+  {
+    key: 'revenue',
+    header: isHe ? 'הכנסה' : 'Revenue',
+    align: 'end',
+    sortable: true,
+    cell: it => formatCurrency(it.revenue),
+    exportValue: it => it.revenue,
+    cellClassName: 'font-mono',
+  },
+  {
+    key: 'cost',
+    header: isHe ? 'עלות' : 'Cost',
+    align: 'end',
+    sortable: true,
+    // CostCell carries the cost_suspect flag — a positive-but-absurd cost (a
+    // ₪0.82 door behind a ₪59,110 sale) is the failure mode on this screen, not
+    // a zero, so the cell has to keep saying which costs are not to be trusted.
+    cell: it => <CostCell item={it} isHe={isHe} />,
+    exportValue: it => it.cost ?? null,
+    sortValue: it => it.cost ?? 0,
+    cellClassName: 'font-mono',
+  },
+  {
+    key: 'margin_pct',
+    header: isHe ? 'מרווח' : 'Margin',
+    align: 'end',
+    sortable: true,
+    cell: it => formatMarginPercent(it.margin_pct),
+    exportValue: it => it.margin_pct ?? null,
+    cellClassName: 'font-semibold text-red-500',
+  },
+  {
+    key: 'profit',
+    header: isHe ? 'הפסד' : 'Loss',
+    align: 'end',
+    sortable: true,
+    cell: it => formatCurrency(it.profit),
+    exportValue: it => it.profit,
+    cellClassName: 'font-mono text-red-500',
+  },
+]
+
+const LEADERBOARD_COLUMNS = (
+  isHe: boolean,
+  primary: 'margin' | 'profit',
+): DataTableColumn<MarginItem>[] => [
+  {
+    key: 'rank',
+    header: '#',
+    // Position in the CURRENT sort, so it renumbers when the reader re-sorts —
+    // and is left out of the export, where a rank means nothing once the sheet
+    // is sorted again.
+    cell: (_it, i) => <span className="tabular-nums text-muted-foreground">{i + 1}</span>,
+    exportValue: null,
+    headerClassName: 'w-6',
+  },
+  {
+    key: 'item_name',
+    header: isHe ? 'פריט' : 'Item',
+    sortable: true,
+    truncate: 'max-w-[220px]',
+    title: it => it.item_name || it.item_code,
+    cell: it => <ItemLink code={it.item_code} name={it.item_name || undefined} />,
+    exportValue: it => it.item_name || it.item_code,
+  },
+  {
+    key: 'revenue',
+    header: isHe ? 'הכנסה' : 'Revenue',
+    align: 'end',
+    sortable: true,
+    cell: it => formatCurrency(it.revenue),
+    exportValue: it => it.revenue,
+    cellClassName: 'font-mono text-muted-foreground',
+  },
+  {
+    key: primary === 'margin' ? 'margin_pct' : 'profit',
+    header: primary === 'margin' ? (isHe ? 'מרווח' : 'Margin') : (isHe ? 'רווח' : 'Profit'),
+    align: 'end',
+    sortable: true,
+    cell: it =>
+      primary === 'margin' ? formatMarginPercent(it.margin_pct) : formatCurrency(it.profit),
+    exportValue: it => (primary === 'margin' ? it.margin_pct ?? null : it.profit),
+    cellClassName: 'font-semibold text-emerald-500',
+  },
+]
+
+const ITEM_COLUMNS = (isHe: boolean): DataTableColumn<MarginItem>[] => [
+  { key: 'rank', header: '#', cell: (_it, i) => <span className="tabular-nums text-muted-foreground">{i + 1}</span>,
+    exportValue: null, headerClassName: 'w-8' },
+  { key: 'item_code', header: isHe ? 'קוד' : 'Code', sortable: true,
+    cell: it => <ItemLink code={it.item_code} showCode />, exportValue: it => it.item_code,
+    cellClassName: 'font-mono text-xs text-muted-foreground' },
+  { key: 'item_name', header: isHe ? 'תיאור' : 'Description', sortable: true,
+    truncate: 'max-w-[220px]', title: it => it.item_name || it.item_code,
+    cell: it => <ItemLink code={it.item_code} name={it.item_name || undefined} />,
+    exportValue: it => it.item_name || it.item_code },
+  { key: 'category', header: isHe ? 'קטגוריה' : 'Category', sortable: true,
+    truncate: 'max-w-[140px]', title: it => it.category ?? '',
+    cell: it => it.category, exportValue: it => it.category ?? null,
+    cellClassName: 'text-xs text-muted-foreground' },
+  { key: 'revenue', header: isHe ? 'הכנסה' : 'Revenue', align: 'end', sortable: true,
+    cell: it => formatCurrency(it.revenue), exportValue: it => it.revenue,
+    cellClassName: 'font-mono font-semibold' },
+  { key: 'quantity', header: isHe ? 'כמות' : 'Qty', align: 'end', sortable: true,
+    cell: it => formatNumber(it.quantity), exportValue: it => it.quantity },
+  { key: 'avg_price', header: isHe ? 'מחיר ממוצע' : 'Avg Price', align: 'end', sortable: true,
+    cell: it => formatCurrency(it.avg_price), exportValue: it => it.avg_price,
+    cellClassName: 'font-mono' },
+  { key: 'cost', header: isHe ? 'עלות (06)' : 'Cost (06)', align: 'end', sortable: true,
+    // Keeps CostCell: a positive-but-absurd cost is the failure mode here, and
+    // the cell is what flags cost_suspect rows rather than pricing off them.
+    cell: it => <CostCell item={it} isHe={isHe} />,
+    exportValue: it => it.cost ?? null, sortValue: it => it.cost ?? 0,
+    cellClassName: 'font-mono' },
+  { key: 'compare_price', header: isHe ? 'נטו (12)' : 'Net (12)', align: 'end', sortable: true,
+    cell: it => (it.compare_price != null ? formatCurrency(it.compare_price) : '—'),
+    exportValue: it => it.compare_price ?? null,
+    cellClassName: 'font-mono text-muted-foreground' },
+  { key: 'profit', header: isHe ? 'רווח' : 'Profit', align: 'end', sortable: true,
+    cell: it => (it.profit != null ? formatCurrency(it.profit) : '—'),
+    exportValue: it => it.profit ?? null, cellClassName: 'font-mono' },
+  { key: 'margin_pct', header: isHe ? 'מרווח' : 'Margin', align: 'end', sortable: true,
+    cell: it => <MarginCell item={it} isHe={isHe} />,
+    exportValue: it => it.margin_pct ?? null },
+]
+
 function CostCell({ item, isHe }: { item: MarginItem; isHe: boolean }) {
   if (item.cost == null) {
     return (
@@ -551,38 +644,21 @@ function LeaderBoard({ isHe, title, note, rows, primary }: {
             {isHe ? 'אין נתונים — מחיר עלות חסר.' : 'No data — cost price missing.'}
           </p>
         ) : (
-          <div className="overflow-x-auto -mx-4 md:mx-0">
-            <table className="w-full text-sm min-w-[420px]">
-              <thead>
-                <tr className="border-b text-muted-foreground">
-                  <th className="pb-2 font-medium text-start ps-4 md:ps-0 w-6">#</th>
-                  <th className="pb-2 font-medium text-start">{isHe ? 'פריט' : 'Item'}</th>
-                  <th className="pb-2 font-medium text-end">{isHe ? 'הכנסה' : 'Revenue'}</th>
-                  <th className="pb-2 font-medium text-end pe-4 md:pe-0">
-                    {primary === 'margin' ? (isHe ? 'מרווח' : 'Margin') : (isHe ? 'רווח' : 'Profit')}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((it, i) => (
-                  <tr key={it.item_code} className="border-b hover:bg-muted/50 transition-colors">
-                    <td className="py-2 ps-4 md:ps-0 text-muted-foreground tabular-nums">{i + 1}</td>
-                    <td className="py-2 max-w-[220px] truncate">
-                      <ItemLink code={it.item_code} name={it.item_name || undefined} />
-                    </td>
-                    <td className="py-2 text-end font-mono tabular-nums text-muted-foreground">
-                      {formatCurrency(it.revenue)}
-                    </td>
-                    <td className="py-2 text-end pe-4 md:pe-0 font-semibold tabular-nums text-emerald-500">
-                      {primary === 'margin'
-                        ? formatMarginPercent(it.margin_pct)
-                        : formatCurrency(it.profit)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            rows={rows}
+            columns={LEADERBOARD_COLUMNS(isHe, primary)}
+            getRowKey={it => it.item_code}
+            minWidth="min-w-[420px]"
+            pageSize={25}
+            exportFileName={title}
+            mobileCard={{
+              title: it => it.item_name || it.item_code,
+              subtitle: it => it.item_code,
+              accent: it =>
+                primary === 'margin' ? formatMarginPercent(it.margin_pct) : formatCurrency(it.profit),
+              fields: [{ label: isHe ? 'הכנסה' : 'Revenue', value: it => formatCurrency(it.revenue) }],
+            }}
+          />
         )}
       </CardContent>
     </Card>
