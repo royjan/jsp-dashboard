@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { Loader2, Map, TrendingUp, Plus } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { Map, TrendingUp, Plus } from 'lucide-react'
 import type { FlowDecisionRecord } from '@/types/chat-admin/flow-decision'
 import { logger } from '@/lib/logger'
+import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
 
 interface CoverageRow {
   description: string
@@ -16,11 +17,76 @@ interface Props {
   onSeedRule: (partDescription: string) => void
 }
 
+
+/** Built inside the component: the "Create rule" cell needs the onSeedRule callback. */
+function buildColumns(onSeedRule: (d: string) => void): DataTableColumn<CoverageRow>[] {
+  return [
+    {
+      key: 'description',
+      header: 'Part description',
+      sortable: true,
+      truncate: 'max-w-[320px]',
+      title: r => r.description,
+      cell: r => <span className="font-medium">{r.description}</span>,
+      exportValue: r => r.description,
+    },
+    {
+      key: 'usageCount',
+      header: 'Usage',
+      align: 'end',
+      sortable: true,
+      cell: r => (
+        <span className="inline-flex items-center gap-1">
+          <TrendingUp className="h-3 w-3 text-muted-foreground" />
+          {r.usageCount}
+        </span>
+      ),
+      exportValue: r => r.usageCount,
+    },
+    {
+      key: 'hasRule',
+      header: 'Has rule',
+      align: 'center',
+      sortable: true,
+      // Sorted so the uncovered descriptions — the ones this report exists to
+      // surface — come first on the ascending click, not last.
+      sortValue: r => (r.hasRule ? 1 : 0),
+      cell: r => (
+        <span
+          title={r.hasRule ? 'Covered by at least one rule' : 'No rule'}
+          className={`inline-block h-2 w-2 rounded-full ${r.hasRule ? 'bg-emerald-500' : 'bg-amber-400'}`}
+        />
+      ),
+      exportValue: r => (r.hasRule ? 'yes' : 'no'),
+    },
+    {
+      key: 'actions',
+      header: '',
+      align: 'end',
+      cell: r =>
+        r.hasRule ? null : (
+          <button
+            onClick={() => onSeedRule(r.description)}
+            className="inline-flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+          >
+            <Plus className="h-3 w-3" />
+            Create rule
+          </button>
+        ),
+      exportValue: null,
+    },
+  ]
+}
+
 export function RuleCoverageReport({ existingRules, onSeedRule }: Props) {
   const [rows, setRows] = useState<CoverageRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showOnlyMissing, setShowOnlyMissing] = useState(true)
+  // Bumped by the table's retry button so the effect below re-runs.
+  const [reloadKey, setReloadKey] = useState(0)
+
+  const columns = useMemo(() => buildColumns(onSeedRule), [onSeedRule])
 
   useEffect(() => {
     let cancelled = false
@@ -44,7 +110,7 @@ export function RuleCoverageReport({ existingRules, onSeedRule }: Props) {
         if (!cancelled) setLoading(false)
       })
     return () => { cancelled = true }
-  }, [existingRules.length])
+  }, [existingRules.length, reloadKey])
 
   const filtered = showOnlyMissing ? rows.filter(r => !r.hasRule) : rows
   const missingCount = rows.filter(r => !r.hasRule).length
@@ -73,66 +139,29 @@ export function RuleCoverageReport({ existingRules, onSeedRule }: Props) {
         </label>
       </div>
 
-      {loading && (
-        <div className="flex items-center justify-center py-20 text-slate-500">
-          <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-          Loading coverage...
-        </div>
-      )}
+      <DataTable
+        rows={filtered}
+        columns={columns}
+        getRowKey={r => r.description}
+        loading={loading}
+        error={error ?? undefined}
+        onRetry={() => setReloadKey(k => k + 1)}
+        defaultSort={{ field: 'usageCount', dir: 'desc' }}
+        pageSize={25}
+        minWidth="min-w-[520px]"
+        exportFileName="rule-coverage"
+        labels={{
+          empty: showOnlyMissing
+            ? 'Every tracked part description has at least one rule.'
+            : 'No part descriptions tracked yet.',
+        }}
+        mobileCard={{
+          title: r => r.description,
+          subtitle: r => (r.hasRule ? 'Covered' : 'No rule'),
+          accent: r => r.usageCount,
+        }}
+      />
 
-      {error && (
-        <div className="rounded-md bg-red-50 px-4 py-3 text-sm text-red-800 dark:bg-red-950 dark:text-red-200">
-          {error}
-        </div>
-      )}
-
-      {!loading && !error && filtered.length === 0 && (
-        <p className="py-10 text-center text-sm text-slate-500">
-          {showOnlyMissing ? 'Every tracked part description has at least one rule.' : 'No part descriptions tracked yet.'}
-        </p>
-      )}
-
-      {!loading && filtered.length > 0 && (
-        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <table className="min-w-[520px] w-full divide-y divide-slate-200 dark:divide-slate-800">
-            <thead className="bg-slate-50 dark:bg-slate-900/50">
-              <tr>
-                <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">Part description</th>
-                <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">Usage</th>
-                <th className="px-3 py-2 text-center text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">Has rule</th>
-                <th className="w-32 px-3 py-2"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {filtered.map(row => (
-                <tr key={row.description} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
-                  <td className="px-3 py-2 text-sm font-medium text-slate-900 dark:text-slate-100">{row.description}</td>
-                  <td className="px-3 py-2 text-right text-sm text-slate-700 dark:text-slate-300">
-                    <span className="inline-flex items-center gap-1">
-                      <TrendingUp className="h-3 w-3 text-slate-400" />
-                      {row.usageCount}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2 text-center">
-                    <span className={`inline-block h-2 w-2 rounded-full ${row.hasRule ? 'bg-emerald-500' : 'bg-amber-400'}`} />
-                  </td>
-                  <td className="px-3 py-2 text-right">
-                    {!row.hasRule && (
-                      <button
-                        onClick={() => onSeedRule(row.description)}
-                        className="inline-flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90"
-                      >
-                        <Plus className="h-3 w-3" />
-                        Create rule
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
     </div>
   )
 }

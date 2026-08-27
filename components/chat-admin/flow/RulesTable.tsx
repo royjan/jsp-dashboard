@@ -1,17 +1,15 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
-import {
-  ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Car, Package, Loader2, Zap, Activity, Check, X, Pencil, Copy,
-} from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { Car, Zap, Activity, Check, X, Pencil, Copy } from 'lucide-react'
 import type { FlowDecisionRecord, FlowDecisionStatus } from '@/types/chat-admin/flow-decision'
 import { toast } from '@/lib/toast'
 import { copyText } from '@/lib/clipboard'
 import { FLOW_STATUS_PILL } from '@/components/chat-admin/shared/colors'
 import { compactCount, relTime } from '@/lib/chat-admin/format'
+import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
 
 type SortKey = 'partDescription' | 'lambdaTarget' | 'status' | 'updatedAt' | 'category' | 'feedbackCount'
-type SortDir = 'asc' | 'desc'
 const PAGE_SIZES = [25, 50, 100, 200]
 
 interface Props {
@@ -24,282 +22,231 @@ interface Props {
   activeId?: string | null
 }
 
+function buildColumns(
+  onRowClick: (id: string) => void,
+  onSetStatus: ((id: string, status: FlowDecisionStatus) => void) | undefined,
+): DataTableColumn<FlowDecisionRecord, SortKey>[] {
+  return [
+    {
+      key: 'status',
+      header: 'Status',
+      sortable: true,
+      sortKey: 'status',
+      headerClassName: 'w-28',
+      cell: r => <StatusPill status={r.status} />,
+      exportValue: r => r.status,
+    },
+    {
+      key: 'partDescription',
+      header: 'Part description',
+      sortable: true,
+      sortKey: 'partDescription',
+      headerClassName: 'w-[20%]',
+      title: r => r.partDescription,
+      cell: r => (
+        <div className="text-sm">
+          <div className="truncate font-medium" dir="auto" title={r.partDescription}>
+            {r.partDescription}
+          </div>
+          {/* click to copy the flow-decision id */}
+          <button
+            onClick={e => {
+              e.stopPropagation()
+              copyText(r.id).then(ok => (ok ? toast.success('Copied id') : toast.error('Copy failed')))
+            }}
+            title={`Copy id: ${r.id}`}
+            className="mt-0.5 inline-flex max-w-full items-center gap-1 font-mono text-[10px] text-muted-foreground transition-colors hover:text-sky-400"
+          >
+            <Copy className="h-3 w-3 shrink-0" /> {r.id.slice(0, 8)}…
+          </button>
+        </div>
+      ),
+      exportValue: r => r.partDescription,
+    },
+    {
+      key: 'lambdaTarget',
+      header: 'Lambda',
+      sortable: true,
+      sortKey: 'lambdaTarget',
+      headerClassName: 'w-24',
+      cell: r => (
+        <span className="inline-block max-w-full truncate rounded bg-muted px-2 py-0.5 font-mono text-xs ring-1 ring-inset ring-border">
+          {r.lambdaTarget}
+        </span>
+      ),
+      exportValue: r => r.lambdaTarget,
+    },
+    {
+      key: 'category',
+      header: 'Category / schema',
+      sortable: true,
+      sortKey: 'category',
+      headerClassName: 'w-[22%]',
+      title: r => `${r.category} › ${r.subcategory} › ${r.schema}`,
+      cell: r => (
+        <div className="text-sm">
+          <div className="truncate font-mono text-xs">{r.category} › {r.subcategory}</div>
+          <div className="truncate font-mono text-xs text-muted-foreground">{r.schema}</div>
+        </div>
+      ),
+      exportValue: r => `${r.category} › ${r.subcategory} › ${r.schema}`,
+    },
+    {
+      key: 'vehicle',
+      header: 'Vehicle',
+      headerClassName: 'w-[14%]',
+      hideOnMobile: true,
+      cell: r => {
+        const summary = describeVehicle(r)
+        return summary ? (
+          <span
+            title={summary}
+            className="inline-flex max-w-full items-center gap-1 rounded bg-muted px-2 py-0.5 text-xs ring-1 ring-inset ring-border"
+          >
+            <Car className="h-3 w-3 shrink-0 text-muted-foreground" />
+            <span className="truncate">{summary}</span>
+          </span>
+        ) : (
+          <span className="text-xs text-muted-foreground">any</span>
+        )
+      },
+      exportValue: r => describeVehicle(r) ?? 'any',
+    },
+    {
+      key: 'feedbackCount',
+      header: <span title="Feedback signals received · confidence. Higher = more trusted.">Activity</span>,
+      exportHeader: 'Feedback',
+      sortable: true,
+      sortKey: 'feedbackCount',
+      headerClassName: 'w-24',
+      cell: r => <TrustSignal rule={r} />,
+      exportValue: r => r.feedbackCount ?? 0,
+    },
+    {
+      key: 'direct',
+      header: 'Direct',
+      align: 'center',
+      headerClassName: 'w-14',
+      hideOnMobile: true,
+      cell: r =>
+        hasDirectPart(r) ? (
+          <Zap aria-label="Has direct part" className="mx-auto h-4 w-4 fill-emerald-400 text-emerald-400" />
+        ) : (
+          <span className="sr-only">No direct part</span>
+        ),
+      exportValue: r => (hasDirectPart(r) ? 'yes' : 'no'),
+    },
+    {
+      key: 'updatedAt',
+      header: 'Updated',
+      sortable: true,
+      sortKey: 'updatedAt',
+      headerClassName: 'w-24',
+      cell: r => <span className="text-xs text-muted-foreground">{relTime(r.updatedAt)}</span>,
+      // The raw timestamp, not "3 days ago" — the relative string sorts wrong
+      // and is useless in a spreadsheet.
+      exportValue: r => String(r.updatedAt ?? ''),
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      align: 'end',
+      headerClassName: 'w-24',
+      cell: r => (
+        // inline quick actions — appear on row hover, no need to open the editor
+        <div className="flex items-center justify-end gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+          {onSetStatus && r.status !== 'approved' && (
+            <RowAction title="Approve" tone="hover:bg-emerald-500/20 hover:text-emerald-400"
+              onClick={e => { e.stopPropagation(); onSetStatus(r.id, 'approved') }}><Check className="h-3.5 w-3.5" /></RowAction>
+          )}
+          {onSetStatus && r.status !== 'rejected' && (
+            <RowAction title="Reject" tone="hover:bg-rose-500/20 hover:text-rose-400"
+              onClick={e => { e.stopPropagation(); onSetStatus(r.id, 'rejected') }}><X className="h-3.5 w-3.5" /></RowAction>
+          )}
+          <RowAction title="Edit" tone="hover:bg-muted"
+            onClick={e => { e.stopPropagation(); onRowClick(r.id) }}><Pencil className="h-3.5 w-3.5" /></RowAction>
+        </div>
+      ),
+      exportValue: null,
+    },
+  ]
+}
+
 export function RulesTable({ rules, loading, selectedIds, onSelectionChange, onRowClick, onSetStatus, activeId }: Props) {
-  const [sortKey, setSortKey] = useState<SortKey>('updatedAt')
-  const [sortDir, setSortDir] = useState<SortDir>('desc')
-  const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(50)
 
-  const sorted = useMemo(() => {
-    const out = [...rules]
-    out.sort((a, b) => {
-      const av = (a as any)[sortKey] ?? ''
-      const bv = (b as any)[sortKey] ?? ''
-      if (av === bv) return 0
-      const sign = sortDir === 'asc' ? 1 : -1
-      return av > bv ? sign : -sign
-    })
-    return out
-  }, [rules, sortKey, sortDir])
-
-  // Reset to page 1 whenever the result set, sort, or page size changes.
-  useEffect(() => { setPage(1) }, [rules, sortKey, sortDir, pageSize])
-
-  const pageCount = Math.max(1, Math.ceil(sorted.length / pageSize))
-  const clampedPage = Math.min(page, pageCount)
-  const start = (clampedPage - 1) * pageSize
-  const visible = sorted.slice(start, start + pageSize)
-
-  const allSelected = sorted.length > 0 && sorted.every(r => selectedIds.includes(r.id))
-  const someSelected = sorted.some(r => selectedIds.includes(r.id))
-
-  const toggleAll = () => {
-    if (allSelected) {
-      onSelectionChange(selectedIds.filter(id => !sorted.some(r => r.id === id)))
-    } else {
-      const merged = new Set([...selectedIds, ...sorted.map(r => r.id)])
-      onSelectionChange([...merged])
-    }
-  }
-
-  const toggleOne = (id: string) => {
-    onSelectionChange(selectedIds.includes(id) ? selectedIds.filter(x => x !== id) : [...selectedIds, id])
-  }
-
-  const onSort = (key: SortKey) => {
-    if (sortKey === key) setSortDir(d => (d === 'asc' ? 'desc' : 'asc'))
-    else {
-      setSortKey(key)
-      setSortDir('asc')
-    }
-  }
-
-  if (loading && rules.length === 0) {
-    return (
-      <div className="flex items-center justify-center py-20 text-muted-foreground">
-        <Loader2 className="mr-2 h-5 w-5 animate-spin text-primary" />
-        Loading rules...
-      </div>
-    )
-  }
-
-  if (sorted.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20 text-center text-muted-foreground">
-        <Package className="mb-3 h-10 w-10 text-muted-foreground/60" />
-        <p className="font-medium text-foreground">No rules match these filters</p>
-        <p className="text-sm text-muted-foreground">Adjust filters or create a new rule.</p>
-      </div>
-    )
-  }
+  const columns = useMemo(() => buildColumns(onRowClick, onSetStatus), [onRowClick, onSetStatus])
+  // The table speaks Sets; this screen's callers speak arrays. Convert at the seam
+  // rather than changing every consumer of RulesTable.
+  const selectedKeys = useMemo(() => new Set<string | number>(selectedIds), [selectedIds])
 
   return (
     <div dir="ltr">
-      {/* scroll area — bounded height so the header can stick while you scroll rows */}
-      <div className="max-h-[calc(100vh-320px)] min-h-[240px] overflow-auto rounded-t-xl border border-white/10 bg-white/[0.03] shadow-lg shadow-black/20 backdrop-blur">
-        <table className="w-full table-fixed divide-y divide-white/10 min-w-[860px]">
-          <thead className="sticky top-0 z-10 bg-slate-900/95 backdrop-blur">
-            <tr>
-              <th className="w-10 px-3 py-2.5 text-left">
-                <input
-                  type="checkbox"
-                  checked={allSelected}
-                  ref={el => { if (el) el.indeterminate = !allSelected && someSelected }}
-                  onChange={toggleAll}
-                  aria-label="Select all rules"
-                  className="rounded border-white/20 bg-white/5 accent-primary"
-                />
-              </th>
-              <SortHeader currentKey={sortKey} dir={sortDir} keyName="status" onSort={onSort} className="w-28">Status</SortHeader>
-              <SortHeader currentKey={sortKey} dir={sortDir} keyName="partDescription" onSort={onSort} className="w-[20%]">Part description</SortHeader>
-              <SortHeader currentKey={sortKey} dir={sortDir} keyName="lambdaTarget" onSort={onSort} className="w-24">Lambda</SortHeader>
-              <SortHeader currentKey={sortKey} dir={sortDir} keyName="category" onSort={onSort} className="w-[22%]">Category / schema</SortHeader>
-              <th className="w-[14%] px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">Vehicle</th>
-              <SortHeader currentKey={sortKey} dir={sortDir} keyName="feedbackCount" onSort={onSort} className="w-24">
-                <span title="Feedback signals received · confidence. Higher = more trusted.">Activity</span>
-              </SortHeader>
-              <th
-                title="Has a pre-mapped direct part (skips search)"
-                className="w-14 px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-slate-400"
-              >
-                Direct
-              </th>
-              <SortHeader currentKey={sortKey} dir={sortDir} keyName="updatedAt" onSort={onSort} className="w-24">Updated</SortHeader>
-              <th className="w-24 px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-slate-400">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-white/5">
-            {visible.map((rule, idx) => {
-              const selected = selectedIds.includes(rule.id)
-              const active = activeId === rule.id
-              const hasDirect = Boolean((rule as any).directPart)
-              const vehicleSummary = describeVehicle(rule)
-              const rowBg = active
-                ? 'bg-primary/15 ring-1 ring-inset ring-primary/30'
-                : selected
-                ? 'bg-primary/10'
-                : idx % 2
-                ? 'bg-white/[0.02] hover:bg-white/[0.05]'   // zebra
-                : 'hover:bg-white/[0.04]'
-              return (
-                <tr
-                  key={rule.id}
-                  onClick={() => onRowClick(rule.id)}
-                  className={`group cursor-pointer transition-colors ${rowBg}`}
-                >
-                  <td className="px-3 py-2.5" onClick={e => { e.stopPropagation(); toggleOne(rule.id) }}>
-                    <input
-                      type="checkbox"
-                      checked={selected}
-                      onChange={() => toggleOne(rule.id)}
-                      onClick={e => e.stopPropagation()}
-                      aria-label={`Select ${rule.partDescription}`}
-                      className="rounded border-white/20 bg-white/5 accent-primary"
-                    />
-                  </td>
-                  <td className="px-3 py-2.5"><StatusPill status={rule.status} /></td>
-                  <td className="px-3 py-2.5 text-sm text-slate-100">
-                    <div className="truncate font-medium" dir="auto" title={rule.partDescription}>
-                      {rule.partDescription}
-                    </div>
-                    {/* click to copy the flow-decision id */}
-                    <button
-                      onClick={e => { e.stopPropagation(); copyText(rule.id).then(ok => (ok ? toast.success('Copied id') : toast.error('Copy failed'))) }}
-                      title={`Copy id: ${rule.id}`}
-                      className="mt-0.5 inline-flex max-w-full items-center gap-1 font-mono text-[10px] text-slate-500 transition-colors hover:text-sky-300"
-                    >
-                      <Copy className="h-3 w-3 shrink-0" /> {rule.id.slice(0, 8)}…
-                    </button>
-                  </td>
-                  <td className="px-3 py-2.5 text-sm">
-                    <span className="inline-block max-w-full truncate rounded bg-white/5 px-2 py-0.5 font-mono text-xs text-slate-300 ring-1 ring-inset ring-white/10">
-                      {rule.lambdaTarget}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2.5 text-sm" title={`${rule.category} › ${rule.subcategory} › ${rule.schema}`}>
-                    <div className="truncate font-mono text-xs text-slate-300">{rule.category} › {rule.subcategory}</div>
-                    <div className="truncate font-mono text-xs text-slate-500">{rule.schema}</div>
-                  </td>
-                  <td className="px-3 py-2.5 text-sm">
-                    {vehicleSummary ? (
-                      <span
-                        title={vehicleSummary}
-                        className="inline-flex max-w-full items-center gap-1 rounded bg-white/5 px-2 py-0.5 text-xs text-slate-300 ring-1 ring-inset ring-white/10"
-                      >
-                        <Car className="h-3 w-3 shrink-0 text-slate-400" />
-                        <span className="truncate">{vehicleSummary}</span>
-                      </span>
-                    ) : (
-                      <span className="text-xs text-slate-500">any</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2.5"><TrustSignal rule={rule} /></td>
-                  <td className="px-3 py-2.5 text-center">
-                    {hasDirect ? (
-                      <Zap
-                        aria-label="Has direct part"
-                        className="mx-auto h-4 w-4 fill-emerald-400 text-emerald-400"
-                      />
-                    ) : (
-                      <span className="sr-only">No direct part</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2.5 text-xs text-slate-500">{relTime(rule.updatedAt)}</td>
-                  <td className="px-2 py-2.5">
-                    {/* inline quick actions — appear on row hover, no need to open the editor */}
-                    <div className="flex items-center justify-end gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
-                      {onSetStatus && rule.status !== 'approved' && (
-                        <RowAction title="Approve" tone="hover:bg-emerald-500/20 hover:text-emerald-300"
-                          onClick={e => { e.stopPropagation(); onSetStatus(rule.id, 'approved') }}><Check className="h-3.5 w-3.5" /></RowAction>
-                      )}
-                      {onSetStatus && rule.status !== 'rejected' && (
-                        <RowAction title="Reject" tone="hover:bg-rose-500/20 hover:text-rose-300"
-                          onClick={e => { e.stopPropagation(); onSetStatus(rule.id, 'rejected') }}><X className="h-3.5 w-3.5" /></RowAction>
-                      )}
-                      <RowAction title="Edit" tone="hover:bg-white/10 hover:text-slate-100"
-                        onClick={e => { e.stopPropagation(); onRowClick(rule.id) }}><Pencil className="h-3.5 w-3.5" /></RowAction>
-                    </div>
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
-
-      {/* footer: legend + pagination */}
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-b-xl border-x border-b border-white/10 bg-white/[0.02] px-3 py-2 text-xs text-slate-400">
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-          <span className="inline-flex items-center gap-1"><Activity className="h-3.5 w-3.5 text-cyan-300" /> feedback · confidence</span>
-          <span className="inline-flex items-center gap-1"><Zap className="h-3.5 w-3.5 fill-emerald-400 text-emerald-400" /> direct part (skips search)</span>
-        </div>
-        <div className="flex items-center gap-3">
-          <label className="inline-flex items-center gap-1">
+      <DataTable<FlowDecisionRecord, SortKey>
+        rows={rules}
+        columns={columns}
+        getRowKey={r => r.id}
+        loading={loading}
+        defaultSort={{ field: 'updatedAt', dir: 'desc' }}
+        selectable
+        selectedKeys={selectedKeys}
+        onSelectionChange={keys => onSelectionChange([...keys].map(String))}
+        onRowClick={r => onRowClick(r.id)}
+        rowClassName={r =>
+          `group cursor-pointer ${activeId === r.id ? 'bg-primary/15 ring-1 ring-inset ring-primary/30' : ''}`
+        }
+        pageSize={pageSize}
+        minWidth="min-w-[860px]"
+        exportFileName="flow-rules"
+        toolbar={
+          <label className="inline-flex items-center gap-1 text-xs text-muted-foreground">
             <span>Per page</span>
             <select
               value={pageSize}
               onChange={e => setPageSize(Number(e.target.value))}
-              className="rounded-md border-0 bg-white/5 px-1.5 py-0.5 text-xs text-slate-200 ring-1 ring-inset ring-white/10 focus:outline-none [&>option]:bg-slate-900"
+              className="rounded-md border bg-background px-1.5 py-0.5 text-xs"
             >
               {PAGE_SIZES.map(n => <option key={n} value={n}>{n}</option>)}
             </select>
           </label>
-          <span className="tabular-nums">
-            {sorted.length === 0 ? 0 : start + 1}–{Math.min(start + pageSize, sorted.length)} of {sorted.length}
-          </span>
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => setPage(p => Math.max(1, p - 1))} disabled={clampedPage <= 1}
-              className="inline-flex h-6 w-6 items-center justify-center rounded-md ring-1 ring-inset ring-white/10 hover:bg-white/10 disabled:opacity-30"
-              aria-label="Previous page"
-            ><ChevronLeft className="h-3.5 w-3.5" /></button>
-            <span className="tabular-nums px-1">{clampedPage}/{pageCount}</span>
-            <button
-              onClick={() => setPage(p => Math.min(pageCount, p + 1))} disabled={clampedPage >= pageCount}
-              className="inline-flex h-6 w-6 items-center justify-center rounded-md ring-1 ring-inset ring-white/10 hover:bg-white/10 disabled:opacity-30"
-              aria-label="Next page"
-            ><ChevronRight className="h-3.5 w-3.5" /></button>
-          </div>
-        </div>
+        }
+        labels={{
+          loading: 'Loading rules...',
+          empty: 'No rules match these filters — adjust filters or create a new rule.',
+        }}
+        mobileCard={{
+          title: r => r.partDescription,
+          subtitle: r => `${r.category} › ${r.schema}`,
+          accent: r => r.status,
+          fields: [
+            { label: 'Lambda', value: r => r.lambdaTarget },
+            { label: 'Updated', value: r => relTime(r.updatedAt) },
+          ],
+        }}
+      />
+
+      {/* legend — what the two icon columns mean */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-3 py-2 text-xs text-muted-foreground">
+        <span className="inline-flex items-center gap-1"><Activity className="h-3.5 w-3.5 text-cyan-400" /> feedback · confidence</span>
+        <span className="inline-flex items-center gap-1"><Zap className="h-3.5 w-3.5 fill-emerald-400 text-emerald-400" /> direct part (skips search)</span>
       </div>
     </div>
   )
+}
+
+/** `directPart` is not on the record type but is present on rows that have one. */
+function hasDirectPart(r: FlowDecisionRecord): boolean {
+  return Boolean((r as FlowDecisionRecord & { directPart?: unknown }).directPart)
 }
 
 function RowAction({ title, tone, onClick, children }: { title: string; tone: string; onClick: (e: React.MouseEvent) => void; children: React.ReactNode }) {
   return (
     <button
       title={title} aria-label={title} onClick={onClick}
-      className={`inline-flex h-6 w-6 items-center justify-center rounded-md text-slate-400 ring-1 ring-inset ring-white/10 transition-colors ${tone}`}
+      className={`inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground ring-1 ring-inset ring-border transition-colors ${tone}`}
     >
       {children}
     </button>
-  )
-}
-
-function SortHeader({
-  currentKey,
-  dir,
-  keyName,
-  onSort,
-  className,
-  children,
-}: {
-  currentKey: string
-  dir: 'asc' | 'desc'
-  keyName: SortKey
-  onSort: (k: SortKey) => void
-  className?: string
-  children: React.ReactNode
-}) {
-  const isActive = currentKey === keyName
-  return (
-    <th className={`px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide ${isActive ? 'text-primary' : 'text-slate-400'} ${className || ''}`}>
-      <button onClick={() => onSort(keyName)} className="inline-flex items-center gap-1 transition-colors hover:text-slate-100">
-        {children}
-        {isActive && (dir === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
-      </button>
-    </th>
   )
 }
 
@@ -309,7 +256,7 @@ function TrustSignal({ rule }: { rule: FlowDecisionRecord }) {
   const count = rule.feedbackCount ?? 0
   const conf = rule.confidence != null ? Number(rule.confidence) : null
   const tone =
-    count >= 100 ? 'text-emerald-300' : count >= 10 ? 'text-cyan-300' : count > 0 ? 'text-slate-300' : 'text-slate-600'
+    count >= 100 ? 'text-emerald-400' : count >= 10 ? 'text-cyan-400' : count > 0 ? 'text-foreground' : 'text-muted-foreground'
   const confPct = conf != null && !isNaN(conf) ? `${Math.round(conf * 100)}%` : null
   return (
     <div
@@ -318,14 +265,14 @@ function TrustSignal({ rule }: { rule: FlowDecisionRecord }) {
     >
       <Activity className={`h-3.5 w-3.5 shrink-0 ${tone}`} />
       <span className={`tabular-nums font-medium ${tone}`}>{compactCount(count)}</span>
-      {confPct && <span className="text-slate-500">· {confPct}</span>}
+      {confPct && <span className="text-muted-foreground">· {confPct}</span>}
     </div>
   )
 }
 
 function StatusPill({ status }: { status: string }) {
   return (
-    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium capitalize ring-1 ring-inset ${FLOW_STATUS_PILL[status] || 'bg-white/5 text-slate-300 ring-white/10'}`}>
+    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium capitalize ring-1 ring-inset ${FLOW_STATUS_PILL[status] || 'bg-muted text-foreground ring-border'}`}>
       {status}
     </span>
   )
@@ -342,5 +289,3 @@ function describeVehicle(r: FlowDecisionRecord): string | null {
   if (r.vinPattern) parts.push(`VIN: ${r.vinPattern}`)
   return parts.length ? parts.join(' · ') : null
 }
-
-

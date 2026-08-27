@@ -1,9 +1,10 @@
 'use client'
 
-import React, { useMemo, useState } from 'react'
+import React, { useMemo } from 'react'
 import Link from 'next/link'
 import { ArrowRight, MessagesSquare } from 'lucide-react'
-import { AdminPagination, StatusBadge } from './shared'
+import { StatusBadge } from './shared'
+import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
 
 export interface FixRow {
   query: string
@@ -26,16 +27,86 @@ const PROBLEM_META: Record<FixRow['problem'], { status: string; label: string; a
   schema: { status: 'unknown', label: 'Schema flip', action: 'Pin schema' },
 }
 
-const PAGE_SIZE = 15
-
 function pinHref(query: string) {
   return `/chat/flow-decisions?source=learned&q=${encodeURIComponent(query)}`
 }
 
+const COLUMNS: DataTableColumn<FixRow>[] = [
+  {
+    key: 'query',
+    header: 'Query',
+    sortable: true,
+    truncate: 'max-w-[280px]',
+    title: r => r.query,
+    cell: r => {
+      // A schema key is an identifier, not prose — forcing it LTR keeps the
+      // punctuation at the end where it belongs. The user queries are Hebrew.
+      const isLtr = r.problem === 'schema'
+      return (
+        <div>
+          <div dir={isLtr ? 'ltr' : 'rtl'} className={`truncate ${isLtr ? 'font-mono text-xs' : ''}`}>
+            {r.query || '(empty)'}
+          </div>
+          {r.normalized && r.problem !== 'schema' && (
+            <div dir="ltr" className="truncate font-mono text-[11px] text-muted-foreground">
+              {r.normalized}
+            </div>
+          )}
+        </div>
+      )
+    },
+    exportValue: r => r.query,
+  },
+  {
+    key: 'problem',
+    header: 'Problem',
+    sortable: true,
+    cell: r => <StatusBadge status={PROBLEM_META[r.problem].status} label={PROBLEM_META[r.problem].label} size="sm" />,
+    exportValue: r => PROBLEM_META[r.problem].label,
+  },
+  {
+    key: 'count',
+    header: 'Hits',
+    align: 'end',
+    sortable: true,
+    cell: r => r.count.toLocaleString(),
+    exportValue: r => r.count,
+  },
+  {
+    key: 'action',
+    header: 'Suggested action',
+    hideOnMobile: true,
+    cell: r => <span className="text-xs text-muted-foreground">{PROBLEM_META[r.problem].action}</span>,
+    exportValue: r => PROBLEM_META[r.problem].action,
+  },
+  {
+    key: 'actions',
+    header: '',
+    align: 'end',
+    cell: r => (
+      <span className="inline-flex items-center gap-1.5">
+        {/* real conversations where this query failed — judge extraction vs routing vs catalog */}
+        <Link
+          href={`/chat/diego?q=${encodeURIComponent(r.query)}`}
+          title="View example sessions with this query"
+          className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs text-muted-foreground hover:bg-muted"
+        >
+          <MessagesSquare className="h-3.5 w-3.5" /> Examples
+        </Link>
+        <Link
+          href={pinHref(r.query)}
+          className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs text-muted-foreground hover:bg-muted"
+        >
+          Fix <ArrowRight className="h-3.5 w-3.5" />
+        </Link>
+      </span>
+    ),
+    exportValue: null,
+  },
+]
+
 /** Merged, ranked action list across not-found / OOS / schema-flip problems. */
 export function FixQueue({ notFound, oos, schemaFlips }: FixQueueProps) {
-  const [page, setPage] = useState(1)
-
   const rows: FixRow[] = useMemo(() => {
     const merged: FixRow[] = [
       ...notFound.map(r => ({ query: r.query, problem: 'notfound' as const, count: r.count })),
@@ -50,79 +121,26 @@ export function FixQueue({ notFound, oos, schemaFlips }: FixQueueProps) {
     })
   }, [notFound, oos, schemaFlips])
 
-  if (rows.length === 0) {
-    return (
-      <div className="py-10 text-center text-sm text-[var(--color-text-secondary,#c7c7cc)]">
-        🎉 Nothing to fix this period.
-      </div>
-    )
-  }
-
-  const totalPages = Math.ceil(rows.length / PAGE_SIZE)
-  const pageRows = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
-
   return (
-    <div>
-      <div className="overflow-x-auto rounded-lg border border-[var(--color-border-default)]">
-        <table className="w-full text-sm">
-          <thead className="bg-black/20 text-[var(--color-text-tertiary,#8a8a90)]">
-            <tr className="text-left">
-              <th className="px-3 py-2 font-medium">Query</th>
-              <th className="px-3 py-2 font-medium">Problem</th>
-              <th className="px-3 py-2 text-right font-medium">Hits</th>
-              <th className="px-3 py-2 font-medium">Suggested action</th>
-              <th className="px-3 py-2 font-medium"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {pageRows.map((r, i) => {
-              const meta = PROBLEM_META[r.problem]
-              const isLtr = r.problem === 'schema'
-              return (
-                <tr key={i} className="border-t border-[var(--color-border-default)] hover:bg-white/5">
-                  <td className="px-3 py-2 max-w-[280px]">
-                    <div
-                      dir={isLtr ? 'ltr' : 'rtl'}
-                      title={r.query}
-                      className={`truncate text-[var(--color-text-primary,#e7e7ea)] ${isLtr ? 'font-mono text-xs' : ''}`}
-                    >
-                      {r.query || '(empty)'}
-                    </div>
-                    {r.normalized && r.problem !== 'schema' && (
-                      <div dir="ltr" className="truncate font-mono text-[11px] text-[var(--color-text-tertiary,#8a8a90)]">{r.normalized}</div>
-                    )}
-                  </td>
-                  <td className="px-3 py-2">
-                    <StatusBadge status={meta.status} label={meta.label} size="sm" />
-                  </td>
-                  <td className="px-3 py-2 text-right tabular-nums text-[var(--color-text-secondary,#c7c7cc)]">{r.count.toLocaleString()}</td>
-                  <td className="px-3 py-2 text-xs text-[var(--color-text-secondary,#c7c7cc)]">{meta.action}</td>
-                  <td className="px-3 py-2 text-right">
-                    <span className="inline-flex items-center gap-1.5">
-                      {/* real conversations where this query failed — judge extraction vs routing vs catalog */}
-                      <Link
-                        href={`/chat/diego?q=${encodeURIComponent(r.query)}`}
-                        title="View example sessions with this query"
-                        className="inline-flex items-center gap-1 rounded-md border border-[var(--color-border-default)] px-2 py-1 text-xs text-[var(--color-text-secondary,#c7c7cc)] hover:bg-white/5"
-                      >
-                        <MessagesSquare className="h-3.5 w-3.5" /> Examples
-                      </Link>
-                      <Link
-                        href={pinHref(r.query)}
-                        className="inline-flex items-center gap-1 rounded-md border border-[var(--color-border-default)] px-2 py-1 text-xs text-[var(--color-text-secondary,#c7c7cc)] hover:bg-white/5"
-                      >
-                        Fix <ArrowRight className="h-3.5 w-3.5" />
-                      </Link>
-                    </span>
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
-      <AdminPagination currentPage={page} totalPages={totalPages} onPageChange={setPage} />
-    </div>
+    <DataTable
+      rows={rows}
+      columns={COLUMNS}
+      // The list is a merge of three sources, so index is the only stable key —
+      // the same query can legitimately appear as both not-found and OOS.
+      getRowKey={(r, i) => `${r.problem}:${r.query}:${i}`}
+      // No defaultSort on purpose: the incoming order IS the ranking (weighted
+      // so a schema flip sits below an equal-count hard failure), and handing
+      // the table a sort field would silently discard that weighting.
+      pageSize={15}
+      minWidth="min-w-[720px]"
+      exportFileName="fix-queue"
+      labels={{ empty: '🎉 Nothing to fix this period.' }}
+      mobileCard={{
+        title: r => r.query || '(empty)',
+        subtitle: r => PROBLEM_META[r.problem].action,
+        accent: r => r.count.toLocaleString(),
+      }}
+    />
   )
 }
 
