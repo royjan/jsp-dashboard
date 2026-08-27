@@ -14,7 +14,7 @@ import { cn } from '@/lib/utils'
 import { AlertTriangle, Clock, ShieldAlert, Eye, TrendingDown, ArrowLeft, Search, Filter, Truck, X, Download, Loader2 } from 'lucide-react'
 import { EbayRecommendButton } from '@/components/shared/EbayRecommendButton'
 import { ItemLink } from '@/components/shared/ItemLink'
-import { SortableTh } from '@/components/shared/sortable-table'
+import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, Area, AreaChart } from 'recharts'
 import { ChartGrid, AXIS_PROPS, ACTIVE_DOT } from '@/components/charts/kit'
 import { formatCurrency, formatNumber } from '@/lib/format'
@@ -133,6 +133,27 @@ function ForecastChart({ itemCode }: { itemCode: string }) {
   )
 }
 
+/** A forecast row as `/api/analytics/stock-forecast` returns it. */
+interface ForecastItem {
+  item_code: string
+  item_name: string
+  current_stock: number
+  predicted_monthly_demand: number
+  stock_out_date: string | null
+  days_until_stockout: number | null
+  days_with_pipeline?: number | null
+  confidence: number
+  urgency: UrgencyLevel
+  stock_urgency?: UrgencyLevel
+  pipeline_qty?: number | null
+  ordered_qty?: number | null
+  incoming_qty?: number | null
+  /** Unit price, used for the value-at-risk KPI and the export. */
+  price?: number | null
+  /** Superseded codes folded into this row — see the code cell. */
+  alias_codes?: string[]
+}
+
 export default function StockForecastPage() {
   // Subscribe to the demo-mode eye: formatCurrency() masks from a module
   // store, so without this the amounts here would not re-render on toggle.
@@ -157,12 +178,6 @@ export default function StockForecastPage() {
     return () => clearTimeout(id)
   }, [searchQuery])
 
-  // SortableTh is generic over the row type, so its key is string|number|symbol.
-  const toggleSort = (key: string | number | symbol) => {
-    const k = String(key)
-    if (k === sortKey) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
-    else { setSortKey(k); setSortDir('asc') }
-  }
 
   const { data, isLoading, error, isFetching } = useStockForecast(urgencyFilter, rowLimit, {
     q: debouncedSearch,
@@ -170,7 +185,7 @@ export default function StockForecastPage() {
     dir: sortDir,
   })
 
-  const items: any[] = data?.items || []
+  const items: ForecastItem[] = data?.items ?? []
   // Counts come from the API over the full result set; the rows below are
   // capped at rowLimit, so counting them here would under-report.
   const summary = data?.summary as
@@ -182,14 +197,15 @@ export default function StockForecastPage() {
   const filteredItems = items
   const sortedItems = items
 
+
   // KPI calculations — prefer the API's whole-set totals, fall back to the
   // loaded rows for older cached payloads that predate `summary`.
-  const criticalCount = summary?.critical ?? items.filter((i: any) => i.urgency === 'critical').length
-  const warningCount = summary?.warning ?? items.filter((i: any) => i.urgency === 'warning').length
-  const watchCount = summary?.watch ?? items.filter((i: any) => i.urgency === 'watch').length
+  const criticalCount = summary?.critical ?? items.filter(i => i.urgency === 'critical').length
+  const warningCount = summary?.warning ?? items.filter(i => i.urgency === 'warning').length
+  const watchCount = summary?.watch ?? items.filter(i => i.urgency === 'watch').length
   const totalValueAtRisk = summary?.value_at_risk ?? items
-    .filter((i: any) => i.urgency === 'critical' || i.urgency === 'warning')
-    .reduce((sum: number, i: any) => sum + (i.current_stock || 0) * (i.price || 0), 0)
+    .filter(i => i.urgency === 'critical' || i.urgency === 'warning')
+    .reduce((sum: number, i) => sum + (i.current_stock || 0) * (i.price || 0), 0)
 
   const he = locale === 'he'
 
@@ -202,7 +218,7 @@ export default function StockForecastPage() {
     // Export the whole result set, not the page. The table is capped by the
     // Rows selector, so exporting what's rendered would silently truncate the
     // file; re-fetch with the same filter/search/sort and no meaningful cap.
-    let exportItems: any[] = sortedItems
+    let exportItems: ForecastItem[] = sortedItems
     try {
       const params = new URLSearchParams({ limit: String(Math.max(summary?.total ?? 0, rowLimit)) })
       if (urgencyFilter) params.set('urgency', urgencyFilter)
@@ -218,7 +234,7 @@ export default function StockForecastPage() {
     }
 
     try {
-    const rows = exportItems.map((item: any, i: number) => ({
+    const rows = exportItems.map((item, i: number) => ({
       '#': i + 1,
       [he ? 'קוד' : 'Code']: item.item_code,
       [he ? 'שם' : 'Name']: item.item_name,
@@ -275,6 +291,164 @@ export default function StockForecastPage() {
         confidence: 'How much sales history backs the forecast: 95% = 3+ months of data, 40% = last year only, 10% = almost none. A low value means the date is a guess — not that you should order more',
         urgency: 'Bucket by days left: Critical under 30, Warning 30-60, Watch 60-90, otherwise OK',
       }
+
+  /** Sorting is CONTROLLED here: the hook above re-queries the server with
+   *  sort+dir, because the rows are a server-side page. Letting the table sort
+   *  in-memory would re-rank only the loaded slice and quietly claim it was the
+   *  whole list. */
+  const columns: DataTableColumn<ForecastItem>[] = [
+    {
+      key: 'item_code',
+      header: <span title={hints.code}>{he ? 'קוד' : 'Code'}</span>,
+      exportHeader: he ? 'קוד' : 'Code',
+      sortable: true,
+      align: 'end',
+      cell: item => (
+        <div className="flex items-center gap-1.5">
+          <EbayRecommendButton itemCode={item.item_code} itemName={item.item_name} />
+          <ItemLink code={item.item_code} showCode />
+          {/* This row is the SUM of a supersession chain. The API has always
+              returned alias_codes and nothing rendered them, so a merged row was
+              indistinguishable from a plain one — and the stock/demand figures
+              looked wrong to anyone who knew the old code separately. */}
+          {(item.alias_codes?.length ?? 0) > 0 && (
+            <span
+              className="shrink-0 rounded bg-muted px-1 text-[10px] leading-4 text-muted-foreground"
+              title={
+                (he ? 'כולל קודים קודמים: ' : 'Includes superseded codes: ') +
+                item.alias_codes!.join(', ')
+              }
+            >
+              +{item.alias_codes!.length}
+            </span>
+          )}
+        </div>
+      ),
+      exportValue: item => item.item_code,
+    },
+    {
+      key: 'item_name',
+      header: <span title={hints.name}>{he ? 'שם' : 'Name'}</span>,
+      exportHeader: he ? 'שם' : 'Name',
+      sortable: true,
+      align: 'end',
+      truncate: 'max-w-[200px]',
+      title: item => item.item_name,
+      cell: item => <ItemLink code={item.item_code} name={item.item_name || '-'} />,
+      exportValue: item => item.item_name,
+    },
+    {
+      key: 'current_stock',
+      header: <span title={hints.stock}>{he ? 'מלאי במחסן' : 'On Hand'}</span>,
+      exportHeader: he ? 'מלאי במחסן' : 'On Hand',
+      sortable: true,
+      align: 'center',
+      cell: item => formatNumber(item.current_stock),
+      exportValue: item => item.current_stock,
+    },
+    {
+      key: 'pipeline_qty',
+      header: <span title={hints.pipeline}>{he ? 'הוזמן/בדרך' : 'On Order'}</span>,
+      exportHeader: he ? 'הוזמן/בדרך' : 'On Order',
+      sortable: true,
+      align: 'center',
+      cell: item =>
+        (item.pipeline_qty ?? 0) > 0 ? (
+          <span
+            className="inline-flex items-center gap-1 text-sky-600 dark:text-sky-400"
+            title={
+              he
+                ? `הוזמן: ${formatNumber(item.ordered_qty ?? 0)} · בדרך: ${formatNumber(item.incoming_qty ?? 0)}`
+                : `Ordered: ${formatNumber(item.ordered_qty ?? 0)} · In transit: ${formatNumber(item.incoming_qty ?? 0)}`
+            }
+          >
+            <Truck className="h-3.5 w-3.5" />
+            {formatNumber(item.pipeline_qty)}
+          </span>
+        ) : (
+          <span className="text-muted-foreground">-</span>
+        ),
+      exportValue: item => item.pipeline_qty ?? 0,
+    },
+    {
+      key: 'predicted_monthly_demand',
+      header: <span title={hints.demand}>{he ? 'ביקוש חודשי' : 'Monthly Demand'}</span>,
+      exportHeader: he ? 'ביקוש חודשי' : 'Monthly Demand',
+      sortable: true,
+      align: 'center',
+      cell: item => formatNumber(item.predicted_monthly_demand),
+      exportValue: item => item.predicted_monthly_demand,
+    },
+    {
+      key: 'stock_out_date',
+      header: <span title={hints.date}>{he ? 'תאריך אזילה' : 'Stock-out Date'}</span>,
+      exportHeader: he ? 'תאריך אזילה' : 'Stock-out Date',
+      sortable: true,
+      align: 'center',
+      cell: item => <span className="text-xs">{formatDate(item.stock_out_date, locale)}</span>,
+      exportValue: item => item.stock_out_date ?? '',
+    },
+    {
+      key: 'days_until_stockout',
+      header: <span title={hints.days}>{he ? 'ימים עד אזילה' : 'Days Left'}</span>,
+      exportHeader: he ? 'ימים עד אזילה' : 'Days Left',
+      sortable: true,
+      align: 'center',
+      cell: item =>
+        item.days_until_stockout != null ? (
+          <span
+            className={cn(
+              item.days_until_stockout < 30
+                ? 'font-semibold text-red-600 dark:text-red-400'
+                : item.days_until_stockout < 60
+                  ? 'text-amber-600 dark:text-amber-400'
+                  : 'text-muted-foreground',
+            )}
+          >
+            {item.days_until_stockout}
+            {item.days_with_pipeline != null && item.days_with_pipeline !== item.days_until_stockout && (
+              <span
+                className="text-sky-600 dark:text-sky-400"
+                title={he ? 'כולל הוזמן/בדרך' : 'Including on-order/in-transit'}
+              >
+                {' '}→ {item.days_with_pipeline}
+              </span>
+            )}
+          </span>
+        ) : (
+          '-'
+        ),
+      exportValue: item => item.days_until_stockout ?? '',
+    },
+    {
+      key: 'confidence',
+      header: <span title={hints.confidence}>{he ? 'אמינות תחזית' : 'Reliability'}</span>,
+      exportHeader: he ? 'אמינות תחזית' : 'Reliability',
+      sortable: true,
+      align: 'center',
+      cell: item => <span className="text-xs text-muted-foreground">{Math.round((item.confidence || 0) * 100)}%</span>,
+      exportValue: item => Math.round((item.confidence || 0) * 100),
+    },
+    {
+      key: 'urgency',
+      header: <span title={hints.urgency}>{he ? 'דחיפות' : 'Urgency'}</span>,
+      exportHeader: he ? 'דחיפות' : 'Urgency',
+      sortable: true,
+      align: 'center',
+      cell: item => (
+        <span className="inline-flex items-center gap-1">
+          <UrgencyBadge urgency={item.urgency} locale={locale} />
+          {item.stock_urgency && item.stock_urgency !== item.urgency && (
+            <span title={he ? 'הדחיפות חושבה כולל הוזמן/בדרך' : 'Urgency includes on-order/in-transit'}>
+              <Truck className="h-3.5 w-3.5 text-sky-500" />
+            </span>
+          )}
+        </span>
+      ),
+      exportValue: item => item.urgency,
+    },
+  ]
+
 
   return (
     <div className="space-y-6" dir={dir}>
@@ -480,110 +654,22 @@ export default function StockForecastPage() {
               {/* Bounded height makes this the scroll container that `sticky` latches
                   onto: a plain overflow-x-auto wrapper computes overflow-y:auto but
                   never scrolls, so a sticky header inside it scrolls away with the page. */}
-              <table className="w-full text-xs sm:text-sm min-w-[780px]">
-                <thead className="sticky top-0 z-20 bg-card">
-                  <tr className="border-b text-muted-foreground [&>th]:py-2">
-                    <SortableTh<any> label={he ? 'קוד' : 'Code'} hint={hints.code} sortKey="item_code" align="end" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                    <SortableTh<any> label={he ? 'שם' : 'Name'} hint={hints.name} sortKey="item_name" align="end" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                    <SortableTh<any> label={he ? 'מלאי במחסן' : 'On Hand'} hint={hints.stock} sortKey="current_stock" align="center" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                    <SortableTh<any> label={he ? 'הוזמן/בדרך' : 'On Order'} hint={hints.pipeline} sortKey="pipeline_qty" align="center" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                    <SortableTh<any> label={he ? 'ביקוש חודשי' : 'Monthly Demand'} hint={hints.demand} sortKey="predicted_monthly_demand" align="center" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                    <SortableTh<any> label={he ? 'תאריך אזילה' : 'Stock-out Date'} hint={hints.date} sortKey="stock_out_date" align="center" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                    <SortableTh<any> label={he ? 'ימים עד אזילה' : 'Days Left'} hint={hints.days} sortKey="days_until_stockout" align="center" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                    <SortableTh<any> label={he ? 'אמינות תחזית' : 'Reliability'} hint={hints.confidence} sortKey="confidence" align="center" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                    <SortableTh<any> label={he ? 'דחיפות' : 'Urgency'} hint={hints.urgency} sortKey="urgency" align="center" activeKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                  </tr>
-                </thead>
-                <tbody>
-                  <AnimatePresence>
-                    {sortedItems.map((item: any) => (
-                      <motion.tr
-                        key={item.item_code}
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className={cn(
-                          'border-b hover:bg-muted/50 cursor-pointer transition-colors',
-                          expandedItem === item.item_code && 'bg-muted/30'
-                        )}
-                        onClick={() => setExpandedItem(expandedItem === item.item_code ? null : item.item_code)}
-                      >
-                        <td className="py-2.5 font-mono text-xs text-end">
-                          <div className="flex items-center gap-1.5">
-                            <EbayRecommendButton itemCode={item.item_code} itemName={item.item_name} />
-                            <ItemLink code={item.item_code} showCode />
-                            {/* This row is the SUM of a supersession chain. The API
-                                has always returned alias_codes and nothing rendered
-                                them, so a merged row was indistinguishable from a
-                                plain one — and the stock/demand figures looked wrong
-                                to anyone who knew the old code separately. */}
-                            {(item.alias_codes?.length ?? 0) > 0 && (
-                              <span
-                                className="shrink-0 rounded bg-muted px-1 text-[10px] leading-4 text-muted-foreground"
-                                title={
-                                  (he ? 'כולל קודים קודמים: ' : 'Includes superseded codes: ') +
-                                  item.alias_codes.join(', ')
-                                }
-                              >
-                                +{item.alias_codes.length}
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="py-2.5 max-w-[200px] truncate text-end" title={item.item_name}><ItemLink code={item.item_code} name={item.item_name || '-'} /></td>
-                        <td className="py-2.5 text-center tabular-nums">{formatNumber(item.current_stock)}</td>
-                        <td className="py-2.5 text-center tabular-nums">
-                          {(item.pipeline_qty ?? 0) > 0 ? (
-                            <span
-                              className="inline-flex items-center gap-1 text-sky-600 dark:text-sky-400"
-                              title={he
-                                ? `הוזמן: ${formatNumber(item.ordered_qty ?? 0)} · בדרך: ${formatNumber(item.incoming_qty ?? 0)}`
-                                : `Ordered: ${formatNumber(item.ordered_qty ?? 0)} · In transit: ${formatNumber(item.incoming_qty ?? 0)}`}
-                            >
-                              <Truck className="h-3.5 w-3.5" />
-                              {formatNumber(item.pipeline_qty)}
-                            </span>
-                          ) : (
-                            <span className="text-muted-foreground">-</span>
-                          )}
-                        </td>
-                        <td className="py-2.5 text-center tabular-nums">{formatNumber(item.predicted_monthly_demand)}</td>
-                        <td className="py-2.5 text-center text-xs">{formatDate(item.stock_out_date, locale)}</td>
-                        <td className="py-2.5 text-center tabular-nums">
-                          {item.days_until_stockout != null ? (
-                            <span className={cn(
-                              item.days_until_stockout < 30 ? 'text-red-600 dark:text-red-400 font-semibold' :
-                              item.days_until_stockout < 60 ? 'text-amber-600 dark:text-amber-400' :
-                              'text-muted-foreground'
-                            )}>
-                              {item.days_until_stockout}
-                              {item.days_with_pipeline != null && item.days_with_pipeline !== item.days_until_stockout && (
-                                <span
-                                  className="text-sky-600 dark:text-sky-400"
-                                  title={he ? 'כולל הוזמן/בדרך' : 'Including on-order/in-transit'}
-                                >
-                                  {' '}→ {item.days_with_pipeline}
-                                </span>
-                              )}
-                            </span>
-                          ) : '-'}
-                        </td>
-                        <td className="py-2.5 text-center text-xs text-muted-foreground">{Math.round((item.confidence || 0) * 100)}%</td>
-                        <td className="py-2.5 text-center">
-                          <span className="inline-flex items-center gap-1">
-                            <UrgencyBadge urgency={item.urgency} locale={locale} />
-                            {item.stock_urgency && item.stock_urgency !== item.urgency && (
-                              <span title={he ? 'הדחיפות חושבה כולל הוזמן/בדרך' : 'Urgency includes on-order/in-transit'}>
-                                <Truck className="h-3.5 w-3.5 text-sky-500" />
-                              </span>
-                            )}
-                          </span>
-                        </td>
-                      </motion.tr>
-                    ))}
-                  </AnimatePresence>
-                </tbody>
-              </table>
+              <DataTable<ForecastItem>
+                rows={sortedItems}
+                columns={columns}
+                getRowKey={item => item.item_code}
+                sort={{ field: sortKey, dir: sortDir }}
+                onSortChange={next => { setSortKey(next.field); setSortDir(next.dir) }}
+                onRowClick={item => setExpandedItem(expandedItem === item.item_code ? null : item.item_code)}
+                rowClassName={item => cn('cursor-pointer', expandedItem === item.item_code && 'bg-muted/30')}
+                minWidth="min-w-[780px]"
+                maxHeight="none"
+                // Deliberately no exportFileName: this page already has its own
+                // export button, and that one RE-FETCHES the full result set
+                // before writing the file. DataTable's export can only see the
+                // rows it was handed, which here are a server-side page — two
+                // buttons where the more obvious one silently exports less.
+              />
             </div>
           )}
 

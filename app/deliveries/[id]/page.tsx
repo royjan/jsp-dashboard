@@ -26,6 +26,7 @@ import { StatusTimeline } from '@/components/deliveries/StatusTimeline'
 import { PhotoCapture } from '@/components/deliveries/PhotoCapture'
 import { statusConfig } from '@/components/deliveries/DeliveryCard'
 import { ItemLink } from '@/components/shared/ItemLink'
+import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
 import type { Delivery, DeliveryPhoto, DeliveryStatusLog } from '@/lib/db/schema'
 import { formatCurrency } from '@/lib/format'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
@@ -39,6 +40,54 @@ interface DeliveryLine {
   discountPercent: number | null
   lineTotal: number | null
 }
+const LINE_COLUMNS: DataTableColumn<DeliveryLine>[] = [
+  {
+    key: 'itemCode',
+    header: 'קוד',
+    sortable: true,
+    cell: l => (l.itemCode ? <ItemLink code={l.itemCode} name={l.itemName} showCode /> : '—'),
+    exportValue: l => l.itemCode,
+  },
+  {
+    key: 'itemName',
+    header: 'תיאור',
+    sortable: true,
+    truncate: 'max-w-[260px]',
+    title: l => l.itemName,
+    cell: l => l.itemName || '—',
+    exportValue: l => l.itemName,
+  },
+  {
+    key: 'quantity',
+    header: 'כמות',
+    align: 'end',
+    sortable: true,
+    cell: l => l.quantity ?? '—',
+    exportValue: l => l.quantity ?? '',
+  },
+  {
+    key: 'unitPrice',
+    header: 'מחיר',
+    align: 'end',
+    sortable: true,
+    cell: l => (
+      <>
+        {l.unitPrice != null ? formatCurrency(l.unitPrice, 2) : '—'}
+        {l.discountPercent ? <span className="text-muted-foreground"> (-{l.discountPercent}%)</span> : null}
+      </>
+    ),
+    exportValue: l => l.unitPrice ?? '',
+  },
+  {
+    key: 'lineTotal',
+    header: 'סה״כ',
+    align: 'end',
+    sortable: true,
+    cell: l => <span className="font-medium">{l.lineTotal != null ? formatCurrency(l.lineTotal, 2) : '—'}</span>,
+    exportValue: l => l.lineTotal ?? '',
+  },
+]
+
 interface DeliveryDocument {
   docFormat: string | null
   docNumber: string | null
@@ -247,45 +296,32 @@ export default function DeliveryDetailPage({
                   <span className="text-muted-foreground">· {doc.lines.length} שורות</span>
                 </div>
                 <div className="overflow-x-auto -mx-2 px-2">
-                  <table className="w-full text-xs sm:text-sm min-w-[520px]">
-                    <thead>
-                      <tr className="border-b text-muted-foreground text-start">
-                        <th className="p-2 text-start font-medium">קוד</th>
-                        <th className="p-2 text-start font-medium">תיאור</th>
-                        <th className="p-2 text-end font-medium">כמות</th>
-                        <th className="p-2 text-end font-medium">מחיר</th>
-                        <th className="p-2 text-end font-medium">סה״כ</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {doc.lines.map((l, li) => (
-                        <tr key={li} className="border-b last:border-0">
-                          <td className="p-2">
-                            {l.itemCode ? <ItemLink code={l.itemCode} name={l.itemName} showCode /> : '—'}
-                          </td>
-                          <td className="p-2 truncate max-w-[260px]">{l.itemName || '—'}</td>
-                          <td className="p-2 text-end tabular-nums">{l.quantity ?? '—'}</td>
-                          <td className="p-2 text-end tabular-nums">
-                            {l.unitPrice != null ? formatCurrency(l.unitPrice, 2) : '—'}
-                            {l.discountPercent ? <span className="text-muted-foreground"> (-{l.discountPercent}%)</span> : null}
-                          </td>
-                          <td className="p-2 text-end tabular-nums font-medium">
-                            {l.lineTotal != null ? formatCurrency(l.lineTotal, 2) : '—'}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                    {doc.documentTotal != null && (
-                      <tfoot>
+                  <DataTable
+                    rows={doc.lines}
+                    columns={LINE_COLUMNS}
+                    getRowKey={(_l, i) => i}
+                    minWidth="min-w-[520px]"
+                    maxHeight="none"
+                    density="compact"
+                    exportFileName={`תעודה-${doc.docNumber ?? ''}`}
+                    // The document total is the ERP's own figure, not a sum of
+                    // the lines above — quoting a derived sum here would drift
+                    // from the printed document whenever a line is missing.
+                    footer={() =>
+                      doc.documentTotal != null ? (
                         <tr className="font-bold">
                           <td className="p-2" colSpan={4}>סה״כ מסמך</td>
-                          <td className="p-2 text-end tabular-nums">
-                            {formatCurrency(doc.documentTotal, 2)}
-                          </td>
+                          <td className="p-2 text-end tabular-nums">{formatCurrency(doc.documentTotal, 2)}</td>
                         </tr>
-                      </tfoot>
-                    )}
-                  </table>
+                      ) : null
+                    }
+                    mobileCard={{
+                      title: l => l.itemName || l.itemCode || '—',
+                      subtitle: l => l.itemCode ?? '',
+                      accent: l => (l.lineTotal != null ? formatCurrency(l.lineTotal, 2) : '—'),
+                      fields: [{ label: 'כמות', value: l => l.quantity ?? '—' }],
+                    }}
+                  />
                 </div>
               </div>
             ))}

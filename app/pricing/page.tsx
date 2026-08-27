@@ -13,6 +13,7 @@ import {
   Info,
 } from 'lucide-react'
 import { ItemLink } from '@/components/shared/ItemLink'
+import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
 import { cn } from '@/lib/utils'
 import { useLocale } from '@/lib/locale-context'
 import type { TranslationKey } from '@/lib/i18n'
@@ -102,8 +103,6 @@ export default function PricingPage() {
   const [data, setData] = useState<ElasticityReport | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [sort, setSort] = useState<SortField>('revenue')
-  const [dir, setDir] = useState<'asc' | 'desc'>('desc')
 
   const recStyles: Record<ElasticityRow['recommendation'], { label: string; className: string }> = {
     raise: { label: t('raisePrice'), className: 'bg-emerald-500/15 text-emerald-500 border-emerald-500/30' },
@@ -125,38 +124,15 @@ export default function PricingPage() {
       .finally(() => setLoading(false))
   }, [])
 
-  const sorted = useMemo(() => {
-    if (!data?.items) return []
-    const rows = [...data.items]
-    rows.sort((a, b) => {
-      let cmp = 0
-      switch (sort) {
-        case 'revenue':
-          cmp = a.total_revenue - b.total_revenue
-          break
-        case 'variance':
-          cmp = a.price_variance_pct - b.price_variance_pct
-          break
-        case 'signal':
-          cmp = a.elasticity_signal - b.elasticity_signal
-          break
-        case 'name':
-          cmp = (a.item_name || a.item_code).localeCompare(
-            b.item_name || b.item_code,
-          )
-          break
-      }
-      return dir === 'desc' ? -cmp : cmp
-    })
-    return rows
-  }, [data, sort, dir])
+  const rows = useMemo(() => data?.items ?? [], [data])
 
+  // The tier bars are scaled against the busiest tier ANYWHERE in the report,
+  // not per row — otherwise every row's widest bar looks equally busy.
   const maxQtyGlobal = useMemo(() => {
-    if (!sorted) return 0
     let max = 0
-    for (const r of sorted) for (const t of r.tiers) if (t.avg_qty > max) max = t.avg_qty
+    for (const r of rows) for (const t of r.tiers) if (t.avg_qty > max) max = t.avg_qty
     return max
-  }, [sorted])
+  }, [rows])
 
   if (loading) {
     return (
@@ -182,39 +158,127 @@ export default function PricingPage() {
     lower: data.items.filter(i => i.recommendation === 'lower').length,
   }
 
-  const Header = ({
-    field,
-    children,
-    className,
-  }: {
-    field: SortField
-    children: React.ReactNode
-    className?: string
-  }) => (
-    <th
-      className={cn(
-        'pb-2 font-medium cursor-pointer select-none hover:text-foreground transition-colors whitespace-nowrap',
-        className,
-      )}
-      onClick={() => {
-        if (sort === field) setDir(d => (d === 'asc' ? 'desc' : 'asc'))
-        else {
-          setSort(field)
-          setDir('desc')
-        }
-      }}
-    >
-      <span className="inline-flex items-center gap-1">
-        {children}
-        <ArrowUpDown
-          className={cn(
-            'h-3 w-3 shrink-0',
-            sort === field ? 'text-foreground' : 'text-muted-foreground/50',
-          )}
-        />
-      </span>
-    </th>
-  )
+  const columns: DataTableColumn<ElasticityRow, SortField>[] = [
+    {
+      key: 'name',
+      header: t('item' as TranslationKey),
+      sortable: true,
+      sortKey: 'name',
+      sortValue: r => r.item_name || r.item_code,
+      cell: r => (
+        <div>
+          <div className="max-w-[200px] truncate font-medium">{r.item_name || r.item_code}</div>
+          <ItemLink code={r.item_code} showCode className="text-xs" />
+        </div>
+      ),
+      exportValue: r => r.item_name || r.item_code,
+    },
+    {
+      key: 'revenue',
+      header: t('revenue'),
+      align: 'end',
+      sortable: true,
+      sortKey: 'revenue',
+      sortValue: r => r.total_revenue,
+      cell: r => <span className="font-mono">{formatCurrency(r.total_revenue)}</span>,
+      exportValue: r => r.total_revenue,
+    },
+    {
+      key: 'list_price',
+      header: t('listPriceCol'),
+      align: 'end',
+      cell: r => <span className="font-mono">{r.list_price != null ? formatCurrency(r.list_price) : '—'}</span>,
+      exportValue: r => r.list_price ?? '',
+    },
+    {
+      key: 'cost_price',
+      header: t('costCol'),
+      align: 'end',
+      hideOnMobile: true,
+      cell: r => (
+        <span className="font-mono text-muted-foreground">
+          {r.cost_price != null ? formatCurrency(r.cost_price) : '—'}
+        </span>
+      ),
+      exportValue: r => r.cost_price ?? '',
+    },
+    {
+      key: 'last_sold',
+      header: t('lastSoldCol'),
+      align: 'end',
+      cell: r => (
+        <div>
+          <div className="font-mono">{formatCurrency(r.last_sold_price)}</div>
+          <div className="text-[10px] text-muted-foreground" dir="ltr">
+            {String(r.last_sold_month).padStart(2, '0')}/{String(r.last_sold_year).slice(2)}
+          </div>
+        </div>
+      ),
+      exportValue: r => r.last_sold_price,
+    },
+    {
+      key: 'margin_pct',
+      header: t('marginCol'),
+      align: 'end',
+      cell: r => <span className="font-mono text-xs">{r.margin_pct != null ? `${r.margin_pct.toFixed(0)}%` : '—'}</span>,
+      exportValue: r => r.margin_pct ?? '',
+    },
+    {
+      key: 'variance',
+      header: t('priceRange'),
+      align: 'end',
+      sortable: true,
+      sortKey: 'variance',
+      sortValue: r => r.price_variance_pct,
+      cell: r => <span className="text-xs text-muted-foreground">±{r.price_variance_pct.toFixed(0)}%</span>,
+      exportValue: r => r.price_variance_pct,
+    },
+    // The three price tiers are a fixed low/mid/high triple on every row, so
+    // they get three real columns rather than one cell holding a sub-table —
+    // that is what lets them sort and land in the export as separate fields.
+    ...(['low', 'mid', 'high'] as const).map((label, i) => ({
+      key: `tier_${label}`,
+      header: t(label === 'low' ? 'lowTier' : label === 'mid' ? 'midTier' : 'highTier'),
+      align: 'center' as const,
+      hideOnMobile: true,
+      cell: (r: ElasticityRow) => {
+        const tier = r.tiers[i]
+        return tier ? <TierCell tier={tier} maxQty={maxQtyGlobal} /> : <span className="text-muted-foreground">—</span>
+      },
+      exportValue: (r: ElasticityRow) => r.tiers[i]?.avg_qty ?? '',
+    })),
+    {
+      key: 'signal',
+      header: t('signal'),
+      align: 'center',
+      sortable: true,
+      sortKey: 'signal',
+      sortValue: r => r.elasticity_signal,
+      cell: r => <SignalIcon signal={r.elasticity_signal} />,
+      exportValue: r => r.elasticity_signal,
+    },
+    {
+      key: 'recommendation',
+      header: t('recommendation'),
+      align: 'end',
+      sortable: true,
+      cell: r => {
+        const rec = recStyles[r.recommendation]
+        return (
+          <div>
+            <Badge variant="outline" className={cn('font-medium', rec.className)}>{rec.label}</Badge>
+            {r.recommendation === 'raise' && r.headroom_pct >= 1 && (
+              <div className="mt-0.5 text-[10px] text-emerald-500" dir="ltr">
+                +{r.headroom_pct.toFixed(0)}% {t('headroomTo')}{' '}
+                {formatCurrency(r.tiers.find(x => x.label === 'high')?.price_range[1] ?? 0)}
+              </div>
+            )}
+          </div>
+        )
+      },
+      exportValue: r => recStyles[r.recommendation].label,
+    },
+  ]
 
   return (
     <div className="space-y-4 md:space-y-6">
@@ -284,97 +348,24 @@ export default function PricingPage() {
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto max-h-[700px] overflow-y-auto">
-            <table className="w-full text-sm min-w-[1200px]">
-              <thead className="sticky top-0 bg-background z-10">
-                <tr className="border-b">
-                  <Header field="name" className="text-start">
-                    {t('item' as TranslationKey)}
-                  </Header>
-                  <Header field="revenue" className="text-end">
-                    {t('revenue')}
-                  </Header>
-                  <th className="text-end pb-2 font-medium whitespace-nowrap">{t('listPriceCol')}</th>
-                  <th className="text-end pb-2 font-medium whitespace-nowrap">{t('costCol')}</th>
-                  <th className="text-end pb-2 font-medium whitespace-nowrap">{t('lastSoldCol')}</th>
-                  <th className="text-end pb-2 font-medium whitespace-nowrap">{t('marginCol')}</th>
-                  <Header field="variance" className="text-end">
-                    {t('priceRange')}
-                  </Header>
-                  <th className="text-center pb-2 font-medium">{t('lowTier')}</th>
-                  <th className="text-center pb-2 font-medium">{t('midTier')}</th>
-                  <th className="text-center pb-2 font-medium">{t('highTier')}</th>
-                  <Header field="signal" className="text-center">
-                    {t('signal')}
-                  </Header>
-                  <th className="text-end pb-2 font-medium">{t('recommendation')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sorted.map(row => {
-                  const rec = recStyles[row.recommendation]
-                  return (
-                    <tr
-                      key={row.item_code}
-                      className="border-b hover:bg-muted/30 transition-colors"
-                    >
-                      <td className="py-2">
-                        <div className="font-medium truncate max-w-[200px]">
-                          {row.item_name || row.item_code}
-                        </div>
-                        <ItemLink code={row.item_code} showCode className="text-xs" />
-                      </td>
-                      <td className="py-2 text-end font-mono tabular-nums">
-                        {formatCurrency(row.total_revenue)}
-                      </td>
-                      <td className="py-2 text-end font-mono tabular-nums">
-                        {row.list_price != null ? formatCurrency(row.list_price) : '—'}
-                      </td>
-                      <td className="py-2 text-end font-mono tabular-nums text-muted-foreground">
-                        {row.cost_price != null ? formatCurrency(row.cost_price) : '—'}
-                      </td>
-                      <td className="py-2 text-end">
-                        <div className="font-mono tabular-nums">
-                          {formatCurrency(row.last_sold_price)}
-                        </div>
-                        <div className="text-[10px] text-muted-foreground" dir="ltr">
-                          {String(row.last_sold_month).padStart(2, '0')}/{String(row.last_sold_year).slice(2)}
-                        </div>
-                      </td>
-                      <td className="py-2 text-end font-mono tabular-nums text-xs">
-                        {row.margin_pct != null ? `${row.margin_pct.toFixed(0)}%` : '—'}
-                      </td>
-                      <td className="py-2 text-end text-xs text-muted-foreground">
-                        ±{row.price_variance_pct.toFixed(0)}%
-                      </td>
-                      {row.tiers.map(t => (
-                        <TierCell
-                          key={t.label}
-                          tier={t}
-                          maxQty={maxQtyGlobal}
-                        />
-                      ))}
-                      <td className="py-2 text-center">
-                        <SignalIcon signal={row.elasticity_signal} />
-                      </td>
-                      <td className="py-2 text-end">
-                        <Badge
-                          variant="outline"
-                          className={cn('font-medium', rec.className)}
-                        >
-                          {rec.label}
-                        </Badge>
-                        {row.recommendation === 'raise' && row.headroom_pct >= 1 && (
-                          <div className="text-[10px] text-emerald-500 mt-0.5" dir="ltr">
-                            +{row.headroom_pct.toFixed(0)}% {t('headroomTo')}{' '}
-                            {formatCurrency(row.tiers.find(x => x.label === 'high')?.price_range[1] ?? 0)}
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+            <DataTable<ElasticityRow, SortField>
+              rows={rows}
+              columns={columns}
+              getRowKey={r => r.item_code}
+              defaultSort={{ field: 'revenue', dir: 'desc' }}
+              pageSize={40}
+              minWidth="min-w-[1200px]"
+              exportFileName="גמישות-מחיר"
+              mobileCard={{
+                title: r => r.item_name || r.item_code,
+                subtitle: r => r.item_code,
+                accent: r => formatCurrency(r.total_revenue),
+                fields: [
+                  { label: t('recommendation'), value: r => recStyles[r.recommendation].label },
+                  { label: t('marginCol'), value: r => (r.margin_pct != null ? `${r.margin_pct.toFixed(0)}%` : '—') },
+                ],
+              }}
+            />
           </div>
         </CardContent>
       </Card>
