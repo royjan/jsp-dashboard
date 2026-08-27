@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Search, Sparkles, Package, Clock, X, ArrowLeft, ExternalLink } from 'lucide-react'
+import { Search, Sparkles, Package, Clock, X, ArrowLeft, ChevronLeft } from 'lucide-react'
 import { brandChipClasses } from '@/lib/brand'
 import { formatCurrency } from '@/lib/format'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
@@ -283,7 +283,16 @@ export default function SearchPage() {
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: idx * 0.05 }}
                     >
-                      <Card className="hover:shadow-md transition-shadow group">
+                      {/* The WHOLE card is the link. It used to be a "צפה בפרטים"
+                          affordance revealed on hover — which a touch screen never
+                          fires, so on a phone the only way into an item was an
+                          invisible target. A card-sized tap area needs no hover and
+                          no aiming. */}
+                      <Link
+                        href={`/items/${encodeURIComponent(item.code)}`}
+                        className="block rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                      <Card className="group transition-shadow hover:shadow-md active:bg-muted/40">
                         <CardContent className="p-4 space-y-2">
                           <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0 flex-1">
@@ -302,16 +311,13 @@ export default function SearchPage() {
                                 <span className="text-sm font-medium">{formatCurrency(item.price)}</span>
                               )}
                             </div>
-                            <Link
-                              href={`/items/${encodeURIComponent(item.code)}`}
-                              className="text-xs text-primary hover:underline flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                            >
-                              {t('search.viewDetails')}
-                              <ExternalLink className="h-3 w-3" />
-                            </Link>
+                            {/* A cue, not a control — the card itself is the link,
+                                and a nested <a> would be invalid and steal the tap. */}
+                            <ChevronLeft className="h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary rtl:rotate-180" />
                           </div>
                         </CardContent>
                       </Card>
+                      </Link>
                     </motion.div>
                   ))}
                 </div>
@@ -334,7 +340,16 @@ export default function SearchPage() {
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: idx * 0.05 }}
                     >
-                      <Card className="hover:shadow-md transition-shadow group">
+                      {/* The WHOLE card is the link. It used to be a "צפה בפרטים"
+                          affordance revealed on hover — which a touch screen never
+                          fires, so on a phone the only way into an item was an
+                          invisible target. A card-sized tap area needs no hover and
+                          no aiming. */}
+                      <Link
+                        href={`/items/${encodeURIComponent(item.code)}`}
+                        className="block rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                      <Card className="group transition-shadow hover:shadow-md active:bg-muted/40">
                         <CardContent className="p-4 space-y-2">
                           <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0 flex-1">
@@ -356,16 +371,13 @@ export default function SearchPage() {
                                 <span className="text-sm font-medium">{formatCurrency(item.price)}</span>
                               )}
                             </div>
-                            <Link
-                              href={`/items/${encodeURIComponent(item.code)}`}
-                              className="text-xs text-primary hover:underline flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                            >
-                              {t('search.viewDetails')}
-                              <ExternalLink className="h-3 w-3" />
-                            </Link>
+                            {/* A cue, not a control — the card itself is the link,
+                                and a nested <a> would be invalid and steal the tap. */}
+                            <ChevronLeft className="h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary rtl:rotate-180" />
                           </div>
                         </CardContent>
                       </Card>
+                      </Link>
                     </motion.div>
                   ))}
                 </div>
@@ -389,7 +401,16 @@ export default function SearchPage() {
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: idx * 0.05 }}
                     >
-                      <Card className="hover:shadow-md transition-shadow group">
+                      {/* The WHOLE card is the link. It used to be a "צפה בפרטים"
+                          affordance revealed on hover — which a touch screen never
+                          fires, so on a phone the only way into an item was an
+                          invisible target. A card-sized tap area needs no hover and
+                          no aiming. */}
+                      <Link
+                        href={`/items/${encodeURIComponent(item.code)}`}
+                        className="block rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                      <Card className="group transition-shadow hover:shadow-md active:bg-muted/40">
                         <CardContent className="p-4 space-y-2">
                           <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0 flex-1">
@@ -406,16 +427,13 @@ export default function SearchPage() {
                             </div>
                           </div>
                           <div className="flex items-center justify-end gap-2 pt-1">
-                            <Link
-                              href={`/items/${encodeURIComponent(item.code)}`}
-                              className="text-xs text-primary hover:underline flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                            >
-                              {t('search.viewDetails')}
-                              <ExternalLink className="h-3 w-3" />
-                            </Link>
+                            {/* A cue, not a control — the card itself is the link,
+                                and a nested <a> would be invalid and steal the tap. */}
+                            <ChevronLeft className="h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary rtl:rotate-180" />
                           </div>
                         </CardContent>
                       </Card>
+                      </Link>
                     </motion.div>
                   ))}
                 </div>
