@@ -455,7 +455,15 @@ export function DataTable<TRow, TSortKey extends string = string>({
 
   const toggleAll = () => {
     if (!onSelectionChange) return
-    onSelectionChange(allSelected ? new Set() : new Set(allKeys))
+    // Only touch the rows THIS table is showing, and leave the rest of the
+    // caller's Set alone. The caller may be holding keys for rows that are
+    // currently filtered out — a header checkbox that replaces the whole Set
+    // turns "select everything here" into "select everything here and silently
+    // drop what I picked before I filtered".
+    const next = new Set(selectedKeys)
+    if (allSelected) for (const k of allKeys) next.delete(k)
+    else for (const k of allKeys) next.add(k)
+    onSelectionChange(next)
   }
   const [exporting, setExporting] = React.useState(false)
   const handleExport = React.useCallback(async () => {
