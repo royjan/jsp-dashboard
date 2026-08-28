@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRecentDestinations, recordDestination, clearRecentDestinations } from '@/lib/recent-destinations'
+import { OPEN_COMMAND_PALETTE } from '@/lib/command-palette'
 import { Command } from 'cmdk'
 import { useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
@@ -93,6 +94,15 @@ export function CommandPalette() {
     // the bubble phase it can consume the event before this sees it.
     document.addEventListener('keydown', onKeyDown, true)
     return () => document.removeEventListener('keydown', onKeyDown, true)
+  }, [])
+
+  // The same palette, opened by things that are not a keyboard: the sidebar
+  // entry, the phone's bottom tab, the "part not found" card. They replaced the
+  // /search page, so this is now the only smart search there is.
+  useEffect(() => {
+    const onOpen = () => setOpen(true)
+    window.addEventListener(OPEN_COMMAND_PALETTE, onOpen)
+    return () => window.removeEventListener(OPEN_COMMAND_PALETTE, onOpen)
   }, [])
 
   // Debounced search

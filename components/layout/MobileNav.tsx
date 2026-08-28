@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { useLocale } from '@/lib/locale-context'
 import { MOBILE_PRIMARY, MOBILE_MORE, isItemActive } from '@/lib/navigation'
+import { openCommandPalette } from '@/lib/command-palette'
 import { MoreHorizontal, X } from 'lucide-react'
 
 
@@ -69,17 +70,26 @@ export function MobileNav() {
           {MOBILE_PRIMARY.map((item) => {
             const isActive = isItemActive(item, pathname, null)
             const Icon = item.icon
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  'flex flex-col items-center justify-center gap-0.5 text-[11px] transition-colors min-h-[44px] px-1 flex-1 min-w-0',
-                  isActive ? 'text-primary' : 'text-muted-foreground'
-                )}
-              >
+            const tabClass = cn(
+              'flex flex-col items-center justify-center gap-0.5 text-[11px] transition-colors min-h-[44px] px-1 flex-1 min-w-0',
+              isActive ? 'text-primary' : 'text-muted-foreground'
+            )
+            const body = (
+              <>
                 <Icon className="h-5 w-5 shrink-0" />
                 <span className="truncate max-w-full">{t(item.labelKey)}</span>
+              </>
+            )
+            // Smart search is the one tab that is not a destination: there is no
+            // /search page any more, so it opens the palette in place. A phone
+            // has no ⌘K, which is exactly why the tab has to stay.
+            return item.action === 'command-palette' ? (
+              <button key={item.href} type="button" onClick={openCommandPalette} className={tabClass}>
+                {body}
+              </button>
+            ) : (
+              <Link key={item.href} href={item.href} className={tabClass}>
+                {body}
               </Link>
             )
           })}

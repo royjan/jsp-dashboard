@@ -239,7 +239,7 @@ authoritative list is `lib/navigation.ts`, which every nav surface derives from.
 
 | Area | Screens |
 |------|---------|
-| Overview | `/` `/brief` `/search` `/seasonal` `/report` |
+| Overview | `/` `/brief` `/seasonal` `/report` (smart search is ⌘K, not a route) |
 | Inventory | `/stock` `/stock/demand` `/stock-forecast` `/gap` `/gap/catalog` `/scrap` `/returns` `/reorder` `/catalog-links` |
 | Sales | `/customers` (+`/[code]`, `/health-score`) `/receivables` `/margin` `/pricing` `/ebay` `/ebay-reco` `/sales-rep/*` |
 | Operations | `/suppliers/*` `/price-lists` `/inquiries` `/invoices` `/credits` `/competitors` `/shipments` `/deliveries` `/vehicle-intelligence` `/alerts` |

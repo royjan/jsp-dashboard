@@ -13,7 +13,6 @@ import { useLocale } from '@/lib/locale-context'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import Link from 'next/link'
 import {
   ArrowLeft, ArrowRight, Package, DollarSign, Warehouse, TrendingUp, Tag, MapPin, Calendar, Layers, Hash,
   FileText, X, Link2,
@@ -24,6 +23,7 @@ import {
 import { formatCurrency, formatNumber } from '@/lib/format'
 import { cardVariants } from '@/lib/motion'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
+import { openCommandPalette } from '@/lib/command-palette'
 
 type DocType = 'invoices' | 'quotes' | 'purchases'
 const DOC_LABELS: Record<DocType, { he: string; en: string }> = {
@@ -274,16 +274,17 @@ function UnknownCode({ code, isHe }: { code: string; isHe: boolean }) {
               : 'We checked stock, the purchase and sales history, and the catalog — this number appears in none of them. Usually that means a typo, or another manufacturer\'s number.'}
           </p>
           <div className="flex flex-wrap gap-2 pt-1">
-            {/* `/search`, not `/items` — `app/items` has only the `[code]` route, so a link
-                to an index page would be a 404 inside a page whose whole job is explaining a
-                404. */}
-            <Link
-              href="/search"
+            {/* Opens ⌘K rather than linking anywhere: `app/items` has only the `[code]`
+                route, so an index link would be a 404 inside a page whose whole job is
+                explaining a 404, and /search — the old escape hatch — no longer exists. */}
+            <button
+              type="button"
+              onClick={openCommandPalette}
               className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm hover:bg-muted transition-colors"
             >
               <Package className="h-4 w-4" />
               {isHe ? 'חיפוש מק״ט' : 'Search part numbers'}
-            </Link>
+            </button>
             <button
               onClick={() => window.history.back()}
               className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm hover:bg-muted transition-colors"

@@ -30,7 +30,6 @@ export interface RouteTitle {
 /** Exact matches. */
 const EXACT: Record<string, RouteTitle> = {
   '/': { key: 'page.overview', he: 'סקירה' },
-  '/search': { key: 'page.smartSearch', he: 'חיפוש חכם' },
   '/report': { key: 'page.report', he: 'דוח עסקי' },
   '/brief': { he: 'בריף בוקר' },
   '/seasonal': { key: 'page.seasonal', he: 'עונתיות' },
