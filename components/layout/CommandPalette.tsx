@@ -264,13 +264,21 @@ export function CommandPalette() {
                         value={`item ${item.code} ${item.name || ''}`}
                         onSelect={() =>
                           runAction(() => {
+                            // The item card, like every other result here. This
+                            // row used to go to /stock?q=CODE -- a filtered
+                            // stock list, except the stock page reads `search`
+                            // and has never read `q`, so it opened the whole
+                            // catalogue unfiltered and the part you searched for
+                            // was somewhere in it. Catalogue and semantic hits
+                            // already opened /items/CODE; searching by code was
+                            // the one path that did not.
                             recordDestination({
-                              href: `/stock?q=${item.code}`,
+                              href: `/items/${encodeURIComponent(item.code)}`,
                               label: item.code,
                               sublabel: item.name || item.description,
                               kind: 'item',
                             })
-                            router.push(`/stock?q=${item.code}`)
+                            router.push(`/items/${encodeURIComponent(item.code)}`)
                           })
                         }
                         className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm cursor-pointer aria-selected:bg-accent aria-selected:text-accent-foreground"

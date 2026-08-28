@@ -730,7 +730,10 @@ function StockPageContent() {
   const [treemapPage, setTreemapPage] = useState(0)
 
   // Unified table state
-  const [searchQuery, setSearchQuery] = useState(get('search') || '')
+  // `q` is an alias for `search`: the palette shipped /stock?q=CODE links for
+  // long enough that they are sitting in people's recent-destinations and
+  // bookmarks, and every one of them silently filtered nothing.
+  const [searchQuery, setSearchQuery] = useState(get('search') || get('q') || '')
   const [quickView, setQuickView] = useState<QuickView>((get('qv') as QuickView) || 'all')
   const [abcFilter, setAbcFilter] = useState<ABCFilter>((get('abc') as ABCFilter) || 'all')
   const [tierFilter, setTierFilter] = useState<TierFilter>((get('tier') as TierFilter) || 'all')
