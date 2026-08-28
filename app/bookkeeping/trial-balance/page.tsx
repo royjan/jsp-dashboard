@@ -38,7 +38,7 @@ function TrialBalanceInner() {
         // Two bars around zero: how this account's debit and credit compare to
         // the largest balance on the page.
         const balance = Number(r.balance ?? 0)
-        return <Sparkline points={[0, balance / peak]} width={56} height={16}
+        return <Sparkline baseline="zero" data={[0, balance / peak]} width={56} height={16}
           color={balance < 0 ? CHART_SEMANTIC.bad : CHART_SEMANTIC.good} />
       } },
     { key: 'movements', header: t('movements'), align: 'end', sortable: true,

@@ -1,5 +1,7 @@
 'use client'
 
+export { Sparkline } from '@/components/charts/Sparkline'
+
 /**
  * kit.tsx — the shared look for every chart in this app.
  *
@@ -414,26 +416,3 @@ export function ChartRange<V extends string>({ value, options, onChange }: {
  * table cell. Deliberately axis-less and tooltip-less: it is a glyph, and the
  * numbers next to it are the data.
  */
-export function Sparkline({ points, color = 'var(--primary)', width = 72, height = 20 }: {
-  points: number[]
-  color?: string
-  width?: number
-  height?: number
-}) {
-  if (points.length < 2) return <span className="inline-block" style={{ width, height }} />
-  const min = Math.min(...points, 0)
-  const max = Math.max(...points, 0)
-  const span = max - min || 1
-  const step = width / (points.length - 1)
-  const y = (v: number) => height - ((v - min) / span) * height
-  const line = points.map((v, i) => `${(i * step).toFixed(1)},${y(v).toFixed(1)}`).join(' ')
-  const zero = y(0)
-  return (
-    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}
-         className="inline-block align-middle overflow-visible" aria-hidden="true">
-      <polygon points={`0,${zero} ${line} ${width},${zero}`} fill={color} fillOpacity={0.14} />
-      <polyline points={line} fill="none" stroke={color} strokeWidth={1.5}
-                strokeLinejoin="round" strokeLinecap="round" />
-    </svg>
-  )
-}

@@ -1,5 +1,7 @@
 'use client'
 
+import { useId } from 'react'
+
 /**
  * Sparkline — a tiny inline trend, deliberately NOT recharts.
  *
@@ -9,6 +11,13 @@
  *
  * Values are plotted as-is: no axis, no ticks, no tooltip. It answers
  * "which way, how bumpy" — the number beside it answers "how much".
+ *
+ * `baseline` is why there is one of these and not two. A second copy lived in
+ * kit.tsx taking `points` instead of `data`, and the difference that mattered
+ * was not the prop name: it anchored the fill to zero rather than to the lowest
+ * value, which is the correct reading for a balance that can cross zero and the
+ * wrong one for a series that never approaches it. Both live here as an option
+ * rather than as two components sharing a name and disagreeing.
  */
 export function Sparkline({
   data,
@@ -17,6 +26,7 @@ export function Sparkline({
   height = 28,
   className,
   title,
+  baseline = 'min',
 }: {
   data: number[]
   color?: string
@@ -24,11 +34,21 @@ export function Sparkline({
   height?: number
   className?: string
   title?: string
+  /**
+   * 'min' fills from the lowest value — best for a series that never nears
+   * zero, where anchoring there would flatten the shape into nothing.
+   * 'zero' keeps zero on the scale, so a balance crossing it reads correctly.
+   */
+  baseline?: 'min' | 'zero'
 }) {
+  // Hooks run before the early return: a component may not change hook count
+  // between renders, and a series can shrink below two points at runtime.
+  const gradientId = useId()
+
   if (data.length < 2) return null
 
-  const max = Math.max(...data)
-  const min = Math.min(...data)
+  const max = baseline === 'zero' ? Math.max(...data, 0) : Math.max(...data)
+  const min = baseline === 'zero' ? Math.min(...data, 0) : Math.min(...data)
   // A flat series would divide by zero; draw it as a mid-height line instead.
   const span = max - min || 1
   const stepX = width / (data.length - 1)
@@ -37,8 +57,10 @@ export function Sparkline({
 
   const points = data.map((v, i) => `${(i * stepX).toFixed(2)},${y(v).toFixed(2)}`)
   const line = `M${points.join('L')}`
-  const area = `${line}L${width},${height}L0,${height}Z`
-  const gradientId = `spark-${Math.round(width)}-${data.length}-${Math.round(max)}`
+  // Close the fill on the baseline rather than the bottom edge, so a
+  // zero-anchored series shows area above and below the axis.
+  const floor = baseline === 'zero' ? y(0) : height
+  const area = `${line}L${width},${floor}L0,${floor}Z`
   const last = data[data.length - 1]
 
   return (

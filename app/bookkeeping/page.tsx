@@ -138,7 +138,7 @@ function OverviewInner() {
       </section>
 
       <div className="flex items-center gap-3 text-xs text-muted-foreground">
-        <Sparkline points={monthly.map((m: any) => Number(m.sales ?? 0))}
+        <Sparkline baseline="zero" data={monthly.map((m: any) => Number(m.sales ?? 0))}
           color={CHART_PALETTE[0]} />
         <span>{t('sales')} · {formatId(monthly.length)} {t('month')}</span>
       </div>
