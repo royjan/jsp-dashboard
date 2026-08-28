@@ -21,7 +21,8 @@ interface SearchResult {
     code: string
     name?: string
     description?: string
-    stock_qty?: number
+    stock_qty?: number | null
+    price?: number | null
   }>
   customers: Array<{
     code?: string
@@ -276,11 +277,21 @@ export function CommandPalette() {
                             </div>
                           )}
                         </div>
-                        {item.stock_qty !== undefined && (
-                          <span className="text-xs text-muted-foreground whitespace-nowrap">
-                            {t('cmd.stockQty')}: {item.stock_qty}
-                          </span>
-                        )}
+                        {/* `!= null`, not `!== undefined`: the API returns null
+                            for a code whose stock lives on its canonical twin, and
+                            null passed that test -- the row rendered "Stock:" with
+                            nothing after it. Same figures, same order as the smart
+                            rows below, because they are rows in one list. */}
+                        <span className="flex shrink-0 items-center gap-2 whitespace-nowrap text-xs text-muted-foreground">
+                          {item.price != null && item.price > 0 && (
+                            <span className="tabular-nums">{formatCurrency(item.price)}</span>
+                          )}
+                          {item.stock_qty != null && (
+                            <span className="tabular-nums">
+                              {t('cmd.stockQty')}: {item.stock_qty}
+                            </span>
+                          )}
+                        </span>
                       </Command.Item>
                     ))}
                   </Command.Group>
