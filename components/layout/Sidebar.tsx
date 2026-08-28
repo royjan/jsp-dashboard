@@ -6,7 +6,6 @@ import { usePathname, useSearchParams } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { useLocale } from '@/lib/locale-context'
 import { sectionsFor, isItemActive, type NavItem } from '@/lib/navigation'
-import { openCommandPalette } from '@/lib/command-palette'
 import { ChevronLeft, Warehouse } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
@@ -46,16 +45,18 @@ function SidebarNavList({
       typeof unackCount === 'number' &&
       unackCount > 0
 
-    const itemClass = cn(
-      'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors relative',
-      isActive
-        ? 'bg-primary text-primary-foreground'
-        : 'text-muted-foreground hover:bg-accent hover:text-foreground',
-      collapsed && 'justify-center px-2'
-    )
-
-    const body = (
-      <>
+    const link = (
+      <Link
+        key={item.href}
+        href={item.href}
+        className={cn(
+          'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors relative',
+          isActive
+            ? 'bg-primary text-primary-foreground'
+            : 'text-muted-foreground hover:bg-accent hover:text-foreground',
+          collapsed && 'justify-center px-2'
+        )}
+      >
         <span className="relative">
           <Icon className="h-4 w-4 shrink-0" />
           {showBadge && collapsed && (
@@ -72,23 +73,6 @@ function SidebarNavList({
             )}
           </span>
         )}
-      </>
-    )
-
-    // Smart search opens ⌘K rather than going anywhere; `w-full text-start` is
-    // the button catching up to what a block-level <a> already did.
-    const link = item.action === 'command-palette' ? (
-      <button
-        key={item.href}
-        type="button"
-        onClick={openCommandPalette}
-        className={cn(itemClass, 'w-full text-start')}
-      >
-        {body}
-      </button>
-    ) : (
-      <Link key={item.href} href={item.href} className={itemClass}>
-        {body}
       </Link>
     )
 

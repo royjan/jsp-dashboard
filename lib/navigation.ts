@@ -55,7 +55,8 @@ export type NavItem = {
    * Renders as a button that opens ⌘K instead of as a link. `href` is then only
    * a key and never navigated to -- smart search stopped being a page, and the
    * alternative to this flag was a second, parallel list of "nav entries that
-   * are not links", which is the thing this file exists to prevent.
+   * are not links", which is the thing this file exists to prevent. Only
+   * MobileNav honours it; the sidebar carries no action entries.
    */
   action?: 'command-palette'
 }
@@ -67,10 +68,12 @@ export const NAV_SECTIONS: NavSection[] = [
     id: 'overview', labelKey: 'sectionOverview', items: [
       { mobilePrimary: true, href: '/', labelKey: 'overview', icon: LayoutDashboard },
       { href: '/brief', labelKey: 'morningBrief', icon: Sunrise },
-      // Not a route: /search was a second search over the same data, and ⌘K
-      // now asks both endpoints it asked. The entry stays so the sidebar and
-      // the phone still have a way in; the palette itself does not list it.
-      { mobilePrimary: true, href: '#search', action: 'command-palette', labelKey: 'smartSearch', icon: Sparkles, surfaces: ['sidebar', 'mobile'] },
+      // Not a route, and mobile-only: /search was a second search over the same
+      // data, and ⌘K now asks both endpoints it asked. A phone has no ⌘K, so the
+      // bottom tab opens the palette in place. The desktop sidebar does not
+      // carry it -- the TopBar's search button is always on screen and says ⌘K
+      // on its face -- and the palette does not list itself.
+      { mobilePrimary: true, href: '#search', action: 'command-palette', labelKey: 'smartSearch', icon: Sparkles, surfaces: ['mobile'] },
       { href: '/seasonal', labelKey: 'seasonal', icon: Sun },
       { href: '/report', labelKey: 'report', icon: FileBarChart },
     ],
