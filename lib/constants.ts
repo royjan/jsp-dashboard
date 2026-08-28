@@ -40,6 +40,10 @@ export const CACHE_TTL = {
   ANALYTICS: 3 * 60 * 60,    // 3 hours
   SEASONAL: 48 * 60 * 60,    // 48 hours (changes rarely, survives weekend)
   AI_INSIGHTS: 2 * 60 * 60,  // 2 hours
+  // Xpart's own data: price lists land monthly, inquiries and orders change a
+  // few times a week. Six hours is well inside both, and every screen that uses
+  // it also renders a FreshnessChip saying the answer came from cache.
+  XPART: 6 * 60 * 60,        // 6 hours
 } as const
 
 // ── Reorder urgency ──

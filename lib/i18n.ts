@@ -17,6 +17,9 @@ export const translations = {
     more: 'עוד',
     deliveries: 'משלוחים',
     inboundShipments: 'משלוחים נכנסים',
+    priceLists: 'מחירוני ספקים',
+    supplierInquiries: 'פניות לספקים',
+    supplierInvoices: 'חשבוניות ספקים',
     catalogLinks: 'חיבורי קטלוג',
 
     // Chat admin
@@ -771,6 +774,9 @@ export const translations = {
     more: 'More',
     deliveries: 'Deliveries',
     inboundShipments: 'Inbound Shipments',
+    priceLists: 'Supplier Price Lists',
+    supplierInquiries: 'Supplier Inquiries',
+    supplierInvoices: 'Supplier Invoices',
     catalogLinks: 'Catalog Links',
 
     // Chat admin

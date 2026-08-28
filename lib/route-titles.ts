@@ -64,8 +64,12 @@ const EXACT: Record<string, RouteTitle> = {
 
   // operations
   '/suppliers': { key: 'page.suppliers', he: 'ספקים' },
+  '/price-lists': { key: 'priceLists', he: 'מחירוני ספקים' },
+  '/inquiries': { key: 'supplierInquiries', he: 'פניות לספקים' },
+  '/invoices': { key: 'supplierInvoices', he: 'חשבוניות ספקים' },
   '/competitors': { he: 'מתחרים' },
   '/shipments': { he: 'משלוחים' },
+  '/shipments/on-the-way': { he: 'בדרך' },
   '/deliveries': { he: 'חלוקה' },
   '/deliveries/driver': { he: 'מסך נהג' },
   '/vehicle-intelligence': { key: 'page.vehicleIntelligence', he: 'מודיעין רכב' },
@@ -101,6 +105,8 @@ const DYNAMIC: Array<[string, RouteTitle]> = [
   ['/customers/:/:', { he: 'כרטיס לקוח' }],
   ['/customers/:', { he: 'כרטיס לקוח' }],
   ['/items/:', { he: 'כרטיס פריט' }],
+  ['/price-lists/:', { he: 'מחירון ספק' }],
+  ['/inquiries/:', { he: 'פנייה לספקים' }],
   ['/documents/:/:', { he: 'מסמך' }],
   ['/bookkeeping/accounts/:', { he: 'כרטסת' }],
   ['/bookkeeping/journal/:', { he: 'פקודת יומן' }],

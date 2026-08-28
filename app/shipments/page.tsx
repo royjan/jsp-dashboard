@@ -14,6 +14,7 @@ import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
 import { Container, PackageCheck, AlertTriangle, Truck, ChevronLeft, ChevronRight} from 'lucide-react'
 import { formatDate } from '@/lib/format'
 import { PageHeader } from '@/components/shared/PageHeader'
+import { SubTabs } from '@/components/shared/SubTabs'
 
 interface Shipment {
   id: string
@@ -129,8 +130,19 @@ export default function ShipmentsPage() {
     <div className="space-y-4">
       <PageHeader
         icon={Container}
-        title={t('משלוחים נכנסים', 'Inbound Shipments')}
-        description={t('סחורה שמגיעה מספקים אל ג׳אן', 'Goods arriving from suppliers to Jan')}
+        title={t('משלוחים', 'Shipments')}
+        description={t('סחורה שנסרקה במחסן · מתוך אפליקציית הסריקה', 'Goods scanned at the warehouse · from the scanning app')}
+      />
+
+      {/* Ordered → arrived. This page starts at the moment a carton is scanned;
+          the tab beside it covers the weeks before that, from Xpart's purchase
+          orders. Same journey, two systems, so they are tabs rather than one
+          table pretending the rows are the same kind of thing. */}
+      <SubTabs
+        tabs={[
+          { href: '/shipments/on-the-way', label: t('בדרך', 'On the way') },
+          { href: '/shipments', label: t('התקבל במחסן', 'Received') },
+        ]}
       />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">

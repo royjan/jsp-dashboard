@@ -13,9 +13,11 @@ import {
   Briefcase,
   CarFront,
   ChevronLeft,
+  ClipboardList,
   Container,
   DollarSign,
   FileBarChart,
+  FileSearch,
   FlaskConical,
   GitBranch,
   Landmark,
@@ -97,6 +99,9 @@ const navSections: Array<{ id: string; labelKey: TranslationKey; items: NavItem[
   {
     id: 'operations', labelKey: 'sectionOperations', items: [
       { href: '/suppliers', labelKey: 'suppliers', icon: PackageCheck },
+      { href: '/price-lists', labelKey: 'priceLists', icon: ClipboardList, match: 'prefix' },
+      { href: '/inquiries', labelKey: 'supplierInquiries', icon: FileSearch, match: 'prefix' },
+      { href: '/invoices', labelKey: 'supplierInvoices', icon: ReceiptText },
       { href: '/credits', labelKey: 'supplierCredits', icon: Undo2 },
       { href: '/competitors', labelKey: 'competitors', icon: Swords },
       { href: '/shipments', labelKey: 'inboundShipments', icon: Container },
