@@ -10,7 +10,8 @@
 
 import { useRouter } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
-import { ClipboardList, Crown } from 'lucide-react'
+import Link from 'next/link'
+import { ClipboardList, Crown, ExternalLink } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { PageHeader } from '@/components/shared/PageHeader'
@@ -18,9 +19,12 @@ import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
 import { formatNumber } from '@/lib/format'
 import { useLocale } from '@/lib/locale-context'
 import type { Provenance } from '@/lib/provenance'
+import { xpartUrl } from '@/lib/xpart-links'
 
 interface PriceList {
   price_list_id: string
+  supplier_id: string | null
+  supplier_finansit_code: string | null
   name: string
   version: number | null
   currency: string
@@ -61,15 +65,46 @@ export default function PriceListsPage() {
       key: 'supplier_name',
       header: isHe ? 'ספק' : 'Supplier',
       sortable: true,
-      cell: l => (
-        <span className="flex items-center gap-1.5">
-          {/* The official distributor's list is the retail baseline, not an offer
-              to buy at — worth marking, since it otherwise reads as one more
-              supplier quoting very high prices. */}
-          {l.supplier_role === 'official_distributor' && <Crown className="h-3.5 w-3.5 text-amber-500" />}
-          {l.supplier_name ?? '—'}
-        </span>
-      ),
+      cell: l => {
+        const name = l.supplier_name ?? '—'
+        return (
+          <span className="flex items-center gap-1.5">
+            {/* The official distributor's list is the retail baseline, not an offer
+                to buy at — worth marking, since it otherwise reads as one more
+                supplier quoting very high prices. */}
+            {l.supplier_role === 'official_distributor' && <Crown className="h-3.5 w-3.5 text-amber-500" />}
+            {/* Where the supplier has an ERP account, its dashboard page is the
+                useful destination — open orders, deliveries, its catalogue.
+                Lubinski, ORLYD and SOEX have no ERP account and would otherwise
+                be dead text on 24 of the 32 rows, so those go to Xpart, which is
+                the only place they exist. stopPropagation because the row itself
+                navigates to the price list. */}
+            {l.supplier_finansit_code ? (
+              <Link
+                href={`/suppliers/${encodeURIComponent(l.supplier_finansit_code)}`}
+                onClick={e => e.stopPropagation()}
+                className="text-primary hover:underline"
+              >
+                {name}
+              </Link>
+            ) : l.supplier_id ? (
+              <a
+                href={xpartUrl.supplier(l.supplier_id)}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={e => e.stopPropagation()}
+                className="inline-flex items-center gap-1 text-primary hover:underline"
+                title={isHe ? 'לספק אין חשבון ב‑ERP — נפתח ב‑Xpart' : 'No ERP account — opens in Xpart'}
+              >
+                {name}
+                <ExternalLink className="h-3 w-3 opacity-60" />
+              </a>
+            ) : (
+              name
+            )}
+          </span>
+        )
+      },
       exportValue: l => l.supplier_name ?? '',
     },
     {

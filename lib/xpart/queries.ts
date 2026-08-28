@@ -35,6 +35,10 @@ const FX_CTE = `
 
 export interface PriceListSummary {
   price_list_id: string
+  supplier_id: string | null
+  /** ERP supplier code — the join to /suppliers/[code]. Null for the three
+   *  Xpart suppliers with no ERP account (Lubinski, ORLYD, SOEX). */
+  supplier_finansit_code: string | null
   name: string
   version: number | null
   currency: string
@@ -57,7 +61,8 @@ export async function listPriceLists(): Promise<PriceListSummary[]> {
     `SELECT pl.price_list_id, btrim(pl.name, E' \t\r\n') AS name, pl.version, pl.currency, pl.status,
             COALESCE(pl.is_promotional, false) AS is_promotional,
             pl.total_items, pl.effective_date, pl.expiry_date, pl.created_at,
-            s.name AS supplier_name, s.supplier_role
+            s.name AS supplier_name, s.supplier_role, s.supplier_id,
+            NULLIF(btrim(s.finansit_code), '') AS supplier_finansit_code
        FROM supplier_price_lists pl
        LEFT JOIN suppliers s ON s.supplier_id = pl.supplier_id
       WHERE pl.tenant_id = $1 AND pl.status IN ('active','archived')
