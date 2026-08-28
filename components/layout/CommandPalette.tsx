@@ -7,39 +7,13 @@ import { useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
 import { useQueryClient } from '@tanstack/react-query'
 import { useLocale } from '@/lib/locale-context'
-import type { TranslationKey } from '@/lib/i18n'
+import { sectionsFor } from '@/lib/navigation'
 import { brandChipClasses } from '@/lib/brand'
-import { Bell, BookOpen, DollarSign, Eye, EyeOff, FileBarChart, Landmark, LayoutDashboard, Loader2, Moon, NotebookPen, Package, Percent, Receipt, RefreshCw, RotateCcw, Scale, Search, SearchX, ShoppingBag, ShoppingCart, Sparkles, Sun, Swords, Trash2, TrendingDown, User, Users, Wallet, Warehouse, Clock, X } from 'lucide-react'
+import { Eye, EyeOff, Loader2, Moon, Package, RefreshCw, Search, Sparkles, Sun, User, Clock, X } from 'lucide-react'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
 import { formatCurrency } from '@/lib/format'
 import { toggleMoneyHidden } from '@/lib/privacy'
 
-const navItems: Array<{ href: string; labelKey: TranslationKey; icon: typeof LayoutDashboard }> = [
-  { href: '/', labelKey: 'overview', icon: LayoutDashboard },
-  { href: '/bookkeeping', labelKey: 'bookkeepingOverview', icon: BookOpen },
-  { href: '/bookkeeping/accounts', labelKey: 'bookkeepingAccounts', icon: Landmark },
-  { href: '/bookkeeping/trial-balance', labelKey: 'bookkeepingTrialBalance', icon: Scale },
-  { href: '/bookkeeping/journal', labelKey: 'bookkeepingJournal', icon: NotebookPen },
-  { href: '/bookkeeping/vat', labelKey: 'bookkeepingVat', icon: Percent },
-  { href: '/bookkeeping/cash', labelKey: 'bookkeepingCash', icon: Wallet },
-  { href: '/bookkeeping/purchasing', labelKey: 'bookkeepingPurchasing', icon: ShoppingBag },
-  { href: '/search', labelKey: 'smartSearch', icon: Sparkles },
-  { href: '/seasonal', labelKey: 'seasonal', icon: Sun },
-  { href: '/stock', labelKey: 'stock', icon: Warehouse },
-  { href: '/stock-forecast', labelKey: 'stockForecast', icon: TrendingDown },
-  { href: '/customers', labelKey: 'customers', icon: Users },
-  { href: '/receivables', labelKey: 'receivables', icon: Receipt },
-  { href: '/gap', labelKey: 'gapAnalysis', icon: SearchX },
-  { href: '/scrap', labelKey: 'scrap', icon: Trash2 },
-  { href: '/returns', labelKey: 'returns', icon: RotateCcw },
-  { href: '/ebay', labelKey: 'ebay', icon: ShoppingCart },
-  { href: '/ebay-reco', labelKey: 'ebayReco', icon: ShoppingCart },
-  { href: '/margin', labelKey: 'margin', icon: Percent },
-  { href: '/competitors', labelKey: 'competitors', icon: Swords },
-  { href: '/alerts', labelKey: 'alerts', icon: Bell },
-  { href: '/pricing', labelKey: 'pricing', icon: DollarSign },
-  { href: '/report', labelKey: 'report', icon: FileBarChart },
-]
 
 interface SearchResult {
   items: Array<{
@@ -469,26 +443,33 @@ export function CommandPalette() {
                   </Command.Group>
                 )}
 
-                {/* Navigation */}
-                <Command.Group
-                  heading={t('cmd.navigation')}
-                  className="[&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5"
-                >
-                  {navItems.map((item) => {
-                    const Icon = item.icon
-                    return (
-                      <Command.Item
-                        key={item.href}
-                        value={`nav ${t(item.labelKey)} ${item.href}`}
-                        onSelect={() => runAction(() => router.push(item.href))}
-                        className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm cursor-pointer aria-selected:bg-accent aria-selected:text-accent-foreground"
-                      >
-                        <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
-                        <span>{t(item.labelKey)}</span>
-                      </Command.Item>
-                    )
-                  })}
-                </Command.Group>
+                {/* Navigation -- every destination, grouped as the sidebar groups
+                    them. This used to be a hand-kept list of 24 that had drifted
+                    19 entries behind the sidebar, so whole areas of the app
+                    (suppliers, shipments, deliveries, all of chat) simply could
+                    not be reached from the keyboard. */}
+                {sectionsFor('palette').map((section) => (
+                  <Command.Group
+                    key={section.id}
+                    heading={t(section.labelKey)}
+                    className="[&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5"
+                  >
+                    {section.items.map((item) => {
+                      const Icon = item.icon
+                      return (
+                        <Command.Item
+                          key={item.href}
+                          value={`nav ${t(item.labelKey)} ${item.href}`}
+                          onSelect={() => runAction(() => router.push(item.href))}
+                          className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm cursor-pointer aria-selected:bg-accent aria-selected:text-accent-foreground"
+                        >
+                          <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                          <span>{t(item.labelKey)}</span>
+                        </Command.Item>
+                      )
+                    })}
+                  </Command.Group>
+                ))}
 
                 {/* Actions */}
                 <Command.Group

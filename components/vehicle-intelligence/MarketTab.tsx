@@ -15,6 +15,7 @@ import { ChartGrid, AXIS_PROPS, BAR_RADIUS, BAR_MAX, PIE_PROPS, DonutCenter, Cha
 import { formatNumber } from '@/lib/format'
 import { cardVariants } from '@/lib/motion'
 import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
+import { seriesColor } from '@/lib/chart-colors'
 
 
 /** A row of the PSA-model table. The upstream feed is inconsistent about which
@@ -55,7 +56,7 @@ const psaColumns = (isHe: boolean): DataTableColumn<PsaModel>[] => [
   },
 ]
 
-const PIE_COLORS = ['#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#f97316', '#ec4899']
+
 
 function MarketSkeleton() {
   return (
@@ -212,7 +213,7 @@ export function MarketTab() {
                       {...PIE_PROPS}
                     >
                       {fuelBreakdown.slice(0, 8).map((_: any, i: number) => (
-                        <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                        <Cell key={i} fill={seriesColor(i)} />
                       ))}
                     </Pie>
                     <Tooltip formatter={(v) => formatNumber(Number(v))} />
@@ -229,7 +230,7 @@ export function MarketTab() {
                   key: f.fuel ?? String(i),
                   label: f.fuel ?? '—',
                   value: formatNumber(f.count || 0),
-                  color: PIE_COLORS[i % PIE_COLORS.length],
+                  color: seriesColor(i),
                 }))}
               />
             </CardContent>

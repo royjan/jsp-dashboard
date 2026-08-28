@@ -36,6 +36,7 @@ import { StatTile, StatGrid } from '@/components/shared/StatTile'
 import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
 import { isDeclineHidden } from '@/lib/privacy'
+import { seriesColor } from '@/lib/chart-colors'
 
 type CustomerSortField = 'name' | 'total_revenue' | 'gross_invoices' | 'total_credits' | 'invoice_count' | 'avg_order_value' | 'trend' | 'last_purchase'
 type ChurnSortField = 'name' | 'last_year_revenue' | 'last_purchase'
@@ -207,7 +208,7 @@ function CustomersSection({ searchQuery }: { searchQuery: string }) {
       name: c.name,
       value: c.total_revenue,
       share: (c.total_revenue / total) * 100,
-      fill: CHART_PALETTE[i % CHART_PALETTE.length],
+      fill: seriesColor(i),
     }))
     // "אחרים" is the long tail, not a category — grey keeps it from reading as
     // the biggest customer just because it is the biggest slice.

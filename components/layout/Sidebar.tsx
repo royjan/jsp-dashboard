@@ -1,163 +1,47 @@
 'use client'
 
+import { Suspense } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useSearchParams } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { useLocale } from '@/lib/locale-context'
-import type { TranslationKey } from '@/lib/i18n'
-import {
-  Bell,
-  BookOpen,
-  Bot,
-  BotMessageSquare,
-  Briefcase,
-  CarFront,
-  ChevronLeft,
-  ClipboardList,
-  Container,
-  DollarSign,
-  FileBarChart,
-  FileSearch,
-  FlaskConical,
-  GitBranch,
-  Landmark,
-  Languages,
-  LayoutDashboard,
-  MessagesSquare,
-  NotebookPen,
-  PackageCheck,
-  PackageX,
-  Percent,
-  Radar,
-  Receipt,
-  ReceiptText,
-  RotateCcw,
-  Scale,
-  SearchX,
-  ShoppingBag,
-  ShoppingCart,
-  Sparkles,
-  Sun,
-  Swords,
-  ThumbsUp,
-  Trash2,
-  TrendingDown,
-  Truck,
-  Users,
-  Wallet,
-  Warehouse, Sunrise, Undo2} from 'lucide-react'
+import { sectionsFor, isItemActive, type NavItem } from '@/lib/navigation'
+import { ChevronLeft, Warehouse } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { useUnacknowledgedCount } from '@/hooks/use-analytics'
 
-type NavItem = {
-  href: string
-  labelKey: TranslationKey
-  icon: typeof LayoutDashboard
-  /**
-   * How the active state is decided. Every entry matched the pathname exactly
-   * until bookkeeping arrived with sub-routes (/bookkeeping/vat …), where an
-   * exact match leaves the whole section unlit. Defaults to 'exact' so no
-   * existing entry changes behaviour.
-   */
-  match?: 'exact' | 'prefix'
-}
 
-const navSections: Array<{ id: string; labelKey: TranslationKey; items: NavItem[] }> = [
-  {
-    id: 'overview', labelKey: 'sectionOverview', items: [
-      { href: '/', labelKey: 'overview', icon: LayoutDashboard },
-      { href: '/brief', labelKey: 'morningBrief', icon: Sunrise },
-      { href: '/search', labelKey: 'smartSearch', icon: Sparkles },
-      { href: '/seasonal', labelKey: 'seasonal', icon: Sun },
-      { href: '/report', labelKey: 'report', icon: FileBarChart },
-    ],
-  },
-  {
-    id: 'inventory', labelKey: 'sectionInventory', items: [
-      { href: '/stock', labelKey: 'stock', icon: Warehouse },
-      { href: '/stock-forecast', labelKey: 'stockForecast', icon: TrendingDown },
-      // Catalog Links hidden from nav (route still reachable at /catalog-links)
-      { href: '/gap', labelKey: 'gapAnalysis', icon: SearchX },
-      { href: '/gap/catalog', labelKey: 'catalogGap', icon: PackageX },
-      { href: '/scrap', labelKey: 'scrap', icon: Trash2 },
-      { href: '/returns', labelKey: 'returns', icon: RotateCcw },
-    ],
-  },
-  {
-    id: 'sales', labelKey: 'sectionSales', items: [
-      { href: '/customers', labelKey: 'customers', icon: Users },
-      { href: '/receivables', labelKey: 'receivables', icon: Receipt },
-      { href: '/margin', labelKey: 'margin', icon: Percent },
-      { href: '/pricing', labelKey: 'pricing', icon: DollarSign },
-      // One entry: /ebay and /ebay-reco are two tabs of the same screen.
-      { href: '/ebay', labelKey: 'ebay', icon: ShoppingCart },
-      { href: '/sales-rep', labelKey: 'salesRep', icon: Briefcase },
-      { href: '/sales-rep/price-check', labelKey: 'stockCheck', icon: DollarSign },
-    ],
-  },
-  {
-    id: 'operations', labelKey: 'sectionOperations', items: [
-      { href: '/suppliers', labelKey: 'suppliers', icon: PackageCheck },
-      { href: '/price-lists', labelKey: 'priceLists', icon: ClipboardList, match: 'prefix' },
-      { href: '/inquiries', labelKey: 'supplierInquiries', icon: FileSearch, match: 'prefix' },
-      { href: '/invoices', labelKey: 'supplierInvoices', icon: ReceiptText },
-      { href: '/credits', labelKey: 'supplierCredits', icon: Undo2 },
-      { href: '/competitors', labelKey: 'competitors', icon: Swords },
-      { href: '/shipments', labelKey: 'inboundShipments', icon: Container },
-      { href: '/deliveries', labelKey: 'deliveries', icon: Truck },
-      { href: '/vehicle-intelligence', labelKey: 'vehicleIntelligence', icon: CarFront },
-      { href: '/alerts', labelKey: 'alerts', icon: Bell },
-    ],
-  },
-  {
-    // הנהח״ש — the books, decoded from the ERP's own files into books.*
-    id: 'bookkeeping', labelKey: 'sectionBookkeeping', items: [
-      { href: '/bookkeeping', labelKey: 'bookkeepingOverview', icon: BookOpen },
-      { href: '/bookkeeping/accounts', labelKey: 'bookkeepingAccounts', icon: Landmark,
-        match: 'prefix' },
-      { href: '/bookkeeping/trial-balance', labelKey: 'bookkeepingTrialBalance', icon: Scale },
-      { href: '/bookkeeping/journal', labelKey: 'bookkeepingJournal', icon: NotebookPen,
-        match: 'prefix' },
-      { href: '/bookkeeping/vat', labelKey: 'bookkeepingVat', icon: Percent },
-      { href: '/bookkeeping/cash', labelKey: 'bookkeepingCash', icon: Wallet, match: 'prefix' },
-      { href: '/bookkeeping/purchasing', labelKey: 'bookkeepingPurchasing', icon: ShoppingBag },
-    ],
-  },
-  {
-    // Chat admin (integrated from chat.jan.parts)
-    id: 'chat', labelKey: 'sectionChat', items: [
-      { href: '/chat/flow-decisions', labelKey: 'chatFlowDecisions', icon: GitBranch },
-      { href: '/chat/flow-decisions/observatory', labelKey: 'chatFlowObservatory', icon: Radar },
-      { href: '/chat/word-mappings', labelKey: 'chatWordMappings', icon: Languages },
-      { href: '/chat/parts-analytics', labelKey: 'chatPartsAnalytics', icon: Bot },
-      { href: '/chat/diego', labelKey: 'chatDiego', icon: BotMessageSquare },
-      { href: '/chat/feedback', labelKey: 'chatFeedback', icon: ThumbsUp },
-      { href: '/chat/simulator', labelKey: 'chatSimulator', icon: FlaskConical },
-      // merged into /chat/diego (Dora view); direct entry kept for muscle memory
-      { href: '/chat/diego?view=dora', labelKey: 'chatCredits', icon: ReceiptText },
-    ],
-  },
-]
 
 interface SidebarProps {
   collapsed: boolean
   onToggle: () => void
 }
 
-export function Sidebar({ collapsed, onToggle }: SidebarProps) {
+/**
+ * The nav list, split out because it reads useSearchParams (needed to tell the
+ * Diego and Dora entries apart -- they share a pathname). That hook forces a
+ * Suspense boundary during prerender, and the boundary is kept in here rather
+ * than around <Sidebar> in app-shell so the shell stays untouched and the
+ * fallback can be the same markup with no query awareness.
+ */
+function SidebarNav({ collapsed, isRTL }: { collapsed: boolean; isRTL: boolean }) {
+  const params = useSearchParams()
+  return <SidebarNavList collapsed={collapsed} isRTL={isRTL} params={params} />
+}
+
+function SidebarNavList({
+  collapsed, isRTL, params,
+}: { collapsed: boolean; isRTL: boolean; params: URLSearchParams | null }) {
   const pathname = usePathname()
-  const { t, dir } = useLocale()
-  const isRTL = dir === 'rtl'
+  const { t } = useLocale()
   const { data: unackCount } = useUnacknowledgedCount()
 
   const renderItem = (item: NavItem) => {
-    const isActive = item.match === 'prefix'
-      ? pathname === item.href || pathname.startsWith(`${item.href}/`)
-      : pathname === item.href
+    const isActive = isItemActive(item, pathname, params)
     const Icon = item.icon
     const showBadge =
-      (item.href === '/customers/health-score' || item.href === '/customers') &&
+      item.href === '/customers' &&
       typeof unackCount === 'number' &&
       unackCount > 0
 
@@ -204,6 +88,28 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   }
 
   return (
+    <>
+      {sectionsFor('sidebar').map((section, si) => (
+        <div key={section.id} className={cn(si > 0 && 'mt-3 border-t border-border/60 pt-3')}>
+          {!collapsed && (
+            <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+              {t(section.labelKey)}
+            </p>
+          )}
+          <div className="space-y-1">
+            {section.items.map(renderItem)}
+          </div>
+        </div>
+      ))}
+    </>
+  )
+}
+
+export function Sidebar({ collapsed, onToggle }: SidebarProps) {
+  const { dir } = useLocale()
+  const isRTL = dir === 'rtl'
+
+  return (
     <TooltipProvider delayDuration={0}>
       <aside
         data-print="hide"
@@ -227,18 +133,9 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         </div>
 
         <nav className="flex-1 overflow-y-auto p-2">
-          {navSections.map((section, si) => (
-            <div key={section.id} className={cn(si > 0 && 'mt-3 border-t border-border/60 pt-3')}>
-              {!collapsed && (
-                <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
-                  {t(section.labelKey)}
-                </p>
-              )}
-              <div className="space-y-1">
-                {section.items.map(renderItem)}
-              </div>
-            </div>
-          ))}
+          <Suspense fallback={<SidebarNavList collapsed={collapsed} isRTL={isRTL} params={null} />}>
+            <SidebarNav collapsed={collapsed} isRTL={isRTL} />
+          </Suspense>
         </nav>
 
         <div className="border-t p-2">

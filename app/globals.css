@@ -37,6 +37,28 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-destructive-subtle: var(--destructive-subtle);
+  --color-destructive-subtle-foreground: var(--destructive-subtle-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-success-subtle: var(--success-subtle);
+  --color-success-subtle-foreground: var(--success-subtle-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-warning-subtle: var(--warning-subtle);
+  --color-warning-subtle-foreground: var(--warning-subtle-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-info-subtle: var(--info-subtle);
+  --color-info-subtle-foreground: var(--info-subtle-foreground);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-chart-6: var(--chart-6);
+  --color-chart-7: var(--chart-7);
+  --color-chart-8: var(--chart-8);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -44,8 +66,8 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-ui-sans);
+  --font-mono: var(--font-ui-mono);
 }
 
 :root {
@@ -71,6 +93,44 @@
   --ring: #2f6fd8;
   --chart-grid: #d4dae2;
   --chart-text: #56606f;
+
+  /* Semantic status. Before these existed the only semantic token was
+     --destructive, so "this number is good" had no expressible form except
+     text-emerald-500 -- which is why ~2,600 raw palette utilities accumulated
+     against only ~540 dark: overrides. Each token carries both themes. */
+  --success: #0f7a52;
+  --success-foreground: #ffffff;
+  --success-subtle: #e8f7ef;
+  --success-subtle-foreground: #186b48;
+  --warning: #a8710a;
+  --warning-foreground: #ffffff;
+  --warning-subtle: #fdf4e3;
+  --warning-subtle-foreground: #8a6410;
+  --info: #2f6fd8;
+  --info-foreground: #ffffff;
+  --info-subtle: #e9f1fd;
+  --info-subtle-foreground: #1d5bb5;
+  --destructive-subtle: #fdedec;
+  --destructive-subtle-foreground: #a5342c;
+
+  /* Categorical chart series. These used to live in lib/chart-colors.ts as a
+     JS array, which cannot vary by theme -- every value was a Tailwind -400
+     step tuned for the dark surface, so on the white card all six fell below
+     3:1 contrast. Nobody saw it because defaultTheme is "dark".
+     Same six hues in both themes, stepped per surface. Validated with the
+     dataviz validate_palette.js against the real surfaces #ffffff / #171b22:
+     lightness band, chroma floor, CVD separation and normal-vision floor all
+     pass in both modes. Three light slots sit under 3:1, which is discharged
+     by direct labels / the DataTable view -- do not "fix" that by darkening
+     them without re-running the validator. */
+  --chart-1: #2a78d6;
+  --chart-2: #eb6834;
+  --chart-3: #1baf7a;
+  --chart-4: #eda100;
+  --chart-5: #e87ba4;
+  --chart-6: #008300;
+  --chart-7: #4a3aa7;
+  --chart-8: #e34948;
 }
 
 .dark {
@@ -95,6 +155,30 @@
   --ring: #5b95e6;
   --chart-grid: #333b4a;
   --chart-text: #b4bccb;
+
+  --success: #4fd6a0;
+  --success-foreground: #0b0e14;
+  --success-subtle: #12301f;
+  --success-subtle-foreground: #7fd7a8;
+  --warning: #f0c674;
+  --warning-foreground: #0b0e14;
+  --warning-subtle: #332510;
+  --warning-subtle-foreground: #f0c674;
+  --info: #5b95e6;
+  --info-foreground: #0b0e14;
+  --info-subtle: #16294a;
+  --info-subtle-foreground: #9dc0f2;
+  --destructive-subtle: #331917;
+  --destructive-subtle-foreground: #f0a49c;
+
+  --chart-1: #3987e5;
+  --chart-2: #d95926;
+  --chart-3: #199e70;
+  --chart-4: #c98500;
+  --chart-5: #d55181;
+  --chart-6: #008300;
+  --chart-7: #9085e9;
+  --chart-8: #e66767;
 }
 
 @layer base {

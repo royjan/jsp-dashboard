@@ -31,7 +31,10 @@ const apps: AppItem[] = [
     id: 'dashboard',
     name: 'דשבורד',
     description: 'ניתוח נתונים ותובנות',
-    url: 'https://dashboard.jan.parts',
+    // Was https://dashboard.jan.parts -- the retired AWS App Runner host, which
+    // CLAUDE.md flags twice as dead. This IS the dashboard, so it points at
+    // itself relatively: correct on Dokploy, in dev, and anywhere else it moves.
+    url: '/',
     icon: LayoutDashboard,
     color: '#6366f1',
   },

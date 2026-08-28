@@ -396,7 +396,7 @@ function SeasonalPageContent() {
                     type="monotone"
                     dataKey="sales"
                     name={t('avgSales')}
-                    stroke="hsl(var(--primary))"
+                    stroke="var(--primary)"
                     strokeWidth={2}
                     dot={{ r: 4 }}
                     activeDot={{ r: 6 }}

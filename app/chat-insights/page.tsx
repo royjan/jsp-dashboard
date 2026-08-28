@@ -24,6 +24,7 @@ import { formatNumber } from '@/lib/constants'
 import { cardVariants } from '@/lib/motion'
 import { formatDate } from '@/lib/format'
 import { PageHeader } from '@/components/shared/PageHeader'
+import { seriesColor } from '@/lib/chart-colors'
 
 // ── types (mirror the API) ──
 interface ChatInsights {
@@ -70,7 +71,7 @@ const statusLabel = (s: string) => STATUS_HE[s] || s
 const statusVariant = (s: string): 'success' | 'warning' | 'destructive' | 'secondary' =>
   s === 'approved' ? 'success' : s === 'pending' ? 'warning' : s === 'rejected' ? 'destructive' : 'secondary'
 
-const INTENT_COLORS = ['#60a5fa', '#34d399', '#f59e0b', '#a78bfa', '#f87171', '#22d3ee', '#fb7185']
+
 
 // ── helpers ──
 const pct = (num: number, den: number) => (den > 0 ? Math.round((num / den) * 100) : 0)
@@ -153,7 +154,7 @@ function ChatInsightsContent() {
       .map((r, idx) => ({
         ...r,
         label: intentLabel(r.intent),
-        fill: INTENT_COLORS[idx % INTENT_COLORS.length],
+        fill: seriesColor(idx),
       }))
   }, [d])
 

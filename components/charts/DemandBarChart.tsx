@@ -6,7 +6,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useLocale } from '@/lib/locale-context'
 import { formatNumber } from '@/lib/constants'
 import type { DemandItem } from '@/lib/types'
-import { CHART_PALETTE as COLORS } from '@/lib/chart-colors'
+import { seriesColor } from '@/lib/chart-colors'
 
 interface DemandBarChartProps {
   data: DemandItem[]
@@ -91,7 +91,7 @@ export function DemandBarChart({ data, isLoading, mode, limit = 10, hoveredCode,
                   {chartData.map((entry, index) => (
                     <Cell
                       key={index}
-                      fill={COLORS[index % COLORS.length]}
+                      fill={seriesColor(index)}
                       fillOpacity={hoveredCode ? (entry.code === hoveredCode ? 1 : 0.2) : 1}
                       stroke={entry.code === hoveredCode ? '#fff' : 'none'}
                       strokeWidth={entry.code === hoveredCode ? 2 : 0}
@@ -130,7 +130,7 @@ export function DemandBarChart({ data, isLoading, mode, limit = 10, hoveredCode,
                   onMouseEnter={() => onHover?.(item.code)}
                   onMouseLeave={() => onHover?.(null)}
                 >
-                  <div className="w-3 h-3 rounded-sm shrink-0" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
+                  <div className="w-3 h-3 rounded-sm shrink-0" style={{ backgroundColor: seriesColor(i) }} />
                   <span className="flex-1 truncate text-foreground">{item.fullName}</span>
                   <span className="text-muted-foreground font-mono text-xs">{formatNumber(item.value)} ({pct}%)</span>
                 </div>

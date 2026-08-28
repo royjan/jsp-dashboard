@@ -99,8 +99,8 @@ function ForecastChart({ itemCode }: { itemCode: string }) {
         <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
           <defs>
             <linearGradient id="stockGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
-              <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+              <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.3} />
+              <stop offset="95%" stopColor="var(--primary)" stopOpacity={0} />
             </linearGradient>
           </defs>
           <ChartGrid />
@@ -109,9 +109,9 @@ function ForecastChart({ itemCode }: { itemCode: string }) {
           <Tooltip
             labelStyle={{ fontWeight: 600 }}
           />
-          <ReferenceLine y={0} stroke="hsl(var(--destructive))" strokeDasharray="3 3" label={{ value: locale === 'he' ? 'אזילה' : 'Stock-out', position: 'right', fontSize: 11 }} />
-          <Area activeDot={ACTIVE_DOT} type="monotone" dataKey="stock" stroke="hsl(var(--primary))" fill="url(#stockGradient)" name={locale === 'he' ? 'מלאי צפוי' : 'Projected Stock'} strokeWidth={2} />
-          <Line activeDot={ACTIVE_DOT} type="monotone" dataKey="demand" stroke="hsl(var(--destructive))" name={locale === 'he' ? 'ביקוש חודשי' : 'Monthly Demand'} strokeWidth={1.5} strokeDasharray="5 5" dot={false} />
+          <ReferenceLine y={0} stroke="var(--destructive)" strokeDasharray="3 3" label={{ value: locale === 'he' ? 'אזילה' : 'Stock-out', position: 'right', fontSize: 11 }} />
+          <Area activeDot={ACTIVE_DOT} type="monotone" dataKey="stock" stroke="var(--primary)" fill="url(#stockGradient)" name={locale === 'he' ? 'מלאי צפוי' : 'Projected Stock'} strokeWidth={2} />
+          <Line activeDot={ACTIVE_DOT} type="monotone" dataKey="demand" stroke="var(--destructive)" name={locale === 'he' ? 'ביקוש חודשי' : 'Monthly Demand'} strokeWidth={1.5} strokeDasharray="5 5" dot={false} />
         </AreaChart>
       </ResponsiveContainer>
 
@@ -124,7 +124,7 @@ function ForecastChart({ itemCode }: { itemCode: string }) {
               <XAxis dataKey="month" {...AXIS_PROPS} tickFormatter={(v: number) => String(v)} />
               <YAxis {...AXIS_PROPS} />
               <Tooltip />
-              <Line activeDot={ACTIVE_DOT} type="monotone" dataKey="quantity" stroke="hsl(var(--chart-2))" name={locale === 'he' ? 'כמות' : 'Quantity'} strokeWidth={1.5} dot={{ r: 2 }} />
+              <Line activeDot={ACTIVE_DOT} type="monotone" dataKey="quantity" stroke="var(--chart-2)" name={locale === 'he' ? 'כמות' : 'Quantity'} strokeWidth={1.5} dot={{ r: 2 }} />
             </LineChart>
           </ResponsiveContainer>
         </div>

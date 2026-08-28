@@ -9,14 +9,18 @@ import {
   PieChart, Pie, Cell,
 } from 'recharts'
 import { ChartGrid, BAR_RADIUS, BAR_MAX, PIE_PROPS, DonutCenter, ACTIVE_BAR, ActivePieSector } from '@/components/charts/kit'
+import { seriesColor } from '@/lib/chart-colors'
 
 // 15 distinct, bright colors so the top-15 manufacturers never reuse a hue.
-const BAR_COLORS = [
-  '#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6',
-  '#06b6d4', '#f97316', '#ec4899', '#10b981', '#eab308',
-  '#6366f1', '#14b8a6', '#f43f5e', '#a855f7', '#0ea5e9',
-]
-const PIE_COLORS = ['#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4']
+/**
+ * The bar chart is a single series over nominal categories that the axis
+ * already names, so hue there encoded nothing -- 15 colors spent restating the
+ * label. One slot for every bar; the hover fade carries the emphasis.
+ * The pie is different: there hue IS the identity channel, so it takes distinct
+ * slots via seriesColor(), which folds past slot 8 into muted rather than
+ * cycling two entities onto one color.
+ */
+const BAR_COLOR = 'var(--chart-1)'
 
 interface ManufacturerData {
   manufacturer: string
@@ -118,10 +122,10 @@ export function PopulationChart({
                   cursor="pointer"
                   onClick={(data: any) => onSelectMake?.(data.name)}
                 >
-                  {barData.map((entry, i) => (
+                  {barData.map((entry) => (
                     <Cell
                       key={entry.name}
-                      fill={BAR_COLORS[i % BAR_COLORS.length]}
+                      fill={BAR_COLOR}
                       // Keep bars at full color; only gently fade the rest on
                       // hover (was 0.3 → near-black/muddy on the dark theme).
                       fillOpacity={hoveredBar && entry.name !== hoveredBar ? 0.55 : 1}
@@ -163,7 +167,7 @@ export function PopulationChart({
                     labelLine={false}
                   >
                     {pieData.map((_, i) => (
-                      <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                      <Cell key={i} fill={seriesColor(i)} />
                     ))}
                   </Pie>
                   <Tooltip
@@ -185,7 +189,7 @@ export function PopulationChart({
                   <div key={item.name} className="flex items-center gap-2">
                     <span
                       className="w-3.5 h-3.5 rounded-full shrink-0"
-                      style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }}
+                      style={{ backgroundColor: seriesColor(i) }}
                     />
                     <span className="text-sm font-medium">{item.name}</span>
                     <span className="text-sm font-mono tabular-nums">{item.value.toLocaleString()}</span>
