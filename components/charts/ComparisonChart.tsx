@@ -10,7 +10,7 @@ import { ChartGrid, AXIS_PROPS } from '@/components/charts/kit'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useLocale } from '@/lib/locale-context'
-import { formatCurrency, formatCurrencyAxis } from '@/lib/format'
+import { formatCurrency, formatCurrencyAxis, formatDate } from '@/lib/format'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
 import { cn } from '@/lib/utils'
 
@@ -43,16 +43,20 @@ const ROLLUP_THRESHOLD = 45
 
 /** Sunday starting the week containing `iso` — the Israeli week, matching the
  *  page's own Sunday alignment for the previous period. */
+// Local calendar fields on the way out, not toISOString(): the Date is built at
+// LOCAL midnight and Israel is UTC+2/+3, so the UTC round trip moved every date
+// back a day -- weekStart() returned the Saturday, and the chart's weekly
+// buckets were labelled a day before the week they held.
 function weekStart(iso: string): string {
   const d = new Date(iso + 'T00:00:00')
   d.setDate(d.getDate() - d.getDay())
-  return d.toISOString().split('T')[0]
+  return formatDate(d, 'iso')
 }
 
 function addDays(iso: string, n: number): string {
   const d = new Date(iso + 'T00:00:00')
   d.setDate(d.getDate() + n)
-  return d.toISOString().split('T')[0]
+  return formatDate(d, 'iso')
 }
 
 /**

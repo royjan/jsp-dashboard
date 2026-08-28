@@ -33,16 +33,16 @@ function getPreviousPeriodRange(period: Period): { dateFrom: string; dateTo: str
   const now = new Date()
   switch (period) {
     case '7d': return {
-      dateFrom: new Date(now.getTime() - 14 * 86400000).toISOString().split('T')[0],
-      dateTo: new Date(now.getTime() - 7 * 86400000).toISOString().split('T')[0],
+      dateFrom: formatDate(new Date(now.getTime() - 14 * 86400000), 'iso'),
+      dateTo: formatDate(new Date(now.getTime() - 7 * 86400000), 'iso'),
     }
     case '30d': return {
-      dateFrom: new Date(now.getTime() - 60 * 86400000).toISOString().split('T')[0],
-      dateTo: new Date(now.getTime() - 30 * 86400000).toISOString().split('T')[0],
+      dateFrom: formatDate(new Date(now.getTime() - 60 * 86400000), 'iso'),
+      dateTo: formatDate(new Date(now.getTime() - 30 * 86400000), 'iso'),
     }
     case '90d': return {
-      dateFrom: new Date(now.getTime() - 180 * 86400000).toISOString().split('T')[0],
-      dateTo: new Date(now.getTime() - 90 * 86400000).toISOString().split('T')[0],
+      dateFrom: formatDate(new Date(now.getTime() - 180 * 86400000), 'iso'),
+      dateTo: formatDate(new Date(now.getTime() - 90 * 86400000), 'iso'),
     }
     case 'ytd': {
       const prevYear = now.getFullYear() - 1
@@ -52,8 +52,8 @@ function getPreviousPeriodRange(period: Period): { dateFrom: string; dateTo: str
       }
     }
     case '1y': return {
-      dateFrom: new Date(now.getTime() - 730 * 86400000).toISOString().split('T')[0],
-      dateTo: new Date(now.getTime() - 365 * 86400000).toISOString().split('T')[0],
+      dateFrom: formatDate(new Date(now.getTime() - 730 * 86400000), 'iso'),
+      dateTo: formatDate(new Date(now.getTime() - 365 * 86400000), 'iso'),
     }
     default: return getPreviousPeriodRange('30d')
   }
@@ -68,8 +68,20 @@ function shiftDateToCurrent(dateStr: string, period: Period): string {
     case 'ytd':
     case '1y': d.setFullYear(d.getFullYear() + 1); break
   }
-  return d.toISOString().split('T')[0]
+  return formatDate(d, 'iso')
 }
+
+/*
+ * Every date here is a CALENDAR DAY, and calendar days are local.
+ *
+ * `new Date('2026-08-28T00:00:00')` is local midnight; `.toISOString()` is UTC,
+ * and Israel is UTC+2/+3, so that round trip returns 2026-08-27 -- all year, not
+ * just under DST. Every helper below used to end that way, so the Sunday the
+ * week aligned to was a Saturday, the previous series sat one day off against
+ * the current one, and "today" became yesterday for anyone opening the
+ * dashboard between midnight and 03:00. formatDate(d, 'iso') reads the local
+ * calendar fields instead, which is the only thing these strings ever meant.
+ */
 
 /** Return the Sunday starting the ISO week that contains dateStr (Sunday = day 0 in JS) */
 function getWeekSunday(dateStr: string): Date {
@@ -94,7 +106,7 @@ function HomePageContent() {
   const { get, setMany } = useUrlParams()
   const queryClient = useQueryClient()
   const currentYear = new Date().getFullYear()
-  const today = new Date().toISOString().split('T')[0]
+  const today = formatDate(new Date(), 'iso')
 
   // ── Sales section state ──
   const urlDateFrom = get('date_from')
@@ -111,15 +123,15 @@ function HomePageContent() {
 
   const effectiveDateFrom = useCustomRange ? customDateFrom! : (() => {
     switch (period) {
-      case '7d': return new Date(now.getTime() - 7 * 86400000).toISOString().split('T')[0]
-      case '30d': return new Date(now.getTime() - 30 * 86400000).toISOString().split('T')[0]
-      case '90d': return new Date(now.getTime() - 90 * 86400000).toISOString().split('T')[0]
+      case '7d': return formatDate(new Date(now.getTime() - 7 * 86400000), 'iso')
+      case '30d': return formatDate(new Date(now.getTime() - 30 * 86400000), 'iso')
+      case '90d': return formatDate(new Date(now.getTime() - 90 * 86400000), 'iso')
       case 'ytd': return `${now.getFullYear()}-01-01`
-      case '1y': return new Date(now.getTime() - 365 * 86400000).toISOString().split('T')[0]
-      default: return new Date(now.getTime() - 30 * 86400000).toISOString().split('T')[0]
+      case '1y': return formatDate(new Date(now.getTime() - 365 * 86400000), 'iso')
+      default: return formatDate(new Date(now.getTime() - 30 * 86400000), 'iso')
     }
   })()
-  const effectiveDateTo = useCustomRange ? customDateTo! : now.toISOString().split('T')[0]
+  const effectiveDateTo = useCustomRange ? customDateTo! : formatDate(now, 'iso')
 
   const periodResult = useSalesAnalytics(period, !useCustomRange)
   const rangeResult = useSalesRange(customDateFrom || '', customDateTo || '', useCustomRange)
@@ -162,7 +174,7 @@ function HomePageContent() {
       for (const p of prevSalesData) {
         const d = new Date(p.date + 'T00:00:00')
         d.setDate(d.getDate() + offsetDays)
-        prevByShiftedDate.set(d.toISOString().split('T')[0], { revenue: p.revenue, originalDate: p.date })
+        prevByShiftedDate.set(formatDate(d, 'iso'), { revenue: p.revenue, originalDate: p.date })
       }
     } else {
       for (const p of prevSalesData) {

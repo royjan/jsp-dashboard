@@ -256,6 +256,11 @@ export function formatDate(
       const mi = String(d.getMinutes()).padStart(2, '0')
       return `${dd}/${mm}/${yyyy} ${hh}:${mi}`
     }
+    // The LOCAL calendar day, which is what a `YYYY-MM-DD` in this app always
+    // means — a date the ERP recorded, a bucket key, a range boundary. Reach for
+    // this rather than `toISOString().split('T')[0]`: that formats the UTC day,
+    // and east of Greenwich a Date built at local midnight is still the previous
+    // day in UTC, so the round trip silently subtracts one.
     case 'iso':
       return `${yyyy}-${mm}-${dd}`
     case 'medium':
