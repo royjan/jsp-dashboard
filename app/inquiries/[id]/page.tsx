@@ -1,16 +1,22 @@
 'use client'
 
 /**
- * One procurement round: the lines that went out, who quoted what, and the
- * comparison Xpart computed from it.
+ * One procurement round: who quoted what, and the comparison Xpart computed
+ * from it.
  *
  * The comparison grid is Xpart's own snapshot rendered as-is — see the API route
  * for why it is not recomputed here. Its age and freshness are shown next to it
  * rather than hidden, because a stale snapshot is still the number the buyer
  * worked from and pretending otherwise helps nobody.
+ *
+ * There used to be an "items" tab beside it listing the lines that went out.
+ * It was the same rows with fewer columns — the comparison already carries the
+ * part, the description and the quantity — so the tab bar bought nothing and
+ * cost a click. What the items table did carry and the grid did not, the
+ * duplicate-part highlight, moved onto the grid.
  */
 
-import { use, useState } from 'react'
+import { use } from 'react'
 import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, FileSearch } from 'lucide-react'
@@ -50,18 +56,6 @@ interface Coverage {
   coverage_pct: number
 }
 
-interface Item {
-  inquiry_item_id: string
-  row_number: number | null
-  brand_name: string | null
-  part_number: string
-  item_id: string | null
-  description: string | null
-  quantity: number | null
-  reference_price: number | null
-  quality_grade: string | null
-}
-
 /** Xpart's internal snapshot shape — every field treated as optional on purpose. */
 interface SnapshotSupplier {
   columnKey: string
@@ -91,13 +85,10 @@ interface SnapshotItem {
   bestPriceSupplierId?: string
 }
 
-type Tab = 'items' | 'comparison'
-
 export default function InquiryDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const { locale } = useLocale()
   const isHe = locale === 'he'
-  const [tab, setTab] = useState<Tab>('items')
 
   const head = useQuery<{ inquiry: Inquiry; coverage: Coverage[]; provenance: Provenance }>({
     queryKey: ['xpart-inquiry', id],
@@ -106,17 +97,6 @@ export default function InquiryDetailPage({ params }: { params: Promise<{ id: st
       if (!res.ok) throw new Error('inquiry unavailable')
       return res.json()
     },
-    staleTime: 15 * 60 * 1000,
-  })
-
-  const items = useQuery<{ items: Item[] }>({
-    queryKey: ['xpart-inquiry-items', id],
-    queryFn: async () => {
-      const res = await fetch(`/api/xpart/inquiries/${id}/items?limit=1000`)
-      if (!res.ok) throw new Error('items unavailable')
-      return res.json()
-    },
-    enabled: tab === 'items',
     staleTime: 15 * 60 * 1000,
   })
 
@@ -133,83 +113,64 @@ export default function InquiryDetailPage({ params }: { params: Promise<{ id: st
       if (!res.ok) throw new Error('comparison unavailable')
       return res.json()
     },
-    enabled: tab === 'comparison',
     staleTime: 15 * 60 * 1000,
   })
 
   const inquiry = head.data?.inquiry
+  const suppliers = comparison.data?.payload?.suppliers ?? []
+  const snapshotItems = comparison.data?.payload?.items ?? []
 
-  // Xpart highlights two things on its own items table, and both matter here:
-  // a part number quoted twice in the same round, and a line that never matched
-  // the catalog. Duplicates are counted over the loaded set, which is the whole
-  // inquiry — the API asks for 1,000 and no round is larger.
+  // A part quoted twice in the same round is worth seeing: the two lines
+  // compete against each other and one of them is usually a mistake.
   const dupKeys = new Set<string>()
   const seen = new Set<string>()
-  for (const it of items.data?.items ?? []) {
-    const key = `${it.brand_name ?? ''}|${it.part_number}`
+  for (const it of snapshotItems) {
+    const key = `${it.brandName ?? ''}|${it.partNumber ?? ''}`
     if (seen.has(key)) dupKeys.add(key)
     seen.add(key)
   }
 
-  const itemColumns: DataTableColumn<Item>[] = [
-    { key: 'row_number', header: '#', align: 'end', sortable: true, cell: i => i.row_number ?? '—' },
-    {
-      key: 'part_number',
-      header: isHe ? 'מק״ט' : 'Part',
-      sortable: true,
-      cell: i => <ItemLink code={i.part_number} showCode copyable={false} />,
-      exportValue: i => i.part_number,
-    },
-    {
-      key: 'brand_name',
-      header: isHe ? 'מותג' : 'Brand',
-      sortable: true,
-      hideOnMobile: true,
-      cell: i => i.brand_name ?? '—',
-    },
-    {
-      key: 'description',
-      header: isHe ? 'תיאור' : 'Description',
-      truncate: 'max-w-[260px]',
-      title: i => i.description ?? '',
-      cell: i => <span dir="auto">{i.description ?? '—'}</span>,
-    },
-    {
-      key: 'quantity',
-      header: isHe ? 'כמות' : 'Qty',
-      align: 'end',
-      sortable: true,
-      cell: i => (i.quantity == null ? '—' : formatNumber(i.quantity)),
-      exportValue: i => i.quantity,
-    },
-    {
-      key: 'reference_price',
-      header: isHe ? 'מחיר ייחוס' : 'Ref. price',
-      align: 'end',
-      sortable: true,
-      cell: i => (i.reference_price == null ? '—' : formatCurrency(i.reference_price)),
-      exportValue: i => i.reference_price,
-    },
-    {
-      key: 'quality_grade',
-      header: isHe ? 'איכות' : 'Quality',
-      align: 'center',
-      hideOnMobile: true,
-      cell: i => i.quality_grade ?? '—',
-    },
-  ]
-
-  const suppliers = comparison.data?.payload?.suppliers ?? []
-  const snapshotItems = comparison.data?.payload?.items ?? []
+  // The supplier whose basket comes out cheapest overall — the one number the
+  // coverage tiles above cannot show.
+  const cheapestKey = suppliers.reduce<{ key: string | null; cost: number }>(
+    (best, s) =>
+      s.totalCostIls != null && s.totalCostIls > 0 && s.totalCostIls < best.cost
+        ? { key: s.columnKey, cost: s.totalCostIls }
+        : best,
+    { key: null, cost: Infinity },
+  ).key
 
   const comparisonColumns: DataTableColumn<SnapshotItem>[] = [
-    { key: 'rowNumber', header: '#', align: 'end', sortable: true, cell: i => i.rowNumber ?? '—' },
+    {
+      key: 'rowNumber',
+      header: '#',
+      align: 'end',
+      sortable: true,
+      // The line number sits right against the part number under RTL, and two
+      // adjacent numbers with nothing between them read as one long number
+      // ("012745" + "1" → "0127451"). Keep it narrow, quiet, and spaced off
+      // the column beside it.
+      headerClassName: 'w-10 pe-4',
+      cellClassName: 'w-10 pe-4 text-muted-foreground',
+      cell: i => i.rowNumber ?? '—',
+      exportValue: i => i.rowNumber ?? null,
+      exportHeader: '#',
+    },
     {
       key: 'partNumber',
       header: isHe ? 'מק״ט' : 'Part',
       sortable: true,
       cell: i => (i.partNumber ? <ItemLink code={i.partNumber} showCode copyable={false} /> : '—'),
       exportValue: i => i.partNumber ?? '',
+    },
+    {
+      key: 'description',
+      header: isHe ? 'תיאור' : 'Description',
+      truncate: 'max-w-[240px]',
+      hideOnMobile: true,
+      title: i => i.description ?? '',
+      cell: i => <span dir="auto">{i.description ?? '—'}</span>,
+      exportValue: i => i.description ?? '',
     },
     {
       key: 'quantity',
@@ -306,130 +267,108 @@ export default function InquiryDetailPage({ params }: { params: Promise<{ id: st
         </StatGrid>
       )}
 
-      <div className="flex items-center gap-1 border-b">
-        {(['items', 'comparison'] as Tab[]).map(k => (
-          <button
-            key={k}
-            type="button"
-            onClick={() => setTab(k)}
-            className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
-              tab === k
-                ? 'border-primary text-foreground'
-                : 'border-transparent text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            {k === 'items' ? (isHe ? 'פריטים' : 'Items') : isHe ? 'השוואת ספקים' : 'Comparison'}
-          </button>
-        ))}
-      </div>
-
-      {tab === 'items' && (
-        <Card>
-          <CardContent className="p-3 sm:p-4">
-            <DataTable
-              rows={items.data?.items ?? []}
-              columns={itemColumns}
-              getRowKey={i => i.inquiry_item_id}
-              loading={items.isLoading}
-              error={items.isError ? (isHe ? 'לא ניתן לטעון פריטים' : 'Could not load items') : undefined}
-              onRetry={() => items.refetch()}
-              defaultSort={{ field: 'row_number', dir: 'asc' }}
-              exportFileName={`${inquiry?.inquiry_number ?? 'inquiry'}-items`}
-              minWidth="min-w-[840px]"
-              pageSize={50}
-              rowClassName={i =>
-                dupKeys.has(`${i.brand_name ?? ''}|${i.part_number}`)
-                  ? 'bg-red-500/5'
-                  : i.item_id === null
-                    ? 'bg-amber-500/5'
-                    : ''
-              }
-              labels={{ empty: isHe ? 'אין פריטים' : 'No items' }}
-            />
-            <p className="mt-2 text-xs text-muted-foreground">
+      <Card>
+        <CardContent className="space-y-3 p-3 sm:p-4">
+          {comparison.data && !comparison.data.computed ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">
               {isHe
-                ? 'רקע אדום — מק״ט שמופיע יותר מפעם אחת · רקע כתום — שורה שלא הותאמה לקטלוג'
-                : 'Red — part appears more than once · Amber — line never matched the catalogue'}
+                ? 'ההשוואה לא חושבה עדיין ב‑Xpart — אין מה להציג כאן.'
+                : 'Xpart has not computed this comparison yet — there is nothing to show.'}
             </p>
-          </CardContent>
-        </Card>
-      )}
-
-      {tab === 'comparison' && (
-        <Card>
-          <CardContent className="space-y-3 p-3 sm:p-4">
-            {comparison.data && !comparison.data.computed ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">
-                {isHe
-                  ? 'ההשוואה לא חושבה עדיין ב‑Xpart — אין מה להציג כאן.'
-                  : 'Xpart has not computed this comparison yet — there is nothing to show.'}
-              </p>
-            ) : (
-              <>
-                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                  <Badge variant="outline">
-                    {comparison.data?.status === 'fresh'
-                      ? isHe
-                        ? 'עדכני'
-                        : 'fresh'
-                      : (comparison.data?.status ?? '')}
-                  </Badge>
-                  {comparison.data?.computedAt && (
-                    <span>
-                      {isHe ? 'חושב ב־' : 'computed'} {comparison.data.computedAt.slice(0, 16).replace('T', ' ')}
-                    </span>
-                  )}
+          ) : (
+            <>
+              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                <span className="text-sm font-medium text-foreground">
+                  {isHe ? 'השוואת ספקים' : 'Supplier comparison'}
+                </span>
+                <Badge variant="outline">
+                  {comparison.data?.status === 'fresh'
+                    ? isHe
+                      ? 'עדכני'
+                      : 'fresh'
+                    : (comparison.data?.status ?? '')}
+                </Badge>
+                {comparison.data?.computedAt && (
                   <span>
-                    {isHe
-                      ? 'הנתונים מחושבים ב‑Xpart ומוצגים כאן כפי שהם'
-                      : 'Computed in Xpart, shown here as-is'}
+                    {isHe ? 'חושב ב־' : 'computed'} {comparison.data.computedAt.slice(0, 16).replace('T', ' ')}
                   </span>
-                  <XpartLink
-                    href={xpartUrl.comparison(id)}
-                    label={isHe ? 'חשב מחדש ב‑Xpart' : 'Recompute in Xpart'}
-                    className="ms-auto"
-                  />
-                </div>
+                )}
+                <span>
+                  {isHe
+                    ? 'הנתונים מחושבים ב‑Xpart ומוצגים כאן כפי שהם'
+                    : 'Computed in Xpart, shown here as-is'}
+                </span>
+              </div>
 
-                {suppliers.length > 0 && (
-                  <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
-                    {suppliers.map(s => (
-                      <div key={s.columnKey} className="rounded-md border p-2">
-                        <div className="truncate text-xs font-medium">{s.displayName ?? s.supplierName}</div>
-                        <div className="text-sm font-semibold tabular-nums">
+              {suppliers.length > 0 && (
+                <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
+                  {suppliers.map(s => {
+                    const isCheapest = s.columnKey === cheapestKey
+                    return (
+                      <div
+                        key={s.columnKey}
+                        className={
+                          'rounded-md border p-2 ' +
+                          (isCheapest
+                            ? 'border-emerald-500/40 bg-emerald-500/5'
+                            : 'bg-card')
+                        }
+                      >
+                        <div className="truncate text-xs font-medium">
+                          {s.displayName ?? s.supplierName}
+                        </div>
+                        <div
+                          className={
+                            'text-sm font-semibold tabular-nums ' +
+                            (isCheapest ? 'text-emerald-600 dark:text-emerald-400' : '')
+                          }
+                        >
                           {s.totalCostIls == null ? '—' : formatCurrency(s.totalCostIls)}
                         </div>
-                        <div className="text-[11px] text-muted-foreground">
+                        <div className="text-[11px] text-muted-foreground tabular-nums">
                           {formatNumber(s.itemsWithPrice ?? 0)}/{formatNumber(s.totalItems ?? 0)}
                           {s.avgMarginPct != null && ` · ${s.avgMarginPct.toFixed(0)}%`}
                         </div>
                       </div>
-                    ))}
-                  </div>
-                )}
+                    )
+                  })}
+                </div>
+              )}
 
-                <DataTable
-                  rows={snapshotItems}
-                  columns={comparisonColumns}
-                  getRowKey={i => i.inquiryItemId ?? `${i.rowNumber}`}
-                  loading={comparison.isLoading}
-                  error={comparison.isError ? (isHe ? 'לא ניתן לטעון השוואה' : 'Could not load comparison') : undefined}
-                  onRetry={() => comparison.refetch()}
-                  defaultSort={{ field: 'rowNumber', dir: 'asc' }}
-                  exportFileName={`${inquiry?.inquiry_number ?? 'inquiry'}-comparison`}
-                  // Static on purpose: a template-literal class is invisible to
-                  // Tailwind's scanner, so it would never be generated. Six
-                  // supplier columns is the most any round has had.
-                  minWidth="min-w-[1200px]"
-                  pageSize={50}
-                  mobileCard={false}
-                  labels={{ empty: isHe ? 'אין נתוני השוואה' : 'No comparison data' }}
-                />
-              </>
-            )}
-          </CardContent>
-        </Card>
-      )}
+              <DataTable
+                rows={snapshotItems}
+                columns={comparisonColumns}
+                getRowKey={i => i.inquiryItemId ?? `${i.rowNumber}`}
+                loading={comparison.isLoading}
+                error={comparison.isError ? (isHe ? 'לא ניתן לטעון השוואה' : 'Could not load comparison') : undefined}
+                onRetry={() => comparison.refetch()}
+                defaultSort={{ field: 'rowNumber', dir: 'asc' }}
+                exportFileName={`${inquiry?.inquiry_number ?? 'inquiry'}-comparison`}
+                // Static on purpose: a template-literal class is invisible to
+                // Tailwind's scanner, so it would never be generated. Six
+                // supplier columns is the most any round has had.
+                minWidth="min-w-[1200px]"
+                pageSize={50}
+                // A page of 50 lines is taller than the viewport, so the header
+                // scrolls away exactly when the supplier columns stop being
+                // self-explanatory. Capping the height gives the sticky header
+                // something to stick to.
+                maxHeight="65vh"
+                mobileCard={false}
+                rowClassName={i =>
+                  dupKeys.has(`${i.brandName ?? ''}|${i.partNumber ?? ''}`) ? 'bg-red-500/5' : ''
+                }
+                labels={{ empty: isHe ? 'אין נתוני השוואה' : 'No comparison data' }}
+              />
+              <p className="text-xs text-muted-foreground">
+                {isHe
+                  ? 'ירוק — המחיר הזול ביותר לשורה · רקע אדום — מק״ט שמופיע יותר מפעם אחת'
+                  : 'Green — cheapest price on the line · Red — part appears more than once'}
+              </p>
+            </>
+          )}
+        </CardContent>
+      </Card>
     </div>
   )
 }

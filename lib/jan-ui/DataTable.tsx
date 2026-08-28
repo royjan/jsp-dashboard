@@ -537,10 +537,16 @@ export function DataTable<TRow, TSortKey extends string = string>({
 
   // A sticky header is inert without a bounded scroll container, so give long
   // tables a cap by default rather than leaving the header silently broken.
+  //
+  // `pageSize` normally turns the automatic cap OFF — a 25-row page fits, and a
+  // scroll area nested in the page's own is worse than none. But an EXPLICIT
+  // maxHeight still wins: a wide grid with a 50-row page (the comparison one)
+  // scrolls past its header long before the pager, and there the caller is
+  // asking for the sticky header on purpose.
   const effectiveMaxHeight =
-    maxHeight === 'none' || pageSize
+    maxHeight === 'none'
       ? undefined
-      : (maxHeight ?? (rows.length > STICKY_MIN_ROWS ? DEFAULT_MAX_HEIGHT : undefined))
+      : (maxHeight ?? (!pageSize && rows.length > STICKY_MIN_ROWS ? DEFAULT_MAX_HEIGHT : undefined))
 
   // ----- selection helpers -----
   // NOTE: every hook must run before the `error` early-return below. This
@@ -674,7 +680,13 @@ export function DataTable<TRow, TSortKey extends string = string>({
     </div>
   )
 
+  // The scrolling grid, and the chrome under it (loader, pager, truncation
+  // notice) as SIBLINGS rather than children: once the container has a height
+  // cap, anything inside it scrolls with the rows, and a pager you have to
+  // scroll fifty rows to reach is a pager nobody finds. The container's
+  // `-mx-3 px-3` pair nets to zero, so chrome outside it stays aligned.
   const table = (
+    <>
     <div
       data-jan-ui="table"
       className={cn(
@@ -845,6 +857,7 @@ export function DataTable<TRow, TSortKey extends string = string>({
           </tfoot>
         )}
       </table>
+    </div>
       {loading && (
         <div className="flex items-center justify-center gap-2 py-2 text-xs text-muted-foreground" aria-live="polite">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -892,7 +905,7 @@ export function DataTable<TRow, TSortKey extends string = string>({
           </button>
         </div>
       )}
-    </div>
+    </>
   )
 
   if (!showToolbar) {
