@@ -20,6 +20,14 @@ interface AppSecrets {
 /** Local reference to fetched secrets so getSecret() can stay synchronous. */
 let cachedSecrets: Record<string, string> = {}
 
+/**
+ * Keys pulled individually by fetchSecretValue(), kept apart from cachedSecrets
+ * on purpose: anything landing in cachedSecrets becomes visible to every
+ * getSecret() caller in the process, which turns "read one connection string"
+ * into "switch on every gate in the app".
+ */
+const onDemandSecrets: Record<string, string> = {}
+
 export async function loadFromSecretsManager(): Promise<AppSecrets> {
   const secretId = process.env.APP_SECRETS_ID || process.env.AWS_SECRETS_ID
   if (!secretId) return cachedSecrets as AppSecrets // env-only (no SM configured)
@@ -57,14 +65,22 @@ export async function loadFromSecretsManager(): Promise<AppSecrets> {
 export async function fetchSecretValue(key: string, secretId = 'config'): Promise<string> {
   if (cachedSecrets[key]) return cachedSecrets[key]
   if (process.env[key]) return process.env[key]!
+  const already = onDemandSecrets[key]
+  if (already !== undefined) return already
   try {
     const { SecretsManagerClient, GetSecretValueCommand } = await import('@aws-sdk/client-secrets-manager')
     const client = new SecretsManagerClient({ region: process.env.AWS_REGION || 'eu-central-1' })
     const res = await client.send(new GetSecretValueCommand({ SecretId: secretId }))
     if (res.SecretString) {
       const parsed = JSON.parse(res.SecretString) as Record<string, string>
-      cachedSecrets = { ...cachedSecrets, ...parsed }
-      return parsed[key] ?? ''
+      // ONLY the requested key, and into a map getSecret() does not read.
+      // Merging the whole secret into cachedSecrets is what the comment above
+      // says this function exists to avoid — and doing it anyway silently gated
+      // every /api/cron/* route the moment any Xpart page was loaded, because
+      // CRON_SECRET came along for the ride and the jan-box timers send no
+      // bearer token. Whoever needs another key asks for it by name.
+      onDemandSecrets[key] = parsed[key] ?? ''
+      return onDemandSecrets[key]
     }
   } catch (e) {
     console.warn(`[aws-secrets] could not read ${key} from ${secretId}:`, e instanceof Error ? e.message : e)
