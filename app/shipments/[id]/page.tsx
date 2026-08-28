@@ -11,6 +11,7 @@ import { useLocale } from '@/lib/locale-context'
 import { formatNumber } from '@/lib/constants'
 import { ItemLink } from '@/components/shared/ItemLink'
 import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
+import { ShipmentOrderCandidates } from '@/components/xpart/ShipmentOrderCandidates'
 import { ArrowRight, ArrowLeft, AlertTriangle, PackageCheck, Container } from 'lucide-react'
 import { formatDate } from '@/lib/format'
 
@@ -165,6 +166,14 @@ export default function ShipmentDetailPage() {
               ))}
             </div>
           )}
+
+          {/* Which PO did this come from? The two systems share no key, so this
+              is the supplier's orders that predate the scan, for a human to pick. */}
+          <ShipmentOrderCandidates
+            supplierCode={sh.matchedSupplier?.code}
+            arrivedOn={sh.shipmentDate}
+            isHe={isHe}
+          />
 
           <Card>
             <CardHeader className="pb-2"><CardTitle className="text-base">{t('פריטים', 'Products')} ({formatNumber(products.length)})</CardTitle></CardHeader>

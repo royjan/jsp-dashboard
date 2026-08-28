@@ -23,6 +23,8 @@ import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
 import { StatGrid, StatTile } from '@/components/shared/StatTile'
 import { formatNumber } from '@/lib/format'
 import { useLocale } from '@/lib/locale-context'
+import { XpartLink } from '@/components/xpart/XpartLink'
+import { xpartUrl } from '@/lib/xpart-links'
 import type { Provenance } from '@/lib/provenance'
 
 interface OpenOrder {
@@ -153,6 +155,13 @@ export default function OnTheWayPage() {
       header: isHe ? 'פנייה' : 'Inquiry',
       hideOnMobile: true,
       cell: o => o.inquiry_number ?? '—',
+    },
+    {
+      key: 'xpart',
+      header: '',
+      // Chrome, not data — excluded from the xlsx export.
+      exportValue: null,
+      cell: o => <XpartLink href={xpartUrl.order(o.order_id)} />,
     },
   ]
 

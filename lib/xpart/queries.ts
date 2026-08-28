@@ -541,3 +541,131 @@ export async function listInvoices(): Promise<XpartInvoice[]> {
     [T],
   )
 }
+
+export interface XpartSupplierContext {
+  supplier_id: string
+  code: string
+  name: string
+  supplier_role: string | null
+  currency: string | null
+  default_price_term: string | null
+  finansit_code: string | null
+  open_orders: number
+  open_items: number
+  open_value_by_currency: Record<string, number>
+  last_order_date: string | null
+  price_lists: Array<{
+    price_list_id: string
+    name: string
+    status: string
+    currency: string
+    total_items: number | null
+    effective_date: string | null
+  }>
+}
+
+/**
+ * Everything Xpart knows about one supplier, addressed by its ERP code.
+ *
+ * The join between the two systems is suppliers.finansit_code — the same value
+ * the dashboard uses as supplier_profiles.supplier_code. Three of Xpart's
+ * eleven suppliers have no ERP account (Lubinski, ORLYD, SOEX) and simply do
+ * not resolve, which is a null rather than an error.
+ */
+export async function getSupplierContext(finansitCode: string): Promise<XpartSupplierContext | null> {
+  const [supplier] = await xpartQuery<{
+    supplier_id: string
+    code: string
+    name: string
+    supplier_role: string | null
+    currency: string | null
+    default_price_term: string | null
+    finansit_code: string | null
+  }>(
+    `SELECT supplier_id, code, name, supplier_role, currency, default_price_term, finansit_code
+       FROM suppliers
+      WHERE tenant_id = $1 AND btrim(finansit_code) = btrim($2) AND is_active
+      LIMIT 1`,
+    [T, finansitCode],
+  )
+  if (!supplier) return null
+
+  const [orders, lists] = await Promise.all([
+    xpartQuery<{ currency: string | null; n: string; items: string; value: number; last_date: string | null }>(
+      `SELECT currency, count(*)::text AS n, COALESCE(sum(total_items),0)::text AS items,
+              COALESCE(sum(total_value),0)::float8 AS value, max(order_date)::text AS last_date
+         FROM orders
+        WHERE tenant_id = $1 AND supplier_id = $2 AND status = 'submitted'
+        GROUP BY currency`,
+      [T, supplier.supplier_id],
+    ),
+    xpartQuery<{
+      price_list_id: string
+      name: string
+      status: string
+      currency: string
+      total_items: number | null
+      effective_date: string | null
+    }>(
+      `SELECT price_list_id, btrim(name, E' \t\r\n') AS name, status, currency, total_items, effective_date
+         FROM supplier_price_lists
+        WHERE tenant_id = $1 AND supplier_id = $2 AND status IN ('active','archived')
+        ORDER BY effective_date DESC NULLS LAST
+        LIMIT 12`,
+      [T, supplier.supplier_id],
+    ),
+  ])
+
+  const byCurrency: Record<string, number> = {}
+  let openOrders = 0
+  let openItems = 0
+  let lastOrderDate: string | null = null
+  for (const o of orders) {
+    openOrders += Number(o.n)
+    openItems += Number(o.items)
+    byCurrency[o.currency ?? '—'] = (byCurrency[o.currency ?? '—'] ?? 0) + Number(o.value)
+    if (o.last_date && (!lastOrderDate || o.last_date > lastOrderDate)) lastOrderDate = o.last_date
+  }
+
+  return {
+    ...supplier,
+    open_orders: openOrders,
+    open_items: openItems,
+    open_value_by_currency: byCurrency,
+    last_order_date: lastOrderDate,
+    price_lists: lists,
+  }
+}
+
+/**
+ * Xpart purchase orders that could correspond to a warehouse shipment.
+ *
+ * The two systems have no shared key — a scanned carton carries no order number
+ * — so this is a candidate list, not a match: the supplier's orders placed
+ * before the goods showed up, newest first. Naming it "likely" rather than
+ * "the" order is the point; guessing wrong here would attach a scan to the
+ * wrong PO, and the screen lets a human pick.
+ */
+export async function getCandidateOrdersForShipment(
+  finansitCode: string,
+  arrivedOn: string | null,
+): Promise<OpenOrder[]> {
+  return xpartQuery<OpenOrder>(
+    `SELECT o.order_id, o.order_number,
+            s.name AS supplier_name, s.finansit_code AS supplier_finansit_code,
+            o.status, o.order_date, o.expected_delivery,
+            o.finansit_doc_number, o.finansit_doc_format,
+            o.total_items, o.total_value::float8 AS total_value, o.currency,
+            i.inquiry_number,
+            (CURRENT_DATE - o.order_date::date) AS days_open
+       FROM orders o
+       JOIN suppliers s ON s.supplier_id = o.supplier_id
+       LEFT JOIN inquiries i ON i.inquiry_id = o.inquiry_id
+      WHERE o.tenant_id = $1
+        AND btrim(s.finansit_code) = btrim($2)
+        AND ($3::date IS NULL OR o.order_date::date <= $3::date)
+      ORDER BY o.order_date DESC NULLS LAST
+      LIMIT 8`,
+    [T, finansitCode, arrivedOn],
+  )
+}

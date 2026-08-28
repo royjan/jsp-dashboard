@@ -22,6 +22,8 @@ import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
 import { ItemLink } from '@/components/shared/ItemLink'
 import { formatCurrency, formatNumber } from '@/lib/format'
 import { useLocale } from '@/lib/locale-context'
+import { XpartLink } from '@/components/xpart/XpartLink'
+import { xpartUrl } from '@/lib/xpart-links'
 import type { Provenance } from '@/lib/provenance'
 
 interface Detail {
@@ -304,6 +306,7 @@ export default function PriceListDetailPage({ params }: { params: Promise<{ id: 
               </Badge>
             )}
             {detail?.is_promotional && <Badge variant="outline">{isHe ? 'מבצע' : 'promo'}</Badge>}
+            <XpartLink href={xpartUrl.priceList(id)} label={isHe ? 'פתח ב‑Xpart' : 'Open in Xpart'} />
           </div>
         }
       />

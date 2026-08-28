@@ -22,6 +22,8 @@ import { StatGrid, StatTile } from '@/components/shared/StatTile'
 import { ItemLink } from '@/components/shared/ItemLink'
 import { formatCurrency, formatNumber } from '@/lib/format'
 import { useLocale } from '@/lib/locale-context'
+import { XpartLink } from '@/components/xpart/XpartLink'
+import { xpartUrl } from '@/lib/xpart-links'
 import type { Provenance } from '@/lib/provenance'
 
 interface Inquiry {
@@ -282,6 +284,7 @@ export default function InquiryDetailPage({ params }: { params: Promise<{ id: st
             : undefined
         }
         provenance={head.data?.provenance}
+        actions={<XpartLink href={xpartUrl.inquiry(id)} label={isHe ? 'פתח ב‑Xpart' : 'Open in Xpart'} />}
       />
 
       {(head.data?.coverage.length ?? 0) > 0 && (
@@ -381,6 +384,11 @@ export default function InquiryDetailPage({ params }: { params: Promise<{ id: st
                       ? 'הנתונים מחושבים ב‑Xpart ומוצגים כאן כפי שהם'
                       : 'Computed in Xpart, shown here as-is'}
                   </span>
+                  <XpartLink
+                    href={xpartUrl.comparison(id)}
+                    label={isHe ? 'חשב מחדש ב‑Xpart' : 'Recompute in Xpart'}
+                    className="ms-auto"
+                  />
                 </div>
 
                 {suppliers.length > 0 && (

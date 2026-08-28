@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { useLocale } from '@/lib/locale-context'
 import { useSupplierDetail, useUpdateSupplier, useSupplierOrders, useSupplierShipments } from '@/hooks/use-suppliers'
+import { XpartSupplierStrip } from '@/components/xpart/XpartSupplierStrip'
 import {
   Loader2, AlertCircle, ArrowRight, Save,
   Package, TrendingDown, Truck, FileSpreadsheet, Container,
@@ -97,6 +98,10 @@ export default function SupplierLayout({ children }: { children: React.ReactNode
         <ArrowRight className="h-3 w-3 rotate-180" />
         <span className="text-foreground">{displayName}</span>
       </div>
+
+      {/* The other half of this supplier: what we have on order and what they
+          charge, from Xpart. Silent when the supplier is not in Xpart. */}
+      <XpartSupplierStrip code={code} />
 
       {/* Profile card */}
       <Card>
