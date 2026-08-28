@@ -1,5 +1,5 @@
 import { Pool } from 'pg'
-import { getSecret, initializeSecrets } from './aws-secrets'
+import { fetchSecretValue, getSecret, initializeSecrets } from './aws-secrets'
 
 /**
  * Read-only connection to Xpart-v2's Supabase Postgres.
@@ -22,7 +22,9 @@ let pool: Pool | null = null
 export async function getXpartPool(): Promise<Pool> {
   if (pool) return pool
   await initializeSecrets()
-  const raw = getSecret('XPART_DB_URL')
+  // Env first (local .env.local, or an injected var); Secrets Manager second,
+  // because the deploy injects env directly and never loads the secret itself.
+  const raw = getSecret('XPART_DB_URL') || (await fetchSecretValue('XPART_DB_URL'))
   if (!raw) throw new Error('XPART_DB_URL not configured')
   // node-postgres lets sslmode= in the connection string win over the ssl
   // option, and sslmode=require then demands a CA it does not have for

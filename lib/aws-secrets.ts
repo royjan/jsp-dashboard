@@ -36,6 +36,42 @@ export async function loadFromSecretsManager(): Promise<AppSecrets> {
   return cachedSecrets as AppSecrets
 }
 
+/**
+ * Read one key straight out of a Secrets Manager secret, on demand.
+ *
+ * The deploy does not set APP_SECRETS_ID, so loadFromSecretsManager() is a
+ * no-op and getSecret() only ever sees the env vars Dokploy injects. The
+ * container does carry AWS credentials, though, and the "config" secret holds
+ * everything — so a key that is in Secrets Manager but not in the injected env
+ * is reachable, just not by the path above.
+ *
+ * Why not simply default APP_SECRETS_ID to "config": that would pull the whole
+ * secret in, including CRON_SECRET, which would immediately start gating every
+ * /api/cron/* route. The jan-box systemd timers call those without a bearer
+ * token and would begin failing. Opening that up is a deliberate decision with
+ * its own rollout, not a side effect of wanting one connection string.
+ *
+ * Result is cached in the same map getSecret() reads, so this costs one API
+ * call per process.
+ */
+export async function fetchSecretValue(key: string, secretId = 'config'): Promise<string> {
+  if (cachedSecrets[key]) return cachedSecrets[key]
+  if (process.env[key]) return process.env[key]!
+  try {
+    const { SecretsManagerClient, GetSecretValueCommand } = await import('@aws-sdk/client-secrets-manager')
+    const client = new SecretsManagerClient({ region: process.env.AWS_REGION || 'eu-central-1' })
+    const res = await client.send(new GetSecretValueCommand({ SecretId: secretId }))
+    if (res.SecretString) {
+      const parsed = JSON.parse(res.SecretString) as Record<string, string>
+      cachedSecrets = { ...cachedSecrets, ...parsed }
+      return parsed[key] ?? ''
+    }
+  } catch (e) {
+    console.warn(`[aws-secrets] could not read ${key} from ${secretId}:`, e instanceof Error ? e.message : e)
+  }
+  return ''
+}
+
 export function getSecret(key: string, fallback: string = ''): string {
   if (cachedSecrets[key]) return cachedSecrets[key]
   return process.env[key] || fallback
