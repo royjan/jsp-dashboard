@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { initializeSecrets } from '@/lib/aws-secrets'
 import { client } from '@/lib/finansit-client'
 import { query } from '@/lib/db'
+import { getCached, setCache } from '@/lib/redis-client'
+
+const SEARCH_CACHE_TTL = 60
 
 /**
  * Partly-catalog matches for codes the ERP can't find — above all TOYOTA
@@ -119,6 +122,16 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ items: [], customers: [], semantic: [], catalog: [] })
   }
 
+  // A minute, because this now costs four upstream calls and the palette fires
+  // it per keystroke: typing a code walks "19", "192", "1920", "1920L" ... and
+  // every backspace, every reopen and every second person searching the same
+  // part re-walks it. Short enough that a quantity changing in the ERP shows up
+  // in a search while you are still looking for it. The smart half has cached
+  // for an hour all along; the two are asked together and only one was.
+  const cacheKey = `search:v2:${q}`
+  const cached = await getCached<{ items: unknown[]; customers: unknown[]; semantic: unknown[]; catalog: unknown[] }>(cacheKey)
+  if (cached) return NextResponse.json(cached)
+
   try {
     await initializeSecrets()
 
@@ -155,7 +168,9 @@ export async function GET(request: NextRequest) {
       searchPartlyCatalog(q),
     ])
 
-    return NextResponse.json({ items, customers, semantic, catalog })
+    const payload = { items, customers, semantic, catalog }
+    await setCache(cacheKey, payload, SEARCH_CACHE_TTL).catch(() => {})
+    return NextResponse.json(payload)
   } catch (error) {
     console.error('[API /search] Error:', error)
     return NextResponse.json(

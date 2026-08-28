@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRecentDestinations, recordDestination, clearRecentDestinations } from '@/lib/recent-destinations'
 import { OPEN_COMMAND_PALETTE } from '@/lib/command-palette'
 import { Command } from 'cmdk'
@@ -49,9 +49,18 @@ interface SearchResult {
 export function CommandPalette() {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
-  const [searchResults, setSearchResults] = useState<SearchResult | null>(null)
+  // The two endpoints are held apart rather than merged on arrival, so the one
+  // that answers first can paint without waiting for the other. They are not
+  // equally fast: the exact search goes to the ERP and takes ~0.7s, the smart
+  // one is served from Redis in ~0.25s, and merging them into a single state
+  // meant every result waited for the slower of the two.
+  const [exactResults, setExactResults] = useState<SearchResult | null>(null)
+  const [smartItems, setSmartItems] = useState<NonNullable<SearchResult['semantic']> | null>(null)
   const [searching, setSearching] = useState(false)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  /** Bumped per search; a response from an earlier one is dropped, not painted. */
+  const searchSeq = useRef(0)
+  const inputRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
   const { theme, setTheme } = useTheme()
   const moneyHidden = useMoneyHidden()
@@ -111,50 +120,49 @@ export function CommandPalette() {
     if (debounceRef.current) clearTimeout(debounceRef.current)
 
     if (!query || query.length < 2) {
-      setSearchResults(null)
+      searchSeq.current++
+      setExactResults(null)
+      setSmartItems(null)
       setSearching(false)
       return
     }
 
     setSearching(true)
-    debounceRef.current = setTimeout(async () => {
+    debounceRef.current = setTimeout(() => {
       const q = encodeURIComponent(query)
+      const seq = ++searchSeq.current
+      const current = () => seq === searchSeq.current
+      let outstanding = 2
+      const settle = () => {
+        outstanding -= 1
+        if (current() && outstanding === 0) setSearching(false)
+      }
+
       // Two endpoints, because /api/search only reaches for the embeddings when
       // the query LOOKS like a sentence, and caps them at five. That heuristic
       // is why this palette and the /search page returned different things for
       // the same words: the page always asked, so it found the part you could
       // only describe ("משאבת הזרקה") while ⌘K came back empty and sent you to
       // the sidebar. Ask outright, and there is one search again.
-      const [exact, semantic] = await Promise.allSettled([
-        fetch(`/api/search?q=${q}`).then(r => (r.ok ? r.json() : null)),
-        fetch(`/api/search/semantic?q=${q}&limit=8`).then(r => (r.ok ? r.json() : null)),
-      ])
-
-      const base = exact.status === 'fulfilled' && exact.value ? exact.value : null
-      const smart =
-        semantic.status === 'fulfilled' && semantic.value?.items?.length
-          ? semantic.value.items
-          : base?.semantic
-
-      // Semantic recall is fuzzy by construction, so anything the exact search
-      // already matched is a duplicate row for the same part, not a second hit.
-      const exactCodes = new Set(
-        [...(base?.items ?? []), ...(base?.catalog ?? [])].map((i: { code: string }) =>
-          i.code?.toUpperCase(),
-        ),
-      )
-
-      if (base || smart) {
-        setSearchResults({
-          items: base?.items ?? [],
-          customers: base?.customers ?? [],
-          catalog: base?.catalog ?? [],
-          semantic: (smart ?? []).filter(
-            (i: { code: string }) => !exactCodes.has(i.code?.toUpperCase()),
-          ),
+      //
+      // Each lands on its own. Typing a code used to show nothing for as long as
+      // the slowest half took; now the codes appear as soon as the ERP answers
+      // and the smart group fills in underneath them.
+      fetch(`/api/search?q=${q}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .catch(() => null)
+        .then((data) => {
+          if (current() && data) setExactResults(data)
         })
-      }
-      setSearching(false)
+        .finally(settle)
+
+      fetch(`/api/search/semantic?q=${q}&limit=8`)
+        .then((r) => (r.ok ? r.json() : null))
+        .catch(() => null)
+        .then((data) => {
+          if (current() && data) setSmartItems(data.items ?? [])
+        })
+        .finally(settle)
     }, 300)
 
     return () => {
@@ -162,11 +170,28 @@ export function CommandPalette() {
     }
   }, [query])
 
+  // Semantic recall is fuzzy by construction, so anything the exact search
+  // already matched is a duplicate row for the same part, not a second hit.
+  // Deduped here rather than on arrival because the two halves no longer arrive
+  // together -- the codes to dedup against may land after the rows to dedup.
+  const smartRows = useMemo(() => {
+    const exactCodes = new Set(
+      [...(exactResults?.items ?? []), ...(exactResults?.catalog ?? [])].map(
+        (i: { code: string }) => i.code?.toUpperCase(),
+      ),
+    )
+    // `exactResults.semantic` is the fallback the exact endpoint folds in itself
+    // when it decided the query looked like a sentence.
+    const raw = (smartItems?.length ? smartItems : exactResults?.semantic) ?? []
+    return raw.filter((i: { code: string }) => !exactCodes.has(i.code?.toUpperCase()))
+  }, [exactResults, smartItems])
+
   const runAction = useCallback(
     (action: () => void) => {
       setOpen(false)
       setQuery('')
-      setSearchResults(null)
+      setExactResults(null)
+      setSmartItems(null)
       action()
     },
     []
@@ -179,11 +204,26 @@ export function CommandPalette() {
     }
   }, [queryClient])
 
+  // ⌘K should leave you typing, not hunting for the box.
+  //
+  // `autoFocus` alone does not do it reliably: the palette mounts in the same
+  // commit as the keydown that opened it, and whatever had focus -- the trigger
+  // button, a nav link, the page behind -- can still hold it when the browser
+  // gets around to the autofocus. Re-asserting it on the next frame, after the
+  // dialog is painted, is the difference between typing "1920LL" into the
+  // palette and typing it into nothing.
+  useEffect(() => {
+    if (!open) return
+    const frame = requestAnimationFrame(() => inputRef.current?.focus())
+    return () => cancelAnimationFrame(frame)
+  }, [open])
+
   // Reset state when closing
   useEffect(() => {
     if (!open) {
       setQuery('')
-      setSearchResults(null)
+      setExactResults(null)
+      setSmartItems(null)
       setSearching(false)
     }
   }, [open])
@@ -224,6 +264,8 @@ export function CommandPalette() {
               <div className="flex items-center border-b px-3">
                 <Search className="h-4 w-4 shrink-0 text-muted-foreground me-2" />
                 <Command.Input
+                  ref={inputRef}
+                  autoFocus
                   value={query}
                   onValueChange={setQuery}
                   placeholder={t('cmd.searchPlaceholder')}
@@ -238,12 +280,12 @@ export function CommandPalette() {
                 </Command.Empty>
 
                 {/* Search Results: Items */}
-                {searchResults?.items && searchResults.items.length > 0 && (
+                {exactResults?.items && exactResults.items.length > 0 && (
                   <Command.Group
                     heading={t('cmd.items')}
                     className="[&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5"
                   >
-                    {searchResults.items.map((item) => (
+                    {exactResults.items.map((item) => (
                       <Command.Item
                         key={`item-${item.code}`}
                         value={`item ${item.code} ${item.name || ''}`}
@@ -298,12 +340,12 @@ export function CommandPalette() {
                 )}
 
                 {/* Search Results: Partly catalog (Toyota/MG codes not in the ERP) */}
-                {searchResults?.catalog && searchResults.catalog.length > 0 && (
+                {exactResults?.catalog && exactResults.catalog.length > 0 && (
                   <Command.Group
                     heading={t('cmd.catalog')}
                     className="[&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5"
                   >
-                    {searchResults.catalog.map((item) => (
+                    {exactResults.catalog.map((item) => (
                       <Command.Item
                         key={`cat-${item.code}`}
                         value={`catalog ${item.code} ${item.description || ''}`}
@@ -338,12 +380,12 @@ export function CommandPalette() {
                 )}
 
                 {/* Search Results: Customers */}
-                {searchResults?.customers && searchResults.customers.length > 0 && (
+                {exactResults?.customers && exactResults.customers.length > 0 && (
                   <Command.Group
                     heading={t('cmd.customers')}
                     className="[&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5"
                   >
-                    {searchResults.customers.map((cust) => {
+                    {exactResults.customers.map((cust) => {
                       const code = cust.code || cust.customer_code || ''
                       const name = cust.name || cust.customer_name || ''
                       return (
@@ -377,12 +419,12 @@ export function CommandPalette() {
                 )}
 
                 {/* Search Results: Semantic (Smart Search) */}
-                {searchResults?.semantic && searchResults.semantic.length > 0 && (
+                {smartRows.length > 0 && (
                   <Command.Group
                     heading={t('cmd.smartSearch')}
                     className="[&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5"
                   >
-                    {searchResults.semantic.map((item) => (
+                    {smartRows.map((item) => (
                       <Command.Item
                         key={`sem-${item.code}`}
                         value={`semantic ${item.code} ${item.name}`}
