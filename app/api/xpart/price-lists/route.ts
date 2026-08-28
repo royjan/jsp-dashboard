@@ -7,7 +7,11 @@ import { getCached, setCache } from '@/lib/redis-client'
 import { CACHE_TTL } from '@/lib/constants'
 import type { Provenance } from '@/lib/provenance'
 
-const CACHE_KEY = 'xpart:price-lists:v1'
+// Bump the version whenever the row SHAPE changes, not just the query.
+// Adding supplier_id/finansit_code under the old key shipped a cache full of
+// rows without them, so every supplier rendered as unlinkable for six hours —
+// the code was right and the answer was stale.
+const CACHE_KEY = 'xpart:price-lists:v2'
 
 /** GET /api/xpart/price-lists — every supplier price list Xpart holds. */
 export async function GET() {
