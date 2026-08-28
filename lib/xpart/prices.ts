@@ -67,11 +67,18 @@ export type SupplierCatalogSort =
   | 'margin_pct'
   | 'cheaper_elsewhere_ils'
 
+/**
+ * Bare column names, not qualified ones: the ORDER BY runs on the outer query,
+ * which selects FROM joined — `m` and `r` only exist inside that CTE. Qualifying
+ * them here fails with "missing FROM-clause entry for table m", and only for the
+ * sorts that carry a prefix, which is why it survived a test that happened to
+ * use one of the two unqualified keys.
+ */
 const SORT_SQL: Record<SupplierCatalogSort, string> = {
-  item_code: 'm.item_code',
-  price: 'm.price',
-  landed_ils: 'm.landed_ils',
-  retail_ils: 'r.retail_ils',
+  item_code: 'item_code',
+  price: 'price',
+  landed_ils: 'landed_ils',
+  retail_ils: 'retail_ils',
   margin_pct: 'margin_pct',
   cheaper_elsewhere_ils: 'cheaper_elsewhere_ils',
 }
