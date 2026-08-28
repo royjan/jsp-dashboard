@@ -7,6 +7,8 @@ import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
 import { deriveBrand, brandChipClasses } from '@/lib/brand'
 import { ItemLink } from '@/components/shared/ItemLink'
 import { PartLinksCard } from '@/components/items/PartLinksCard'
+import { SupplierPricesCard } from '@/components/xpart/SupplierPricesCard'
+import { ItemAliasesCard } from '@/components/xpart/ItemAliasesCard'
 import { useLocale } from '@/lib/locale-context'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -688,6 +690,14 @@ export default function ItemDetailPage({ params }: { params: Promise<{ code: str
       {/* Which scanned vehicles carry this part — same card the catalog-only
           view shows, previously missing here entirely. */}
       <FitsCard fits={data.fits} isHe={isHe} open={vehiclesOpen} setOpen={setVehiclesOpen} />
+
+      {/* What each supplier charges for this part (Xpart price lists) — the buy
+          side of the card, next to our own cost and the shelf price above. */}
+      <SupplierPricesCard code={decodedCode} isHe={isHe} />
+
+      {/* Every name the part goes by — the single name above is one source's
+          wording, chosen by a precedence chain that says nothing about which. */}
+      <ItemAliasesCard code={decodedCode} isHe={isHe} />
 
       {/* Cross-brand equivalent parts (partly.part_links) + manual linking */}
       <PartLinksCard code={decodedCode} links={partLinks} isHe={isHe} />
