@@ -495,7 +495,7 @@ export function CommandPalette() {
                     and a recents list competing with them is noise. */}
                 {!query && recents.length > 0 && (
                   <Command.Group
-                    heading="נפתחו לאחרונה"
+                    heading={t('recentlyOpened')}
                     className="[&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5"
                   >
                     {recents.map((r) => (
@@ -547,7 +547,18 @@ export function CommandPalette() {
                         <Command.Item
                           key={item.href}
                           value={`nav ${parent ? `${parent} ` : ''}${t(item.labelKey)} ${item.href}`}
-                          onSelect={() => runAction(() => router.push(item.href))}
+                          onSelect={() => runAction(() => {
+                            // `kind: 'page'` had NO writer anywhere — the store defined it,
+                            // nothing recorded it. So the surfaces that want "screens you
+                            // opened recently" (the phone sheet) had an always-empty list.
+                            recordDestination({
+                              href: item.href,
+                              label: t(item.labelKey),
+                              sublabel: parent ?? undefined,
+                              kind: 'page',
+                            })
+                            router.push(item.href)
+                          })}
                           className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm cursor-pointer aria-selected:bg-accent aria-selected:text-accent-foreground"
                         >
                           <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />

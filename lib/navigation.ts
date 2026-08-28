@@ -357,6 +357,20 @@ export const MOBILE_PRIMARY: NavFlatItem[] = itemsFor('mobile').filter((i) => i.
 export const MOBILE_MORE: NavFlatItem[] = itemsFor('mobile').filter((i) => !i.mobilePrimary)
 
 /**
+ * The same destinations as MOBILE_MORE, but STILL IN THEIR SECTIONS.
+ *
+ * The phone sheet used to render MOBILE_MORE, which is `itemsFor` — and `itemsFor` exists
+ * precisely to throw the grouping away. Forty-eight destinations then arrived as one flat
+ * icon grid with no headings, on the surface with the least room to make sense of them,
+ * while the sidebar rendered the identical tree grouped. The grouping was never missing;
+ * mobile was the only surface discarding it.
+ */
+export const MOBILE_MORE_SECTIONS: Array<{ id: string; labelKey: TranslationKey; items: NavFlatItem[] }> =
+  flatSectionsFor('mobile')
+    .map((s) => ({ ...s, items: s.items.filter((i) => !i.mobilePrimary) }))
+    .filter((s) => s.items.length > 0)
+
+/**
  * Active-state test shared by every surface, so a route cannot read as active
  * in one place and inactive in another.
  *
