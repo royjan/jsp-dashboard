@@ -20,6 +20,7 @@ import type { TranslationKey } from '@/lib/i18n'
 import { formatCurrency, formatNumber } from '@/lib/format'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
 import { PageHeader } from '@/components/shared/PageHeader'
+import { PricingTabs } from '@/components/shared/PricingTabs'
 
 interface ElasticityTier {
   label: 'low' | 'mid' | 'high'
@@ -296,6 +297,7 @@ export default function PricingPage() {
           <CardContent className="p-3 md:p-4">
             <div className="flex items-center gap-2 text-muted-foreground text-xs md:text-sm mb-2">
               <TrendingUp className="h-4 w-4 shrink-0" />
+      <PricingTabs />
               <span>{t('raisePriceCandidates')}</span>
             </div>
             <div className="text-2xl font-bold text-emerald-500">

@@ -21,6 +21,7 @@ import {
 import { useMoneyHidden } from '@/lib/use-money-hidden'
 import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
 import { PageHeader } from '@/components/shared/PageHeader'
+import { PricingTabs } from '@/components/shared/PricingTabs'
 
 // Margin buckets, in the order FINAPI emits them. `below_cost` is deliberately
 // its own bucket and its own colour — a -3% part and a +3% part are not
@@ -176,6 +177,7 @@ function MarginContent() {
   return (
     <div className="space-y-4 md:space-y-6">
       <PageHeader title={t('margin')} icon={Percent} />
+      <PricingTabs />
       {/* Cost-pending notice */}
       {costPending && (
         <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm">

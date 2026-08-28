@@ -21,6 +21,7 @@ import type { CompareRow, CompetitorCell } from '@/app/api/analytics/competitors
 import type { TranslationKey } from '@/lib/i18n'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
 import { PageHeader } from '@/components/shared/PageHeader'
+import { PricingTabs } from '@/components/shared/PricingTabs'
 
 type SortField = 'code' | 'ourPrice' | 'ourStock' | 'minNet' | 'spread' | 'sold'
 type T = (k: TranslationKey) => string
@@ -465,6 +466,7 @@ function CompetitorsPageInner() {
         actions={
           <Button variant={showUploader ? 'secondary' : 'default'} size="sm" onClick={() => setShowUploader(v => !v)}>
             <Upload className="h-4 w-4 me-1.5" />
+      <PricingTabs />
             {t('competitors.uploadFile')}
           </Button>
         }
