@@ -120,20 +120,31 @@ function ReportContent() {
     }))
   }, [data])
 
+  // The three years this section compares. These used to be the string literals
+  // '2023'/'2024'/'2025', so the chart, the table and both their titles quietly
+  // went stale a year after they were written — in 2026 the page was still
+  // showing 2023-2025 under a heading that said so, which reads as current.
+  const compareYears = useMemo(() => {
+    const years = (data?.monthly_revenue || []).map((r: any) => Number(r.year))
+    const latest = years.length ? Math.max(...years) : new Date().getFullYear()
+    return { cur: latest, prev: latest - 1, prev2: latest - 2 }
+  }, [data])
+
   const monthlyCompare = useMemo(() => {
     if (!data?.monthly_revenue) return []
-    const byYearMonth: Record<string, Record<number, number>> = {}
+    const byYearMonth: Record<number, Record<number, number>> = {}
     for (const r of data.monthly_revenue) {
-      if (!byYearMonth[r.year]) byYearMonth[r.year] = {}
-      byYearMonth[r.year][r.month] = Math.round(r.revenue)
+      const y = Number(r.year)
+      if (!byYearMonth[y]) byYearMonth[y] = {}
+      byYearMonth[y][r.month] = Math.round(r.revenue)
     }
     return Array.from({ length: 12 }, (_, i) => ({
       month: monthLabels[i],
-      '2023': byYearMonth['2023']?.[i + 1] || 0,
-      '2024': byYearMonth['2024']?.[i + 1] || 0,
-      '2025': byYearMonth['2025']?.[i + 1] || 0,
+      prev2: byYearMonth[compareYears.prev2]?.[i + 1] || 0,
+      prev: byYearMonth[compareYears.prev]?.[i + 1] || 0,
+      cur: byYearMonth[compareYears.cur]?.[i + 1] || 0,
     }))
-  }, [data, monthLabels])
+  }, [data, monthLabels, compareYears])
 
   const seasonalData = useMemo(() => {
     if (!data?.seasonality) return []
@@ -157,15 +168,41 @@ function ReportContent() {
     return data.customer_retention
   }, [data])
 
-  // Enriched, pre-computed rows for the sortable revenue table
+  const ytd = data?.revenue_ytd ?? null
+
+  // Enriched, pre-computed rows for the sortable revenue table.
+  //
+  // Two things this has to avoid. Comparing against the PREVIOUS ROW silently
+  // treats a missing year as if it were last year, so a gap in the data reads as
+  // growth. And comparing a year still in progress against a complete one
+  // guarantees a double-digit fake decline every January — so the current year
+  // is compared year-to-date against the same window a year earlier, which is
+  // the number the endpoint computes in `revenue_ytd`.
   const revenueRows = useMemo(() => {
-    return revenueChartData.map((r: any, i: number) => {
-      const prev = i > 0 ? revenueChartData[i - 1] : null
-      const change = prev ? Math.round((r.revenue - prev.revenue) / prev.revenue * 1000) / 10 : null
+    const byYear = new Map<number, any>(revenueChartData.map((r: any) => [Number(r.year), r]))
+    return revenueChartData.map((r: any) => {
+      const year = Number(r.year)
+      const isPartial = ytd ? year === ytd.year : false
+      const prev = byYear.get(year - 1)
+
+      const change = isPartial
+        ? ytd?.change ?? null
+        : prev && prev.revenue > 0
+          ? Math.round((r.revenue - prev.revenue) / prev.revenue * 1000) / 10
+          : null
+
       const avgValue = r.invoices > 0 ? Math.round(r.revenue / r.invoices) : 0
-      return { ...r, change, avgValue }
+      return { ...r, change, avgValue, isPartial }
     })
-  }, [revenueChartData])
+  }, [revenueChartData, ytd])
+
+  // "עד 27.8" — a partial year has to say so beside its own figure, not only in
+  // a caption someone may not read.
+  const throughLabel = useMemo(() => {
+    if (!ytd?.through) return null
+    const d = new Date(`${ytd.through}T00:00:00`)
+    return `${d.getDate()}.${d.getMonth() + 1}`
+  }, [ytd])
 
   const concentrationData = useMemo(() => data?.customer_concentration ?? [], [data])
 
@@ -288,7 +325,10 @@ function ReportContent() {
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-base">{t('revenueTrend')} (2020-2026)</CardTitle>
+                <CardTitle className="text-base">
+                  {t('revenueTrend')}
+                  {revenueChartData.length > 0 && ` (${revenueChartData[0].year}-${revenueChartData[revenueChartData.length - 1].year})`}
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={350}>
@@ -319,7 +359,24 @@ function ReportContent() {
                 <DataTable<RevenueRow>
                   rows={revenueRows}
                   columns={[
-                    { key: 'year', header: isHe ? 'שנה' : 'Year', sortable: true, cell: r => <span className="font-medium">{r.year}</span>, exportValue: r => r.year },
+                    {
+                      key: 'year',
+                      header: isHe ? 'שנה' : 'Year',
+                      sortable: true,
+                      // A part-year has to carry its own caveat. Read without it,
+                      // the last row is just a smaller number than the one above.
+                      cell: r => (
+                        <span className="font-medium">
+                          {r.year}
+                          {r.isPartial && throughLabel && (
+                            <span className="ms-1 text-xs font-normal text-muted-foreground">
+                              ({isHe ? 'עד' : 'to'} {throughLabel})
+                            </span>
+                          )}
+                        </span>
+                      ),
+                      exportValue: r => (r.isPartial && throughLabel ? `${r.year} (${isHe ? 'עד' : 'to'} ${throughLabel})` : r.year),
+                    },
                     { key: 'revenue', header: isHe ? 'הכנסות' : 'Revenue', align: 'end', sortable: true, cell: r => <span className="font-mono">{formatCurrency(r.revenue)}</span>, exportValue: r => r.revenue },
                     {
                       key: 'change',
@@ -332,9 +389,16 @@ function ReportContent() {
                       sortValue: r => r.change ?? -Infinity,
                       cell: r =>
                         r.change !== null && (
-                          <Badge variant={r.change > 0 ? 'success' : 'destructive'}>
-                            {r.change > 0 ? '+' : ''}{r.change}%
-                          </Badge>
+                          <span className="inline-flex items-center gap-1">
+                            <Badge variant={r.change > 0 ? 'success' : 'destructive'}>
+                              {r.change > 0 ? '+' : ''}{r.change}%
+                            </Badge>
+                            {r.isPartial && (
+                              <span className="text-xs text-muted-foreground">
+                                {isHe ? 'מתחילת השנה' : 'YTD'}
+                              </span>
+                            )}
+                          </span>
                         ),
                       exportValue: r => r.change ?? '',
                     },
@@ -348,6 +412,17 @@ function ReportContent() {
                   exportFileName={isHe ? 'הכנסות-לפי-שנה' : 'revenue-by-year'}
                 />
               </div>
+              {/* The basis, stated. This table and the morning brief used to sit
+                  on two different tables with two different VAT bases and
+                  disagreed about the direction of the year; naming the basis is
+                  how a reader can tell the two screens are now the same number. */}
+              {ytd && (
+                <p className="mt-3 text-xs text-muted-foreground">
+                  {isHe
+                    ? `כולל מע"מ, לפי תאריך המסמך. ${ytd.year} חלקית — עד ${ytd.through}; השינוי מחושב מול אותה תקופה ב-${ytd.year - 1} (${formatCurrency(ytd.revenue)} מול ${formatCurrency(ytd.prev_revenue)}).`
+                    : `VAT-inclusive, by document date. ${ytd.year} is partial — through ${ytd.through}; the change compares the same window in ${ytd.year - 1} (${formatCurrency(ytd.revenue)} vs ${formatCurrency(ytd.prev_revenue)}).`}
+                </p>
+              )}
             </CardContent>
           </Card>
 
@@ -589,7 +664,7 @@ function ReportContent() {
         <div className="space-y-4 md:space-y-6">
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-base">{isHe ? 'השוואה חודשית - 2023 vs 2024 vs 2025' : 'Monthly Comparison - 2023 vs 2024 vs 2025'}</CardTitle>
+              <CardTitle className="text-base">{`${isHe ? 'השוואה חודשית' : 'Monthly Comparison'} - ${compareYears.prev2} vs ${compareYears.prev} vs ${compareYears.cur}`}</CardTitle>
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={400}>
@@ -599,9 +674,9 @@ function ReportContent() {
                   <YAxis {...AXIS_PROPS} tickFormatter={(v) => formatCurrencyAxis(v)} />
                   <Tooltip formatter={(value: any) => [formatCurrency(value), '']} />
                   <Legend />
-                  <Line activeDot={ACTIVE_DOT} type="monotone" dataKey="2023" stroke="#34d399" strokeWidth={2} dot={{ r: 3 }} animationDuration={800} />
-                  <Line activeDot={ACTIVE_DOT} type="monotone" dataKey="2024" stroke="#60a5fa" strokeWidth={2} dot={{ r: 3 }} animationDuration={800} />
-                  <Line activeDot={ACTIVE_DOT} type="monotone" dataKey="2025" stroke="#f87171" strokeWidth={2} dot={{ r: 3 }} animationDuration={800} />
+                  <Line activeDot={ACTIVE_DOT} type="monotone" dataKey="prev2" name={String(compareYears.prev2)} stroke="#34d399" strokeWidth={2} dot={{ r: 3 }} animationDuration={800} />
+                  <Line activeDot={ACTIVE_DOT} type="monotone" dataKey="prev" name={String(compareYears.prev)} stroke="#60a5fa" strokeWidth={2} dot={{ r: 3 }} animationDuration={800} />
+                  <Line activeDot={ACTIVE_DOT} type="monotone" dataKey="cur" name={String(compareYears.cur)} stroke="#f87171" strokeWidth={2} dot={{ r: 3 }} animationDuration={800} />
                 </LineChart>
               </ResponsiveContainer>
             </CardContent>
@@ -610,7 +685,7 @@ function ReportContent() {
           {/* Monthly comparison table */}
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-base">{isHe ? 'השוואה חודשית 2025 vs 2024' : 'Monthly 2025 vs 2024'}</CardTitle>
+              <CardTitle className="text-base">{`${isHe ? 'השוואה חודשית' : 'Monthly'} ${compareYears.cur} vs ${compareYears.prev}`}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="overflow-x-auto -mx-4 md:mx-0">
@@ -618,8 +693,8 @@ function ReportContent() {
                   rows={monthlyCompare}
                   columns={[
                     { key: 'month', header: isHe ? 'חודש' : 'Month', cell: m => m.month, exportValue: m => m.month },
-                    { key: 'y2024', header: '2024', align: 'end', sortable: true, sortValue: m => m['2024'], cell: m => <span className="font-mono">{m['2024'] > 0 ? formatCurrency(m['2024']) : '—'}</span>, exportValue: m => m['2024'] },
-                    { key: 'y2025', header: '2025', align: 'end', sortable: true, sortValue: m => m['2025'], cell: m => <span className="font-mono">{m['2025'] > 0 ? formatCurrency(m['2025']) : '—'}</span>, exportValue: m => m['2025'] },
+                    { key: 'prev', header: String(compareYears.prev), align: 'end', sortable: true, sortValue: m => m.prev, cell: m => <span className="font-mono">{m.prev > 0 ? formatCurrency(m.prev) : '—'}</span>, exportValue: m => m.prev },
+                    { key: 'cur', header: String(compareYears.cur), align: 'end', sortable: true, sortValue: m => m.cur, cell: m => <span className="font-mono">{m.cur > 0 ? formatCurrency(m.cur) : '—'}</span>, exportValue: m => m.cur },
                     {
                       key: 'change',
                       header: isHe ? 'שינוי' : 'Change',
@@ -627,16 +702,16 @@ function ReportContent() {
                       sortable: true,
                       // A month with no 2024 base has no percentage change; it
                       // sorts below the real ones instead of reading as flat.
-                      sortValue: m => (m['2024'] > 0 && m['2025'] > 0 ? (m['2025'] - m['2024']) / m['2024'] : -Infinity),
+                      sortValue: m => (m.prev > 0 && m.cur > 0 ? (m.cur - m.prev) / m.prev : -Infinity),
                       cell: m => {
-                        const change = m['2024'] > 0 ? Math.round(((m['2025'] - m['2024']) / m['2024']) * 1000) / 10 : null
-                        return change !== null && m['2025'] > 0 ? (
+                        const change = m.prev > 0 ? Math.round(((m.cur - m.prev) / m.prev) * 1000) / 10 : null
+                        return change !== null && m.cur > 0 ? (
                           <Badge variant={change > 0 ? 'success' : 'destructive'}>
                             {change > 0 ? '+' : ''}{change}%
                           </Badge>
                         ) : null
                       },
-                      exportValue: m => (m['2024'] > 0 ? Math.round(((m['2025'] - m['2024']) / m['2024']) * 1000) / 10 : ''),
+                      exportValue: m => (m.prev > 0 ? Math.round(((m.cur - m.prev) / m.prev) * 1000) / 10 : ''),
                     },
                   ] satisfies DataTableColumn<MonthlyCompareRow>[]}
                   getRowKey={(m, i) => m.month ?? i}
@@ -1181,9 +1256,15 @@ interface RevenueRow {
   year: number | string
   revenue: number
   invoices: number
-  /** Year-over-year %, null for the first year — nothing to compare against. */
+  /**
+   * Year-over-year %, null when the prior year is absent — nothing to compare
+   * against. For the year still in progress this is the year-to-date change
+   * against the same window last year, not part-year against whole-year.
+   */
   change: number | null
   avgValue: number
+  /** The year is still running (or the data stops inside it). */
+  isPartial?: boolean
 }
 interface ReportDeadStockRow {
   item_code: string
@@ -1194,8 +1275,10 @@ interface ReportDeadStockRow {
 }
 interface MonthlyCompareRow {
   month: string
-  '2024': number
-  '2025': number
+  /** The two years before the latest one present in the data, and the latest. */
+  prev2: number
+  prev: number
+  cur: number
 }
 interface CreditsByYearRow {
   year: number | string

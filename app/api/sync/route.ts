@@ -1,13 +1,14 @@
 import { NextResponse } from 'next/server'
 import { initializeSecrets } from '@/lib/aws-secrets'
-import { fetchDocuments, fetchDocumentDetail, fetchDocumentDetailsByNumber, searchDocuments, refreshCache, waitForStockCache, fetchAllStockItemsBlocking } from '@/lib/finansit-client'
+import { fetchDocumentDetail, fetchDocumentDetailsByNumber, searchDocuments, refreshCache, waitForStockCache, fetchAllStockItemsBlocking } from '@/lib/finansit-client'
 import { query, getDb } from '@/lib/db'
-import { monthlySales, dailySales, itemSnapshots, documents } from '@/lib/db/schema'
+import { monthlySales, itemSnapshots, documents } from '@/lib/db/schema'
 import { sql } from 'drizzle-orm'
 import { DOC_FORMATS, CACHE_VERSIONS } from '@/lib/constants'
 import { getItems } from '@/lib/services/analytics-service'
 import { deleteCache } from '@/lib/redis-client'
 import { fixRtlItemName } from '@/lib/rtl-fix'
+import { recentWindow, writeDailySalesFromInvoices } from '@/lib/services/daily-sales-sync'
 
 function getSeason(month: number): 'summer' | 'winter' {
   return [5, 6, 7, 8, 9, 10].includes(month) ? 'summer' : 'winter'
@@ -83,14 +84,33 @@ export async function GET(request: Request) {
     }
 
     // Backfill-docs mode: aggregate daily_sales from dashboard.documents (full history from 2020)
+    //
+    // Two things this has to get right, both of which it used to get wrong:
+    //
+    // 1. DEDUPE. `documents` archives each invoice once per Btrieve fiscal-year
+    //    database it was read from, so a document open across a year-end is
+    //    stored twice under two `year` values. Summing the raw table inflated
+    //    2023 to 21.7M against a true 18.1M and 2024 to 20.1M against 16.8M —
+    //    and that inflated 2024 is what /brief compared 2025 against.
+    // 2. CLOSED YEARS ONLY. The archive is authoritative for years that have
+    //    finished loading; the active year is FINAPI's (the loader has been
+    //    stopped since 2026-05-13, and 2,099 of the 7,147 archived 2026 rows
+    //    carry grand_total = 0). Restating the current year from here would
+    //    replace good FINAPI figures with a half-loaded, part-zero copy.
     if (mode === 'backfill-docs') {
       await ensureTables()
       // Complex cross-table INSERT...SELECT with ON CONFLICT -- keep as raw SQL
       await query(`
         INSERT INTO dashboard.daily_sales (date, revenue, invoice_count)
         SELECT doc_date, SUM(grand_total), COUNT(*)
-        FROM dashboard.documents
-        WHERE format = '11' AND doc_date IS NOT NULL
+        FROM (
+          SELECT DISTINCT ON (doc_number) doc_date, grand_total
+          FROM dashboard.documents
+          WHERE format = '11'
+            AND doc_date IS NOT NULL
+            AND doc_date < DATE_TRUNC('year', CURRENT_DATE)
+          ORDER BY doc_number, year DESC
+        ) d
         GROUP BY doc_date
         ON CONFLICT (date) DO UPDATE SET
           revenue = EXCLUDED.revenue,
@@ -149,6 +169,10 @@ export async function GET(request: Request) {
     // line-item detail fetch below, which otherwise defaults to the current
     // year's Btrieve context and hangs/fails for every doc in that month.
     let detailYear: string | undefined
+    // The window Step 2 is allowed to restate. Every path below is date-bounded,
+    // so the window is always known and always fetched in full.
+    let windowFrom: string
+    let windowTo: string
 
     if (mode === 'historical') {
       // page=1 → current month, page=2 → previous month, etc.
@@ -157,6 +181,8 @@ export async function GET(request: Request) {
       const dateFrom = targetDate.toISOString().split('T')[0]
       const lastDay = new Date(targetDate.getFullYear(), targetDate.getMonth() + 1, 0)
       const dateTo = lastDay.toISOString().split('T')[0]
+      windowFrom = dateFrom
+      windowTo = dateTo
       const targetYear = String(targetDate.getFullYear())
       const activeYear = String(now.getFullYear())
 
@@ -180,41 +206,30 @@ export async function GET(request: Request) {
       const monthLabel = `${targetDate.getFullYear()}-${String(targetDate.getMonth() + 1).padStart(2, '0')}`
       console.log(`[Sync] Historical page ${page} (${monthLabel}): ${invoices.length} invoices for ${dateFrom} to ${dateTo}${targetYear !== activeYear ? ` (year=${targetYear})` : ''}`)
     } else {
-      const invoiceLimit = mode === 'full' ? 5000 : 1000
-      invoices = await fetchDocuments(DOC_FORMATS.TAX_INVOICE, invoiceLimit)
+      // Date-bounded rather than newest-N. Step 2 below REPLACES each day's total,
+      // which is only correct if the window covers those days in full — a
+      // count-bounded window never does at its far edge, and that is what
+      // hollowed out July 2026 (316 invoices recorded against ~1,600 real).
+      // See lib/services/daily-sales-sync.ts.
+      const windowDays = mode === 'full' ? 90 : 21
+      const { dateFrom, dateTo } = recentWindow(windowDays)
+      windowFrom = dateFrom
+      windowTo = dateTo
+      invoices = await searchDocuments({
+        format: String(DOC_FORMATS.TAX_INVOICE),
+        date_from: dateFrom,
+        date_to: dateTo,
+        limit: '10000',
+        direction: 'desc',
+      })
+      console.log(`[Sync] ${mode}: ${invoices.length} invoices for ${dateFrom}..${dateTo}`)
     }
 
-    // Step 2: Populate daily_sales from invoice headers (no line items needed = fast)
-    const dailyMap = new Map<string, { revenue: number; count: number }>()
-    for (const inv of invoices) {
-      const d = inv.doc_date
-      if (!d) continue
-      const dateKey = d.split('T')[0]
-      const existing = dailyMap.get(dateKey) || { revenue: 0, count: 0 }
-      existing.revenue += inv.grand_total || inv.total || 0
-      existing.count += 1
-      dailyMap.set(dateKey, existing)
-    }
-
-    let dailyUpserted = 0
-    const dailyEntries = [...dailyMap.entries()]
-    for (let i = 0; i < dailyEntries.length; i += 50) {
-      const batch = dailyEntries.slice(i, i + 50)
-      await db.insert(dailySales)
-        .values(batch.map(([date, data]) => ({
-          date,
-          revenue: String(data.revenue),
-          invoiceCount: data.count,
-        })))
-        .onConflictDoUpdate({
-          target: dailySales.date,
-          set: {
-            revenue: sql`excluded.revenue`,
-            invoiceCount: sql`excluded.invoice_count`,
-          },
-        })
-      dailyUpserted += batch.length
-    }
+    // Step 2: Populate daily_sales from invoice headers (no line items needed = fast).
+    // Shared with the cron so there is one implementation of "replace a day's
+    // total only when the day was fetched whole" — see lib/services/daily-sales-sync.ts.
+    const dailyResult = await writeDailySalesFromInvoices(invoices, windowFrom, windowTo)
+    const dailyUpserted = dailyResult.days
 
     // Step 3: Fetch line items from invoices for monthly_sales (batches of 20)
     // historical mode processes one month at a time so line-item fetching is manageable
@@ -336,6 +351,8 @@ export async function GET(request: Request) {
       mode,
       invoices_fetched: invoices.length,
       daily_sales_upserted: dailyUpserted,
+      daily_sales_window: `${dailyResult.from}..${dailyResult.to}`,
+      daily_sales_rejected: dailyResult.rejected.length ? dailyResult.rejected : undefined,
       invoices_with_lines: processedDocs,
       monthly_records: monthlyUpserted,
       items_snapshotted: snapshotted,

@@ -6,6 +6,7 @@ import { getIcsStats } from '@/lib/ics-stats'
 import { query, getDb } from '@/lib/db'
 import { monthlySales, dailySales } from '@/lib/db/schema'
 import { sql } from 'drizzle-orm'
+import { syncDailySalesRange, recentWindow } from '@/lib/services/daily-sales-sync'
 import { DOC_FORMATS, CACHE_VERSIONS } from '@/lib/constants'
 import {
   getItems,
@@ -201,37 +202,14 @@ async function runWarmCache(mode: string, from?: number, to?: number) {
       }
     }
 
-    // Always sync daily_sales from recent invoices (fast — headers only, no line items)
+    // Always sync daily_sales from recent invoices (fast — headers only, no line items).
+    // Date-bounded, not newest-N: see lib/services/daily-sales-sync.ts for why a
+    // count-bounded window silently hollowed out whole months.
     await timed('daily-sales-sync', async () => {
-      const invoices = await fetchDocuments(DOC_FORMATS.TAX_INVOICE, 1000)
-      const dailyMap = new Map<string, { revenue: number; count: number }>()
-      for (const inv of invoices) {
-        const d = inv.doc_date
-        if (!d) continue
-        const dateKey = d.split('T')[0]
-        const existing = dailyMap.get(dateKey) || { revenue: 0, count: 0 }
-        existing.revenue += inv.grand_total || inv.total || 0
-        existing.count += 1
-        dailyMap.set(dateKey, existing)
-      }
-      const dailyEntries = [...dailyMap.entries()]
-      for (let i = 0; i < dailyEntries.length; i += 50) {
-        const batch = dailyEntries.slice(i, i + 50)
-        await db.insert(dailySales)
-          .values(batch.map(([date, data]) => ({
-            date,
-            revenue: String(data.revenue),
-            invoiceCount: data.count,
-          })))
-          .onConflictDoUpdate({
-            target: dailySales.date,
-            set: {
-              revenue: sql`excluded.revenue`,
-              invoiceCount: sql`excluded.invoice_count`,
-            },
-          })
-      }
-      results['daily_sales_synced'] = dailyMap.size
+      const { dateFrom, dateTo } = recentWindow()
+      const res = await syncDailySalesRange(dateFrom, dateTo)
+      results['daily_sales_synced'] = res.days
+      if (res.rejected.length) results['daily_sales_rejected'] = res.rejected.length
     })
 
     // Monthly sales line-item sync only in full mode (slower — requires fetching line items)

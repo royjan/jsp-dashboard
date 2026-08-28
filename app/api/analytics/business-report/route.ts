@@ -33,47 +33,116 @@ export async function GET() {
     queryFailures = []
     await initializeSecrets() // FINAPI creds for getItems() (dead-stock source)
 
+    // Revenue on this page and revenue on /brief used to come from two different
+    // tables on two different VAT bases, and disagreed about whether the year was
+    // up or down. They now share one source: `dashboard.daily_sales`, gross of
+    // VAT, one row per calendar day.
+    //
+    // What `documents` cannot be for this: it archives each invoice once per
+    // Btrieve fiscal-year database it was read from, so every one of 2025's
+    // 20,273 invoices ALSO sits under year=2026. Grouping by that `year` column
+    // reported 2026 at 16.3M — 12.3M of it 2025's revenue — against a 15.1M
+    // "2025", a fabricated +8% on a year that was actually flat. On top of that
+    // the half-loaded 2026 archive has grand_total = 0 on 2,099 of its 7,147
+    // rows, so it cannot even be read on a gross basis.
+    //
+    // `documents` is still the right source for credit notes below: daily_sales
+    // only carries format 11.
+
     // 1. Revenue by year
     const revenueByYear = await safeQuery(`
+      WITH rev AS (
+        SELECT EXTRACT(YEAR FROM date)::int as year,
+               SUM(revenue) as revenue, SUM(invoice_count) as invoice_count
+        FROM daily_sales
+        GROUP BY 1
+      ), cred AS (
+        -- Credit notes are stored signed (negative). The chart draws them as a
+        -- magnitude beside revenue and credit_pct is a ratio, so both want the
+        -- absolute value; the signed figure rendered as a bar below the axis and
+        -- as a negative "credit rate".
+        SELECT EXTRACT(YEAR FROM doc_date)::int as year,
+               ABS(SUM(total)) as credit_total, COUNT(*) as credit_count
+        FROM (
+          SELECT DISTINCT ON (doc_number) doc_date, total
+          FROM documents
+          WHERE format = '12' AND doc_date IS NOT NULL
+          ORDER BY doc_number, year DESC
+        ) x
+        GROUP BY 1
+      )
+      SELECT r.year, r.revenue, r.invoice_count,
+             COALESCE(c.credit_total, 0) as credit_total,
+             COALESCE(c.credit_count, 0) as credit_count
+      FROM rev r
+      LEFT JOIN cred c ON c.year = r.year
+      ORDER BY r.year
+    `)
+
+    // How far the shared sales table reaches, so a partial year can say so
+    // rather than being drawn beside complete ones.
+    const revenueDataThrough = await safeQueryOne(`SELECT MAX(date) as d FROM daily_sales`)
+
+    // The only honest year-over-year for the year in progress: Jan 1 → the last
+    // day we have, against exactly that window a year earlier. The table above
+    // holds whole years, so putting a part-year beside them and subtracting
+    // guarantees an invented collapse — which is the mirror image of the invented
+    // +8% this page used to show.
+    const ytd = await safeQueryOne(`
+      WITH bounds AS (
+        SELECT MAX(date) AS through FROM daily_sales
+      )
       SELECT
-        year,
-        SUM(CASE WHEN format = '11' THEN total ELSE 0 END) as revenue,
-        SUM(CASE WHEN format = '11' THEN 1 ELSE 0 END) as invoice_count,
-        SUM(CASE WHEN format = '12' THEN total ELSE 0 END) as credit_total,
-        SUM(CASE WHEN format = '12' THEN 1 ELSE 0 END) as credit_count
-      FROM documents
-      WHERE format IN ('11', '12')
-      GROUP BY year
-      ORDER BY year
+        EXTRACT(YEAR FROM b.through)::int AS year,
+        b.through AS through,
+        COALESCE(SUM(d.revenue) FILTER (
+          WHERE d.date >= DATE_TRUNC('year', b.through) AND d.date <= b.through), 0) AS revenue,
+        COALESCE(SUM(d.invoice_count) FILTER (
+          WHERE d.date >= DATE_TRUNC('year', b.through) AND d.date <= b.through), 0) AS invoice_count,
+        COALESCE(SUM(d.revenue) FILTER (
+          WHERE d.date >= DATE_TRUNC('year', b.through) - INTERVAL '1 year'
+            AND d.date <= b.through - INTERVAL '1 year'), 0) AS prev_revenue,
+        COALESCE(SUM(d.invoice_count) FILTER (
+          WHERE d.date >= DATE_TRUNC('year', b.through) - INTERVAL '1 year'
+            AND d.date <= b.through - INTERVAL '1 year'), 0) AS prev_invoice_count
+      FROM daily_sales d CROSS JOIN bounds b
+      GROUP BY b.through
     `)
 
     // 2. Monthly revenue
-    // EXTRACT/TO_CHAR rather than SQLite's strftime — these run against
-    // Postgres, where strftime doesn't exist and the query failed silently.
     const monthlyRevenue = await safeQuery(`
       SELECT
-        year,
-        EXTRACT(MONTH FROM doc_date)::int as month,
-        SUM(CASE WHEN format = '11' THEN total ELSE 0 END) as revenue,
-        SUM(CASE WHEN format = '11' THEN 1 ELSE 0 END) as invoice_count
-      FROM documents
-      WHERE format = '11' AND year >= 2020
-      GROUP BY year, EXTRACT(MONTH FROM doc_date)::int
-      ORDER BY year, month
+        EXTRACT(YEAR FROM date)::int as year,
+        EXTRACT(MONTH FROM date)::int as month,
+        SUM(revenue) as revenue,
+        SUM(invoice_count) as invoice_count
+      FROM daily_sales
+      WHERE date >= '2020-01-01'
+      GROUP BY 1, 2
+      ORDER BY 1, 2
     `)
 
-    // 3. Credit notes analysis by year
+    // 3. Credit notes analysis by year.
+    // Deduped on doc_number (verified globally unique per format: 158,361 distinct
+    // across 188,720 format-11 rows) and bucketed on doc_date, never on `year`.
+    // Both sides stay on the net `total` basis — this feeds a ratio, and the
+    // archive's grand_total is unreliable for the current year.
     const creditsByYear = await safeQuery(`
+      WITH inv AS (
+        SELECT DISTINCT ON (format, doc_number) format, doc_date, total
+        FROM documents
+        WHERE format IN ('11', '12') AND doc_date IS NOT NULL
+        ORDER BY format, doc_number, year DESC
+      )
       SELECT
-        year,
+        EXTRACT(YEAR FROM doc_date)::int as year,
         SUM(CASE WHEN format = '11' THEN 1 ELSE 0 END) as invoice_count,
         SUM(CASE WHEN format = '12' THEN 1 ELSE 0 END) as credit_count,
         SUM(CASE WHEN format = '11' THEN total ELSE 0 END) as invoice_total,
-        SUM(CASE WHEN format = '12' THEN total ELSE 0 END) as credit_total
-      FROM documents
-      WHERE format IN ('11', '12')
-      GROUP BY year
-      ORDER BY year
+        ABS(SUM(CASE WHEN format = '12' THEN total ELSE 0 END)) as credit_total
+      FROM inv
+      GROUP BY EXTRACT(YEAR FROM doc_date)::int
+      ORDER BY 1
     `)
 
     // 4. Day of week analysis (Sun-Fri Israeli work week)
@@ -345,7 +414,7 @@ export async function GET() {
           SUM(revenue) as revenue,
           SUM(invoice_count) as invoice_count
         FROM daily_sales
-        WHERE date >= '2020-01-01' AND date < '2026-01-01'
+        WHERE date >= '2020-01-01' AND date < DATE_TRUNC('year', CURRENT_DATE)
         GROUP BY EXTRACT(YEAR FROM date)::int, EXTRACT(MONTH FROM date)::int
       ) m
       GROUP BY month
@@ -370,11 +439,34 @@ export async function GET() {
     // than reporting 0 next to a 45M inventory value.
     const totalItemsWithStock = { count: deadStockSummary?.total_items_with_stock || 0 }
 
-    const latestYearRevenue = revenueByYear.length > 0
-      ? revenueByYear.reduce((a: any, b: any) => (b.year > a.year ? b : a)).revenue
-      : 0
+    // The newest year in the table is always partial — the archive currently ends
+    // mid-May 2026 — so `revenue / 12` and `revenue / inventory` both read as a
+    // collapse that is really just a short year. Scale by the span actually
+    // covered instead, and hand the coverage to the client so it can say so.
+    const latestYearRow = revenueByYear.length > 0
+      ? revenueByYear.reduce((a: any, b: any) => (b.year > a.year ? b : a))
+      : null
+    const latestYearRevenue = latestYearRow?.revenue || 0
+    const latestYear = latestYearRow?.year ?? new Date().getFullYear()
+
+    const revenueThrough: string | null = revenueDataThrough?.d
+      ? new Date(revenueDataThrough.d).toISOString().split('T')[0]
+      : null
+
+    // Days of `latestYear` the archive actually covers. A closed year covers all
+    // of itself; only the newest one is short.
+    const latestYearDays = (() => {
+      if (!revenueThrough) return 365
+      const through = new Date(`${revenueThrough}T00:00:00Z`)
+      if (through.getUTCFullYear() !== latestYear) return 365
+      const jan1 = Date.UTC(latestYear, 0, 1)
+      return Math.max(1, Math.round((through.getTime() - jan1) / 86400000) + 1)
+    })()
+    const latestYearIsPartial = latestYearDays < 365
+    const annualizedLatestRevenue = latestYearRevenue * (365 / latestYearDays)
+
     const inventoryValue = deadStockSummary?.total_inventory_value || 1
-    const turnoverRatio = Math.round(latestYearRevenue / inventoryValue * 100) / 100
+    const turnoverRatio = Math.round(annualizedLatestRevenue / inventoryValue * 100) / 100
 
     return NextResponse.json({
       // Non-empty when a query failed and its section is showing zeros.
@@ -405,8 +497,28 @@ export async function GET() {
       },
       seasonality,
       avg_invoice_value: avgInvoiceValue,
+      // How far the deduped document archive actually reaches, so the client can
+      // label a partial year instead of drawing it beside complete ones.
+      revenue_data_through: revenueThrough,
+      revenue_latest_year: latestYear,
+      revenue_latest_year_partial: latestYearIsPartial,
+      // Year-to-date against the same window last year — the comparison the
+      // yearly table cannot make for the year still in progress.
+      revenue_ytd: ytd
+        ? {
+            year: ytd.year,
+            through: new Date(ytd.through).toISOString().split('T')[0],
+            revenue: Number(ytd.revenue),
+            invoice_count: Number(ytd.invoice_count),
+            prev_revenue: Number(ytd.prev_revenue),
+            prev_invoice_count: Number(ytd.prev_invoice_count),
+            change: Number(ytd.prev_revenue) > 0
+              ? Math.round(((Number(ytd.revenue) - Number(ytd.prev_revenue)) / Number(ytd.prev_revenue)) * 1000) / 10
+              : null,
+          }
+        : null,
       kpis: {
-        monthly_revenue: latestYearRevenue / 12,
+        monthly_revenue: latestYearRevenue / (latestYearDays / 30.44),
         turnover_ratio: turnoverRatio,
         dead_stock_pct_3y: deadStockSummary?.total_inventory_value > 0
           ? Math.round(deadStockSummary.no_sales_3y / deadStockSummary.total_inventory_value * 1000) / 10

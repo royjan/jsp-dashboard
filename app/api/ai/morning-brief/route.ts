@@ -5,7 +5,6 @@ import { getCached, setCache } from '@/lib/redis-client'
 import { getDashboardData } from '@/lib/services/analytics-service'
 import { client } from '@/lib/finansit-client'
 import { query as dbQuery } from '@/lib/db'
-import { readQueryAsync } from '@/lib/neon-read'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -28,57 +27,42 @@ async function getSalesKpis() {
   const lastWeekSameDay = new Date(now.getTime() - 8 * 86400000).toISOString().split('T')[0]
   const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
   const weekAgo = new Date(now.getTime() - 7 * 86400000).toISOString().split('T')[0]
-  const yearAgo = new Date(now.getTime() - 365 * 86400000)
-  const yearAgoMonthStart = `${yearAgo.getFullYear()}-${String(yearAgo.getMonth() + 1).padStart(2, '0')}-01`
+  // Calendar-aligned, not now-minus-365-days. Across a leap year the arithmetic
+  // version lands a day off, and on the 1st of a month it can resolve to the
+  // PREVIOUS month — so "the same month last year" silently became a different
+  // month.
+  const yearAgo = new Date(Date.UTC(now.getUTCFullYear() - 1, now.getUTCMonth(), now.getUTCDate()))
+  const yearAgoMonthStart = `${yearAgo.getUTCFullYear()}-${String(yearAgo.getUTCMonth() + 1).padStart(2, '0')}-01`
   const yearAgoToday = yearAgo.toISOString().split('T')[0]
 
-  // Try SQLite first, then PostgreSQL
+  // One database. `readQueryAsync` used to hit a local SQLite mirror and this
+  // block fell back to Postgres when it failed; the mirror is gone
+  // (lib/neon-read.ts) and both helpers now open the same Neon pool, so the
+  // "fallback" was retrying the identical query against the identical database.
   let todaySales = { total: 0, count: 0 }
   let weekSales = { total: 0, count: 0 }
   let monthSales = { total: 0, count: 0 }
   let yearAgoMonthSales = { total: 0, count: 0 }
 
-  try {
-    const tRes = await readQueryAsync(
-      `SELECT COALESCE(SUM(revenue), 0) as total, COALESCE(SUM(invoice_count), 0) as count FROM daily_sales WHERE date = ?`,
-      [today],
-    )
-    if (tRes.rows.length > 0) todaySales = { total: parseFloat(tRes.rows[0].total), count: parseInt(tRes.rows[0].count) || 0 }
-
-    const wRes = await readQueryAsync(
-      `SELECT COALESCE(SUM(revenue), 0) as total, COALESCE(SUM(invoice_count), 0) as count FROM daily_sales WHERE date >= ? AND date <= ?`,
-      [weekAgo, today],
-    )
-    if (wRes.rows.length > 0) weekSales = { total: parseFloat(wRes.rows[0].total), count: parseInt(wRes.rows[0].count) || 0 }
-
-    const mRes = await readQueryAsync(
-      `SELECT COALESCE(SUM(revenue), 0) as total, COALESCE(SUM(invoice_count), 0) as count FROM daily_sales WHERE date >= ? AND date <= ?`,
-      [monthStart, today],
-    )
-    if (mRes.rows.length > 0) monthSales = { total: parseFloat(mRes.rows[0].total), count: parseInt(mRes.rows[0].count) || 0 }
-
-    const yRes = await readQueryAsync(
-      `SELECT COALESCE(SUM(revenue), 0) as total, COALESCE(SUM(invoice_count), 0) as count FROM daily_sales WHERE date >= ? AND date <= ?`,
-      [yearAgoMonthStart, yearAgoToday],
-    )
-    if (yRes.rows.length > 0) yearAgoMonthSales = { total: parseFloat(yRes.rows[0].total), count: parseInt(yRes.rows[0].count) || 0 }
-  } catch {
-    // Fallback to PostgreSQL
-    try {
-      const tRes = await dbQuery(`SELECT COALESCE(SUM(revenue::numeric), 0) as total, COALESCE(SUM(invoice_count), 0) as count FROM dashboard.daily_sales WHERE date = $1`, [today])
-      if (tRes.rows.length > 0) todaySales = { total: parseFloat(tRes.rows[0].total), count: parseInt(tRes.rows[0].count) || 0 }
-
-      const wRes = await dbQuery(`SELECT COALESCE(SUM(revenue::numeric), 0) as total, COALESCE(SUM(invoice_count), 0) as count FROM dashboard.daily_sales WHERE date >= $1 AND date <= $2`, [weekAgo, today])
-      if (wRes.rows.length > 0) weekSales = { total: parseFloat(wRes.rows[0].total), count: parseInt(wRes.rows[0].count) || 0 }
-
-      const mRes = await dbQuery(`SELECT COALESCE(SUM(revenue::numeric), 0) as total, COALESCE(SUM(invoice_count), 0) as count FROM dashboard.daily_sales WHERE date >= $1 AND date <= $2`, [monthStart, today])
-      if (mRes.rows.length > 0) monthSales = { total: parseFloat(mRes.rows[0].total), count: parseInt(mRes.rows[0].count) || 0 }
-
-      const yRes = await dbQuery(`SELECT COALESCE(SUM(revenue::numeric), 0) as total, COALESCE(SUM(invoice_count), 0) as count FROM dashboard.daily_sales WHERE date >= $1 AND date <= $2`, [yearAgoMonthStart, yearAgoToday])
-      if (yRes.rows.length > 0) yearAgoMonthSales = { total: parseFloat(yRes.rows[0].total), count: parseInt(yRes.rows[0].count) || 0 }
-    } catch (e) {
-      console.warn('[morning-brief] DB queries failed:', e)
+  const SUM_RANGE = `SELECT COALESCE(SUM(revenue::numeric), 0) as total, COALESCE(SUM(invoice_count), 0) as count
+                     FROM dashboard.daily_sales WHERE date >= $1 AND date <= $2`
+  const readRange = async (from: string, to: string) => {
+    const res = await dbQuery(SUM_RANGE, [from, to])
+    return {
+      total: parseFloat(res.rows[0]?.total || 0),
+      count: parseInt(res.rows[0]?.count) || 0,
     }
+  }
+
+  try {
+    ;[todaySales, weekSales, monthSales, yearAgoMonthSales] = await Promise.all([
+      readRange(today, today),
+      readRange(weekAgo, today),
+      readRange(monthStart, today),
+      readRange(yearAgoMonthStart, yearAgoToday),
+    ])
+  } catch (e) {
+    console.warn('[morning-brief] DB queries failed:', e)
   }
 
   const yoyChange = yearAgoMonthSales.total > 0
@@ -109,7 +93,7 @@ async function getSalesKpis() {
   let dataThrough: string | null = null
   try {
     const ytdStart = `${now.getFullYear()}-01-01`
-    const ytdAgoStart = `${yearAgo.getFullYear()}-01-01`
+    const ytdAgoStart = `${yearAgo.getUTCFullYear()}-01-01`
     const [cur, prev, fresh] = await Promise.all([
       dbQuery(`SELECT COALESCE(SUM(revenue::numeric), 0) as total FROM dashboard.daily_sales WHERE date >= $1 AND date <= $2`, [ytdStart, today]),
       dbQuery(`SELECT COALESCE(SUM(revenue::numeric), 0) as total FROM dashboard.daily_sales WHERE date >= $1 AND date <= $2`, [ytdAgoStart, yearAgoToday]),
@@ -126,7 +110,46 @@ async function getSalesKpis() {
     console.warn('[morning-brief] YTD queries failed:', e)
   }
 
-  return { todaySales, yesterdaySales, lastWeekSameDaySales, weekSales, monthSales, yearAgoMonthSales, yoyChange, ytdYoy, ytdTotal, ytdPrevTotal, dataThrough }
+  // MAX(date) says the table reaches today. It does not say the months in
+  // between are whole — and they were not. July 2026 sat in daily_sales as 316
+  // invoices against a real ~1,600, which is not a hole a freshness date can
+  // show: every day of the month was present, each holding a fraction of itself.
+  // The brief then reported the year down 14% and the number looked fine.
+  //
+  // So compare each month of the current year against the same month a year ago
+  // by INVOICE COUNT — a volume metric, unaffected by price — and treat anything
+  // under 60% as unloaded rather than as a collapse in trade.
+  let incompleteMonths: { month: string; count: number; prevCount: number }[] = []
+  try {
+    const res = await dbQuery(
+      `WITH cur AS (
+         SELECT EXTRACT(MONTH FROM date)::int AS m, SUM(invoice_count) AS c
+         FROM dashboard.daily_sales
+         WHERE date >= $1 AND date <= $2 GROUP BY 1
+       ), prev AS (
+         SELECT EXTRACT(MONTH FROM date)::int AS m, SUM(invoice_count) AS c
+         FROM dashboard.daily_sales
+         WHERE date >= $3 AND date <= $4 GROUP BY 1
+       )
+       SELECT cur.m, cur.c AS count, prev.c AS prev_count
+       FROM cur JOIN prev ON prev.m = cur.m
+       WHERE prev.c > 0 AND cur.c < prev.c * 0.6
+       ORDER BY cur.m`,
+      [`${now.getUTCFullYear()}-01-01`, today, `${yearAgo.getUTCFullYear()}-01-01`, yearAgoToday],
+    )
+    incompleteMonths = res.rows.map((r: any) => ({
+      month: `${now.getUTCFullYear()}-${String(r.m).padStart(2, '0')}`,
+      count: Number(r.count),
+      prevCount: Number(r.prev_count),
+    }))
+    if (incompleteMonths.length) {
+      console.warn('[morning-brief] months look unloaded:', incompleteMonths.map(m => `${m.month} ${m.count}/${m.prevCount}`).join(', '))
+    }
+  } catch (e) {
+    console.warn('[morning-brief] completeness check failed:', e)
+  }
+
+  return { todaySales, yesterdaySales, lastWeekSameDaySales, weekSales, monthSales, yearAgoMonthSales, yoyChange, ytdYoy, ytdTotal, ytdPrevTotal, dataThrough, incompleteMonths }
 }
 
 async function getTopOverdueCustomers() {
@@ -198,12 +221,20 @@ async function getStockAlerts() {
 
 // ── Route handler ──
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     await initializeSecrets()
 
-    // Check cache first
-    const cached = await getCached<MorningBriefCache>(CACHE_KEY)
+    // `?refresh=1` bypasses the 4h cache and regenerates.
+    //
+    // The page has a "רענן" button which called refetch() — a React Query
+    // refetch, which re-requested this route, which returned the same cached
+    // payload. The button could not refresh anything for up to four hours, which
+    // matters most in exactly the case it exists for: the underlying data was
+    // wrong and has just been corrected.
+    const refresh = new URL(request.url).searchParams.get('refresh') === '1'
+
+    const cached = refresh ? null : await getCached<MorningBriefCache>(CACHE_KEY)
     if (cached) {
       return NextResponse.json({ ...cached, cached: true })
     }
@@ -234,6 +265,7 @@ export async function GET() {
 - ${monthName} עד כה: ₪${Math.round(salesKpis.monthSales.total).toLocaleString()} (${salesKpis.monthSales.count} עסקאות)
 ${salesKpis.yoyChange !== null ? `- ${monthName} לעומת ${monthName} אשתקד (חודש בודד בלבד!): ${salesKpis.yoyChange > 0 ? '+' : ''}${salesKpis.yoyChange}% (₪${Math.round(salesKpis.monthSales.total).toLocaleString()} לעומת ₪${Math.round(salesKpis.yearAgoMonthSales.total).toLocaleString()})` : ''}
 ${salesKpis.ytdYoy !== null ? `- מתחילת השנה עד היום לעומת אותה תקופה אשתקד (ההשוואה השנתית האמיתית): ${salesKpis.ytdYoy > 0 ? '+' : ''}${salesKpis.ytdYoy}% (₪${Math.round(salesKpis.ytdTotal ?? 0).toLocaleString()} לעומת ₪${Math.round(salesKpis.ytdPrevTotal ?? 0).toLocaleString()})` : ''}
+${salesKpis.incompleteMonths.length ? `- ⚠️ אזהרה: החודשים ${salesKpis.incompleteMonths.map(m => m.month).join(', ')} טרם נטענו במלואם (${salesKpis.incompleteMonths.map(m => `${m.month}: ${m.count} חשבוניות מול ${m.prevCount} אשתקד`).join('; ')}). המספרים מתחילת השנה נמוכים מהמציאות — אל תדווח על הירידה השנתית כעובדה, אמור שהנתונים חסרים.` : ''}
 
 **סטטוס תפעולי:**
 - הצעות מחיר פתוחות: ${dashboardData?.open_quotes?.count ?? 'לא זמין'}${dashboardData?.open_quotes?.total ? ` (₪${Math.round(dashboardData.open_quotes.total).toLocaleString()})` : ''} — שים לב: מספר מצטבר רב-שנתי (הצעות לא נסגרות במערכת), לא צבר עסקאות אמיתי. אל תציג אותו כהזדמנות מכירה.
@@ -272,6 +304,7 @@ ${stockAlerts.length > 0
 - דוגמה לניסוח רע (אל תכתוב כך): "מגמת המכירות השנתית (מצטבר מתחילת השנה לעומת התקופה המקבילה אשתקד) יציבה עם ירידה קלה".
 
 כללי ברזל: ליד כל אחוז או השוואה ציין במפורש את התקופה שהיא מכסה (חודש בודד ≠ שנתי);
+אם סומן שחודש לא נטען במלואו — אל תציג את ההשוואה השנתית כעובדה, ציין שהנתונים חסרים;
 אל תמציא מסקנות שאינן נתמכות בנתונים שלמעלה; אם נתון מסומן כלא-זמין — אמור שהוא לא זמין.
 החזר את התשובה כ-JSON בפורמט הבא בלבד (ללא markdown):
 {"summary": "משפט סיכום כללי קצר", "bullets": ["📊 ...", "📈 ...", "🚚 ...", "⚠️ ..."]}`

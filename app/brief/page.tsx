@@ -14,6 +14,7 @@
  * would disagree, which is worse than not having the screen.
  */
 
+import { useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { RefreshCw, Sunrise } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -32,10 +33,17 @@ interface Brief {
 }
 
 export default function MorningBriefPage() {
+  // Set by the refresh button so the next fetch bypasses the 4h upstream cache.
+  // Without it "רענן" re-requested the route and got the same cached prose back,
+  // which looks identical to a refresh that worked.
+  const forceRef = useRef(false)
+
   const { data, isLoading, isError, refetch, isFetching } = useQuery<Brief>({
     queryKey: ['morning-brief'],
     queryFn: async () => {
-      const res = await fetch('/api/ai/morning-brief')
+      const force = forceRef.current
+      forceRef.current = false
+      const res = await fetch(`/api/ai/morning-brief${force ? '?refresh=1' : ''}`)
       if (!res.ok) throw new Error('brief unavailable')
       return res.json()
     },
@@ -69,7 +77,7 @@ export default function MorningBriefPage() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => refetch()}
+            onClick={() => { forceRef.current = true; refetch() }}
             disabled={isFetching}
             className="gap-1.5"
           >
