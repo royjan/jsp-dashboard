@@ -11,6 +11,7 @@ import type { TranslationKey } from '@/lib/i18n'
 import { brandChipClasses } from '@/lib/brand'
 import { Bell, BookOpen, DollarSign, Eye, EyeOff, FileBarChart, Landmark, LayoutDashboard, Loader2, Moon, NotebookPen, Package, Percent, Receipt, RefreshCw, RotateCcw, Scale, Search, SearchX, ShoppingBag, ShoppingCart, Sparkles, Sun, Swords, Trash2, TrendingDown, User, Users, Wallet, Warehouse, Clock, X } from 'lucide-react'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
+import { formatCurrency } from '@/lib/format'
 import { toggleMoneyHidden } from '@/lib/privacy'
 
 const navItems: Array<{ href: string; labelKey: TranslationKey; icon: typeof LayoutDashboard }> = [
@@ -57,6 +58,8 @@ interface SearchResult {
     code: string
     name: string
     similarity: number
+    price?: number | null
+    stock_qty?: number | null
   }>
   /** Partly-catalog codes the ERP doesn't know — Toyota (SU0*) part ids etc. */
   catalog?: Array<{
@@ -130,17 +133,43 @@ export function CommandPalette() {
 
     setSearching(true)
     debounceRef.current = setTimeout(async () => {
-      try {
-        const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`)
-        if (res.ok) {
-          const data = await res.json()
-          setSearchResults(data)
-        }
-      } catch {
-        // silently fail
-      } finally {
-        setSearching(false)
+      const q = encodeURIComponent(query)
+      // Two endpoints, because /api/search only reaches for the embeddings when
+      // the query LOOKS like a sentence, and caps them at five. That heuristic
+      // is why this palette and the /search page returned different things for
+      // the same words: the page always asked, so it found the part you could
+      // only describe ("משאבת הזרקה") while ⌘K came back empty and sent you to
+      // the sidebar. Ask outright, and there is one search again.
+      const [exact, semantic] = await Promise.allSettled([
+        fetch(`/api/search?q=${q}`).then(r => (r.ok ? r.json() : null)),
+        fetch(`/api/search/semantic?q=${q}&limit=8`).then(r => (r.ok ? r.json() : null)),
+      ])
+
+      const base = exact.status === 'fulfilled' && exact.value ? exact.value : null
+      const smart =
+        semantic.status === 'fulfilled' && semantic.value?.items?.length
+          ? semantic.value.items
+          : base?.semantic
+
+      // Semantic recall is fuzzy by construction, so anything the exact search
+      // already matched is a duplicate row for the same part, not a second hit.
+      const exactCodes = new Set(
+        [...(base?.items ?? []), ...(base?.catalog ?? [])].map((i: { code: string }) =>
+          i.code?.toUpperCase(),
+        ),
+      )
+
+      if (base || smart) {
+        setSearchResults({
+          items: base?.items ?? [],
+          customers: base?.customers ?? [],
+          catalog: base?.catalog ?? [],
+          semantic: (smart ?? []).filter(
+            (i: { code: string }) => !exactCodes.has(i.code?.toUpperCase()),
+          ),
+        })
       }
+      setSearching(false)
     }, 300)
 
     return () => {
@@ -372,8 +401,25 @@ export function CommandPalette() {
                           <div className="font-medium truncate">{item.code}</div>
                           <div className="text-xs text-muted-foreground truncate">{item.name}</div>
                         </div>
-                        <span className="text-xs text-muted-foreground whitespace-nowrap">
-                          {Math.round(item.similarity * 100)}%
+                        <span className="flex shrink-0 items-center gap-2 whitespace-nowrap text-xs text-muted-foreground">
+                          {item.price != null && item.price > 0 && (
+                            <span className="tabular-nums">{formatCurrency(item.price)}</span>
+                          )}
+                          {item.stock_qty != null && (
+                            <span
+                              className={
+                                'tabular-nums ' +
+                                (item.stock_qty > 5
+                                  ? 'text-emerald-600 dark:text-emerald-400'
+                                  : item.stock_qty > 0
+                                    ? 'text-amber-600 dark:text-amber-400'
+                                    : 'text-red-600 dark:text-red-400')
+                              }
+                            >
+                              {t('cmd.stockQty')}: {item.stock_qty}
+                            </span>
+                          )}
+                          <span className="tabular-nums">{Math.round(item.similarity * 100)}%</span>
                         </span>
                       </Command.Item>
                     ))}
