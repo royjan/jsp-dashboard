@@ -37,6 +37,7 @@ import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
 import { isDeclineHidden } from '@/lib/privacy'
 import { seriesColor } from '@/lib/chart-colors'
+import { PageHeader } from '@/components/shared/PageHeader'
 
 type CustomerSortField = 'name' | 'total_revenue' | 'gross_invoices' | 'total_credits' | 'invoice_count' | 'avg_order_value' | 'trend' | 'last_purchase'
 type ChurnSortField = 'name' | 'last_year_revenue' | 'last_purchase'
@@ -436,6 +437,7 @@ function CustomersPageContent() {
 
   return (
     <div className="space-y-4 md:space-y-6">
+      <PageHeader title={t('customers')} icon={Users} />
       <SubTabs
         tabs={[
           { href: '/customers', label: t('customers') },

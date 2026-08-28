@@ -20,6 +20,7 @@ import ReactMarkdown from 'react-markdown'
 import { useQueryClient } from '@tanstack/react-query'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
 import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
+import { PageHeader } from '@/components/shared/PageHeader'
 
 function SeasonalItemsSection({ dateFrom, dateTo }: { dateFrom: string; dateTo: string }) {
   // Subscribe to the demo-mode eye: formatCurrency() masks from a module
@@ -335,6 +336,7 @@ function SeasonalPageContent() {
 
   return (
     <div className="space-y-6">
+      <PageHeader title={t('seasonal')} icon={Sun} />
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex flex-wrap items-center gap-2">
           <DateRangePresets

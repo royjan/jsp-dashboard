@@ -20,6 +20,7 @@ import {
 } from 'lucide-react'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
 import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
+import { PageHeader } from '@/components/shared/PageHeader'
 
 // Margin buckets, in the order FINAPI emits them. `below_cost` is deliberately
 // its own bucket and its own colour — a -3% part and a +3% part are not
@@ -36,6 +37,7 @@ const BUCKET_COLORS: Record<string, string> = {
 }
 
 function MarginContent() {
+  const { t } = useLocale()
   // Subscribe to the demo-mode eye: formatCurrency() and formatMarginPercent()
   // mask from a module store, so without this the amounts here would not
   // re-render on toggle.
@@ -87,6 +89,7 @@ function MarginContent() {
   if (isLoading) {
     return (
       <div className="space-y-4 md:space-y-6">
+        <PageHeader title={t('margin')} icon={Percent} />
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[...Array(4)].map((_, i) => (
             <Card key={i}><CardContent className="p-4"><Skeleton className="h-4 w-20 mb-2" /><Skeleton className="h-8 w-24" /></CardContent></Card>
@@ -172,6 +175,7 @@ function MarginContent() {
 
   return (
     <div className="space-y-4 md:space-y-6">
+      <PageHeader title={t('margin')} icon={Percent} />
       {/* Cost-pending notice */}
       {costPending && (
         <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm">

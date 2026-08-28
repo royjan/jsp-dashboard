@@ -16,6 +16,7 @@ import { ItemLink } from '@/components/shared/ItemLink'
 import { formatNumber } from '@/lib/format'
 import { cardVariants } from '@/lib/motion'
 import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
+import { PageHeader } from '@/components/shared/PageHeader'
 
 
 /** A recent eBay listing as the analytics endpoint returns it. */
@@ -131,6 +132,7 @@ function EbayContent() {
 
   return (
     <div className="space-y-6">
+      <PageHeader title={t('ebay')} icon={ShoppingCart} />
       <EbayTabs />
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3">

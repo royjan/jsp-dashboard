@@ -14,6 +14,7 @@ import { Search, Trash2, AlertTriangle, Package, ShoppingCart, Loader2 } from 'l
 import { formatCurrency, formatNumber } from '@/lib/format'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
 import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
+import { PageHeader } from '@/components/shared/PageHeader'
 
 
 function getScoreColor(score: number) {
@@ -48,6 +49,7 @@ function getSalesLabel(item: any, isHe: boolean) {
 }
 
 function ScrapContent() {
+  const { t } = useLocale()
   // Subscribe to the demo-mode eye: formatCurrency() masks from a module
   // store, so without this the amounts here would not re-render on toggle.
   useMoneyHidden()
@@ -126,6 +128,7 @@ function ScrapContent() {
 
   return (
     <div className="space-y-4 md:space-y-6">
+      <PageHeader title={t('scrap')} icon={Trash2} />
       {/* Search bar */}
       <Card>
         <CardContent className="p-4">

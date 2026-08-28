@@ -7,10 +7,7 @@ import { useLocale } from '@/lib/locale-context'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import {
-  Search, AlertTriangle, TrendingUp, Users, Clock, ArrowUpRight,
-  MessageCircle, Package,
-} from 'lucide-react'
+import { AlertTriangle, ArrowUpRight, Clock, MessageCircle, Package, Search, TrendingDown, TrendingUp, Users } from 'lucide-react'
 import { ItemLink } from '@/components/shared/ItemLink'
 import { SubTabs } from '@/components/shared/SubTabs'
 import {
@@ -21,6 +18,7 @@ import { formatNumber, formatCurrency } from '@/lib/format'
 import { cardVariants } from '@/lib/motion'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
 import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
+import { PageHeader } from '@/components/shared/PageHeader'
 
 
 function LoadingSkeleton() {
@@ -91,6 +89,7 @@ export default function DemandPage() {
 
   return (
     <div className="space-y-6">
+      <PageHeader title={t('demand')} icon={TrendingDown} />
       <SubTabs
         tabs={[
           { href: '/stock', label: t('stock') },

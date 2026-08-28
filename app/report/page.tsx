@@ -14,10 +14,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
 import { ActionPlaybook } from '@/components/report/ActionPlaybook'
-import {
-  TrendingUp, TrendingDown, AlertTriangle, Package, Users, FileText,
-  BarChart3, Calendar, Target, ArrowRight, RefreshCw,
-} from 'lucide-react'
+import { AlertTriangle, ArrowRight, BarChart3, Calendar, FileBarChart, FileText, Package, RefreshCw, Target, TrendingDown, TrendingUp, Users } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
   LineChart, Line, AreaChart, Area, Cell, PieChart, Pie,
@@ -29,6 +26,7 @@ import { cardVariants } from '@/lib/motion'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
 import { isDeclineHidden } from '@/lib/privacy'
 import { DataWarning } from '@/components/shared/DataWarning'
+import { PageHeader } from '@/components/shared/PageHeader'
 
 const MONTH_LABELS_HE = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר']
 const MONTH_LABELS_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -236,6 +234,7 @@ function ReportContent() {
 
   return (
     <div className="space-y-4 md:space-y-6">
+      <PageHeader title={t('report')} icon={FileBarChart} />
       {/* The API has reported query_failures for a while; nothing rendered it,
           so a query that failed showed up as a zero on a revenue card and
           nowhere else. On this data an empty result and a quiet month look

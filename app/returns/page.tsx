@@ -20,6 +20,7 @@ import { formatCurrency, formatNumber } from '@/lib/format'
 import { cardVariants } from '@/lib/motion'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
 import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
+import { PageHeader } from '@/components/shared/PageHeader'
 
 
 function LoadingSkeleton() {
@@ -88,6 +89,7 @@ export default function ReturnsPage() {
 }
 
 function ReturnsContent() {
+  const { t } = useLocale()
   // Subscribe to the demo-mode eye: formatCurrency() masks from a module
   // store, so without this the amounts here would not re-render on toggle.
   useMoneyHidden()
@@ -108,6 +110,7 @@ function ReturnsContent() {
 
   return (
     <div className="space-y-6">
+      <PageHeader title={t('returns')} icon={RotateCcw} />
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3">
         <motion.div custom={0} variants={cardVariants} initial="hidden" animate="visible">
