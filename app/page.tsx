@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useEffect, useRef, Suspense } from 'react'
+import { useState, useMemo, useEffect, useRef, useCallback, Suspense } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useDashboard, useItems } from '@/hooks/use-dashboard'
 import { useSalesAnalytics, useTopSellingItems, useSalesRange, useDemandAnalysis, useCrossPlatformKpis } from '@/hooks/use-analytics'
@@ -87,7 +87,8 @@ function HomePageContent() {
   // store, so without this the amounts here would not re-render on toggle.
   useMoneyHidden()
 
-  const { t } = useLocale()
+  const { t, locale } = useLocale()
+  const isHe = locale === 'he'
   const { get, setMany } = useUrlParams()
   const queryClient = useQueryClient()
   const currentYear = new Date().getFullYear()
@@ -142,6 +143,7 @@ function HomePageContent() {
   const totalTransactions = salesData.reduce((sum, d) => sum + d.count, 0)
 
   const [isBackfilling, setIsBackfilling] = useState(false)
+  const [backfillError, setBackfillError] = useState<string | null>(null)
   const backfillTriggeredRef = useRef(false)
   const [alignByWeekday, setAlignByWeekday] = useState(false)
 
@@ -179,16 +181,31 @@ function HomePageContent() {
 
   const needsBackfill = !useCustomRange && (period === '1y' || period === 'ytd') && prevCoverage < 0.5 && salesData.length > 30
 
+  // Backfilling is something you ask for, not something that happens because
+  // you looked at a chart. This used to fire from an effect the moment previous
+  // -period coverage dipped under 50%: once per tab, so two windows meant two
+  // concurrent document syncs, with `.catch(() => {})` swallowing whatever came
+  // back. Loading a page should not start an ETL job.
   useEffect(() => { backfillTriggeredRef.current = false }, [period])
-  useEffect(() => {
-    if (!needsBackfill || backfillTriggeredRef.current || isLoading) return
+
+  const runBackfill = useCallback(() => {
+    if (backfillTriggeredRef.current) return
     backfillTriggeredRef.current = true
     setIsBackfilling(true)
+    setBackfillError(null)
     fetch('/api/sync?mode=backfill-docs')
-      .then(() => queryClient.invalidateQueries({ queryKey: ['sales-range'] }))
-      .catch(() => {})
+      .then(res => {
+        if (!res.ok) throw new Error(String(res.status))
+        return queryClient.invalidateQueries({ queryKey: ['sales-range'] })
+      })
+      .catch(() => {
+        // Say so. The silent catch here is why a failed backfill looked
+        // identical to one that had simply not finished yet.
+        setBackfillError(isHe ? 'הטעינה נכשלה' : 'Backfill failed')
+        backfillTriggeredRef.current = false
+      })
       .finally(() => setIsBackfilling(false))
-  }, [needsBackfill, isLoading])
+  }, [queryClient, isHe])
 
   // ── Demand section state ──
   const [demandMode, setDemandMode] = useState<'count' | 'qty'>((get('dmode') as 'count' | 'qty') || 'count')
@@ -286,9 +303,30 @@ function HomePageContent() {
       </div>
 
       {needsBackfill && (
-        <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/30 px-4 py-2 text-sm text-muted-foreground">
-          <span className="shrink-0">{isBackfilling ? '⏳' : 'ℹ️'}</span>
-          <span>{isBackfilling ? 'טוען נתונים היסטוריים לתקופה קודמת — ההשוואה תופיע בטעינה הבאה' : 'חסרים נתונים היסטוריים לתקופה קודמת. ניסיון לטעון אוטומטית...'}</span>
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-muted/30 px-4 py-2 text-sm text-muted-foreground">
+          <span className="shrink-0" aria-hidden>{isBackfilling ? '⏳' : 'ℹ️'}</span>
+          <span className="min-w-0 flex-1">
+            {isBackfilling
+              ? (isHe
+                  ? 'טוען נתונים היסטוריים — ההשוואה תופיע כשיסתיים'
+                  : 'Loading history — the comparison appears when it finishes')
+              : (backfillError
+                  ? backfillError
+                  : (isHe
+                      ? 'חסרים נתונים היסטוריים לתקופה הקודמת, ולכן ההשוואה חלקית.'
+                      : 'History for the previous period is incomplete, so the comparison is partial.'))}
+          </span>
+          {!isBackfilling && (
+            <button
+              type="button"
+              onClick={runBackfill}
+              className="shrink-0 rounded-md border border-border bg-background px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-accent"
+            >
+              {backfillError
+                ? (isHe ? 'נסה שוב' : 'Retry')
+                : (isHe ? 'טען נתונים היסטוריים' : 'Load history')}
+            </button>
+          )}
         </div>
       )}
 
