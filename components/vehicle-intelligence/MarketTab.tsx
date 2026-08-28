@@ -150,7 +150,10 @@ export function MarketTab() {
                 <Fuel className="h-3.5 w-3.5 text-amber-500" />
                 {isHe ? 'סוגי דלק' : 'Fuel Types'}
               </div>
-              <div className="text-xl sm:text-2xl font-bold">{fuelBreakdown.length}</div>
+              {/* REAL fuels only. `fuel_breakdown` also carries the אחר and ללא סיווג
+                  buckets that make the donut sum to the fleet, and counting those here
+                  would report two more fuel types than Israel has. */}
+              <div className="text-xl sm:text-2xl font-bold">{data.fuel_type_count ?? fuelBreakdown.length}</div>
             </CardContent>
           </Card>
         </motion.div>
@@ -201,7 +204,7 @@ export function MarketTab() {
                 <ResponsiveContainer width="100%" height={260}>
                   <PieChart>
                     <Pie activeShape={ActivePieSector}
-                      data={fuelBreakdown.slice(0, 8)}
+                      data={fuelBreakdown}
                       dataKey="count"
                       nameKey="fuel"
                       cx="50%"
@@ -212,7 +215,7 @@ export function MarketTab() {
                       labelLine={false}
                       {...PIE_PROPS}
                     >
-                      {fuelBreakdown.slice(0, 8).map((_: any, i: number) => (
+                      {fuelBreakdown.map((_: any, i: number) => (
                         <Cell key={i} fill={seriesColor(i)} />
                       ))}
                     </Pie>
@@ -226,7 +229,7 @@ export function MarketTab() {
               </div>
               <ChartLegendChips
                 className="justify-center"
-                items={fuelBreakdown.slice(0, 8).map((f: any, i: number) => ({
+                items={fuelBreakdown.map((f: any, i: number) => ({
                   key: f.fuel ?? String(i),
                   label: f.fuel ?? '—',
                   value: formatNumber(f.count || 0),
