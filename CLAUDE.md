@@ -87,7 +87,21 @@ data/
 - **Components**: PascalCase `.tsx`, Radix UI + Tailwind + CVA
 - **Hooks**: `use-*` pattern in `/hooks`
 - **i18n**: All UI text uses translation keys, Hebrew primary
-- **Data flow**: React Query hooks → API routes → Finansit SDK → Redis cache
+- **Data flow**: React Query hooks → API routes → Finansit SDK → Redis cache.
+  This is the intended pattern and what new code should follow, but be aware
+  three conventions coexist today: shared hooks in `/hooks` (~35 pages), inline
+  `useQuery` with the fetch written in the page (~22), and plain
+  `useEffect` + `fetch` + `useState` with no React Query at all (~28, including
+  `/stock`, `/competitors` and `/stock-forecast`). Prefer the hooks; convert
+  rather than extend the other two.
+- **Colour**: semantic tokens (`--success`/`--warning`/`--info`) and chart
+  series (`--chart-1..8`) are defined per theme in `app/globals.css`. Use them
+  rather than raw Tailwind palette classes — a `text-emerald-500` has no dark
+  counterpart unless you write one, which is how ~2,600 unpaired palette
+  utilities accumulated. Chart series come from `lib/chart-colors.ts`
+  (`seriesColor(i)`, which never cycles); never wrap a token in `hsl()`, the
+  values are hex and `hsl(var(--x))` renders no mark at all.
+- **Page titles**: `components/shared/PageHeader.tsx`, not a hand-rolled `<h1>`.
 - **Standalone output**: Docker-optimized Next.js build
 
 ## Finansit SDK Integration
@@ -218,14 +232,23 @@ wrong exit code.
 
 ## Dashboard Pages
 
-| Page | Purpose |
+**84 `page.tsx` files — about 60 real screens** once the 10 redirect stubs and
+the thin shells are discounted. The table below used to list nine and was read
+as the whole app; it is a map of the main areas, not an inventory. The
+authoritative list is `lib/navigation.ts`, which every nav surface derives from.
+
+| Area | Screens |
 |------|---------|
-| Overview (`/`) | Sales trends, KPIs, YoY comparisons, demand scatter |
-| Seasonal (`/seasonal`) | Item category heatmap by month, seasonal clustering |
-| Stock (`/stock`) | Dead stock analysis, capital tied up, lifecycle view |
-| Customers (`/customers`) | Top customers, churn analysis, revenue trends |
-| Customer Detail (`/customers/[code]`) | Individual customer orders, aging, balance |
-| Receivables (`/receivables`) | AR aging buckets, payment terms, overdue |
-| Gap Analysis (`/gap`) | Items quoted but not in stock (supply chain gaps) |
-| Scrap (`/scrap`) | Dead stock candidates, 4-year sales history |
-| Reorder (`/reorder`) | AI-powered reorder recommendations |
+| Overview | `/` `/brief` `/search` `/seasonal` `/report` |
+| Inventory | `/stock` `/stock/demand` `/stock-forecast` `/gap` `/gap/catalog` `/scrap` `/returns` `/reorder` `/catalog-links` |
+| Sales | `/customers` (+`/[code]`, `/health-score`) `/receivables` `/margin` `/pricing` `/ebay` `/ebay-reco` `/sales-rep/*` |
+| Operations | `/suppliers/*` `/price-lists` `/inquiries` `/invoices` `/credits` `/competitors` `/shipments` `/deliveries` `/vehicle-intelligence` `/alerts` |
+| Bookkeeping | `/bookkeeping` + accounts, trial-balance, journal, vat, cash, purchasing, years |
+| Chat admin | `/chat/*` (flow-decisions, observatory, word-mappings, parts-analytics, diego, feedback, simulator) + `/chat-insights` |
+
+**Navigation lives in one place: `lib/navigation.ts`.** Sidebar, MobileNav and
+CommandPalette all derive from it, and an entry appears on every surface unless
+it opts out via `surfaces`. Add a screen there or it is unreachable — which is
+how `/reorder`, `/chat-insights`, `/catalog-links` and `/bookkeeping/years`
+ended up as ~1,800 lines nothing linked to.
+

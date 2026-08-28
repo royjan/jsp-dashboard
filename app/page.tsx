@@ -26,6 +26,8 @@ import { ChartGrid } from '@/components/charts/kit'
 import { formatCurrency, formatDate, formatNumber } from '@/lib/format'
 import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
+import { PageHeader } from '@/components/shared/PageHeader'
+import { LayoutDashboard } from 'lucide-react'
 
 function getPreviousPeriodRange(period: Period): { dateFrom: string; dateTo: string } {
   const now = new Date()
@@ -258,6 +260,11 @@ function HomePageContent() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
+      {/* The overview was the ninth screen with no heading element. The TopBar
+          names the route but is deliberately not an h1 (see the comment there),
+          so the app's front page had no document outline at all and nothing for
+          a screen reader to land on above the KPI figures. */}
+      <PageHeader title={t('overview')} icon={LayoutDashboard} />
 
       {/* ── Morning Brief ── */}
       <MorningBrief />
