@@ -509,6 +509,63 @@ export async function getItemDescriptions(partNumbers: string[]): Promise<XpartD
   )
 }
 
+export interface XpartSupplierDescription {
+  description: string
+  suppliers: string
+  supplier_count: number
+  last_seen: string | null
+}
+
+/**
+ * What each supplier actually called this part, taken from what they were
+ * ordered against.
+ *
+ * `item_descriptions` cannot answer this -- it has no supplier column, and all
+ * price-list wording collapses into one 'price_list' row upstream. Purchase
+ * orders can: `order_items.description` is the line as it was written for that
+ * supplier, and `orders.supplier_id` says who. It is also the largest such
+ * source in Xpart by an order of magnitude (36k lines, 12k distinct names)
+ * against shipment_items and invoice_items at ~1.5k each, which are copied
+ * downstream from these same order lines anyway.
+ *
+ * Two collapses, in this order, because the raw rows are mostly repetition:
+ *   - the latest line per supplier, so a supplier who has ordered a part for
+ *     years is described by what it calls the part now, not in 2019;
+ *   - then one row per distinct name, listing the suppliers who use it, so five
+ *     suppliers agreeing is one row rather than five identical ones. The card
+ *     exists to show disagreement; agreement should take one line.
+ */
+export async function getSupplierDescriptions(partNumbers: string[]): Promise<XpartSupplierDescription[]> {
+  const codes = [...new Set(partNumbers.map(c => String(c || '').trim()).filter(Boolean))]
+  if (codes.length === 0) return []
+  return xpartQuery<XpartSupplierDescription>(
+    `WITH latest AS (
+       SELECT DISTINCT ON (s.name)
+              s.name AS supplier,
+              btrim(oi.description) AS description,
+              o.order_date
+         FROM order_items oi
+         JOIN orders o ON o.order_id = oi.order_id
+         JOIN suppliers s ON s.supplier_id = o.supplier_id
+        WHERE oi.part_number = ANY($1::text[])
+          AND (oi.tenant_id IS NULL OR oi.tenant_id = $2)
+          AND oi.description IS NOT NULL
+          AND btrim(oi.description) <> ''
+          AND s.name IS NOT NULL AND btrim(s.name) <> ''
+        ORDER BY s.name, o.order_date DESC NULLS LAST
+     )
+     SELECT description,
+            string_agg(supplier, ', ' ORDER BY supplier) AS suppliers,
+            count(*)::int AS supplier_count,
+            max(order_date)::text AS last_seen
+       FROM latest
+      GROUP BY description
+      ORDER BY count(*) DESC, max(order_date) DESC NULLS LAST
+      LIMIT 8`,
+    [codes, T],
+  )
+}
+
 export interface XpartInvoice {
   invoice_id: string
   invoice_number: string

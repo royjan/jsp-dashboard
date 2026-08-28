@@ -12,8 +12,12 @@
  * One caveat worth knowing when reading this: the Xpart rows are attributed to
  * the import CHANNEL, not the supplier. All suppliers' price-list wording
  * collapses into a single 'price_list' row upstream, last import wins, so this
- * is not "what each supplier calls it". Competitor rows are per-competitor and
- * are the exception.
+ * is not "what each supplier calls it".
+ *
+ * The supplier rows are. They come from purchase-order lines, which is the one
+ * place Xpart keeps a description and the supplier it was written for together,
+ * and they carry the supplier's name -- several names, where suppliers agree on
+ * the wording. Competitor rows are per-competitor for the same reason.
  */
 
 import { useQuery } from '@tanstack/react-query'
@@ -25,10 +29,12 @@ import type { Provenance } from '@/lib/provenance'
 
 interface Alias {
   source: string
-  sourceKind: 'xpart' | 'catalog' | 'competitor' | 'distributor'
+  sourceKind: 'xpart' | 'catalog' | 'competitor' | 'distributor' | 'supplier'
   language: string | null
   description: string
   isPrimary?: boolean
+  /** Supplier rows only: when a supplier last ordered the part under this name. */
+  lastSeen?: string | null
 }
 
 interface Response {
@@ -42,6 +48,7 @@ const KIND_TONE: Record<Alias['sourceKind'], string> = {
   catalog: 'bg-violet-500/10 text-violet-600 dark:text-violet-400',
   competitor: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
   distributor: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+  supplier: 'bg-sky-500/10 text-sky-600 dark:text-sky-400',
 }
 
 const SOURCE_LABEL_HE: Record<string, string> = {
@@ -94,12 +101,20 @@ export function ItemAliasesCard({ code, isHe }: { code: string; isHe: boolean })
             <span dir="auto" className="min-w-0 break-words">
               {a.description}
             </span>
+            {/* Only supplier rows are dated: they come from an order, so there is
+                a real "when", and a name a supplier last used in 2019 should not
+                read like this year's. */}
+            {a.lastSeen && (
+              <span className="text-[10px] tabular-nums text-muted-foreground/70">
+                {a.lastSeen.slice(0, 7)}
+              </span>
+            )}
           </div>
         ))}
         <p className="pt-1 text-[11px] text-muted-foreground">
           {isHe
-            ? 'מקורות Xpart מסומנים לפי ערוץ הייבוא ולא לפי ספק — כל מחירוני הספקים נשמרים באותה שורה ב‑Xpart. שורות מתחרים הן לפי מתחרה.'
-            : 'Xpart rows are labelled by import channel, not supplier — all suppliers’ price lists share one row upstream. Competitor rows are per competitor.'}
+            ? 'מקורות Xpart מסומנים לפי ערוץ הייבוא ולא לפי ספק — כל מחירוני הספקים נשמרים באותה שורה ב‑Xpart. שורות ספק מגיעות משורות הזמנות הרכש, ושורות מתחרים הן לפי מתחרה.'
+            : 'Xpart rows are labelled by import channel, not supplier — all suppliers’ price lists share one row upstream. Supplier rows come from purchase-order lines; competitor rows are per competitor.'}
         </p>
       </CardContent>
     </Card>

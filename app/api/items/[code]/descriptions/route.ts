@@ -2,7 +2,7 @@ export const maxDuration = 45
 
 import { NextResponse } from 'next/server'
 import { initializeSecrets } from '@/lib/aws-secrets'
-import { getItemDescriptions } from '@/lib/xpart/queries'
+import { getItemDescriptions, getSupplierDescriptions } from '@/lib/xpart/queries'
 import { fetchItemHistory } from '@/lib/finansit-client'
 import { readQueryAsync } from '@/lib/neon-read'
 import type { Provenance } from '@/lib/provenance'
@@ -23,13 +23,21 @@ import type { Provenance } from '@/lib/provenance'
  *   partly.global_parts       the manufacturer catalogue, HE and EN
  *   competitor_items          what each competitor's price sheet calls it
  *   xpart.lubinski_price_list the official distributor's own wording
+ *   order_items → orders      what each SUPPLIER called it when we ordered it
+ *
+ * The last one is the only per-supplier naming that exists: item_descriptions
+ * has no supplier column and collapses every price list into one 'price_list'
+ * row, so before this the card could say "supplier price list" but never which
+ * supplier. Purchase order lines carry both.
  */
 interface Alias {
   source: string
-  sourceKind: 'xpart' | 'catalog' | 'competitor' | 'distributor'
+  sourceKind: 'xpart' | 'catalog' | 'competitor' | 'distributor' | 'supplier'
   language: string | null
   description: string
   isPrimary?: boolean
+  /** Supplier rows only: when a supplier last ordered the part under this name. */
+  lastSeen?: string | null
 }
 
 export async function GET(_req: Request, { params }: { params: Promise<{ code: string }> }) {
@@ -78,6 +86,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ code: s
           LIMIT 1`,
         [codes],
       ),
+      getSupplierDescriptions(codes),
     ])
 
     if (settle[0].status === 'fulfilled') {
@@ -120,6 +129,18 @@ export async function GET(_req: Request, { params }: { params: Promise<{ code: s
       }
     }
 
+    if (settle[4].status === 'fulfilled') {
+      for (const r of settle[4].value) {
+        aliases.push({
+          source: r.suppliers,
+          sourceKind: 'supplier',
+          language: null,
+          description: r.description,
+          lastSeen: r.last_seen,
+        })
+      }
+    }
+
     // Two channels importing the identical string is not two names.
     const seen = new Set<string>()
     const deduped = aliases.filter(a => {
@@ -139,7 +160,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ code: s
       provenance: {
         source: deduped.length ? 'postgres' : 'unavailable',
         rows: deduped.length,
-        scope: 'Xpart · קטלוג · מתחרים',
+        scope: 'Xpart · קטלוג · מתחרים · ספקים',
         reason: deduped.length ? undefined : 'לא נמצאו תיאורים נוספים',
       } satisfies Provenance,
     })

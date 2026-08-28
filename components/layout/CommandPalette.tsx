@@ -183,8 +183,19 @@ export function CommandPalette() {
     // `exactResults.semantic` is the fallback the exact endpoint folds in itself
     // when it decided the query looked like a sentence.
     const raw = (smartItems?.length ? smartItems : exactResults?.semantic) ?? []
-    return raw.filter((i: { code: string }) => !exactCodes.has(i.code?.toUpperCase()))
-  }, [exactResults, smartItems])
+    // A row whose CODE contains what you typed is not a smart find, whatever
+    // endpoint returned it. Typing 1920L matched thirteen codes, the exact
+    // search returned the first few, and the rest came back through the other
+    // endpoint and landed under "smart search" -- so 1920LL was an item and
+    // 1920LR was an insight, for no reason a reader could see. That is a cap
+    // artefact, not a discovery. When embeddings arrive this filter stops
+    // matching anything, because a semantic hit is found by its name.
+    const needle = query.trim().toUpperCase()
+    return raw.filter((i: { code: string }) => {
+      const code = i.code?.toUpperCase()
+      return !exactCodes.has(code) && !(needle && code?.includes(needle))
+    })
+  }, [exactResults, smartItems, query])
 
   const runAction = useCallback(
     (action: () => void) => {
@@ -243,19 +254,27 @@ export function CommandPalette() {
         </kbd>
       </button>
 
-      {/* Command Palette Dialog */}
+      {/* Command Palette Dialog.
+
+          Closing by clicking away is handled on the overlay, not the backdrop.
+          The backdrop is a SIBLING of the palette rather than its parent, so it
+          only caught clicks that happened to miss the box's own rectangle. And
+          on mousedown, not click, so a press that starts outside closes on the
+          press instead of waiting for a mouseup the pointer may never deliver
+          there. The palette stops the event, which is what keeps clicking
+          inside it from closing it. */}
       {open && (
-        <div className="fixed inset-0 z-50">
+        <div className="fixed inset-0 z-50" onMouseDown={closePalette}>
           {/* Backdrop */}
-          <div
-            className="fixed inset-0 bg-black/50 backdrop-blur-sm"
-            onClick={closePalette}
-          />
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" />
 
           {/* Palette */}
           {/* Sits higher on a phone: the on-screen keyboard eats the lower half,
               and at top-[15%] the first results were pushed under it. */}
-          <div className="fixed inset-x-0 top-[5%] sm:top-[15%] mx-auto max-w-lg px-4">
+          <div
+            className="fixed inset-x-0 top-[5%] sm:top-[15%] mx-auto max-w-lg px-4"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
             <Command
               className="rounded-xl border bg-popover text-popover-foreground shadow-2xl overflow-hidden"
               dir="rtl"

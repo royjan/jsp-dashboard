@@ -143,7 +143,12 @@ export async function GET(request: NextRequest) {
       Promise<{ customers: any[] }>,
       Promise<{ items: any[] }> | null,
     ] = [
-      client.items.search(q, 5).catch(() => ({ items: [] })),
+      // 10, not 5: "1920L" matches thirteen codes in the ERP, and at five the
+      // other eight fell off the list and came back through the semantic
+      // endpoint, where they read as smart finds rather than as the plain code
+      // matches they are. The list scrolls; the cap was the only thing making
+      // consecutive codes look like different kinds of result.
+      client.items.search(q, 10).catch(() => ({ items: [] })),
       client.customers.search(q, 5).catch(() => ({ customers: [] })),
       isNaturalLanguage
         ? client.items.semanticSearch(q, 5).catch(() => ({ items: [] }))
@@ -160,7 +165,7 @@ export async function GET(request: NextRequest) {
       ? (results[2] as { items: any[] })
       : { items: [] }
 
-    const rawItems = (itemsResult.items || itemsResult || []).slice(0, 5)
+    const rawItems = (itemsResult.items || itemsResult || []).slice(0, 10)
     const customers = (customersResult.customers || customersResult || []).slice(0, 5)
     const semantic = (semanticResult.items || []).slice(0, 5)
     const [items, catalog] = await Promise.all([
