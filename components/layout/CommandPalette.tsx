@@ -8,7 +8,7 @@ import { useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
 import { useQueryClient } from '@tanstack/react-query'
 import { useLocale } from '@/lib/locale-context'
-import { sectionsFor } from '@/lib/navigation'
+import { flatSectionsFor } from '@/lib/navigation'
 import { brandChipClasses } from '@/lib/brand'
 import { Eye, EyeOff, Loader2, Moon, Package, RefreshCw, Search, Sparkles, Sun, User, Clock, X } from 'lucide-react'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
@@ -530,7 +530,7 @@ export function CommandPalette() {
                     19 entries behind the sidebar, so whole areas of the app
                     (suppliers, shipments, deliveries, all of chat) simply could
                     not be reached from the keyboard. */}
-                {sectionsFor('palette').map((section) => (
+                {flatSectionsFor('palette').map((section) => (
                   <Command.Group
                     key={section.id}
                     heading={t(section.labelKey)}
@@ -538,15 +538,23 @@ export function CommandPalette() {
                   >
                     {section.items.map((item) => {
                       const Icon = item.icon
+                      // A tab promoted out of its parent says which screen it
+                      // belongs to: 'זיכויים' alone is indistinguishable from
+                      // 'זיכויי ספקים' in a flat list. The parent name is in
+                      // `value` too, so typing the screen finds its tabs.
+                      const parent = item.qualifierKey ? t(item.qualifierKey) : null
                       return (
                         <Command.Item
                           key={item.href}
-                          value={`nav ${t(item.labelKey)} ${item.href}`}
+                          value={`nav ${parent ? `${parent} ` : ''}${t(item.labelKey)} ${item.href}`}
                           onSelect={() => runAction(() => router.push(item.href))}
                           className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm cursor-pointer aria-selected:bg-accent aria-selected:text-accent-foreground"
                         >
                           <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
-                          <span>{t(item.labelKey)}</span>
+                          <span>
+                            {parent && <span className="text-muted-foreground">{parent} › </span>}
+                            {t(item.labelKey)}
+                          </span>
                         </Command.Item>
                       )
                     })}

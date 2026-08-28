@@ -6,6 +6,7 @@ import { usePathname, useSearchParams } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { useLocale } from '@/lib/locale-context'
 import { sectionsFor, isItemActive, type NavItem, type NavSection } from '@/lib/navigation'
+import { useMoneyHidden } from '@/lib/use-money-hidden'
 import { ChevronDown, ChevronLeft, Warehouse } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
@@ -45,21 +46,36 @@ function sectionOfPath(
   pathname: string,
   params: URLSearchParams | null,
 ): string | null {
-  const hit = sections.find((s) => s.items.some((i) => isItemActive(i, pathname, params)))
+  const hit = sections.find((s) =>
+    s.items.some((i) => isItemActive(i, pathname, params) || subtreeHasActive(i, pathname, params)),
+  )
   if (hit) return hit.id
 
+  // Longest own-path match, which also covers the queryMatch entries while the
+  // search params are still suspending: /report is not "active" then, but it is
+  // still the page you are on.
   let best: string | null = null
   let bestLen = 0
   for (const section of sections) {
-    for (const item of section.items) {
+    for (const item of [...section.items, ...section.items.flatMap((i) => i.children ?? [])]) {
       const href = (item.matchHref ?? item.href).split('?')[0]
-      if (href !== '/' && pathname.startsWith(`${href}/`) && href.length > bestLen) {
+      const owns = href !== '/' && (pathname === href || pathname.startsWith(`${href}/`))
+      if (owns && href.length > bestLen) {
         best = section.id
         bestLen = href.length
       }
     }
   }
   return best
+}
+
+/** Is the current route one of this item's tabs? */
+function subtreeHasActive(
+  item: NavItem,
+  pathname: string,
+  params: URLSearchParams | null,
+): boolean {
+  return (item.children ?? []).some((c) => isItemActive(c, pathname, params))
 }
 
 function SidebarNavList({
@@ -103,6 +119,35 @@ function SidebarNavList({
   }, [activeSectionId, setOpenId])
 
   /**
+   * The third level, one open at a time, on the same two-empty-values scheme
+   * as the sections above: the tabs of the screen you are on are showing
+   * before you touch anything, and any other parent can be opened by its
+   * chevron without navigating there first.
+   */
+  const [openTabsOf, setOpenTabsOf] = usePersisted<string | null>('ui.sidebar.openTabs', null)
+  const moneyHidden = useMoneyHidden()
+
+  // Being ON the parent counts, not just on one of its tabs: /report's own row
+  // IS the summary tab, so landing there must still reveal the other six. The
+  // pathname clause carries the queryMatch entries (/report, /chat/diego)
+  // through the render where the search params are still suspending and
+  // isItemActive cannot answer yet.
+  const routeParent = sections
+    .flatMap((s) => s.items)
+    .find(
+      (i) =>
+        (i.children?.length ?? 0) > 0 &&
+        (isItemActive(i, pathname, params) ||
+          subtreeHasActive(i, pathname, params) ||
+          pathname === (i.matchHref ?? i.href).split('?')[0]),
+    )?.href ?? null
+  const expandedTabsOf = openTabsOf === null ? routeParent : openTabsOf
+
+  useEffect(() => {
+    if (routeParent) setOpenTabsOf(routeParent)
+  }, [routeParent, setOpenTabsOf])
+
+  /**
    * Unacknowledged customer feedback is the only count on the tree today, but
    * a closed section must not swallow what its rows were shouting about -- so
    * the header rolls up whatever this returns rather than knowing about
@@ -113,10 +158,36 @@ function SidebarNavList({
       ? unackCount
       : undefined
 
+  /**
+   * A tab row. Deliberately not the parent's shape: no icon (seven more icons
+   * in a 224px column is noise, and the indent already says what these are),
+   * smaller text, and the same solid pill when active -- the pill is always
+   * exactly where you are, at whichever level.
+   */
+  const renderChild = (child: NavItem) => (
+    <Link
+      key={child.href}
+      href={child.href}
+      className={cn(
+        'flex items-center rounded-md px-3 py-1.5 text-[13px] transition-colors',
+        isItemActive(child, pathname, params)
+          ? 'bg-primary font-semibold text-primary-foreground'
+          : 'text-muted-foreground hover:bg-accent hover:text-foreground',
+      )}
+    >
+      <span className="truncate">{t(child.labelKey)}</span>
+    </Link>
+  )
+
   const renderItem = (item: NavItem) => {
     const isActive = isItemActive(item, pathname, params)
     const Icon = item.icon
     const badge = badgeOf(item)
+    // Demo mode drops /report's revenue tab, so the row for it goes too.
+    const children = (item.children ?? []).filter((c) => !(c.demoHidden && moneyHidden))
+    const hasChildren = children.length > 0 && !collapsed
+    const tabsOpen = hasChildren && expandedTabsOf === item.href
+    const holdsActive = subtreeHasActive(item, pathname, params)
 
     const link = (
       <Link
@@ -126,7 +197,11 @@ function SidebarNavList({
           'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors relative',
           isActive
             ? 'bg-primary text-primary-foreground'
-            : 'text-muted-foreground hover:bg-accent hover:text-foreground',
+            : holdsActive
+              // Not where you are, but what you are inside.
+              ? 'bg-accent/60 text-foreground'
+              : 'text-muted-foreground hover:bg-accent hover:text-foreground',
+          hasChildren ? 'flex-1' : '',
           collapsed && 'justify-center px-2'
         )}
       >
@@ -157,7 +232,39 @@ function SidebarNavList({
         </Tooltip>
       )
     }
-    return link
+    if (!hasChildren) return link
+
+    return (
+      <div key={item.href}>
+        <div className="flex items-center gap-0.5">
+          {link}
+          {/* A separate control, not part of the link: opening a screen's tabs
+              and going to that screen are two different intentions, and the
+              second one should still be one click from anywhere. */}
+          <button
+            type="button"
+            onClick={() => setOpenTabsOf(tabsOpen ? '' : item.href)}
+            aria-expanded={tabsOpen}
+            aria-label={t(item.labelKey)}
+            className="shrink-0 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
+            <ChevronDown
+              className={cn(
+                'h-3.5 w-3.5 transition-transform',
+                !tabsOpen && (isRTL ? 'rotate-90' : '-rotate-90'),
+              )}
+            />
+          </button>
+        </div>
+        {tabsOpen && (
+          // The guide line carries the eye back to the parent; without it a
+          // tab row reads as a sibling that happens to be indented.
+          <div className="ms-5 mt-0.5 space-y-0.5 border-s border-border/70 ps-2">
+            {children.map(renderChild)}
+          </div>
+        )}
+      </div>
+    )
   }
 
   return (
