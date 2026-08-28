@@ -10,6 +10,23 @@ import { useUploadPriceList, usePriceUploads } from '@/hooks/use-suppliers'
 import { Upload, FileSpreadsheet, CheckCircle2, AlertCircle, Loader2, X } from 'lucide-react'
 import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
 
+/*
+ * A second way in, and the one nobody uses.
+ *
+ * This uploader parses a sheet into dashboard.supplier_price_uploads.parsedData
+ * as a jsonb blob. As of 2026-08-28 that table holds ZERO completed uploads,
+ * while Xpart — which has a real importer with column mapping, brand
+ * resolution, change detection and price history — holds 1.16M active prices
+ * for the same suppliers. The catalogue rendered above this component comes
+ * from there.
+ *
+ * So treat this as a fallback for a list that never went through Xpart, not as
+ * the normal path. If it does start being used, the thing to fix is that its
+ * output lands in a blob nothing joins to, rather than in a normalized table
+ * beside the mirrored prices — two ingestion paths writing different shapes is
+ * how the same supplier ends up with two different prices for one part.
+ */
+
 /** A parsed row from the uploaded price list, as the API echoes it back. */
 interface PreviewRow {
   itemCode: string

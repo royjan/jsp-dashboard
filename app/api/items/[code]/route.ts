@@ -274,6 +274,15 @@ export async function GET(
        price list knows it as "ראש מנוע". Prefer either over showing nothing.
        Name-driven, not existence-driven — an ERP name always wins when present. */
     if (!String(item.name ?? '').trim()) {
+      /* xpart.lubinski_price_list is a manual upload last refreshed 2026-03-04.
+         Its PRICES are stale — 4,034 of the 87,490 codes it shares with the
+         live mirror (dashboard.xpart_supplier_prices, is_retail) now disagree,
+         median 5% and 799 by more than 10% — and nothing reads them, here or
+         anywhere. Only `description` is used, and only as a name fallback.
+         Keep it that way: for a current retail price use the mirror. The table
+         survives because it is the one place holding Lubinski's OWN wording —
+         Xpart collapses every supplier's price-list text into a single
+         source='price_list' row, so per-supplier naming exists nowhere else. */
       const fb = await query(
         `SELECT coalesce(nullif(gp.hebrew_description, '-'), '') AS heb,
                 gp.description AS eng,
