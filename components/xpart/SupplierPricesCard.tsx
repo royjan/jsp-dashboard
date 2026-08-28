@@ -13,12 +13,14 @@
  */
 
 import { useQuery } from '@tanstack/react-query'
-import { Coins } from 'lucide-react'
+import Link from 'next/link'
+import { Coins, ExternalLink } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
 import { FreshnessChip } from '@/components/shared/FreshnessChip'
 import { formatCurrency, formatNumber } from '@/lib/format'
+import { xpartUrl } from '@/lib/xpart-links'
 import type { Provenance } from '@/lib/provenance'
 
 interface SupplierPrice {
@@ -32,6 +34,10 @@ interface SupplierPrice {
   price_list_name: string | null
   effective_date: string | null
   via_code?: string
+  /** ERP code, where the supplier has an account. Null for Lubinski/ORLYD/SOEX. */
+  supplier_finansit_code?: string | null
+  /** Xpart's own id — the fallback destination for the three with no ERP account. */
+  supplier_xpart_id?: string | null
 }
 
 interface Response {
@@ -84,7 +90,33 @@ export function SupplierPricesCard({ code, isHe }: { code: string; isHe: boolean
       sortable: true,
       cell: p => (
         <span className="flex items-center gap-1.5">
-          {p.supplier_name}
+          {/* The name was dead text on the one card where "who do we buy this
+              from" is the question being asked. Where the supplier has an ERP
+              account its dashboard page is the destination — open orders,
+              deliveries, its catalogue. Lubinski, ORLYD and SOEX have none, so
+              those go to Xpart, the only system they exist in, marked with an
+              external-link icon and a title saying why. */}
+          {p.supplier_finansit_code ? (
+            <Link
+              href={`/suppliers/${encodeURIComponent(p.supplier_finansit_code)}`}
+              className="text-primary hover:underline"
+            >
+              {p.supplier_name}
+            </Link>
+          ) : p.supplier_xpart_id ? (
+            <a
+              href={xpartUrl.supplier(p.supplier_xpart_id)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-primary hover:underline"
+              title={isHe ? 'לספק אין חשבון ב‑ERP — נפתח ב‑Xpart' : 'No ERP account — opens in Xpart'}
+            >
+              {p.supplier_name}
+              <ExternalLink className="h-3 w-3 opacity-60" />
+            </a>
+          ) : (
+            p.supplier_name
+          )}
           {p.via_code && p.via_code !== code && (
             <Badge variant="outline" className="text-[10px] font-mono">
               {p.via_code}

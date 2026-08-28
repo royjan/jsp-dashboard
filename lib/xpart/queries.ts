@@ -509,6 +509,42 @@ export async function getItemDescriptions(partNumbers: string[]): Promise<XpartD
   )
 }
 
+export interface XpartSupplierIdentity {
+  supplier_id: string
+  name: string
+  finansit_code: string | null
+  supplier_role: string | null
+}
+
+/**
+ * Who each supplier is in the two systems, so a name can become a link.
+ *
+ * The mirrored price rows carry `supplier_code` -- "11", "AUTOMOTOR", "LUB" --
+ * which is Xpart's own code and not the ERP's, so it routes nowhere. The ERP
+ * code (ARG is 0000055084) lives only here, next to the name the mirror does
+ * carry.
+ *
+ * `finansit_code` is NULLIF(btrim(...), '') because Xpart stores the missing
+ * ones as empty strings, and '' would look like a real code and produce
+ * `/suppliers/` for every supplier that has no ERP account -- which is three of
+ * the eleven: Lubinski, ORLYD and SOEX. Those get `supplier_id` instead, for a
+ * link into Xpart, the only system where they exist.
+ *
+ * Eleven rows and no per-item filter: this is the whole supplier list, cached
+ * by the caller for the same reason it fits in one query.
+ */
+export async function listSupplierIdentities(): Promise<XpartSupplierIdentity[]> {
+  return xpartQuery<XpartSupplierIdentity>(
+    `SELECT supplier_id, name,
+            NULLIF(btrim(finansit_code), '') AS finansit_code,
+            supplier_role
+       FROM suppliers
+      WHERE (tenant_id IS NULL OR tenant_id = $1)
+        AND name IS NOT NULL AND btrim(name) <> ''`,
+    [T],
+  )
+}
+
 export interface XpartSupplierDescription {
   description: string
   suppliers: string

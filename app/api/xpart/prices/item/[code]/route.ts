@@ -3,6 +3,7 @@ export const maxDuration = 30
 import { NextResponse } from 'next/server'
 import { initializeSecrets } from '@/lib/aws-secrets'
 import { getItemSupplierPrices } from '@/lib/xpart/prices'
+import { listSupplierIdentities } from '@/lib/xpart/queries'
 import { fetchItemHistory } from '@/lib/finansit-client'
 import type { Provenance } from '@/lib/provenance'
 
@@ -57,9 +58,28 @@ export async function GET(_req: Request, { params }: { params: Promise<{ code: s
       }
     }
 
-    const prices = [...bySupplier.values()].sort(
-      (a, b) => Number(a.is_retail) - Number(b.is_retail) || (a.landed_ils ?? 0) - (b.landed_ils ?? 0),
-    )
+    // Who the supplier is in the other system, so the card can link the name.
+    // Joined on the name because the mirror's `supplier_code` is Xpart's code
+    // ("11", "LUB") and the ERP's is a zero-padded ten-digit one -- the mirror
+    // has no column that reaches either supplier page. Case-folded, since one
+    // side writes "starcityautos" and this is a display name, not a key.
+    //
+    // Failure here loses the links, not the prices: the prices are the card.
+    const identities = await listSupplierIdentities().catch(() => [])
+    const byName = new Map(identities.map(i => [i.name.trim().toLowerCase(), i]))
+
+    const prices = [...bySupplier.values()]
+      .map(p => {
+        const id = byName.get((p.supplier_name ?? '').trim().toLowerCase())
+        return {
+          ...p,
+          supplier_finansit_code: id?.finansit_code ?? null,
+          supplier_xpart_id: id?.supplier_id ?? null,
+        }
+      })
+      .sort(
+        (a, b) => Number(a.is_retail) - Number(b.is_retail) || (a.landed_ils ?? 0) - (b.landed_ils ?? 0),
+      )
     const codes = [itemCode, ...chainCodes]
 
     const retail = prices.find(p => p.is_retail) ?? null
