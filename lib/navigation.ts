@@ -13,6 +13,15 @@
  * surface derives from NAV_SECTIONS below, and an item appears on ALL surfaces
  * unless it opts out via `surfaces` -- so the default for a newly added screen
  * is reachable, and hiding one is a deliberate, visible act.
+ *
+ * SECTIONS ARE NAMED AFTER THE WORK, NOT AFTER THE SYSTEM. A section is where
+ * someone looks when they have a job in hand, so the test for a new entry is
+ * "which job is this part of", not "which table does it read". That is why
+ * stock alerts live with stock rather than in a catch-all, and why supplier
+ * invoices and supplier credits are one section apart from customer
+ * receivables even though all three are money. The sidebar shows one section
+ * expanded at a time, which makes a wrong home expensive: it is not a row in
+ * the wrong place, it is a row nobody sees.
  */
 import type { LucideIcon } from 'lucide-react'
 import {
@@ -76,6 +85,11 @@ export const NAV_SECTIONS: NavSection[] = [
       { mobilePrimary: true, href: '#search', action: 'command-palette', labelKey: 'smartSearch', icon: Sparkles, surfaces: ['mobile'] },
       { href: '/seasonal', labelKey: 'seasonal', icon: Sun },
       { href: '/report', labelKey: 'report', icon: FileBarChart },
+      // Moved out of the old 'operations' bucket. Neither is something you DO
+      // -- they are things you look at to decide, which is what this section
+      // is for. In operations they sat between shipments and stock alerts.
+      { href: '/competitors', labelKey: 'competitors', icon: Swords },
+      { href: '/vehicle-intelligence', labelKey: 'vehicleIntelligence', icon: CarFront },
     ],
   },
   {
@@ -92,6 +106,9 @@ export const NAV_SECTIONS: NavSection[] = [
       // despite being listed as a feature in CLAUDE.md, and /catalog-links was
       // hidden from the sidebar on purpose but then had no other entry either.
       { href: '/reorder', labelKey: 'reorder', icon: ListRestart },
+      // 'Stock alerts' -- it was filed under operations, one section away from
+      // the stock it alerts about.
+      { href: '/alerts', labelKey: 'alerts', icon: Bell },
       { href: '/catalog-links', labelKey: 'catalogLinks', icon: Link2, surfaces: ['palette'] },
     ],
   },
@@ -111,19 +128,21 @@ export const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
-    id: 'operations', labelKey: 'sectionOperations', items: [
+    // Was 'operations', which had become the bucket for anything that was not
+    // clearly stock, sales or books: supplier paperwork sat beside competitor
+    // pricing and stock alerts. What is left is one flow in its own order --
+    // who we buy from, what they quote, what we asked, what they billed, what
+    // they credited, what is on the way, what went out.
+    id: 'purchasing', labelKey: 'sectionPurchasing', items: [
       { href: '/suppliers', labelKey: 'suppliers', icon: PackageCheck },
       { href: '/price-lists', labelKey: 'priceLists', icon: ClipboardList, match: 'prefix' },
       { href: '/inquiries', labelKey: 'supplierInquiries', icon: FileSearch, match: 'prefix' },
       { href: '/invoices', labelKey: 'supplierInvoices', icon: ReceiptText },
       { href: '/credits', labelKey: 'supplierCredits', icon: Undo2 },
-      { href: '/competitors', labelKey: 'competitors', icon: Swords },
       { href: '/shipments', labelKey: 'inboundShipments', icon: Container },
       { href: '/deliveries', labelKey: 'deliveries', icon: Truck },
       // Fullscreen phone view (see FULLSCREEN_PATHS) -- only meaningful on mobile.
       { href: '/deliveries/driver', labelKey: 'deliveriesDriver', icon: Truck, surfaces: ['mobile'] },
-      { href: '/vehicle-intelligence', labelKey: 'vehicleIntelligence', icon: CarFront },
-      { href: '/alerts', labelKey: 'alerts', icon: Bell },
     ],
   },
   {
