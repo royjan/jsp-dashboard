@@ -40,6 +40,42 @@ function looksLikeACode(name: unknown): boolean {
 }
 
 /**
+ * PSA prints a part id in groups -- "16 082 066 80" on the box, "16-082-066-80"
+ * in a supplier's price list -- and the ERP stores it closed up: 1608206680.
+ * Neither printed form found anything, because FINAPI's item search is a
+ * substring match and the separators are part of the string it compares.
+ *
+ * So a query that reads as a separated code is searched twice: verbatim first
+ * (codes really do carry dashes -- MG10929808-SEPP -- and those hits stay on
+ * top), then with the separators removed. Returns null when the query is not
+ * that: without the "plain alphanumerics, at least one digit" test, "משאבת מים"
+ * would collapse into one word and be searched as it.
+ */
+function separatorlessCode(q: string): string | null {
+  const stripped = q.replace(/[\s.\-/_\\]+/g, '')
+  if (stripped === q || stripped.length < 3) return null
+  if (!/^[A-Za-z0-9]+$/.test(stripped) || !/\d/.test(stripped)) return null
+  return stripped
+}
+
+/** Concatenates result groups in order, keeping the first row per code. */
+function mergeByCode<T extends { code?: unknown }>(...groups: T[][]): T[] {
+  const seen = new Set<string>()
+  const out: T[] = []
+  for (const group of groups) {
+    for (const row of group) {
+      const code = String(row?.code ?? '').toUpperCase()
+      if (code) {
+        if (seen.has(code)) continue
+        seen.add(code)
+      }
+      out.push(row)
+    }
+  }
+  return out
+}
+
+/**
  * Fill in what FINAPI's item search leaves out.
  *
  * `/api/items/search` returns the raw ERP row, and for a superseded code that
@@ -128,7 +164,7 @@ export async function GET(request: NextRequest) {
   // part re-walks it. Short enough that a quantity changing in the ERP shows up
   // in a search while you are still looking for it. The smart half has cached
   // for an hour all along; the two are asked together and only one was.
-  const cacheKey = `search:v2:${q}`
+  const cacheKey = `search:v3:${q}`
   const cached = await getCached<{ items: unknown[]; customers: unknown[]; semantic: unknown[]; catalog: unknown[] }>(cacheKey)
   if (cached) return NextResponse.json(cached)
 
@@ -137,40 +173,39 @@ export async function GET(request: NextRequest) {
 
     // Determine if query looks like natural language (contains spaces, >3 chars)
     const isNaturalLanguage = q.length > 3 && q.includes(' ')
+    // "16 082 066 80" -> "1608206680", searched as a second pass under the
+    // verbatim hits. null for everything that isn't a separated code.
+    const closedUp = separatorlessCode(q)
 
-    const promises: [
-      Promise<{ items: any[] }>,
-      Promise<{ customers: any[] }>,
-      Promise<{ items: any[] }> | null,
-    ] = [
+    const [itemsResult, customersResult, semanticResult, closedUpResult] = await Promise.all([
       // 10, not 5: "1920L" matches thirteen codes in the ERP, and at five the
       // other eight fell off the list and came back through the semantic
       // endpoint, where they read as smart finds rather than as the plain code
       // matches they are. The list scrolls; the cap was the only thing making
       // consecutive codes look like different kinds of result.
-      client.items.search(q, 10).catch(() => ({ items: [] })),
-      client.customers.search(q, 5).catch(() => ({ customers: [] })),
+      client.items.search(q, 10).catch(() => ({ items: [] as any[] })),
+      client.customers.search(q, 5).catch(() => ({ customers: [] as any[] })),
       isNaturalLanguage
-        ? client.items.semanticSearch(q, 5).catch(() => ({ items: [] }))
-        : null,
-    ]
+        ? client.items.semanticSearch(q, 5).catch(() => ({ items: [] as any[] }))
+        : Promise.resolve({ items: [] as any[] }),
+      closedUp
+        ? client.items.search(closedUp, 10).catch(() => ({ items: [] as any[] }))
+        : Promise.resolve({ items: [] as any[] }),
+    ])
 
-    const results = await Promise.all(
-      promises.filter((p): p is NonNullable<typeof p> => p !== null)
-    )
-
-    const itemsResult = results[0] as { items: any[] }
-    const customersResult = results[1] as { customers: any[] }
-    const semanticResult = isNaturalLanguage
-      ? (results[2] as { items: any[] })
-      : { items: [] }
-
-    const rawItems = (itemsResult.items || itemsResult || []).slice(0, 10)
+    const rawItems = mergeByCode(
+      (itemsResult.items || itemsResult || []) as any[],
+      (closedUpResult.items || []) as any[]
+    ).slice(0, 10)
     const customers = (customersResult.customers || customersResult || []).slice(0, 5)
     const semantic = (semanticResult.items || []).slice(0, 5)
     const [items, catalog] = await Promise.all([
       enrichItems(rawItems).catch(() => rawItems),
-      searchPartlyCatalog(q),
+      closedUp
+        ? Promise.all([searchPartlyCatalog(q), searchPartlyCatalog(closedUp)]).then(
+            ([verbatim, stripped]) => mergeByCode(verbatim, stripped).slice(0, 6)
+          )
+        : searchPartlyCatalog(q),
     ])
 
     const payload = { items, customers, semantic, catalog }
