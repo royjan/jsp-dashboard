@@ -178,6 +178,99 @@ const VEHICLE_PREVIEW = 5      // vehicles shown before "show all"
  * exact diagram. Shared by both item states — it used to live inside the
  * catalog-only branch, so a part we actually stock showed no vehicles.
  */
+/**
+ * The code chain, oldest → newest.
+ *
+ * Two lineages, one row. `history` is FINAPI's ERP chain (`old_item_id` /
+ * `new_item_id`, hand-maintained in Finansit); `catalogHistory` is what the
+ * manufacturer's catalog knows beyond it, scraped from ServiceBox's "RP"
+ * markers. The catalog routinely reaches one step further — it names the
+ * current part number long before we open an item for it — so the LAST entry
+ * of the two together is the current code, whichever list it came from, and
+ * that is what carries "עדכני".
+ *
+ * They render identically on purpose: a code is a code, and the ⁧מהקטלוג⁩ tag
+ * this used to carry made the newest number read like a footnote. Where a
+ * catalog code cannot be priced, its own item page says so and links to the
+ * code we sell it under — that is the right place for the caveat, not here.
+ */
+function CodeChainCard({
+  history,
+  catalogHistory,
+  isHe,
+}: {
+  history?: string[]
+  catalogHistory?: Array<{ code: string; name: string | null }>
+  isHe: boolean
+}) {
+  const erp = history ?? []
+  const catalog = catalogHistory ?? []
+  const chain = [
+    ...erp.map((code) => ({ code, name: null as string | null })),
+    ...catalog,
+  ]
+  if (chain.length < 2) return null
+
+  const Arrow = isHe ? ArrowLeft : ArrowRight
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base flex items-center gap-2">
+          <Hash className="h-4 w-4 text-amber-500" />
+          {isHe ? 'שרשרת קודים' : 'Code History'}
+          <span className="text-xs font-normal text-muted-foreground">
+            {isHe ? '(ישן ← עדכני)' : '(old → current)'}
+          </span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="flex flex-wrap items-center gap-2">
+          {chain.map((entry, i) => {
+            const isCurrent = i === chain.length - 1
+            return (
+              <motion.span
+                key={entry.code}
+                className="flex items-center gap-2"
+                initial={{ opacity: 0, x: isHe ? 10 : -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: i * 0.12, duration: 0.3, ease: 'easeOut' }}
+              >
+                {/* The row lays out along the page's reading direction, so in RTL
+                    the newest code lands leftmost. A hardcoded '→' therefore
+                    pointed back at the code the part was RE-CODED FROM. The arrow
+                    follows the locale and drifts toward the newest code, so the
+                    direction reads without decoding the glyph. */}
+                {i > 0 && (
+                  <motion.span
+                    className="text-muted-foreground"
+                    animate={{ x: isHe ? [0, -3, 0] : [0, 3, 0] }}
+                    transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut', delay: i * 0.12 }}
+                  >
+                    <Arrow className="h-3.5 w-3.5" />
+                  </motion.span>
+                )}
+                <Badge
+                  variant={isCurrent ? 'default' : 'outline'}
+                  className="font-mono text-xs"
+                  title={entry.name ?? undefined}
+                >
+                  <ItemLink code={entry.code} showCode copyable={false} />
+                </Badge>
+                {isCurrent && (
+                  <span className="text-[10px] text-muted-foreground">
+                    {isHe ? 'עדכני' : 'current'}
+                  </span>
+                )}
+              </motion.span>
+            )
+          })}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
 function FitsCard({ fits, isHe, open, setOpen }: {
   fits?: Array<{ label: string; vin?: string; url: string; schema?: string | null }>
   isHe: boolean
@@ -407,16 +500,38 @@ export default function ItemDetailPage({ params }: { params: Promise<{ code: str
 
         <Card>
           <CardContent className="p-4 space-y-3">
-            <p className="text-sm">
-              {isHe
-                ? 'הפריט מופיע בקטלוג היצרן אך לא נמכר אצלנו — אין לו מלאי, מחיר או היסטוריה.'
-                : "This part is in the manufacturer's catalog but we don't carry it — no stock, price or history."}
-            </p>
+            {/* The blanket "no stock, price or history" was true only while this
+                code had no chain. When the catalog tells us which number it
+                replaced and we stock THAT one, saying we don't carry the part is
+                simply wrong — we carry it under an older code, which is the one
+                thing the person on this page needs. */}
+            {data.erp_code ? (
+              <p className="text-sm flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span>
+                  {isHe
+                    ? 'המק״ט העדכני בקטלוג היצרן. אצלנו הוא נמכר תחת'
+                    : "The manufacturer's current number for this part. We sell it under"}
+                </span>
+                <ItemLink code={data.erp_code} showCode copyable={false} />
+              </p>
+            ) : (
+              <p className="text-sm">
+                {isHe
+                  ? 'הפריט מופיע בקטלוג היצרן אך לא נמכר אצלנו — אין לו מלאי, מחיר או היסטוריה.'
+                  : "This part is in the manufacturer's catalog but we don't carry it — no stock, price or history."}
+              </p>
+            )}
             {data.description && (
               <p className="text-xs text-muted-foreground" dir="ltr">{data.description}</p>
             )}
           </CardContent>
         </Card>
+
+        <CodeChainCard
+          history={data.item_id_history}
+          catalogHistory={data.catalog_history}
+          isHe={isHe}
+        />
 
         <PartMediaCard code={decodedCode} isHe={isHe} />
 
@@ -717,99 +832,11 @@ export default function ItemDetailPage({ params }: { params: Promise<{ code: str
       {/* Cross-brand equivalent parts (partly.part_links) + manual linking */}
       <PartLinksCard code={decodedCode} links={partLinks} isHe={isHe} />
 
-      {/* Item History Chain — the array runs oldest → newest, and the row lays
-          out along the page's reading direction, so in RTL the newest code
-          lands leftmost. A hardcoded '→' therefore pointed back at the code
-          the part was RE-CODED FROM: on 1920LL it read as if 1675941280 (the
-          current id) became 1920LL, exactly backwards. The arrow follows the
-          locale, and drifts toward the newest code so the direction is
-          readable without decoding the glyph. */}
-      {(data.item_id_history?.length > 1 || data.catalog_history?.length > 0) && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Hash className="h-4 w-4 text-amber-500" />
-              {isHe ? 'שרשרת קודים' : 'Code History'}
-              <span className="text-xs font-normal text-muted-foreground">
-                {isHe ? '(ישן ← עדכני)' : '(old → current)'}
-              </span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-wrap items-center gap-2">
-              {data.item_id_history.map((histCode: string, i: number) => {
-                const isCurrent = histCode === (data.canonical_code || data.code)
-                const Arrow = isHe ? ArrowLeft : ArrowRight
-                return (
-                  <motion.span
-                    key={histCode}
-                    className="flex items-center gap-2"
-                    initial={{ opacity: 0, x: isHe ? 10 : -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: i * 0.12, duration: 0.3, ease: 'easeOut' }}
-                  >
-                    {i > 0 && (
-                      <motion.span
-                        className="text-muted-foreground"
-                        animate={{ x: isHe ? [0, -3, 0] : [0, 3, 0] }}
-                        transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut', delay: i * 0.12 }}
-                      >
-                        <Arrow className="h-3.5 w-3.5" />
-                      </motion.span>
-                    )}
-                    <Badge
-                      variant={isCurrent ? 'default' : 'outline'}
-                      className="font-mono text-xs"
-                    >
-                      {histCode}
-                    </Badge>
-                    {isCurrent && (
-                      <span className="text-[10px] text-muted-foreground">
-                        {isHe ? 'עדכני' : 'current'}
-                      </span>
-                    )}
-                  </motion.span>
-                )
-              })}
-
-              {/* The manufacturer's catalog carries the chain PAST what Finansit
-                  knows: it names the current part number long before we open an
-                  item for it. Deliberately marked — a catalog successor is not
-                  an ERP-confirmed one, and there may be no code here to price. */}
-              {(data.catalog_history ?? []).map((entry: { code: string; name: string | null }, i: number) => {
-                const Arrow = isHe ? ArrowLeft : ArrowRight
-                const offset = (data.item_id_history?.length ?? 0) + i
-                return (
-                  <motion.span
-                    key={`catalog-${entry.code}`}
-                    className="flex items-center gap-2"
-                    initial={{ opacity: 0, x: isHe ? 10 : -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: offset * 0.12, duration: 0.3, ease: 'easeOut' }}
-                  >
-                    <motion.span
-                      className="text-muted-foreground"
-                      animate={{ x: isHe ? [0, -3, 0] : [0, 3, 0] }}
-                      transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut', delay: offset * 0.12 }}
-                    >
-                      <Arrow className="h-3.5 w-3.5" />
-                    </motion.span>
-                    <Badge variant="secondary" className="font-mono text-xs border-dashed">
-                      <ItemLink code={entry.code} showCode copyable={false} />
-                    </Badge>
-                    <span
-                      className="text-[10px] text-muted-foreground"
-                      title={entry.name ?? undefined}
-                    >
-                      {isHe ? 'מהקטלוג' : 'from catalog'}
-                    </span>
-                  </motion.span>
-                )
-              })}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      <CodeChainCard
+        history={data.item_id_history}
+        catalogHistory={data.catalog_history}
+        isHe={isHe}
+      />
     </div>
   )
 }
