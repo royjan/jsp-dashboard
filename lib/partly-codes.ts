@@ -174,3 +174,55 @@ export async function erpCodeViaSupersession(code: string): Promise<string | nul
 
   return null
 }
+
+/**
+ * For each ERP code, the manufacturer's CURRENT number for that part — the one
+ * a search should land on.
+ *
+ * Batched, because ⌘K fires per keystroke. The catalog edge hangs off whichever
+ * code the diagram was drawn with, which is rarely the code being searched:
+ * looking for 1609697180 finds nothing, because ServiceBox drew
+ * 1608206580 → 1685352580 off the chain's HEAD. So each code is first expanded
+ * to its whole ERP chain — following each row's own old/new pointers, the same
+ * walk FINAPI's build_item_chain does, on the `code` primary key — and the
+ * catalog is then asked about every member.
+ *
+ * Returns only codes that actually have a newer catalog number; a part whose
+ * chain the catalog agrees with is absent from the map.
+ */
+export async function catalogCurrentForCodes(codes: string[]): Promise<Map<string, string>> {
+  const seeds = [...new Set(codes.map((c) => String(c ?? '').trim()).filter(Boolean))]
+  const out = new Map<string, string>()
+  if (seeds.length === 0) return out
+
+  const res = await query(
+    `WITH RECURSIVE seeds(seed, code) AS (
+       SELECT c, c FROM unnest($1::text[]) AS c
+     ),
+     chain(seed, code, depth) AS (
+       SELECT seed, code, 0 FROM seeds
+       UNION
+       SELECT ch.seed, x.next, ch.depth + 1
+         FROM chain ch
+         JOIN erp.items i ON i.code = ch.code
+         CROSS JOIN LATERAL (VALUES
+           (NULLIF(btrim(i.new_item_id), '')),
+           (NULLIF(btrim(i.old_item_id), ''))
+         ) AS x(next)
+        WHERE x.next IS NOT NULL AND ch.depth < $2
+     )
+     SELECT DISTINCT ch.seed, ps.new_item_number
+       FROM chain ch
+       JOIN partly.part_supersessions ps ON ps.old_item_number = ch.code
+      WHERE ps.new_item_number <> ch.seed`,
+    [seeds, MAX_CHAIN_HOPS],
+  ).catch(() => null)
+
+  for (const r of res?.rows ?? []) {
+    const row = r as { seed: string; new_item_number: string }
+    if (!row?.seed || !row?.new_item_number) continue
+    // A code already in its own ERP chain is not a newer number.
+    if (!out.has(row.seed)) out.set(row.seed, row.new_item_number)
+  }
+  return out
+}

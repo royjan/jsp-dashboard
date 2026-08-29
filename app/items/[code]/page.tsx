@@ -538,14 +538,46 @@ export default function ItemDetailPage({ params }: { params: Promise<{ code: str
                 simply wrong — we carry it under an older code, which is the one
                 thing the person on this page needs. */}
             {data.erp_code ? (
-              <p className="text-sm flex flex-wrap items-center gap-x-2 gap-y-1">
-                <span>
-                  {isHe
-                    ? 'המק״ט העדכני בקטלוג היצרן. אצלנו הוא נמכר תחת'
-                    : "The manufacturer's current number for this part. We sell it under"}
-                </span>
-                <ItemLink code={data.erp_code} showCode copyable={false} />
-              </p>
+              <>
+                <p className="text-sm flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <span>
+                    {isHe
+                      ? 'המק״ט העדכני בקטלוג היצרן. אצלנו הוא נמכר תחת'
+                      : "The manufacturer's current number for this part. We sell it under"}
+                  </span>
+                  <ItemLink code={data.erp_code} showCode copyable={false} />
+                </p>
+                {/* This code has no ERP row of its own, so every figure here
+                    belongs to the one we trade under. Labelled, not merged:
+                    an unattributed "4 in stock" on a number the ERP has never
+                    heard of is how someone orders against a code that does not
+                    exist. */}
+                {data.chain_resolution && (
+                  <div className="flex flex-wrap items-center gap-x-6 gap-y-2 pt-1">
+                    <div>
+                      <div className="text-[10px] text-muted-foreground">{isHe ? 'מלאי' : 'Stock'}</div>
+                      <div className="text-sm font-semibold">{formatNumber(data.stock_qty ?? 0)}</div>
+                    </div>
+                    {data.price != null && (
+                      <div>
+                        <div className="text-[10px] text-muted-foreground">{isHe ? 'מחיר' : 'Price'}</div>
+                        <div className="text-sm font-semibold">{formatCurrency(data.price)}</div>
+                      </div>
+                    )}
+                    {data.sold_this_year != null && (
+                      <div>
+                        <div className="text-[10px] text-muted-foreground">{isHe ? 'נמכר השנה' : 'Sold this year'}</div>
+                        <div className="text-sm font-semibold">{formatNumber(data.sold_this_year)}</div>
+                      </div>
+                    )}
+                    <span className="text-[10px] text-muted-foreground">
+                      {isHe
+                        ? `הנתונים לפי ${data.chain_resolution.resolvedCode}`
+                        : `figures from ${data.chain_resolution.resolvedCode}`}
+                    </span>
+                  </div>
+                )}
+              </>
             ) : (
               <p className="text-sm">
                 {isHe

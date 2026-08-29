@@ -283,6 +283,16 @@ export async function GET(
       // into the ERP and hand over its chain, so the page shows
       // 1608206680 -> 1609697280 -> 1685352480 instead of a dead end.
       const erpCode = await erpCodeViaSupersession(c.item_number).catch(() => null)
+      // The catalog's number is the CURRENT one, so this page is where a search
+      // should land -- but only if it carries the commercial truth. It has no
+      // ERP row of its own, so the stock, price and sales come through the chain
+      // from the code we trade under, and the response says so rather than
+      // letting the numbers read as this code's own.
+      // NOT the first ERP hop: erpCodeViaSupersession returns the nearest code
+      // the ERP knows, which is usually the OLDEST one in the chain, and its
+      // price is the stale one (1608206580 lists at 2878.34 against
+      // 1609697180's 1845.09). Fold to the chain's tail -- the code we actually
+      // trade under -- before taking any figure off it.
       const erpChain = erpCode
         ? ((await fetchItemHistory(erpCode).catch(() => null))?.item_id_history ?? [erpCode])
             .map((h: unknown) => String(h))
@@ -290,12 +300,14 @@ export async function GET(
       const catalogTail = await catalogChainAfter(
         erpChain.length ? erpChain : [c.item_number],
       ).catch(() => [])
+      const erpSellCode = erpChain.length ? erpChain[erpChain.length - 1] : erpCode
+      const erpItem = erpSellCode ? await client.items.get(erpSellCode).catch(() => null) : null
 
       // must match slugify in partly's vehicle page (spaces -> _, drop the rest)
       return NextResponse.json({
         catalog_only: true,
         code: c.item_number,
-        erp_code: erpCode,
+        erp_code: erpSellCode,
         // Oldest -> newest, ERP codes first, exactly like the ERP-backed card.
         item_id_history: erpChain.length ? erpChain : undefined,
         catalog_history: catalogTail.map((t) => ({ ...t, source: 'psa_catalog' })),
@@ -303,6 +315,17 @@ export async function GET(
         erp_latest_source: erpChain.length
           ? await erpLatestSource(erpChain[erpChain.length - 1]).catch(() => 'erp')
           : null,
+        // Same disclosure shape as brand_resolution: what you asked for, and
+        // which code the figures below actually belong to.
+        chain_resolution: erpItem
+          ? { requestedCode: c.item_number, resolvedCode: erpItem.code, source: 'psa_catalog' }
+          : null,
+        stock_qty: erpItem?.stock_qty ?? null,
+        ordered_qty: erpItem?.ordered_qty ?? null,
+        incoming_qty: erpItem?.incoming_qty ?? null,
+        price: erpItem?.price ?? erpItem?.price_list_price ?? null,
+        sold_this_year: erpItem?.sold_this_year ?? null,
+        sold_last_year: erpItem?.sold_last_year ?? null,
         name: (c.hebrew_description && c.hebrew_description !== '-') ? c.hebrew_description : c.description,
         description: c.description,
         brand: c.brand,

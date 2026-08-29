@@ -3,7 +3,7 @@ import { initializeSecrets } from '@/lib/aws-secrets'
 import { client } from '@/lib/finansit-client'
 import { query } from '@/lib/db'
 import { getCached, setCache } from '@/lib/redis-client'
-import { erpCodeViaSupersession } from '@/lib/partly-codes'
+import { erpCodeViaSupersession, catalogCurrentForCodes } from '@/lib/partly-codes'
 
 const SEARCH_CACHE_TTL = 60
 
@@ -159,6 +159,11 @@ async function enrichItems(items: any[]): Promise<any[]> {
     }
   }
 
+  // The manufacturer's current number for each hit, so the palette can send you
+  // to the code the part is sold as today rather than the one you happened to
+  // type. One batched query for the whole result set.
+  const catalogCurrent = await catalogCurrentForCodes(codes).catch(() => new Map<string, string>())
+
   return items.map((item) => {
     const uc = String(item?.code ?? '').toUpperCase()
     const stock = stockByCode.get(uc)
@@ -176,6 +181,11 @@ async function enrichItems(items: any[]): Promise<any[]> {
       incoming_qty: item?.incoming_qty ?? stock?.total_incoming ?? null,
       price: item?.price ?? priceByCode.get(uc) ?? null,
       canonical_code: canonical,
+      // Absent when the catalog agrees with our chain, which is the common case.
+      catalog_current_code:
+        catalogCurrent.get(String(item?.code ?? '')) ??
+        catalogCurrent.get(uc) ??
+        null,
     }
   })
 }
@@ -192,7 +202,7 @@ export async function GET(request: NextRequest) {
   // part re-walks it. Short enough that a quantity changing in the ERP shows up
   // in a search while you are still looking for it. The smart half has cached
   // for an hour all along; the two are asked together and only one was.
-  const cacheKey = `search:v4:${q}`
+  const cacheKey = `search:v5:${q}`
   const cached = await getCached<{ items: unknown[]; customers: unknown[]; semantic: unknown[]; catalog: unknown[] }>(cacheKey)
   if (cached) return NextResponse.json(cached)
 

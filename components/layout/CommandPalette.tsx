@@ -23,6 +23,8 @@ interface SearchResult {
     description?: string
     stock_qty?: number | null
     price?: number | null
+    /** The manufacturer's current number, when the catalog is ahead of our chain. */
+    catalog_current_code?: string | null
   }>
   customers: Array<{
     code?: string
@@ -318,20 +320,35 @@ export function CommandPalette() {
                             // was somewhere in it. Catalogue and semantic hits
                             // already opened /items/CODE; searching by code was
                             // the one path that did not.
+                            // Land on the number the manufacturer sells the
+                            // part as today. Searching 1609697180 used to open
+                            // 1609697180 even though the catalog superseded it
+                            // by 1685352580 -- our own chain simply stops where
+                            // the price list we buy against stops. That page now
+                            // carries the stock and price through the chain, so
+                            // this costs nothing and answers the newer question.
+                            const target = item.catalog_current_code || item.code
                             recordDestination({
-                              href: `/items/${encodeURIComponent(item.code)}`,
-                              label: item.code,
+                              href: `/items/${encodeURIComponent(target)}`,
+                              label: target,
                               sublabel: item.name || item.description,
                               kind: 'item',
                             })
-                            router.push(`/items/${encodeURIComponent(item.code)}`)
+                            router.push(`/items/${encodeURIComponent(target)}`)
                           })
                         }
                         className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm cursor-pointer aria-selected:bg-accent aria-selected:text-accent-foreground"
                       >
                         <Package className="h-4 w-4 shrink-0 text-muted-foreground" />
                         <div className="flex-1 min-w-0">
-                          <div className="font-medium truncate">{item.code}</div>
+                          <div className="font-medium truncate flex items-center gap-1.5">
+                            <span className="truncate">{item.code}</span>
+                            {item.catalog_current_code && (
+                              <span className="shrink-0 text-[10px] font-normal text-muted-foreground">
+                                → {item.catalog_current_code}
+                              </span>
+                            )}
+                          </div>
                           {(item.name || item.description) && (
                             <div className="text-xs text-muted-foreground truncate">
                               {item.name || item.description}
