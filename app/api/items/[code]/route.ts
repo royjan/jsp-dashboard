@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server'
-import { client } from '@/lib/finansit-client'
+import { client, fetchItemHistory } from '@/lib/finansit-client'
 import { initializeSecrets } from '@/lib/aws-secrets'
 import { query } from '@/lib/db'
 import { partlyCandidates, partlyMatchForms } from '@/lib/partly-codes'
-import { itemChainCodes } from '@/lib/services/analytics-service'
+
+/** The shape of FINAPI's item-history response that this route actually reads. */
+interface ItemHistory { canonical_code?: string | null; item_id_history?: unknown[] }
 
 /** Must match slugify() in partly's vehicle route so deep links resolve. */
 const slug = (t: string) => t.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_-]/g, '')
@@ -27,8 +29,28 @@ const partlyBase = (process.env.PARTLY_URL || 'https://192.168.0.112').replace(/
  *  · the chain — 284 superseded codes carry their partly row on the OLD number,
  *    so opening the canonical successor found nothing.
  */
-async function vehiclesFor(itemCode: string) {
-  const chain = await itemChainCodes(itemCode).catch(() => [itemCode])
+async function vehiclesFor(itemCode: string, knownHistory?: ItemHistory | null) {
+  // Chain codes come from one FINAPI history call, NOT itemChainCodes() — that
+  // reaches getItems(), which builds the 100k-item / 31MB catalog and costs
+  // 10-40s on a cold container. It put that cost on the first item page after
+  // every deploy, for a card decoration. Checked against the two codes this
+  // fan-out was originally added for: history alone returns the full chain for
+  // 9819938480 and 1920LL (both -> 1920LL/9819938480/1675941280), which is what
+  // their 8 vehicles depend on.
+  //
+  // The caller has usually already fetched this code's history; reuse it rather
+  // than asking FINAPI the same question twice in one request.
+  const chainHas = (knownHistory?.item_id_history ?? []).some(
+    (c: unknown) => String(c ?? '').toUpperCase() === itemCode.toUpperCase(),
+  )
+  const history = chainHas ? knownHistory : await fetchItemHistory(itemCode).catch(() => null)
+  const chain = [
+    ...new Set(
+      [itemCode, history?.canonical_code, ...(history?.item_id_history ?? [])]
+        .map((c: unknown) => String(c ?? '').trim())
+        .filter(Boolean),
+    ),
+  ]
   const candidates = (
     await Promise.all(chain.map((c) => partlyCandidates(c).catch(() => [c])))
   ).flat()
@@ -266,7 +288,7 @@ export async function GET(
     /* Stocked parts want this just as much as unstocked ones — it used to be
        computed only on the catalog-only fallback, so an item we sell showed
        no vehicles at all. */
-    const fits = await vehiclesFor(item.code).catch(() => [])
+    const fits = await vehiclesFor(item.code, effectiveHistory).catch(() => [])
 
     /* The catalog fallback above is gated on the item being ABSENT from the ERP,
        which misses the commoner case: the ERP has the part but never got a name
