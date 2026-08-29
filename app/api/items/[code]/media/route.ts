@@ -107,6 +107,11 @@ export async function GET(
           WHERE upper(regexp_replace(gp.item_number, '[^A-Za-z0-9]', '', 'g')) = ANY($1)
             AND pp.deleted_at IS NULL
             AND s.coordinates->>'imageUrl' ~ 'screenshots'
+          -- Richest diagram first. A part sits on many scans of the same
+          -- assembly and they are not equally complete; picking whichever row
+          -- came back first showed a 3-callout crop of an 8-callout drawing.
+          ORDER BY (SELECT count(*) FROM jsonb_object_keys(
+                      COALESCE(s.coordinates->'positions', '{}'::jsonb))) DESC
           LIMIT 12`,
         [forms],
       ).catch(() => null),
