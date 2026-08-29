@@ -85,6 +85,24 @@ async function vehiclesFor(itemCode: string, knownHistory?: ItemHistory | null) 
   }))
 }
 
+/**
+ * Where the last ERP-side code in a chain comes from, for labelling.
+ *
+ * The ERP chain and the manufacturer's catalog disagree about the current part
+ * number more often than not: Finansit's chain is maintained from the price
+ * lists we buy against, and Lubinski's covers 1608206580 -> 1609697180 while
+ * carrying no row at all for the catalog's 1685352580. Naming the two ends
+ * separately is the difference between "our list stops here" and "this number
+ * is wrong". Falls back to 'erp' rather than claiming a source we cannot see.
+ */
+async function erpLatestSource(code: string): Promise<'lubinski' | 'erp'> {
+  const r = await query(
+    `SELECT 1 FROM xpart.lubinski_price_list WHERE item_id = $1 LIMIT 1`,
+    [code],
+  ).catch(() => null)
+  return (r?.rows?.length ?? 0) > 0 ? 'lubinski' : 'erp'
+}
+
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ code: string }> }
@@ -281,6 +299,10 @@ export async function GET(
         // Oldest -> newest, ERP codes first, exactly like the ERP-backed card.
         item_id_history: erpChain.length ? erpChain : undefined,
         catalog_history: catalogTail.map((t) => ({ ...t, source: 'psa_catalog' })),
+        erp_latest: erpChain.length ? erpChain[erpChain.length - 1] : null,
+        erp_latest_source: erpChain.length
+          ? await erpLatestSource(erpChain[erpChain.length - 1]).catch(() => 'erp')
+          : null,
         name: (c.hebrew_description && c.hebrew_description !== '-') ? c.hebrew_description : c.description,
         description: c.description,
         brand: c.brand,
@@ -358,6 +380,12 @@ export async function GET(
       // The newest number the manufacturer prints, which is NOT necessarily one
       // we can price. Kept apart from canonical_code for that reason.
       catalog_canonical_code: catalogTail.length ? catalogTail[catalogTail.length - 1].code : null,
+      // Where our own lineage stops, so the card can say which list ran out
+      // rather than leaving the older code looking simply wrong.
+      erp_latest: erpChain[erpChain.length - 1] ?? null,
+      erp_latest_source: catalogTail.length
+        ? await erpLatestSource(erpChain[erpChain.length - 1]).catch(() => 'erp')
+        : null,
       ...(brandResolution ? { brand_resolution: brandResolution } : {}),
     })
   } catch (error) {

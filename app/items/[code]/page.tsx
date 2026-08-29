@@ -197,10 +197,14 @@ const VEHICLE_PREVIEW = 5      // vehicles shown before "show all"
 function CodeChainCard({
   history,
   catalogHistory,
+  erpLatest,
+  erpLatestSource,
   isHe,
 }: {
   history?: string[]
   catalogHistory?: Array<{ code: string; name: string | null }>
+  erpLatest?: string | null
+  erpLatestSource?: 'lubinski' | 'erp' | null
   isHe: boolean
 }) {
   const erp = history ?? []
@@ -212,6 +216,10 @@ function CodeChainCard({
   if (chain.length < 2) return null
 
   const Arrow = isHe ? ArrowLeft : ArrowRight
+  // Only worth naming when the two lineages actually disagree. Where our price
+  // list already carries the newest number there is one "latest" and saying it
+  // twice is noise.
+  const split = catalog.length > 0 && !!erpLatest
 
   return (
     <Card>
@@ -267,9 +275,23 @@ function CodeChainCard({
                     }
                   />
                 </Badge>
+                {/* Two lineages, two "latest". The catalog is the manufacturer's
+                    and decides; ours stops wherever the price list we buy against
+                    stops. Labelling only the newest code left the older one
+                    looking like a mistake rather than the number we actually
+                    trade under. */}
                 {isCurrent && (
-                  <span className="text-[10px] text-muted-foreground">
-                    {isHe ? 'עדכני' : 'current'}
+                  <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                    {split
+                      ? (isHe ? 'עדכני · לפי הקטלוג' : 'current · catalog')
+                      : (isHe ? 'עדכני' : 'current')}
+                  </span>
+                )}
+                {split && !isCurrent && entry.code === erpLatest && (
+                  <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                    {erpLatestSource === 'lubinski'
+                      ? (isHe ? 'אחרון בלובינסקי' : 'latest · Lubinski')
+                      : (isHe ? 'אחרון אצלנו' : 'latest · ours')}
                   </span>
                 )}
               </motion.span>
@@ -540,6 +562,8 @@ export default function ItemDetailPage({ params }: { params: Promise<{ code: str
         <CodeChainCard
           history={data.item_id_history}
           catalogHistory={data.catalog_history}
+          erpLatest={data.erp_latest}
+          erpLatestSource={data.erp_latest_source}
           isHe={isHe}
         />
 
@@ -845,6 +869,8 @@ export default function ItemDetailPage({ params }: { params: Promise<{ code: str
       <CodeChainCard
         history={data.item_id_history}
         catalogHistory={data.catalog_history}
+        erpLatest={data.erp_latest}
+        erpLatestSource={data.erp_latest_source}
         isHe={isHe}
       />
     </div>
