@@ -2,7 +2,7 @@
 
 import { use, useState } from 'react'
 import { motion } from 'framer-motion'
-import { useItemDetail, useItemDocuments, useItemLinks, HttpError } from '@/hooks/use-analytics'
+import { useItemDetail, useItemDocuments, useItemLinks, useItemMedia, HttpError } from '@/hooks/use-analytics'
 import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
 import { deriveBrand, brandChipClasses } from '@/lib/brand'
 import { ItemLink } from '@/components/shared/ItemLink'
@@ -341,6 +341,12 @@ export default function ItemDetailPage({ params }: { params: Promise<{ code: str
   const { t, locale } = useLocale()
   const { data, isLoading, error } = useItemDetail(decodedCode)
   const { data: linksData } = useItemLinks(decodedCode)
+  // Started HERE, not inside PartMediaCard, because everything below the
+  // `isLoading` early return is unmounted while the detail query is in flight —
+  // so the card's own fetch could not begin until that one had finished, and the
+  // page paid for the two in series. Same query key, so the card gets this
+  // result rather than issuing a second request.
+  useItemMedia(decodedCode)
   const isHe = locale === 'he'
   const [openDocs, setOpenDocs] = useState<DocType | null>(null)
   // 30 vehicles is a lot of card: show a few, let the user open the rest
@@ -412,7 +418,7 @@ export default function ItemDetailPage({ params }: { params: Promise<{ code: str
           </CardContent>
         </Card>
 
-        <PartMediaCard code={data.code || decodedCode} isHe={isHe} />
+        <PartMediaCard code={decodedCode} isHe={isHe} />
 
         <FitsCard fits={data.fits} isHe={isHe} open={vehiclesOpen} setOpen={setVehiclesOpen} />
 
@@ -568,7 +574,7 @@ export default function ItemDetailPage({ params }: { params: Promise<{ code: str
       {/* What the part LOOKS like: the photo staff uploaded in the portal and
           the exploded diagram it is called out on. Renders nothing when the
           item has neither. */}
-      <PartMediaCard code={data.canonical_code || data.code || decodedCode} isHe={isHe} />
+      <PartMediaCard code={decodedCode} isHe={isHe} />
 
       {/* Document drill-down (invoices / quotes / purchases for this item) */}
       {openDocs && (

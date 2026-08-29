@@ -45,6 +45,8 @@ async function vehiclesFor(itemCode: string) {
        LEFT JOIN partly.schemas s ON s.id = pp.schema_id
        LEFT JOIN partly.subcategories sub ON sub.id = s.subcategory_id
        LEFT JOIN partly.categories c ON c.id = sub.category_id
+      -- BYTE-IDENTICAL to partly.global_parts_item_number_norm_idx. Reword this
+      -- expression and the index stops matching: 1,641ms instead of 83ms.
       WHERE upper(regexp_replace(gp.item_number, '[^A-Za-z0-9]', '', 'g')) = ANY($1)
       ORDER BY p.id, p.year DESC NULLS LAST
       LIMIT 30`,

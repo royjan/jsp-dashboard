@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server'
 import { initializeSecrets } from '@/lib/aws-secrets'
 import { query } from '@/lib/db'
+import { fetchItemHistory } from '@/lib/finansit-client'
 import { partlyCandidates, partlyMatchForms } from '@/lib/partly-codes'
-import { itemChainCodes } from '@/lib/services/analytics-service'
+import { getCached, setCache } from '@/lib/redis-client'
 
 /**
  * What a part LOOKS like: the photo staff uploaded in the portal, and the
@@ -17,7 +18,20 @@ import { itemChainCodes } from '@/lib/services/analytics-service'
  *
  * Always 200. This feeds one secondary card and must never break the item page,
  * so every failure degrades to "no media" rather than an error.
+ *
+ * Chain codes come from one FINAPI history call, not itemChainCodes() — that
+ * builds the whole 112k-item catalog map and took two minutes cold, to decorate
+ * a panel on one item card. (Same lesson as the Xpart prices route.)
  */
+
+/** 10 minutes, deliberately not CACHE_TTL.ITEMS (3h).
+ *
+ *  The whole promise of this route is that a photo uploaded in the portal shows
+ *  up here — it reads `portal_item_flags` live rather than syncing a copy. A
+ *  three-hour cache would break exactly that. Ten minutes keeps a second view
+ *  of the same part instant without making an upload look lost; `?refresh=1`
+ *  bypasses it. */
+const MEDIA_TTL = 600
 
 interface Marker { x: number; y: number; radius: number }
 interface Coordinates {
@@ -71,7 +85,7 @@ function othersFor(coordinates: Coordinates | null, ownScheme: string, rows: Par
 }
 
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ code: string }> }
 ) {
   const empty = { hasImage: false, imageVersion: null as string | null, diagram: null }
@@ -82,10 +96,23 @@ export async function GET(
 
     await initializeSecrets()
 
+    const cacheKey = `item:media:v1:${upper}`
+    if (!new URL(req.url).searchParams.get('refresh')) {
+      const cached = await getCached<unknown>(cacheKey)
+      if (cached) return NextResponse.json(cached)
+    }
+
     // The photo is keyed by the ERP code; the diagram lives on whatever
     // spelling partly stores (MG prefix, manual mapping, superseded code), so
     // it needs the same fan-out the vehicles card uses.
-    const chain = await itemChainCodes(upper).catch(() => [upper])
+    const history = await fetchItemHistory(upper).catch(() => null)
+    const chain = [
+      ...new Set(
+        [upper, history?.canonical_code, ...(history?.item_id_history ?? [])]
+          .map((c: unknown) => String(c ?? '').trim().toUpperCase())
+          .filter(Boolean),
+      ),
+    ]
     const candidates = (
       await Promise.all(chain.map((c) => partlyCandidates(c).catch(() => [c])))
     ).flat()
@@ -100,6 +127,11 @@ export async function GET(
         [chain.map((c) => String(c).toUpperCase())],
       ).catch(() => null),
       forms.length === 0 ? null : query(
+        // The WHERE expression must stay BYTE-IDENTICAL to the index
+        // `partly.global_parts_item_number_norm_idx` (and to partlyMatchForms,
+        // which produces the values). Reword it and Postgres silently stops
+        // using the index: it then inverts the join and walks all 1.29M
+        // project_parts rows — 5,951ms instead of 4ms, on every item page.
         `SELECT s.id AS schema_id, s.name, s.coordinates, pp.scheme_number
            FROM partly.project_parts pp
            JOIN partly.global_parts gp ON gp.id = pp.global_part_id
@@ -152,15 +184,19 @@ export async function GET(
       }
     }
 
-    return NextResponse.json({
+    const payload = {
       hasImage: !!imgRow,
       // The <img> cache-busts on this, so an admin re-upload shows up without
       // a hard refresh.
       imageVersion: imgRow?.image_updated_at ? new Date(imgRow.image_updated_at).getTime() : null,
       imageCode: imgRow?.item_code ?? null,
       diagram,
-    })
+    }
+    await setCache(cacheKey, payload, MEDIA_TTL)
+    return NextResponse.json(payload)
   } catch {
+    // Deliberately NOT cached: a failed DB read must not pin "no media" on a
+    // part for ten minutes.
     return NextResponse.json(empty)
   }
 }
