@@ -255,7 +255,17 @@ function CodeChainCard({
                   className="font-mono text-xs"
                   title={entry.name ?? undefined}
                 >
-                  <ItemLink code={entry.code} showCode copyable={false} />
+                  {/* The current badge fills with bg-primary, and ItemLink paints
+                      itself text-primary — primary on primary, an invisible code.
+                      Hand it the badge's own foreground instead. */}
+                  <ItemLink
+                    code={entry.code}
+                    showCode
+                    copyable={false}
+                    className={
+                      isCurrent ? 'text-primary-foreground hover:text-primary-foreground' : undefined
+                    }
+                  />
                 </Badge>
                 {isCurrent && (
                   <span className="text-[10px] text-muted-foreground">
