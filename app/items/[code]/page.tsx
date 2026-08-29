@@ -1,7 +1,8 @@
 'use client'
 
-import { use, useState } from 'react'
+import { use, useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
+import { useRouter } from 'next/navigation'
 import { useItemDetail, useItemDocuments, useItemLinks, useItemMedia, HttpError } from '@/hooks/use-analytics'
 import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
 import { deriveBrand, brandChipClasses } from '@/lib/brand'
@@ -464,6 +465,7 @@ export default function ItemDetailPage({ params }: { params: Promise<{ code: str
   const { code } = use(params)
   const decodedCode = decodeURIComponent(code)
   const { t, locale } = useLocale()
+  const router = useRouter()
   const { data, isLoading, error } = useItemDetail(decodedCode)
   const { data: linksData } = useItemLinks(decodedCode)
   // Started HERE, not inside PartMediaCard, because everything below the
@@ -477,6 +479,24 @@ export default function ItemDetailPage({ params }: { params: Promise<{ code: str
   // 30 vehicles is a lot of card: show a few, let the user open the rest
   const [vehiclesOpen, setVehiclesOpen] = useState(false)
   const toggleDocs = (type: DocType) => setOpenDocs((cur) => (cur === type ? null : type))
+
+  // ONE PAGE PER PART, KEYED ON THE NUMBER IT IS SOLD AS TODAY.
+  //
+  // Every code in a chain lands on the newest one. Our own chain stops wherever
+  // the price list we buy against stops — Lubinski has no row for 1685352580 at
+  // all — so without this, opening 1609697180 showed a code the manufacturer
+  // replaced, with no sign that it had. The destination carries the ERP figures
+  // through the chain, so nothing is lost by arriving there instead.
+  //
+  // `catalog_canonical_code` is only ever set on a code that is NOT itself the
+  // catalog's latest, so the target can never redirect onward: the guard below
+  // is belt and braces, not the thing preventing a loop.
+  const catalogCurrent = data?.catalog_canonical_code
+  useEffect(() => {
+    if (catalogCurrent && catalogCurrent !== decodedCode) {
+      router.replace(`/items/${encodeURIComponent(catalogCurrent)}`)
+    }
+  }, [catalogCurrent, decodedCode, router])
 
   if (isLoading) return <LoadingSkeleton />
   // A CODE WE DO NOT HAVE IS AN ANSWER, NOT A CRASH.
@@ -505,7 +525,14 @@ export default function ItemDetailPage({ params }: { params: Promise<{ code: str
   const totalSales = salesData.reduce((sum, s) => sum + s.value, 0)
   const maxSales = Math.max(...salesData.map(s => s.value), 1)
 
-  const displayedCode = data.canonical_code || data.code || decodedCode
+  // canonical_code normally IS the code to show — it is where a superseded ERP
+  // code folds to. But when the catalog carries the chain further, canonical_code
+  // deliberately stays the ERP code so the documents and sales panels keep
+  // working (the catalog number appears in no invoice ever written), and the
+  // headline belongs to the code actually opened.
+  const displayedCode = data.chain_resolution
+    ? data.code || decodedCode
+    : data.canonical_code || data.code || decodedCode
   const brand = deriveBrand(displayedCode)
   const partLinks = linksData?.links || []
 
@@ -682,6 +709,24 @@ export default function ItemDetailPage({ params }: { params: Promise<{ code: str
           {data.brand_resolution.confidence !== 'high' && (
             <span className="text-xs text-muted-foreground" title={isHe ? 'התאמה משוערת' : 'approximate match'}>~</span>
           )}
+        </div>
+      )}
+
+      {/* Chain resolution: this code is the manufacturer's CURRENT number and
+          has no ERP row of its own, so every figure on the page — stock, price,
+          documents, sales — belongs to the code we trade under. Same disclosure
+          as the cross-brand banner above it, and for the same reason: an
+          unattributed "6 in stock" on a number the ERP has never heard of is
+          how someone orders against a code that does not exist. */}
+      {data.chain_resolution && (
+        <div className="flex flex-wrap items-center gap-2 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm dark:border-sky-500/30 dark:bg-sky-500/10">
+          <span className="font-mono" dir="ltr">{data.chain_resolution.requestedCode}</span>
+          <span className="text-muted-foreground">
+            {isHe
+              ? 'המק״ט העדכני בקטלוג היצרן — הנתונים לפי הקוד שאנחנו מוכרים'
+              : "the manufacturer's current number — figures from the code we sell"}
+          </span>
+          <ItemLink code={data.chain_resolution.resolvedCode} showCode copyable={false} />
         </div>
       )}
 
@@ -889,11 +934,11 @@ export default function ItemDetailPage({ params }: { params: Promise<{ code: str
 
       {/* What each supplier charges for this part (Xpart price lists) — the buy
           side of the card, next to our own cost and the shelf price above. */}
-      <SupplierPricesCard code={decodedCode} isHe={isHe} />
+      <SupplierPricesCard code={data.erp_code || decodedCode} isHe={isHe} />
 
       {/* Every name the part goes by — the single name above is one source's
           wording, chosen by a precedence chain that says nothing about which. */}
-      <ItemAliasesCard code={decodedCode} isHe={isHe} />
+      <ItemAliasesCard code={data.erp_code || decodedCode} isHe={isHe} />
 
       {/* Cross-brand equivalent parts (partly.part_links) + manual linking */}
       <PartLinksCard code={decodedCode} links={partLinks} isHe={isHe} />

@@ -305,7 +305,16 @@ export async function GET(
 
       // must match slugify in partly's vehicle page (spaces -> _, drop the rest)
       return NextResponse.json({
-        catalog_only: true,
+        // Everything the ERP knows about the code we trade under, so this page
+        // renders as a FULL item card rather than the stub it used to be. It is
+        // the destination every code in the chain now resolves to, and landing
+        // on a reduced page would be a downgrade from opening the old code.
+        // Spread FIRST so the fields below win: the identity on the page must
+        // stay the catalog's number, only the figures are borrowed.
+        ...(erpItem ?? {}),
+        // Only a code with no ERP resolution at all is still "catalog only" —
+        // that is the case the reduced layout was written for.
+        catalog_only: erpItem ? undefined : true,
         code: c.item_number,
         erp_code: erpSellCode,
         // Oldest -> newest, ERP codes first, exactly like the ERP-backed card.
@@ -320,6 +329,9 @@ export async function GET(
         chain_resolution: erpItem
           ? { requestedCode: c.item_number, resolvedCode: erpItem.code, source: 'psa_catalog' }
           : null,
+        // canonical_code drives the documents/sales panels, and must be the ERP
+        // code — the catalog number appears in no invoice ever written.
+        canonical_code: erpSellCode ?? undefined,
         stock_qty: erpItem?.stock_qty ?? null,
         ordered_qty: erpItem?.ordered_qty ?? null,
         incoming_qty: erpItem?.incoming_qty ?? null,
