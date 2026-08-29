@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { client, fetchItemHistory } from '@/lib/finansit-client'
 import { initializeSecrets } from '@/lib/aws-secrets'
 import { query } from '@/lib/db'
-import { partlyCandidates, partlyMatchForms } from '@/lib/partly-codes'
+import { partlyCandidates, partlyMatchForms, catalogChainAfter, erpCodeViaSupersession } from '@/lib/partly-codes'
 
 /** The shape of FINAPI's item-history response that this route actually reads. */
 interface ItemHistory { canonical_code?: string | null; item_id_history?: unknown[] }
@@ -260,10 +260,27 @@ export async function GET(
          LIMIT 30`,
         [c.id]
       ).catch(() => null)
+      // The ERP has never heard of this code, but the manufacturer's catalog
+      // says which code it replaced — and we may well stock THAT one. Walk back
+      // into the ERP and hand over its chain, so the page shows
+      // 1608206680 -> 1609697280 -> 1685352480 instead of a dead end.
+      const erpCode = await erpCodeViaSupersession(c.item_number).catch(() => null)
+      const erpChain = erpCode
+        ? ((await fetchItemHistory(erpCode).catch(() => null))?.item_id_history ?? [erpCode])
+            .map((h: unknown) => String(h))
+        : []
+      const catalogTail = await catalogChainAfter(
+        erpChain.length ? erpChain : [c.item_number],
+      ).catch(() => [])
+
       // must match slugify in partly's vehicle page (spaces -> _, drop the rest)
       return NextResponse.json({
         catalog_only: true,
         code: c.item_number,
+        erp_code: erpCode,
+        // Oldest -> newest, ERP codes first, exactly like the ERP-backed card.
+        item_id_history: erpChain.length ? erpChain : undefined,
+        catalog_history: catalogTail.map((t) => ({ ...t, source: 'psa_catalog' })),
         name: (c.hebrew_description && c.hebrew_description !== '-') ? c.hebrew_description : c.description,
         description: c.description,
         brand: c.brand,
@@ -321,12 +338,26 @@ export async function GET(
       if (f) item = { ...item, name: f.heb || f.lubinski || f.eng || item.name }
     }
 
+    // The catalog reaches one step further than Finansit does: it names the
+    // current part number long before we open an item for it. Appended AFTER
+    // the ERP chain and kept in its OWN field — `item_id_history` is FINAPI's
+    // ERP truth, and stock, price and the analytics chain map all fold through
+    // it, so a code the ERP has never heard of must not leak into it.
+    const erpChain = (
+      (effectiveHistory?.item_id_history || item.item_id_history || [item.code]) as unknown[]
+    ).map((h) => String(h))
+    const catalogTail = await catalogChainAfter(erpChain).catch(() => [])
+
     return NextResponse.json({
       ...item,
       fits,
       canonical_code: effectiveHistory?.canonical_code || item.code,
       canonical_name: effectiveHistory?.canonical_name || item.name,
       item_id_history: effectiveHistory?.item_id_history || item.item_id_history,
+      catalog_history: catalogTail.map((t) => ({ ...t, source: 'psa_catalog' })),
+      // The newest number the manufacturer prints, which is NOT necessarily one
+      // we can price. Kept apart from canonical_code for that reason.
+      catalog_canonical_code: catalogTail.length ? catalogTail[catalogTail.length - 1].code : null,
       ...(brandResolution ? { brand_resolution: brandResolution } : {}),
     })
   } catch (error) {

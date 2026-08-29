@@ -3,6 +3,7 @@ import { initializeSecrets } from '@/lib/aws-secrets'
 import { client } from '@/lib/finansit-client'
 import { query } from '@/lib/db'
 import { getCached, setCache } from '@/lib/redis-client'
+import { erpCodeViaSupersession } from '@/lib/partly-codes'
 
 const SEARCH_CACHE_TTL = 60
 
@@ -11,7 +12,17 @@ const SEARCH_CACHE_TTL = 60
  * (SU0*) part ids, which exist only in partly.global_parts. Excludes codes
  * the ERP already knows (those surface in the regular items group).
  */
-async function searchPartlyCatalog(q: string): Promise<any[]> {
+interface CatalogHit {
+  code: string
+  brand: string
+  description: string | null
+  hebrewDescription: string | null
+  /** The code we actually stock this catalog number under, if the chain names one. */
+  erpCode: string | null
+  erpVia: 'supersession' | null
+}
+
+async function searchPartlyCatalog(q: string): Promise<CatalogHit[]> {
   const like = q.toUpperCase().replace(/[%_]/g, '') + '%'
   const res = await query(
     `SELECT gp.item_number AS code, gp.brand, gp.description, gp.hebrew_description
@@ -23,11 +34,28 @@ async function searchPartlyCatalog(q: string): Promise<any[]> {
      LIMIT 6`,
     [like]
   ).catch(() => null)
-  return (res?.rows ?? []).map((r: any) => ({
+  // A catalog-only code is a dead end on its own — description, no stock, no
+  // price. But the catalog also says which code it replaced, and that one we
+  // may well hold: this car's headlamp is catalogued as 1685352480 while the
+  // four on the shelf sit under 1608206680 -> 1609697280. Resolve it here so
+  // the customer's number reaches the part rather than a description.
+  const catalogRows = (res?.rows ?? []) as Array<{
+    code: string
+    brand: string | null
+    description: string | null
+    hebrew_description: string | null
+  }>
+  const erpCodes = await Promise.all(
+    catalogRows.map((r) => erpCodeViaSupersession(String(r.code)).catch(() => null)),
+  )
+
+  return catalogRows.map((r, i) => ({
     code: r.code,
     brand: r.brand || 'PSA',
     description: r.description || null,
     hebrewDescription: r.hebrew_description && r.hebrew_description !== '-' ? r.hebrew_description : null,
+    erpCode: erpCodes[i],
+    erpVia: erpCodes[i] ? ('supersession' as const) : null,
   }))
 }
 
@@ -164,7 +192,7 @@ export async function GET(request: NextRequest) {
   // part re-walks it. Short enough that a quantity changing in the ERP shows up
   // in a search while you are still looking for it. The smart half has cached
   // for an hour all along; the two are asked together and only one was.
-  const cacheKey = `search:v3:${q}`
+  const cacheKey = `search:v4:${q}`
   const cached = await getCached<{ items: unknown[]; customers: unknown[]; semantic: unknown[]; catalog: unknown[] }>(cacheKey)
   if (cached) return NextResponse.json(cached)
 
@@ -199,14 +227,45 @@ export async function GET(request: NextRequest) {
     ).slice(0, 10)
     const customers = (customersResult.customers || customersResult || []).slice(0, 5)
     const semantic = (semanticResult.items || []).slice(0, 5)
-    const [items, catalog] = await Promise.all([
-      enrichItems(rawItems).catch(() => rawItems),
-      closedUp
-        ? Promise.all([searchPartlyCatalog(q), searchPartlyCatalog(closedUp)]).then(
-            ([verbatim, stripped]) => mergeByCode(verbatim, stripped).slice(0, 6)
+    const catalog = closedUp
+      ? await Promise.all([searchPartlyCatalog(q), searchPartlyCatalog(closedUp)]).then(
+          ([verbatim, stripped]) => mergeByCode(verbatim, stripped).slice(0, 6)
+        )
+      : await searchPartlyCatalog(q)
+
+    // A code the catalog resolved into the ERP belongs in `items`, not only as
+    // a footnote on the catalog hit: enrichItems folds its supersession chain
+    // through stock.batch, so it arrives with the real quantity, price and the
+    // canonical code — which is the whole answer the customer asked for.
+    // mergeByCode keeps the ERP search's own hits on top and dedupes.
+    const resolvedFromCatalog = [
+      ...new Set(catalog.map((c) => c.erpCode).filter(Boolean).map(String)),
+    ]
+      .filter(
+        (code) =>
+          !rawItems.some(
+            (i: { code?: unknown }) => String(i?.code ?? '').toUpperCase() === code.toUpperCase()
           )
-        : searchPartlyCatalog(q),
-    ])
+      )
+      .map((code) => ({ code }))
+
+    const enriched = await enrichItems(
+      mergeByCode(rawItems, resolvedFromCatalog).slice(0, 10)
+    ).catch(() => rawItems)
+
+    // enrichItems names a row from its CANONICAL code, so a resolved code that
+    // is already its own canonical comes back nameless. The catalog knows what
+    // the part is; a row with a quantity and no name is worse than either.
+    const catalogNameByErpCode = new Map<string, string>()
+    for (const c of catalog) {
+      const label = c.hebrewDescription || c.description
+      if (c.erpCode && label) catalogNameByErpCode.set(String(c.erpCode).toUpperCase(), String(label))
+    }
+    const items = enriched.map((it: { code?: unknown; name?: unknown }) =>
+      String(it?.name ?? '').trim()
+        ? it
+        : { ...it, name: catalogNameByErpCode.get(String(it?.code ?? '').toUpperCase()) ?? it?.name }
+    )
 
     const payload = { items, customers, semantic, catalog }
     await setCache(cacheKey, payload, SEARCH_CACHE_TTL).catch(() => {})
