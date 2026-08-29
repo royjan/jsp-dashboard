@@ -200,6 +200,35 @@ export function useItemLinks(code: string | null) {
   })
 }
 
+export interface ItemMedia {
+  hasImage: boolean
+  imageVersion: number | null
+  imageCode: string | null
+  diagram: {
+    schemaName: string
+    imageUrl: string
+    width: number
+    height: number
+    scheme: string
+    markers: { x: number; y: number; radius: number }[]
+    others: { scheme: string; name: string; markers: { x: number; y: number; radius: number }[] }[]
+  } | null
+}
+
+/** Product photo + exploded diagram for an item (portal upload + partly catalog). */
+export function useItemMedia(code: string | null) {
+  return useQuery<ItemMedia>({
+    queryKey: ['item-media', code],
+    queryFn: async () => {
+      const res = await fetch(`/api/items/${encodeURIComponent(code!)}/media`)
+      if (!res.ok) throw new Error('Failed')
+      return res.json()
+    },
+    enabled: !!code,
+    staleTime: 5 * 60 * 1000,
+  })
+}
+
 export function useItemDocuments(code: string, type: string | null) {
   return useQuery({
     queryKey: ['item-documents', code, type],

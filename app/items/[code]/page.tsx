@@ -7,6 +7,7 @@ import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
 import { deriveBrand, brandChipClasses } from '@/lib/brand'
 import { ItemLink } from '@/components/shared/ItemLink'
 import { PartLinksCard } from '@/components/items/PartLinksCard'
+import { PartMediaCard } from '@/components/items/PartMediaCard'
 import { SupplierPricesCard } from '@/components/xpart/SupplierPricesCard'
 import { ItemAliasesCard } from '@/components/xpart/ItemAliasesCard'
 import { useLocale } from '@/lib/locale-context'
@@ -411,6 +412,8 @@ export default function ItemDetailPage({ params }: { params: Promise<{ code: str
           </CardContent>
         </Card>
 
+        <PartMediaCard code={data.code || decodedCode} isHe={isHe} />
+
         <FitsCard fits={data.fits} isHe={isHe} open={vehiclesOpen} setOpen={setVehiclesOpen} />
 
         {data.equivalents?.length > 0 && (
@@ -561,6 +564,11 @@ export default function ItemDetailPage({ params }: { params: Promise<{ code: str
           </Card>
         </motion.div>
       </div>
+
+      {/* What the part LOOKS like: the photo staff uploaded in the portal and
+          the exploded diagram it is called out on. Renders nothing when the
+          item has neither. */}
+      <PartMediaCard code={data.canonical_code || data.code || decodedCode} isHe={isHe} />
 
       {/* Document drill-down (invoices / quotes / purchases for this item) */}
       {openDocs && (
