@@ -37,31 +37,53 @@ import { ChevronLeft, Clock, X } from 'lucide-react'
  * repeated on every row, and the tabs that had opted out can come back.
  */
 
-/** The radial layout. Alternating radii, not one arc: six bubbles on a single
- *  arc sit ~50px apart, which is closer than their labels are wide, and the
- *  labels then overlap into a smear exactly when they matter most. Zig-zagging
- *  them pushes neighbours ~80px apart and lets every name render in full. */
-const ORBIT_START = 20
-const ORBIT_STEP = 28
-const ORBIT_RADII = [104, 158] as const
+/**
+ * The radial layout: two rows of three, gently arced, springing out of the
+ * button.
+ *
+ * It was a real arc -- six bubbles at evenly spaced angles, radii alternating
+ * so neighbours would not sit closer together than their labels are wide. That
+ * fails at the bottom of the arc, which is where reading starts: the first
+ * bubble ends up barely above the button, and a caption hung under it lands
+ * behind the dock. Widening the arc to lift it pushes the outermost captions
+ * past the edge of a 393pt screen instead.
+ *
+ * There is no arrangement of six labelled points on a ring that fits Hebrew
+ * section names at this width, so the ring goes and the labels stay. Rows keep
+ * every caption on screen and clear of the dock, and the middle column sits
+ * higher than its neighbours, which is enough curve to read as a burst rather
+ * than a grid.
+ */
+const ORBIT_COL_X = 118
+const ORBIT_ROW_Y = [-110, -218] as const
+/** How much higher the middle of each row sits. The whole of the curve. */
+const ORBIT_ARC_LIFT = 16
 const BUBBLE = 56
+/** Half a bubble's caption, so a side column can be checked against the edge. */
+const ORBIT_HALF_CAPTION = 52
 
 function orbitOffset(i: number, scale: number, isRTL: boolean) {
-  const a = ((ORBIT_START + i * ORBIT_STEP) * Math.PI) / 180
-  const r = ORBIT_RADII[i % 2] * scale
-  // Index 0 sits where reading starts: the right in RTL, the left in LTR.
-  return { x: r * Math.cos(a) * (isRTL ? 1 : -1), y: -r * Math.sin(a) }
+  const row = Math.floor(i / 3)
+  // Column +1 is where reading starts: the right in RTL, the left in LTR.
+  const col = 1 - (i % 3)
+  return {
+    x: col * ORBIT_COL_X * scale * (isRTL ? 1 : -1),
+    // Not scaled: vertical room is the one thing a phone has, and shrinking
+    // this is what would put a caption back under the dock.
+    y: ORBIT_ROW_Y[row] - (col === 0 ? ORBIT_ARC_LIFT : 0),
+  }
 }
 
 /**
- * Shrink the whole constellation on narrow phones rather than letting the outer
- * bubbles run off the edge. 148 is the widest offset the layout produces; the
- * 38 covers half a bubble plus a margin.
+ * Shrink the constellation on narrow phones rather than letting the outer
+ * captions run off the edge. The widest thing on screen is a side column plus
+ * half its caption; 8px keeps it off the bezel.
  */
 function useOrbitScale(): number {
   const [scale, setScale] = useState(1)
   useEffect(() => {
-    const measure = () => setScale(Math.min(1, (window.innerWidth / 2 - 38) / 148))
+    const measure = () =>
+      setScale(Math.min(1, (window.innerWidth / 2 - 8) / (ORBIT_COL_X + ORBIT_HALF_CAPTION)))
     measure()
     window.addEventListener('resize', measure)
     return () => window.removeEventListener('resize', measure)
@@ -166,16 +188,16 @@ export function MobileNav() {
     const body = (
       <>
         <span className={cn(
-          'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border',
+          'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border',
           isActive ? 'border-transparent bg-primary/15 text-primary' : 'bg-muted/40 text-muted-foreground',
         )}>
-          <Icon className="h-[18px] w-[18px]" />
+          <Icon className="h-[17px] w-[17px]" />
         </span>
         <span className="flex-1 text-start leading-tight">
           {label}
           {kids.length > 0 && (
-            <span className="mt-0.5 block text-[11px] font-normal text-muted-foreground">
-              {kids.length} {t('navViewsCount')}
+            <span className="block text-[10.5px] font-normal leading-tight text-muted-foreground">
+              {kids.length === 1 ? t('navViewOne') : `${kids.length} ${t('navViewsCount')}`}
             </span>
           )}
         </span>
@@ -184,8 +206,11 @@ export function MobileNav() {
         )}
       </>
     )
+    // 48px, not 56: a one-column list of seven rows at 56 plus a gap filled the
+    // whole sheet with air and made the section look longer than it is. 48 is
+    // still over the 44px touch minimum.
     const cls = cn(
-      'flex min-h-14 w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-[15px] font-semibold',
+      'flex min-h-12 w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-[14.5px] font-semibold',
       'transition-colors active:bg-muted',
       isActive ? 'bg-primary/10 text-primary' : 'text-foreground',
     )
@@ -261,9 +286,6 @@ export function MobileNav() {
         {MOBILE_TREE.map((s, i) => {
           const { x, y } = orbitOffset(i, scale, isRTL)
           const Icon = s.icon
-          // Inner bubbles caption downward, outer ones upward, so a caption
-          // never lands on the bubble one ring behind it.
-          const capBelow = i % 2 === 0
           return (
             <button
               key={s.id}
@@ -287,13 +309,10 @@ export function MobileNav() {
               )}
             >
               <Icon className="h-[22px] w-[22px] text-primary" />
-              <span
-                className={cn(
-                  'absolute w-[92px] text-center text-[11px] font-bold leading-tight',
-                  'rounded-full border bg-background/90 px-1.5 py-0.5',
-                  capBelow ? 'top-[calc(100%+4px)]' : 'bottom-[calc(100%+4px)]',
-                )}
-              >
+              {/* Always below, never above: a caption over a bubble reads as
+                  belonging to the one in the row behind it. Two lines are
+                  allowed -- "לקוחות ומכירות" truncated is worse than wrapped. */}
+              <span className="absolute top-[calc(100%+5px)] w-[104px] rounded-lg border bg-background/95 px-1 py-0.5 text-center text-[11px] font-bold leading-tight">
                 {t(s.labelKey)}
               </span>
             </button>
@@ -353,7 +372,9 @@ export function MobileNav() {
                 <div className="truncate text-[11px] text-muted-foreground">
                   {drilled
                     ? t(section.labelKey)
-                    : `${section.items.length} ${t('navScreensCount')}`}
+                    : section.items.length === 1
+                      ? t('navScreenOne')
+                      : `${section.items.length} ${t('navScreensCount')}`}
                 </div>
               </div>
               <button
@@ -369,11 +390,16 @@ export function MobileNav() {
             {/* Two panes, one transform. The incoming pane enters from the side
                 the language reads TOWARDS -- from the left in Hebrew -- because
                 a push that arrives from the wrong edge reads as a step back. */}
-            <div className="relative flex-1 overflow-hidden">
+            {/* The two panes share ONE grid cell, so the sheet is as tall as the
+                taller of them and no taller. It used to be a flex-1 box holding
+                an h-full pane, which grows to the 82vh cap whatever is in it --
+                seven rows then sat in a sheet sized for fourteen, which is what
+                made the list read as mostly empty space. */}
+            <div className="grid overflow-hidden">
               <div
                 data-sheet-scroll
                 className={cn(
-                  'h-full space-y-1 overflow-y-auto overscroll-contain px-2 pb-[max(0.75rem,env(safe-area-inset-bottom))]',
+                  '[grid-area:1/1] max-h-[62vh] space-y-0.5 overflow-y-auto overscroll-contain px-2 pb-[max(0.75rem,env(safe-area-inset-bottom))]',
                   'transition-[transform,opacity] duration-300 ease-out motion-reduce:transition-none',
                   drilled && (isRTL ? 'pointer-events-none translate-x-[42%] opacity-0' : 'pointer-events-none -translate-x-[42%] opacity-0'),
                 )}
@@ -407,7 +433,7 @@ export function MobileNav() {
               <div
                 aria-hidden={!drilled}
                 className={cn(
-                  'absolute inset-0 space-y-1 overflow-y-auto overscroll-contain px-2 pb-[max(0.75rem,env(safe-area-inset-bottom))]',
+                  '[grid-area:1/1] max-h-[62vh] space-y-0.5 overflow-y-auto overscroll-contain px-2 pb-[max(0.75rem,env(safe-area-inset-bottom))]',
                   'transition-[transform,opacity] duration-300 ease-out motion-reduce:transition-none',
                   drilled
                     ? 'translate-x-0 opacity-100'
