@@ -5,65 +5,106 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { useLocale } from '@/lib/locale-context'
-import { MOBILE_PRIMARY, MOBILE_MORE, MOBILE_MORE_SECTIONS, isItemActive } from '@/lib/navigation'
+import { MOBILE_PRIMARY, MOBILE_TREE, isItemActive, type NavItem } from '@/lib/navigation'
+import { useMoneyHidden } from '@/lib/use-money-hidden'
 import { useRecentDestinations, recordDestination } from '@/lib/recent-destinations'
 import { openCommandPalette } from '@/lib/command-palette'
-import { ChevronLeft, Clock, MoreHorizontal } from 'lucide-react'
+import { ChevronLeft, Clock, X } from 'lucide-react'
 
 /**
- * The phone's navigation.
+ * The phone's navigation: a fixed dock, a radial menu on the button in the
+ * middle of it, and a sheet that drills in.
  *
- * THE SHEET USED TO BE A FLAT GRID OF 48 ICONS. `MOBILE_MORE` is `itemsFor('mobile')`,
- * and `itemsFor` exists to throw the section tree away — so the surface with the least
- * room to make sense of forty-eight destinations was the one rendering them with no
- * headings at all, while the sidebar showed the identical tree grouped. The grouping was
- * never missing. Mobile was the only surface discarding it.
+ * WHY NOT A HAMBURGER. The four destinations people actually open stay on the
+ * screen at all times, so the common case costs no discovery at all -- someone
+ * who does not know what a menu is can still see where to press. The dock is
+ * the floor; everything below is opt-in.
  *
- * So the sheet reads `MOBILE_MORE_SECTIONS` instead, and shows the six sections as an
- * accordion: the whole map fits one screen, with a count against each, and opening one
- * closes the others. That last part is the point — a scroll through 48 rows tells you
- * where you are but never what exists.
+ * WHY THE ORBIT. The button in the middle is the whole map, and it opens as six
+ * labelled bubbles springing out over the page rather than as another list.
+ * Two practical reasons on top of the obvious one: a 56px circle near the
+ * bottom edge is the easiest target a thumb has, and a fixed layout gives the
+ * hand somewhere to learn -- "purchasing is the far one on the left" is muscle
+ * memory a scrolling list can never offer. Every bubble carries its name in
+ * text; an icon on its own would put back exactly the guessing the dock avoids.
+ *
+ * WHY THE SHEET PUSHES INSTEAD OF FLATTENING. It used to render the tree
+ * flattened -- every screen's tabs promoted to rows of their own, each needing
+ * a "דוח עסקי › זיכויים" qualifier to not read as a sibling of "זיכויי ספקים" --
+ * and seven of them opted out of the phone entirely rather than appear that
+ * way. A second pane costs one transform and one back button, and pays for both
+ * at once: the parent is the header, so the qualifier is structural instead of
+ * repeated on every row, and the tabs that had opted out can come back.
  */
+
+/** The radial layout. Alternating radii, not one arc: six bubbles on a single
+ *  arc sit ~50px apart, which is closer than their labels are wide, and the
+ *  labels then overlap into a smear exactly when they matter most. Zig-zagging
+ *  them pushes neighbours ~80px apart and lets every name render in full. */
+const ORBIT_START = 20
+const ORBIT_STEP = 28
+const ORBIT_RADII = [104, 158] as const
+const BUBBLE = 56
+
+function orbitOffset(i: number, scale: number, isRTL: boolean) {
+  const a = ((ORBIT_START + i * ORBIT_STEP) * Math.PI) / 180
+  const r = ORBIT_RADII[i % 2] * scale
+  // Index 0 sits where reading starts: the right in RTL, the left in LTR.
+  return { x: r * Math.cos(a) * (isRTL ? 1 : -1), y: -r * Math.sin(a) }
+}
 
 /**
- * One section open at a time, defaulting to the one you are already in.
- *
- * DERIVED, NOT SYNCED. The obvious shape — `useState(current)` plus an effect that
- * re-aims it whenever the sheet opens — is a setState inside an effect, which this repo
- * lints against and which costs a cascading render on every open. Instead `null` means
- * "follow the route": the default stays live with no effect at all, and closing the
- * sheet resets to null so reopening it lands on wherever you have since navigated.
- * An empty string is a real value, distinct from null — it means every section collapsed.
+ * Shrink the whole constellation on narrow phones rather than letting the outer
+ * bubbles run off the edge. 148 is the widest offset the layout produces; the
+ * 38 covers half a bubble plus a margin.
  */
-function useOpenSection(pathname: string) {
-  const current = useMemo(() => {
-    const hit = MOBILE_MORE_SECTIONS.find((s) =>
-      s.items.some((i) => isItemActive(i, pathname, null)))
-    return hit?.id ?? MOBILE_MORE_SECTIONS[0]?.id ?? ''
-  }, [pathname])
-
-  const [override, setOverride] = useState<string | null>(null)
-  return { openId: override ?? current, setOverride }
+function useOrbitScale(): number {
+  const [scale, setScale] = useState(1)
+  useEffect(() => {
+    const measure = () => setScale(Math.min(1, (window.innerWidth / 2 - 38) / 148))
+    measure()
+    window.addEventListener('resize', measure)
+    return () => window.removeEventListener('resize', measure)
+  }, [])
+  return scale
 }
 
 export function MobileNav() {
   const pathname = usePathname()
-  const { t } = useLocale()
-  const [showMore, setShowMore] = useState(false)
-  const { openId, setOverride } = useOpenSection(pathname)
+  const { t, dir } = useLocale()
+  const isRTL = dir === 'rtl'
+  const scale = useOrbitScale()
+  const moneyHidden = useMoneyHidden()
   const recents = useRecentDestinations()
   const sheetRef = useRef<HTMLDivElement>(null)
 
-  // Was `href === pathname`, so /bookkeeping/vat left the More tab unlit.
-  const isMoreActive = MOBILE_MORE.some((item) => isItemActive(item, pathname, null))
+  const [orbitOpen, setOrbitOpen] = useState(false)
+  const [sectionId, setSectionId] = useState<string | null>(null)
+  /** The parent whose tabs the second pane is showing. */
+  const [drillHref, setDrillHref] = useState<string | null>(null)
+
+  const section = useMemo(() => MOBILE_TREE.find((s) => s.id === sectionId) ?? null, [sectionId])
+  const drilled = useMemo(
+    () => section?.items.find((i) => i.href === drillHref) ?? null,
+    [section, drillHref],
+  )
+  const sheetOpen = section !== null
+  const anyOpen = orbitOpen || sheetOpen
 
   // ── swipe down to dismiss ────────────────────────────────────────────────────────
   // A sheet you can only close with the X is a panel wearing a sheet's shape. Tracked
   // by hand rather than pulled in as a dependency: it is one pointer delta, and the
-  // gesture must not fight the list's own scrolling — so it only arms when the scroll
+  // gesture must not fight the list's own scrolling -- so it only arms when the scroll
   // is already at the top, which is the same rule the OS sheets use.
   const drag = useRef<{ y: number; armed: boolean } | null>(null)
   const [dragY, setDragY] = useState(0)
+
+  const closeAll = useCallback(() => {
+    setOrbitOpen(false)
+    setSectionId(null)
+    setDrillHref(null)
+    setDragY(0)
+  }, [])
 
   function onPointerDown(e: React.PointerEvent) {
     const scroller = sheetRef.current?.querySelector('[data-sheet-scroll]')
@@ -77,68 +118,215 @@ export function MobileNav() {
   function onPointerUp() {
     // A third of the way down is the commit point; anything less springs back, so a
     // half-hearted drag never loses the menu.
-    if (dragY > 110) closeSheet()
+    if (dragY > 110) closeAll()
     setDragY(0)
     drag.current = null
   }
 
-  const closeSheet = useCallback(() => {
-    setShowMore(false)
-    setDragY(0)
-    // Back to following the route, so the next open aims at wherever we ended up.
-    setOverride(null)
-  }, [setOverride])
-
-  // The sheet is a layer over the page; the page behind it must not scroll with it.
+  // Whatever is open is a layer over the page; the page behind it must not scroll.
   useEffect(() => {
-    if (!showMore) return
+    if (!anyOpen) return
     const prev = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     return () => { document.body.style.overflow = prev }
-  }, [showMore])
+  }, [anyOpen])
 
-  // Escape closes it — a phone rarely has a key, but this component also renders on a
-  // narrow desktop window, where a sheet with no keyboard exit is a trap.
+  // Escape backs out one level at a time -- a phone rarely has a key, but this
+  // component also renders on a narrow desktop window, where a layer with no
+  // keyboard exit is a trap and one that drops you all the way out is a chore.
   useEffect(() => {
-    if (!showMore) return
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') closeSheet() }
+    if (!anyOpen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      if (drillHref) setDrillHref(null)
+      else if (sheetOpen) setSectionId(null)
+      else closeAll()
+    }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [showMore, closeSheet])
+  }, [anyOpen, drillHref, sheetOpen, closeAll])
 
   // Only page destinations. `recent-destinations` also records items, customers and
-  // documents — useful in ⌘K, noise in a navigation menu.
+  // documents -- useful in ⌘K, noise in a navigation menu.
   const recentPages = recents.filter((r) => r.kind === 'page').slice(0, 4)
+
+  const go = (item: NavItem, label: string, qualifier?: string) => {
+    recordDestination({ href: item.href, label, sublabel: qualifier, kind: 'page' })
+    closeAll()
+  }
+
+  /** One row of the sheet: a destination, or a parent that pushes the next pane. */
+  const renderRow = (item: NavItem, qualifier?: string) => {
+    const label = t(item.labelKey)
+    const isActive = isItemActive(item, pathname, null)
+    const Icon = item.icon
+    // Demo mode drops /report's revenue tab, so the row for it goes too --
+    // otherwise it is a link that silently lands on the summary instead.
+    const kids = (item.children ?? []).filter((c) => !(c.demoHidden && moneyHidden))
+    const body = (
+      <>
+        <span className={cn(
+          'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border',
+          isActive ? 'border-transparent bg-primary/15 text-primary' : 'bg-muted/40 text-muted-foreground',
+        )}>
+          <Icon className="h-[18px] w-[18px]" />
+        </span>
+        <span className="flex-1 text-start leading-tight">
+          {label}
+          {kids.length > 0 && (
+            <span className="mt-0.5 block text-[11px] font-normal text-muted-foreground">
+              {kids.length} {t('navViewsCount')}
+            </span>
+          )}
+        </span>
+        {kids.length > 0 && (
+          <ChevronLeft className={cn('h-4 w-4 shrink-0 text-muted-foreground', !isRTL && 'rotate-180')} />
+        )}
+      </>
+    )
+    const cls = cn(
+      'flex min-h-14 w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-[15px] font-semibold',
+      'transition-colors active:bg-muted',
+      isActive ? 'bg-primary/10 text-primary' : 'text-foreground',
+    )
+
+    if (kids.length > 0) {
+      return (
+        <button key={item.href} type="button" className={cls} onClick={() => setDrillHref(item.href)}>
+          {body}
+        </button>
+      )
+    }
+    // The one entry that is not a destination: smart search has no page any
+    // more, so it opens the palette in place.
+    if (item.action === 'command-palette') {
+      return (
+        <button key={item.href} type="button" className={cls} onClick={() => { closeAll(); openCommandPalette() }}>
+          {body}
+        </button>
+      )
+    }
+    return (
+      <Link key={item.href} href={item.href} className={cls} onClick={() => go(item, label, qualifier)}>
+        {body}
+      </Link>
+    )
+  }
+
+  /** One dock tab. The four that matter, always on screen, never in a menu. */
+  const tabs = MOBILE_PRIMARY
+  const half = Math.ceil(tabs.length / 2)
+  const renderTab = (item: NavItem) => {
+    const isActive = isItemActive(item, pathname, null)
+    const Icon = item.icon
+    const label = t(item.labelKey)
+    const cls = cn(
+      'flex min-h-[54px] flex-col items-center justify-center gap-1 px-1 text-[11px] transition-colors',
+      isActive ? 'text-primary' : 'text-muted-foreground',
+    )
+    const body = (
+      <>
+        <Icon className="h-5 w-5 shrink-0" />
+        <span className="max-w-full truncate">{label}</span>
+      </>
+    )
+    // Smart search is the one tab that is not a destination: there is no
+    // /search page any more, so it opens the palette in place. A phone has no
+    // ⌘K, which is exactly why the tab has to stay.
+    return item.action === 'command-palette' ? (
+      <button key={item.href} type="button" onClick={openCommandPalette} className={cls}>
+        {body}
+      </button>
+    ) : (
+      <Link key={item.href} href={item.href} className={cls} onClick={() => go(item, label)}>
+        {body}
+      </Link>
+    )
+  }
 
   return (
     <div data-print="hide" className="contents">
-      {showMore && (
+      {/* ── the radial menu ───────────────────────────────────────────────── */}
+      <div
+        className={cn('fixed inset-0 z-50 lg:hidden', !orbitOpen && 'pointer-events-none')}
+        aria-hidden={!orbitOpen}
+      >
+        <div
+          className={cn(
+            'absolute inset-0 bg-black/70 backdrop-blur-sm transition-opacity duration-300',
+            orbitOpen ? 'opacity-100' : 'pointer-events-none opacity-0',
+          )}
+          onClick={closeAll}
+        />
+        {MOBILE_TREE.map((s, i) => {
+          const { x, y } = orbitOffset(i, scale, isRTL)
+          const Icon = s.icon
+          // Inner bubbles caption downward, outer ones upward, so a caption
+          // never lands on the bubble one ring behind it.
+          const capBelow = i % 2 === 0
+          return (
+            <button
+              key={s.id}
+              type="button"
+              tabIndex={orbitOpen ? 0 : -1}
+              onClick={() => { setOrbitOpen(false); setSectionId(s.id); setDrillHref(null) }}
+              style={{
+                width: BUBBLE,
+                height: BUBBLE,
+                transform: orbitOpen
+                  ? `translate(calc(-50% + ${x.toFixed(1)}px), ${y.toFixed(1)}px) scale(1)`
+                  : 'translate(-50%, 0) scale(0.3)',
+                transitionDelay: `${(orbitOpen ? i : MOBILE_TREE.length - i) * 35}ms`,
+              }}
+              className={cn(
+                'absolute bottom-[calc(1.375rem+env(safe-area-inset-bottom))] left-1/2',
+                'flex items-center justify-center rounded-full border bg-card text-foreground shadow-xl',
+                'transition-[transform,opacity] duration-[450ms] [transition-timing-function:cubic-bezier(.34,1.56,.64,1)]',
+                'motion-reduce:transition-none active:scale-95',
+                orbitOpen ? 'opacity-100' : 'pointer-events-none opacity-0',
+              )}
+            >
+              <Icon className="h-[22px] w-[22px] text-primary" />
+              <span
+                className={cn(
+                  'absolute w-[92px] text-center text-[11px] font-bold leading-tight',
+                  'rounded-full border bg-background/90 px-1.5 py-0.5',
+                  capBelow ? 'top-[calc(100%+4px)]' : 'bottom-[calc(100%+4px)]',
+                )}
+              >
+                {t(s.labelKey)}
+              </span>
+            </button>
+          )
+        })}
+      </div>
+
+      {/* ── the sheet ─────────────────────────────────────────────────────── */}
+      {sheetOpen && section && (
         <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true">
           <div
             className="absolute inset-0 bg-black/60 transition-opacity"
             style={{ opacity: Math.max(0, 1 - dragY / 260) }}
-            onClick={closeSheet}
+            onClick={closeAll}
           />
           <div
             ref={sheetRef}
             className={cn(
-              // ABOVE THE BAR, as the original panel was. Anchoring at bottom-0 tucks the
-              // last section behind the nav — which is fixed, z-50 and painted after this,
-              // so it wins — and the sixth category simply vanished.
-              'absolute inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] flex flex-col',
-              'bg-background border-t rounded-t-2xl shadow-2xl',
-              // HUGS ITS CONTENT, capped. A fixed 86vh left a quarter of the sheet empty
-              // whenever the open section was a short one, which reads as a loading state
-              // rather than a menu that has finished.
-              'max-h-[86vh]',
+              // ABOVE THE BAR. Anchoring at bottom-0 tucks the last row behind the
+              // dock -- which is fixed, z-50 and painted after this, so it wins.
+              'absolute inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] flex flex-col',
+              'rounded-t-3xl border-t bg-background shadow-2xl',
+              // Hugs its content, capped: a fixed height leaves a quarter of the
+              // sheet empty on a short section, which reads as still loading.
+              'max-h-[82vh]',
               !dragY && 'transition-transform duration-200',
             )}
             style={{ transform: `translateY(${dragY}px)` }}
           >
-            {/* The grab area, and the only place a drag starts. Dragging from the list
-                itself would make every attempt to scroll feel like a dismissal. */}
+            {/* The grab area, and the only place a drag starts. Dragging from the
+                list itself would make every scroll attempt feel like a dismissal. */}
             <div
-              className="shrink-0 pt-2 pb-1 cursor-grab active:cursor-grabbing touch-none"
+              className="shrink-0 cursor-grab touch-none pb-1 pt-2 active:cursor-grabbing"
               onPointerDown={onPointerDown}
               onPointerMove={onPointerMove}
               onPointerUp={onPointerUp}
@@ -147,158 +335,143 @@ export function MobileNav() {
               <div className="mx-auto h-1 w-10 rounded-full bg-muted-foreground/30" />
             </div>
 
-            <div
-              data-sheet-scroll
-              className="flex-1 overflow-y-auto overscroll-contain px-2 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
-            >
-              {recentPages.length > 0 && (
-                <div className="px-1 pb-2">
-                  <div className="flex items-center gap-1.5 px-2 pb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    <Clock className="h-3 w-3" />
-                    {t('recentlyOpened')}
-                  </div>
-                  {/* Horizontal, because the point of this row is that it never pushes
-                      the sections off the screen however many entries it holds. */}
-                  <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                    {recentPages.map((r) => (
-                      <Link
-                        key={r.href}
-                        href={r.href}
-                        onClick={closeSheet}
-                        className="shrink-0 rounded-full border bg-muted/40 px-3 py-2 text-xs whitespace-nowrap active:bg-muted"
-                      >
-                        {r.label}
-                      </Link>
-                    ))}
-                  </div>
-                  <div className="mt-2 h-px bg-border" />
-                </div>
+            <div className="flex shrink-0 items-center gap-2 border-b px-3 pb-3 pt-1">
+              {drilled && (
+                <button
+                  type="button"
+                  onClick={() => setDrillHref(null)}
+                  aria-label={t('navBack')}
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border active:bg-muted"
+                >
+                  <ChevronLeft className={cn('h-4 w-4', !isRTL && 'rotate-180')} />
+                </button>
               )}
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[17px] font-bold leading-tight">
+                  {drilled ? t(drilled.labelKey) : t(section.labelKey)}
+                </div>
+                <div className="truncate text-[11px] text-muted-foreground">
+                  {drilled
+                    ? t(section.labelKey)
+                    : `${section.items.length} ${t('navScreensCount')}`}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={closeAll}
+                aria-label={t('navCloseMenu')}
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border text-muted-foreground active:bg-muted"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
 
-              {MOBILE_MORE_SECTIONS.map((section) => {
-                const isOpen = openId === section.id
-                const hasActive = section.items.some((i) => isItemActive(i, pathname, null))
-                return (
-                  <div key={section.id}>
-                    <button
-                      type="button"
-                      onClick={() => setOverride(isOpen ? '' : section.id)}
-                      aria-expanded={isOpen}
-                      className={cn(
-                        'flex w-full items-center gap-2.5 rounded-xl px-3 py-3 text-start text-[15px] font-semibold min-h-11',
-                        'active:bg-muted transition-colors',
-                        isOpen || hasActive ? 'text-primary' : 'text-foreground',
-                      )}
-                    >
-                      {/* ChevronLeft, not Right: the sheet is RTL, so the collapsed arrow
-                          has to point at the text it opens. */}
-                      <ChevronLeft
-                        className={cn(
-                          'h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200',
-                          isOpen && '-rotate-90',
-                        )}
-                      />
-                      <span className="flex-1">{t(section.labelKey)}</span>
-                      <span className="rounded-full border bg-muted/50 px-2 py-0.5 text-[11px] font-medium text-muted-foreground tabular-nums">
-                        {section.items.length}
-                      </span>
-                    </button>
-
-                    {/* grid-template-rows 0fr -> 1fr animates to the content's real height,
-                        which a max-height guess cannot do without clipping a long section
-                        or leaving a gap under a short one. */}
-                    <div
-                      className={cn(
-                        'grid transition-[grid-template-rows] duration-200 ease-out',
-                        isOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]',
-                      )}
-                    >
-                      <div className="overflow-hidden">
-                        <div className="grid grid-cols-2 gap-1.5 px-1 pb-2 pt-0.5">
-                          {section.items.map((item) => {
-                            const isActive = isItemActive(item, pathname, null)
-                            const Icon = item.icon
-                            const label = t(item.labelKey)
-                            return (
-                              <Link
-                                key={item.href}
-                                href={item.href}
-                                onClick={() => {
-                                  recordDestination({
-                                    href: item.href,
-                                    label,
-                                    sublabel: item.qualifierKey ? t(item.qualifierKey) : undefined,
-                                    kind: 'page',
-                                  })
-                                  closeSheet()
-                                }}
-                                className={cn(
-                                  'flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] min-h-11',
-                                  'bg-muted/40 active:bg-muted transition-colors',
-                                  isActive ? 'text-primary bg-primary/10' : 'text-foreground',
-                                )}
-                              >
-                                <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
-                                {/* The label wraps to two lines rather than truncating:
-                                    "אינטליגנציית רכב" and "מחירוני ספקים" are both
-                                    unreadable cut at one line in a half-width cell. */}
-                                <span className="leading-tight line-clamp-2">{label}</span>
-                              </Link>
-                            )
-                          })}
-                        </div>
-                      </div>
+            {/* Two panes, one transform. The incoming pane enters from the side
+                the language reads TOWARDS -- from the left in Hebrew -- because
+                a push that arrives from the wrong edge reads as a step back. */}
+            <div className="relative flex-1 overflow-hidden">
+              <div
+                data-sheet-scroll
+                className={cn(
+                  'h-full space-y-1 overflow-y-auto overscroll-contain px-2 pb-[max(0.75rem,env(safe-area-inset-bottom))]',
+                  'transition-[transform,opacity] duration-300 ease-out motion-reduce:transition-none',
+                  drilled && (isRTL ? 'pointer-events-none translate-x-[42%] opacity-0' : 'pointer-events-none -translate-x-[42%] opacity-0'),
+                )}
+              >
+                {recentPages.length > 0 && !drilled && (
+                  <div className="px-1 pb-1 pt-1">
+                    <div className="flex items-center gap-1.5 px-2 pb-2 text-[11px] font-semibold text-muted-foreground">
+                      <Clock className="h-3 w-3" />
+                      {t('recentlyOpened')}
                     </div>
+                    {/* Horizontal, so this row never pushes the section off the
+                        screen however many entries it holds. */}
+                    <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                      {recentPages.map((r) => (
+                        <Link
+                          key={r.href}
+                          href={r.href}
+                          onClick={closeAll}
+                          className="shrink-0 whitespace-nowrap rounded-full border bg-muted/40 px-3 py-2 text-xs active:bg-muted"
+                        >
+                          {r.label}
+                        </Link>
+                      ))}
+                    </div>
+                    <div className="mt-2 h-px bg-border" />
                   </div>
-                )
-              })}
+                )}
+                {section.items.map((item) => renderRow(item))}
+              </div>
+
+              <div
+                aria-hidden={!drilled}
+                className={cn(
+                  'absolute inset-0 space-y-1 overflow-y-auto overscroll-contain px-2 pb-[max(0.75rem,env(safe-area-inset-bottom))]',
+                  'transition-[transform,opacity] duration-300 ease-out motion-reduce:transition-none',
+                  drilled
+                    ? 'translate-x-0 opacity-100'
+                    : cn('pointer-events-none opacity-0', isRTL ? '-translate-x-full' : 'translate-x-full'),
+                )}
+              >
+                {/* The parent is a destination too -- /report's own row IS the
+                    summary tab -- so it leads its own tab list rather than being
+                    the one screen you cannot reach from here. */}
+                {drilled && renderRow({ ...drilled, children: undefined }, t(section.labelKey))}
+                {(drilled?.children ?? [])
+                  .filter((c) => !(c.demoHidden && moneyHidden))
+                  .map((c) => renderRow(c, drilled ? t(drilled.labelKey) : undefined))}
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Bottom nav bar */}
-      <nav className="fixed bottom-0 left-0 right-0 z-50 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 lg:hidden safe-area-bottom">
-        <div className="flex items-center justify-around h-14">
-          {MOBILE_PRIMARY.map((item) => {
-            const isActive = isItemActive(item, pathname, null)
-            const Icon = item.icon
-            const tabClass = cn(
-              'flex flex-col items-center justify-center gap-0.5 text-[11px] transition-colors min-h-[44px] px-1 flex-1 min-w-0',
-              isActive ? 'text-primary' : 'text-muted-foreground'
-            )
-            const body = (
-              <>
-                <Icon className="h-5 w-5 shrink-0" />
-                <span className="truncate max-w-full">{t(item.labelKey)}</span>
-              </>
-            )
-            // Smart search is the one tab that is not a destination: there is no
-            // /search page any more, so it opens the palette in place. A phone
-            // has no ⌘K, which is exactly why the tab has to stay.
-            return item.action === 'command-palette' ? (
-              <button key={item.href} type="button" onClick={openCommandPalette} className={tabClass}>
-                {body}
-              </button>
-            ) : (
-              <Link key={item.href} href={item.href} className={tabClass}>
-                {body}
-              </Link>
-            )
-          })}
-          <button
-            onClick={() => (showMore ? closeSheet() : setShowMore(true))}
-            aria-expanded={showMore}
-            className={cn(
-              'flex flex-col items-center justify-center gap-0.5 text-[11px] transition-colors min-h-[44px] px-1 flex-1 min-w-0',
-              isMoreActive || showMore ? 'text-primary' : 'text-muted-foreground'
-            )}
-          >
-            <MoreHorizontal className="h-5 w-5 shrink-0" />
-            <span className="truncate max-w-full">{t('more') || 'More'}</span>
-          </button>
+      {/* ── the dock ──────────────────────────────────────────────────────── */}
+      <nav
+        className="safe-area-bottom fixed bottom-0 left-0 right-0 z-50 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 lg:hidden"
+        aria-label={t('navOpenMenu')}
+      >
+        <div className="grid h-16 grid-cols-5 items-center">
+          {/* Two tabs, the gap the button in the middle occupies, two tabs.
+              Splitting the list rather than laying out five equal slots keeps
+              this correct if a fifth primary is ever added: it lands in a
+              column, not on top of the button. */}
+          {tabs.slice(0, half).map(renderTab)}
+          <div aria-hidden />
+          {tabs.slice(half).map(renderTab)}
         </div>
       </nav>
+
+      {/* Above the dock in the stacking order and in the layout: it is the one
+          control that opens everything, so it is the one that overlaps. */}
+      <button
+        type="button"
+        onClick={() => (anyOpen ? closeAll() : setOrbitOpen(true))}
+        aria-expanded={anyOpen}
+        aria-label={anyOpen ? t('navCloseMenu') : t('navOpenMenu')}
+        style={{ width: BUBBLE, height: BUBBLE }}
+        className={cn(
+          'fixed bottom-[calc(1.375rem+env(safe-area-inset-bottom))] left-1/2 z-[51] lg:hidden',
+          'flex items-center justify-center rounded-[1.4rem] bg-primary text-primary-foreground shadow-lg shadow-primary/30',
+          'transition-[transform,border-radius] duration-500 [transition-timing-function:cubic-bezier(.34,1.56,.64,1)]',
+          'motion-reduce:transition-none',
+          anyOpen ? '-translate-x-1/2 rotate-[135deg] rounded-full' : '-translate-x-1/2',
+        )}
+      >
+        {/* Nine dots that read as "everything", and land on a clean X at 135deg. */}
+        <span className="grid grid-cols-3 gap-1">
+          {Array.from({ length: 9 }, (_, i) => (
+            <span
+              key={i}
+              className={cn(
+                'h-1.5 w-1.5 rounded-full bg-current transition-all duration-300',
+                anyOpen && i % 2 === 1 && 'scale-50 opacity-30',
+              )}
+            />
+          ))}
+        </span>
+      </button>
     </div>
   )
 }

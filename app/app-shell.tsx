@@ -16,7 +16,14 @@ const FULLSCREEN_PATHS = ['/deliveries/driver', '/login']
 export function AppShell({ children }: { children: React.ReactNode }) {
   // Persisted: this was plain useState, so the sidebar sprang back open on
   // every reload and every full navigation.
-  const [collapsed, setCollapsed] = usePersisted('ui.sidebar.collapsed', false)
+  //
+  // The default flipped with the rail. It used to be "expanded", because
+  // collapsing meant losing the labels; the rail keeps them, so the default is
+  // now the 80px rail and the flyout is opened by pointing at a section. Pinning
+  // it is the opt-in, under its own key -- reusing 'ui.sidebar.collapsed' would
+  // have read every existing user's stored `false` as "pin it open", which is
+  // the opposite of what they last chose.
+  const [pinned, setPinned] = usePersisted('ui.sidebar.pinned', false)
   const pathname = usePathname()
 
   const isFullscreen = FULLSCREEN_PATHS.some((p) => pathname.startsWith(p))
@@ -30,21 +37,31 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     )
   }
 
-  // Logical margin-inline-start pushes content off the sidebar on the correct side in both LTR & RTL.
-  const marginClass = collapsed ? 'lg:ms-16' : 'lg:ms-56'
+  // Logical margin-inline-start pushes content off the sidebar on the correct
+  // side in both LTR & RTL. Rail only, or rail + pinned flyout (80 + 256).
+  const marginClass = pinned ? 'lg:ms-[336px]' : 'lg:ms-20'
 
   return (
     <>
       <QueryLoadingBar />
-      <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(c => !c)} />
+      <Sidebar pinned={pinned} onTogglePin={() => setPinned(p => !p)} />
       <div className={cn('min-h-screen transition-all duration-300', marginClass)}>
         <TopBar />
-        {/* Bottom clearance = nav (3.5rem) + breathing room + the home-indicator
-            inset. Deliberately NOT the `p-*` shorthand: Tailwind emits `sm:p-4`
-            after the unprefixed `pb-*`, so the shorthand won above 640px and
-            left only 16px of clearance under a 57px nav — the last row of every
-            table sat behind it on tablets. Separate px/pt/pb can't collide. */}
-        <main className="px-2 sm:px-4 lg:px-6 pt-2 sm:pt-4 lg:pt-6 pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-6">
+        {/* Bottom clearance = dock (4rem) + the button overhanging it + the
+            home-indicator inset. It was 5rem for a 3.5rem bar; the dock is
+            taller now and the round button sits proud of it, so the last row of
+            a table needs the extra half-rem or it lands underneath.
+
+            Deliberately NOT the `p-*` shorthand: Tailwind emits `sm:p-4` after
+            the unprefixed padding-bottom, so the shorthand won above 640px and
+            left only 16px of clearance — separate px/pt/pb can't collide.
+
+            And do not write a class-shaped string inside a comment anywhere
+            in this repo. Tailwind scans comments too, so a utility quoted in
+            prose is compiled as if it were real -- and one written with an
+            ellipsis standing in for its argument emits invalid CSS, which
+            fails the whole stylesheet and every page with it. */}
+        <main className="px-2 sm:px-4 lg:px-6 pt-2 sm:pt-4 lg:pt-6 pb-[calc(5.5rem+env(safe-area-inset-bottom))] lg:pb-6">
           {/* Enter-only fade keyed on the route — no mode="wait" exit delay, so navigation
               shows the new page immediately instead of waiting for the old one to animate out. */}
           <motion.div

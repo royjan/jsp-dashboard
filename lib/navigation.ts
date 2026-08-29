@@ -96,7 +96,18 @@ export type NavItem = {
   demoHidden?: boolean
 }
 
-export type NavSection = { id: string; labelKey: TranslationKey; items: NavItem[] }
+/**
+ * `icon` is the section's own, not borrowed from its first item. The rail shows
+ * one glyph per section, and reusing items[0].icon meant the rail for
+ * Purchasing was a supplier card and the rail for Bookkeeping was a ledger --
+ * each the picture of one screen inside, standing in for all seven.
+ */
+export type NavSection = {
+  id: string
+  labelKey: TranslationKey
+  icon: LucideIcon
+  items: NavItem[]
+}
 
 /**
  * One tab of /report. The seven sections are one page whose tab strip writes
@@ -114,15 +125,18 @@ const reportTab = (
   queryMatch: (p) => p.get('section') === section,
   labelKey,
   icon,
-  // Short, ambiguous labels ('זיכויים' against 'זיכויי ספקים') read fine
-  // indented under their parent and badly as a standalone tile on a phone.
-  surfaces: ['sidebar', 'palette'],
+  // These used to opt out of 'mobile': short, ambiguous labels ('זיכויים'
+  // against 'זיכויי ספקים') read fine indented under their parent and badly as
+  // a standalone tile in a flat grid, which is what the phone sheet was. The
+  // sheet now drills IN -- a tab is only ever shown with its parent in the
+  // sheet header -- so the ambiguity that justified hiding them is gone, and
+  // hiding them would just make seven real screens unreachable on a phone.
   ...extra,
 })
 
 export const NAV_SECTIONS: NavSection[] = [
   {
-    id: 'overview', labelKey: 'sectionOverview', items: [
+    id: 'overview', labelKey: 'sectionOverview', icon: LayoutDashboard, items: [
       { mobilePrimary: true, href: '/', labelKey: 'overview', icon: LayoutDashboard },
       { href: '/brief', labelKey: 'morningBrief', icon: Sunrise },
       // Not a route, and mobile-only: /search was a second search over the same
@@ -159,7 +173,7 @@ export const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
-    id: 'inventory', labelKey: 'sectionInventory', items: [
+    id: 'inventory', labelKey: 'sectionInventory', icon: Warehouse, items: [
       {
         mobilePrimary: true, href: '/stock', labelKey: 'stock', icon: Warehouse,
         children: [{ href: '/stock/demand', labelKey: 'demand', icon: Activity }],
@@ -186,7 +200,7 @@ export const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
-    id: 'sales', labelKey: 'sectionSales', items: [
+    id: 'sales', labelKey: 'sectionSales', icon: Users, items: [
       {
         mobilePrimary: true, href: '/customers', labelKey: 'customers', icon: Users,
         // Health score is a tab of /customers and had no nav entry anywhere.
@@ -214,7 +228,7 @@ export const NAV_SECTIONS: NavSection[] = [
     // pricing and stock alerts. What is left is one flow in its own order --
     // who we buy from, what they quote, what we asked, what they billed, what
     // they credited, what is on the way, what went out.
-    id: 'purchasing', labelKey: 'sectionPurchasing', items: [
+    id: 'purchasing', labelKey: 'sectionPurchasing', icon: Truck, items: [
       { href: '/suppliers', labelKey: 'suppliers', icon: PackageCheck },
       { href: '/price-lists', labelKey: 'priceLists', icon: ClipboardList, match: 'prefix' },
       { href: '/inquiries', labelKey: 'supplierInquiries', icon: FileSearch, match: 'prefix' },
@@ -232,7 +246,7 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     // הנהח״ש — the books, decoded from the ERP's own files into books.*
-    id: 'bookkeeping', labelKey: 'sectionBookkeeping', items: [
+    id: 'bookkeeping', labelKey: 'sectionBookkeeping', icon: Landmark, items: [
       { href: '/bookkeeping', labelKey: 'bookkeepingOverview', icon: BookOpen },
       { href: '/bookkeeping/accounts', labelKey: 'bookkeepingAccounts', icon: Landmark,
         match: 'prefix' },
@@ -247,7 +261,7 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     // Chat admin (integrated from chat.jan.parts)
-    id: 'chat', labelKey: 'sectionChat', items: [
+    id: 'chat', labelKey: 'sectionChat', icon: BotMessageSquare, items: [
       {
         href: '/chat/flow-decisions', labelKey: 'chatFlowDecisions', icon: GitBranch,
         children: [
@@ -365,6 +379,23 @@ export const MOBILE_MORE: NavFlatItem[] = itemsFor('mobile').filter((i) => !i.mo
  * while the sidebar rendered the identical tree grouped. The grouping was never missing;
  * mobile was the only surface discarding it.
  */
+/**
+ * The phone's TREE -- sections with their items, children still nested.
+ *
+ * MOBILE_MORE_SECTIONS below flattens each parent's tabs up beside it, which is
+ * what a sheet that can only render one list deep has to do. The sheet now
+ * pushes a second pane instead, so it wants the shape the sidebar gets: a
+ * parent with children is a row that drills in, and its tabs are named by a
+ * header rather than by a repeated qualifier on every row.
+ *
+ * Primary tabs are NOT filtered out here, unlike the flat list. That filter
+ * existed because the sheet was reached from a tab labelled "more", so
+ * repeating the four bottom tabs inside it was a contradiction. It is now
+ * reached from a control that offers the whole map, and a map missing the four
+ * most-used destinations is a worse lie than a little duplication.
+ */
+export const MOBILE_TREE: NavSection[] = sectionsFor('mobile')
+
 export const MOBILE_MORE_SECTIONS: Array<{ id: string; labelKey: TranslationKey; items: NavFlatItem[] }> =
   flatSectionsFor('mobile')
     .map((s) => ({ ...s, items: s.items.filter((i) => !i.mobilePrimary) }))
