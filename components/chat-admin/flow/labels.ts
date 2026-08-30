@@ -136,6 +136,9 @@ export const L = {
 
   cancel: 'ביטול',
   close: 'סגור',
+  idCopied: 'המזהה הועתק',
+  copyFailed: 'ההעתקה נכשלה',
+  copyId: 'העתק מזהה',
 
   // ── list header / filter bar ─────────────────────────────────────────────────
   found: 'נמצא',

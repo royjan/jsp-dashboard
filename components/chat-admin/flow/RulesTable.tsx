@@ -45,17 +45,25 @@ function buildColumns(
       headerClassName: 'w-[20%]',
       title: r => r.partDescription,
       cell: r => (
-        <div className="text-sm">
+        // `dir="auto"` alone made this column ragged: it resolves an English description to LTR,
+        // and inside an RTL table `start` is then the LEFT edge — so English rows sat flush left
+        // while Hebrew rows sat flush right, and the two languages drifted apart mid-column.
+        // The direction still has to be per-string (the shaping and the bidi run depend on it),
+        // so the fix is to keep dir="auto" for the TEXT and pin the BLOCK to the column's own
+        // edge, which in an RTL table is the right one. Every row starts in the same place.
+        <div className="text-sm text-right">
           <div className="truncate font-medium" dir="auto" title={r.partDescription}>
             {r.partDescription}
           </div>
-          {/* click to copy the flow-decision id */}
+          {/* click to copy the flow-decision id — a hex id is never bidi, so it is pinned LTR
+              and reads `f16c4da4…` rather than having the ellipsis flipped to its front. */}
           <button
             onClick={e => {
               e.stopPropagation()
-              copyText(r.id).then(ok => (ok ? toast.success('Copied id') : toast.error('Copy failed')))
+              copyText(r.id).then(ok => (ok ? toast.success(L.idCopied) : toast.error(L.copyFailed)))
             }}
-            title={`Copy id: ${r.id}`}
+            title={`${L.copyId}: ${r.id}`}
+            dir="ltr"
             className="mt-0.5 inline-flex max-w-full items-center gap-1 font-mono text-[10px] text-muted-foreground transition-colors hover:text-sky-400"
           >
             <Copy className="h-3 w-3 shrink-0" /> {r.id.slice(0, 8)}…
