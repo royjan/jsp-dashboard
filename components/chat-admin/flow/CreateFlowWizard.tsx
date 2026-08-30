@@ -24,6 +24,7 @@ import AutocompleteInput from './AutocompleteInput'
 import { VinDecodeSection } from './VinDecodeSection'
 import { logger } from '@/lib/logger'
 import { toast } from '@/lib/toast'
+import { L } from './labels'
 
 // ────────────────────────────────────────────────────────────────────────────
 // Types
@@ -467,7 +468,7 @@ export default function CreateFlowWizard({ seedDescription, seedVehicle, existin
             <button
               onClick={onClose}
               className="grid h-11 w-11 place-items-center rounded-xl text-slate-400 transition-colors hover:bg-white/10 hover:text-slate-100"
-              aria-label="Close wizard"
+              aria-label={L.close}
             >
               <X className="h-5 w-5" />
             </button>
@@ -669,8 +670,8 @@ const StepPart = forwardRef<
   return (
     <StepShell
       icon={<Package className="h-5 w-5" />}
-      title="What part is the customer asking for?"
-      hint="Type it the way a customer would say it — Hebrew or English. We'll match it to the right catalog."
+      title={L.stepPartTitle}
+      hint={L.stepPartHint}
     >
       <div
         onKeyDown={e => {
@@ -710,8 +711,8 @@ function StepSupplier({ selected, onSelect }: { selected: string; onSelect: (id:
   return (
     <StepShell
       icon={<Globe className="h-5 w-5" />}
-      title="Where should we search for it?"
-      hint="Pick the supplier catalog that carries this part for these vehicles."
+      title={L.stepSupplierTitle}
+      hint={L.stepSupplierHint}
     >
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {SUPPLIERS.map(s => {
@@ -759,23 +760,23 @@ function StepVehicles({
   return (
     <StepShell
       icon={<Car className="h-5 w-5" />}
-      title="Which vehicles does this apply to?"
-      hint="Use 'All vehicles' unless this part only fits certain models or years."
+      title={L.stepVehicleTitle}
+      hint={L.stepVehicleHint}
     >
       <div className="grid grid-cols-2 gap-3">
         <ScopeCard
           active={!specific}
           onClick={() => set('vehicleScope', 'all')}
           icon={<Globe className="h-6 w-6" />}
-          title="All vehicles"
-          subtitle="Applies to every vehicle"
+          title={L.allVehicles}
+          subtitle={L.allVehiclesSub}
         />
         <ScopeCard
           active={specific}
           onClick={() => set('vehicleScope', 'specific')}
           icon={<MapPin className="h-6 w-6" />}
-          title="Specific vehicles"
-          subtitle="Limit by model, year, fuel…"
+          title={L.specificVehicles}
+          subtitle={L.specificVehiclesSub}
         />
       </div>
 
@@ -799,10 +800,10 @@ function StepVehicles({
                 <DarkInput value={form.model} onChange={v => set('model', v)} placeholder="208, Corsa…" />
               </DarkField>
               <DarkField label="סוג דלק">
-                <DarkInput value={form.fuelType} onChange={v => set('fuelType', v)} placeholder="petrol, diesel, electric" />
+                <DarkInput value={form.fuelType} onChange={v => set('fuelType', v)} placeholder={L.phFuel} />
               </DarkField>
               <DarkField label="דגם מנוע">
-                <DarkInput value={form.engineModel} onChange={v => set('engineModel', v)} placeholder="optional" />
+                <DarkInput value={form.engineModel} onChange={v => set('engineModel', v)} placeholder={L.optional} />
               </DarkField>
               <DarkField label="תבנית VIN">
                 <DarkInput value={form.vinPattern} onChange={v => set('vinPattern', v)} placeholder="WAUZZZ…" mono />
@@ -897,8 +898,8 @@ function StepMapping({
   return (
     <StepShell
       icon={<Layers className="h-5 w-5" />}
-      title="Where does this part live in the catalog?"
-      hint={`Tell us how to find the part inside ${supplierName} — or paste a part number and let us auto-fill it.`}
+      title={L.stepCatalogTitle}
+      hint={L.stepCatalogHint(supplierName)}
     >
       <div className="space-y-4">
         {/* Auto-fill by part id: known part → instant; new part → live PSA lookup (needs VIN). */}
@@ -930,46 +931,46 @@ function StepMapping({
               type="text"
               value={form.lookupVin}
               onChange={e => set('lookupVin', e.target.value)}
-              placeholder="VIN — only needed for a part we haven't seen before (live lookup, up to ~90s)"
+              placeholder={L.phLookupVin}
               className="w-full"
             />
           </div>
           {resolveMsg && <p className={`mt-2 text-xs ${msgColor}`}>{resolveMsg.text}</p>}
         </div>
 
-        <WizardAutocompleteField label="קטגוריה" hint="The broad group, e.g. Engine, Brakes, Body.">
+        <WizardAutocompleteField label="קטגוריה" hint={L.hintCategory}>
           <AutocompleteInput
             id="wizard-category"
             value={form.category}
             onChange={v => set('category', v)}
             suggestions={suggestions.categories}
-            placeholder="e.g. Engine"
+            placeholder={L.phCategory}
           />
         </WizardAutocompleteField>
-        <WizardAutocompleteField label="תת-קטגוריה" hint="A narrower group inside the category, e.g. Filters.">
+        <WizardAutocompleteField label="תת-קטגוריה" hint={L.hintSubcategory}>
           <AutocompleteInput
             id="wizard-subcategory"
             value={form.subcategory}
             onChange={v => set('subcategory', v)}
             suggestions={suggestions.subcategories}
-            placeholder="e.g. Filters"
+            placeholder={L.phSubcategory}
           />
         </WizardAutocompleteField>
-        <WizardAutocompleteField label="שרטוט" hint="The exact part group / diagram name in the catalog.">
+        <WizardAutocompleteField label="שרטוט" hint={L.hintSchema}>
           <AutocompleteInput
             id="wizard-schema"
             value={form.schema}
             onChange={v => set('schema', v)}
             suggestions={suggestions.schemas}
-            placeholder="e.g. ENGINE OIL FILTER"
+            placeholder={L.phSchema}
           />
         </WizardAutocompleteField>
-        <WizardAutocompleteField label="Direct part name (optional)" hint="How the part is listed inside the schema, e.g. OIL SEPARATOR SEAL.">
+        <WizardAutocompleteField label={L.partNameInSchema} hint={L.hintPartName}>
           <input
             type="text"
             value={form.directPartName}
             onChange={e => set('directPartName', e.target.value)}
-            placeholder="e.g. OIL SEPARATOR SEAL"
+            placeholder={L.phPartName}
             className="w-full"
           />
         </WizardAutocompleteField>
@@ -1079,8 +1080,8 @@ function StepReview({ form, lambda, duplicate }: { form: WizardState; lambda: st
   return (
     <StepShell
       icon={<FlaskConical className="h-5 w-5" />}
-      title="Review your new rule"
-      hint="Here's what you're about to create. Run a live test to see what would happen."
+      title={L.stepReviewTitle}
+      hint={L.stepReviewHint}
     >
       {/* Big rule sentence */}
       <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-slate-800/60 p-5">
@@ -1092,7 +1093,7 @@ function StepReview({ form, lambda, duplicate }: { form: WizardState; lambda: st
         <div className="mt-4 flex items-start gap-3 rounded-xl border border-amber-400/30 bg-amber-500/10 p-4 text-sm">
           <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-300" />
           <div className="text-amber-100">
-            <p className="font-semibold text-amber-200">A matching rule already exists</p>
+            <p className="font-semibold text-amber-200">{L.duplicateExists}</p>
             <p className="mt-0.5 text-amber-100/80">
               “{duplicate.partDescription}” → {duplicate.lambdaTarget} with the same vehicle scope is already
               {' '}<span className="font-medium">{duplicate.status}</span>. Saving will conflict — edit the existing rule instead.
@@ -1103,12 +1104,12 @@ function StepReview({ form, lambda, duplicate }: { form: WizardState; lambda: st
 
       {/* Summary card */}
       <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-        <SummaryRow label="Part" value={form.partDescription || '—'} />
-        <SummaryRow label="Supplier" value={supplier.name} />
+        <SummaryRow label={L.colPart} value={form.partDescription || '—'} />
+        <SummaryRow label={L.supplier} value={supplier.name} />
         <SummaryRow label="קטגוריה" value={form.category || '—'} />
         <SummaryRow label="תת-קטגוריה" value={form.subcategory || '—'} />
         <SummaryRow label="שרטוט" value={form.schema || '—'} />
-        <SummaryRow label="Vehicles" value={vehicleSummary(form)} />
+        <SummaryRow label={L.vehicles} value={vehicleSummary(form)} />
       </div>
 
       {/* Test */}

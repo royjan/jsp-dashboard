@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { ChevronUp, ChevronDown, FlaskConical, Loader2, Sparkles } from 'lucide-react'
 import { logger } from '@/lib/logger'
+import { L } from './labels'
 
 interface Props {
   highlightRuleId?: string | null
@@ -98,17 +99,17 @@ export function LiveSimulatorDock({ highlightRuleId }: Props) {
         <div className="border-t border-slate-200 px-6 py-3 dark:border-slate-800">
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <div className="space-y-2">
-              <Field label="Part description (English)">
+              <Field label={L.simPartDesc}>
                 <input
                   type="text"
                   value={partDescription}
                   onChange={e => setPartDescription(e.target.value)}
-                  placeholder="e.g. oil filter"
+                  placeholder={L.simPartPlaceholder}
                   className="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800"
                 />
               </Field>
               <div className="grid grid-cols-2 gap-2">
-                <Field label="VIN (optional)">
+                <Field label={L.vinOptional}>
                   <input type="text" value={vin} onChange={e => setVin(e.target.value)} className="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs font-mono dark:border-slate-700 dark:bg-slate-800" />
                 </Field>
                 <Field label="שנה">
@@ -117,7 +118,7 @@ export function LiveSimulatorDock({ highlightRuleId }: Props) {
                 <Field label="דגם">
                   <input type="text" value={model} onChange={e => setModel(e.target.value)} className="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-800" />
                 </Field>
-                <Field label="Fuel">
+                <Field label={L.fuelType}>
                   <input type="text" value={fuelType} onChange={e => setFuelType(e.target.value)} className="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-800" />
                 </Field>
               </div>
@@ -126,24 +127,24 @@ export function LiveSimulatorDock({ highlightRuleId }: Props) {
             <div className="rounded-md border border-border bg-muted p-3">
               <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">
                 <Sparkles className="h-3 w-3" />
-                Result
+                {L.result}
                 {loading && <Loader2 className="ml-auto h-3 w-3 animate-spin" />}
               </div>
               {!partDescription.trim() ? (
-                <p className="text-sm text-slate-400">Type a part description to see which rule wins.</p>
+                <p className="text-sm text-slate-400">{L.simEmpty}</p>
               ) : result?.bestMatch ? (
                 <div className="space-y-1 text-sm">
                   <div className="text-emerald-700 dark:text-emerald-400">
-                    Match type: <span className="font-mono">{result.matchType}</span>
+                    {L.matchType}: <span className="font-mono" dir="ltr">{result.matchType}</span>
                   </div>
                   <div className="text-slate-700 dark:text-slate-300">
                     <span className="font-mono">{result.bestMatch.category} › {result.bestMatch.subcategory} › {result.bestMatch.schema}</span>
                   </div>
-                  <div className="text-xs text-slate-500">{result.bestMatch.reasoning}</div>
-                  <div className="text-xs text-slate-500">{result.allCandidates?.length || 0} candidate(s) considered</div>
+                  <div className="text-xs text-slate-500" dir="auto">{result.bestMatch.reasoning}</div>
+                  <div className="text-xs text-slate-500">{L.considered(result.allCandidates?.length || 0)}</div>
                 </div>
               ) : !loading ? (
-                <p className="text-sm text-slate-500">No rule matched.</p>
+                <p className="text-sm text-slate-500">{L.simNoMatch}</p>
               ) : null}
             </div>
           </div>

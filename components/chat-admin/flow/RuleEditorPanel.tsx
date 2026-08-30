@@ -8,6 +8,7 @@ import AutocompleteInput from './AutocompleteInput'
 import { VinDecodeSection } from './VinDecodeSection'
 import { logger } from '@/lib/logger'
 import { toast } from '@/lib/toast'
+import { L } from './labels'
 import { formatCurrency } from '@/lib/format'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
 
@@ -163,30 +164,30 @@ export function RuleEditorPanel({ rule, isCreating, seedDescription, onClose, on
       <header className="flex items-center justify-between border-b border-slate-200 px-5 py-3 dark:border-slate-800">
         <div className="flex items-center gap-2">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-            {isCreating ? 'New rule' : 'Edit rule'}
+            {isCreating ? L.newRule : L.editRule}
           </h2>
           <StatusBadge status={form.status} />
         </div>
-        <button onClick={onClose} className="rounded-md p-1 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" aria-label="Close editor">
+        <button onClick={onClose} className="rounded-md p-1 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" aria-label={L.close}>
           <X className="h-5 w-5" />
         </button>
       </header>
 
       <nav className="flex border-b border-slate-200 px-5 dark:border-slate-800">
-        <TabButton active={tab === 'match'} onClick={() => setTab('match')}>Match</TabButton>
-        <TabButton active={tab === 'action'} onClick={() => setTab('action')}>Action</TabButton>
-        {!isCreating && <TabButton active={tab === 'history'} onClick={() => setTab('history')}>History</TabButton>}
+        <TabButton active={tab === 'match'} onClick={() => setTab('match')}>{L.tabMatch}</TabButton>
+        <TabButton active={tab === 'action'} onClick={() => setTab('action')}>{L.tabAction}</TabButton>
+        {!isCreating && <TabButton active={tab === 'history'} onClick={() => setTab('history')}>{L.tabHistory}</TabButton>}
       </nav>
 
       <div className="flex-1 overflow-y-auto px-5 py-4">
         {tab === 'match' && (
           <div className="space-y-4">
-            <Field label="Part description (English)" required>
+            <Field label={L.simPartDesc} required>
               <AutocompleteInput
                 value={form.partDescription}
                 onChange={v => set('partDescription', v)}
                 suggestions={autocomplete.partDescriptions}
-                placeholder="e.g. oil filter, brake pad set"
+                placeholder={L.phPartDesc}
                 id="rule-part-description"
               />
             </Field>
@@ -194,18 +195,18 @@ export function RuleEditorPanel({ rule, isCreating, seedDescription, onClose, on
             <fieldset className="rounded-md border border-slate-200 p-3 dark:border-slate-800">
               <legend className="px-2 text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">
                 <Car className="mr-1 inline h-3 w-3" />
-                Vehicle filters (optional)
+                {L.vehicleFiltersOptional}
               </legend>
               <div className="grid grid-cols-2 gap-3">
                 <Field label="משנה"><NumberInput value={form.vehicleYearFrom} onChange={v => set('vehicleYearFrom', v)} /></Field>
                 <Field label="עד שנה"><NumberInput value={form.vehicleYearTo} onChange={v => set('vehicleYearTo', v)} /></Field>
                 <Field label="דגם"><TextInput value={form.vehicleModel} onChange={v => set('vehicleModel', v)} /></Field>
-                <Field label="סוג דלק"><TextInput value={form.vehicleFuelType} onChange={v => set('vehicleFuelType', v)} placeholder="petrol, diesel, electric..." /></Field>
+                <Field label="סוג דלק"><TextInput value={form.vehicleFuelType} onChange={v => set('vehicleFuelType', v)} placeholder={L.phFuel} /></Field>
                 <Field label="דגם מנוע"><TextInput value={form.vehicleEngineModel} onChange={v => set('vehicleEngineModel', v)} /></Field>
                 <Field label="תבנית VIN"><TextInput value={form.vinPattern} onChange={v => set('vinPattern', v)} placeholder="WAUZZZ..." /></Field>
               </div>
               <details className="mt-3">
-                <summary className="cursor-pointer text-xs text-slate-500 hover:text-slate-700">Decode VIN to autofill</summary>
+                <summary className="cursor-pointer text-xs text-slate-500 hover:text-slate-700">{L.decodeVinAutofill}</summary>
                 <div className="mt-2">
                   <VinDecodeSection
                     defaultCollapsed={false}
@@ -224,7 +225,7 @@ export function RuleEditorPanel({ rule, isCreating, seedDescription, onClose, on
 
         {tab === 'action' && (
           <div className="space-y-4">
-            <Field label="Lambda target" required>
+            <Field label={L.lambda} required>
               <select
                 value={form.lambdaTarget}
                 onChange={e => set('lambdaTarget', e.target.value)}
@@ -239,7 +240,7 @@ export function RuleEditorPanel({ rule, isCreating, seedDescription, onClose, on
                   value={form.category}
                   onChange={v => set('category', v)}
                   suggestions={autocomplete.categories}
-                  placeholder="e.g. Engine, Body, Brakes"
+                  placeholder={L.phCategory}
                   id="rule-category"
                 />
               </Field>
@@ -248,7 +249,7 @@ export function RuleEditorPanel({ rule, isCreating, seedDescription, onClose, on
                   value={form.subcategory}
                   onChange={v => set('subcategory', v)}
                   suggestions={autocomplete.subcategories}
-                  placeholder="e.g. Filters, Sensors, Belts"
+                  placeholder={L.phSubcategory}
                   id="rule-subcategory"
                 />
               </Field>
@@ -257,7 +258,7 @@ export function RuleEditorPanel({ rule, isCreating, seedDescription, onClose, on
                   value={form.schema}
                   onChange={v => set('schema', v)}
                   suggestions={autocomplete.schemas}
-                  placeholder="e.g. ENGINE OIL FILTER"
+                  placeholder={L.phSchema}
                   id="rule-schema"
                 />
               </Field>
@@ -266,28 +267,28 @@ export function RuleEditorPanel({ rule, isCreating, seedDescription, onClose, on
             <fieldset className="rounded-md border border-slate-200 p-3 dark:border-slate-800">
               <legend className="px-2 text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">
                 <Pin className="mr-1 inline h-3 w-3" />
-                Pinned direct part (optional)
+                {L.pinnedDirectPart}
               </legend>
               <div className="grid grid-cols-1 gap-3">
-                <Field label="Part number (מק״ט)">
+                <Field label={L.partNumber}>
                   <TextInput
                     value={form.directPartId}
                     onChange={v => set('directPartId', v)}
-                    placeholder="e.g. 6466S5 — leave empty for no pin"
+                    placeholder={L.phPartNumber}
                   />
                 </Field>
-                <Field label="Part name (as listed in the schema)">
+                <Field label={L.partNameInSchema}>
                   <TextInput
                     value={form.directPartName}
                     onChange={v => set('directPartName', v)}
-                    placeholder="e.g. OIL SEPARATOR SEAL"
+                    placeholder={L.phPartName}
                   />
                 </Field>
               </div>
               {rule?.directPart && rule.directPart.partId === form.directPartId.trim() && (
                 <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
                   {rule.directPart.price != null && `${formatCurrency(rule.directPart.price)} · `}
-                  {rule.directPart.inStock ? 'in stock' : 'out of stock'}
+                  {rule.directPart.inStock ? L.inStock : L.outOfStock}
                 </p>
               )}
               <p className="mt-2 text-xs text-slate-400">
@@ -300,14 +301,14 @@ export function RuleEditorPanel({ rule, isCreating, seedDescription, onClose, on
 
         {tab === 'history' && rule && (
           <dl className="space-y-3 text-sm">
-            <Row label="Created"><span className="font-mono">{formatDate(rule.createdAt)}</span> {rule.createdBy && `by ${rule.createdBy}`}</Row>
+            <Row label={L.created}><span className="font-mono">{formatDate(rule.createdAt)}</span> {rule.createdBy && `· ${rule.createdBy}`}</Row>
             <Row label="עודכן"><span className="font-mono">{formatDate(rule.updatedAt)}</span></Row>
-            {rule.approvedAt && <Row label="Approved"><span className="font-mono">{formatDate(rule.approvedAt)}</span> {rule.approvedBy && `by ${rule.approvedBy}`}</Row>}
-            {rule.rejectedAt && <Row label="Rejected"><span className="font-mono">{formatDate(rule.rejectedAt)}</span> {rule.rejectedBy && `by ${rule.rejectedBy}`}</Row>}
-            {rule.rejectionReason && <Row label="Rejection reason">{rule.rejectionReason}</Row>}
+            {rule.approvedAt && <Row label={L.approvedAt}><span className="font-mono">{formatDate(rule.approvedAt)}</span> {rule.approvedBy && `· ${rule.approvedBy}`}</Row>}
+            {rule.rejectedAt && <Row label={L.rejectedAt}><span className="font-mono">{formatDate(rule.rejectedAt)}</span> {rule.rejectedBy && `· ${rule.rejectedBy}`}</Row>}
+            {rule.rejectionReason && <Row label={L.rejectionReason}><span dir="auto">{rule.rejectionReason}</span></Row>}
             {rule.source && <Row label="מקור">{rule.source}</Row>}
             {rule.confidence != null && <Row label="רמת ביטחון">{Number(rule.confidence).toFixed(2)}</Row>}
-            {rule.feedbackCount > 0 && <Row label="Feedback count">{rule.feedbackCount}</Row>}
+            {rule.feedbackCount > 0 && <Row label={L.feedbackCount}>{rule.feedbackCount}</Row>}
           </dl>
         )}
       </div>

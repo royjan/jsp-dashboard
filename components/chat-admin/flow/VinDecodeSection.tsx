@@ -10,6 +10,7 @@ import {
   ChevronDown,
   ChevronUp,
 } from 'lucide-react';
+import { L } from './labels';
 
 export interface VehicleInfo {
   manufacturer?: string;
@@ -94,7 +95,7 @@ export function VinDecodeSection({
             <Car className="w-5 h-5 text-blue-600 dark:text-blue-400" />
           </div>
           <div className="text-left">
-            <h3 className="font-semibold text-gray-900 dark:text-white">VIN Decode (Optional)</h3>
+            <h3 className="font-semibold text-gray-900 dark:text-white">{L.vinDecodeOptional}</h3>
             <p className="text-sm text-gray-500 dark:text-gray-400">
               Auto-fill vehicle filters from VIN • {supportedBrands}
             </p>
@@ -104,7 +105,7 @@ export function VinDecodeSection({
           {vinStatus === 'decoded' && (
             <span className="px-2 py-1 text-xs rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 flex items-center gap-1">
               <CheckCircle2 className="w-3 h-3" />
-              Decoded
+              {L.decoded}
             </span>
           )}
           {isCollapsed ? (
@@ -158,7 +159,7 @@ export function VinDecodeSection({
               ) : (
                 <>
                   <Search className="w-5 h-5" />
-                  Decode
+                  {L.decode}
                 </>
               )}
             </button>
@@ -176,14 +177,14 @@ export function VinDecodeSection({
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="w-5 h-5 text-green-600 dark:text-green-400" />
-                  <span className="font-medium text-green-700 dark:text-green-300">Vehicle Identified</span>
+                  <span className="font-medium text-green-700 dark:text-green-300">{L.vehicleIdentified}</span>
                 </div>
                 <button
                   type="button"
                   onClick={reset}
                   className="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
                 >
-                  Clear
+                  {L.clear}
                 </button>
               </div>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
@@ -200,7 +201,7 @@ export function VinDecodeSection({
                   <p className="font-semibold text-gray-900 dark:text-white">{vehicleInfo.year || 'N/A'}</p>
                 </div>
                 <div>
-                  <span className="text-gray-500 dark:text-gray-400">Fuel Type</span>
+                  <span className="text-gray-500 dark:text-gray-400">{L.fuelType}</span>
                   <p className="font-semibold text-gray-900 dark:text-white">{vehicleInfo.fuelType || 'N/A'}</p>
                 </div>
               </div>

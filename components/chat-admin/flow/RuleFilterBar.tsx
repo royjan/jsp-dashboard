@@ -111,10 +111,10 @@ export function RuleFilterBar({ filters, onChange, onReset }: Props) {
           />
         </ChipGroup>
 
-        <ChipGroup label={'מק"ט ישיר'}>
+        <ChipGroup label={L.directPart}>
           <SelectChip
             value={filters.hasDirectPart}
-            options={[{ v: 'any', l: 'any' }, { v: 'yes', l: 'has direct part' }, { v: 'no', l: 'no direct part' }]}
+            options={[{ v: 'any', l: he('any') }, { v: 'yes', l: L.hasDirectPart }, { v: 'no', l: L.noDirectPart }]}
             onChange={v => set('hasDirectPart', v as RuleFilters['hasDirectPart'])}
           />
         </ChipGroup>
@@ -124,14 +124,14 @@ export function RuleFilterBar({ filters, onChange, onReset }: Props) {
             onClick={onReset}
             className="ml-auto inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-slate-400 transition-colors hover:bg-white/10 hover:text-slate-200"
           >
-            <X className="h-3 w-3" /> Clear all ({activeCount})
+            <X className="h-3 w-3" /> {L.clearAll} ({activeCount})
           </button>
         )}
       </div>
 
       <details className="mt-2">
         <summary className="cursor-pointer select-none text-xs text-slate-400 transition-colors hover:text-slate-200">
-          Advanced filters (year, model, fuel, engine, VIN)
+          {L.advancedFilters}
         </summary>
         <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-6">
           <NumberField placeholder={L.yearFrom} value={filters.yearFrom} onChange={v => set('yearFrom', v)} />

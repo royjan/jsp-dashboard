@@ -89,4 +89,126 @@ export const L = {
   hasRule: 'יש כלל',
   createRule: 'צור כלל',
   liveSimulator: 'סימולטור חי',
+
+  // ── simulator ────────────────────────────────────────────────────────────────
+  // The field used to say "Part description (English)". That was never true: `simulate()`
+  // detects Hebrew, expands it through `word_mappings` (he → en canonical) and vector-searches
+  // on the expansion — so a Hebrew ask has always worked. The label was turning a working
+  // feature away.
+  simPartDesc: 'תיאור החלק (עברית או אנגלית)',
+  simPartPlaceholder: 'לדוגמה: פילטר שמן · oil filter',
+  vinOptional: 'VIN (לא חובה)',
+  result: 'תוצאה',
+  matchType: 'סוג התאמה',
+  simEmpty: 'הקלד תיאור חלק כדי לראות איזה כלל מנצח.',
+  simNoMatch: 'לא נמצא כלל מתאים.',
+
+  // ── retro-scan ───────────────────────────────────────────────────────────────
+  retroTitle: 'הצעות מסריקה למפרע',
+  retroBlurb: 'סורק את היסטוריית החיפושים האחרונה ומאתר בקשות לחלקים שעדיין אין להן כלל ניתוב. עברו על הניתובים המוצעים וצרו את אלה שתרצו.',
+  daysBack: 'ימים אחורה',
+  maxSuggestions: 'מקסימום הצעות',
+  runScan: 'הרץ סריקה',
+  retroIdle: 'הרץ סריקה כדי לראות הצעות.',
+  retroScanning: 'סורק היסטוריית חיפושים…',
+  retroEmpty: 'לא נמצאו הצעות חדשות בטווח שנסרק.',
+  applySomeFailed: 'החלת חלק מההצעות נכשלה',
+  seen: 'נצפה',
+  filters: 'סינון',
+
+  // ── VIN decode ───────────────────────────────────────────────────────────────
+  vinDecodeOptional: 'פענוח VIN (לא חובה)',
+  decode: 'פענח',
+  decoded: 'פוענח',
+  vehicleIdentified: 'הרכב זוהה',
+  clear: 'נקה',
+
+  // ── export ───────────────────────────────────────────────────────────────────
+  exportTitle: 'ייצוא כללי ניתוב',
+  exportFormat: 'פורמט ייצוא',
+  exportOptions: 'אפשרויות ייצוא',
+  fmtSql: 'ייבוא ישיר למסד הנתונים, כולל טיפול ב-ON CONFLICT',
+  fmtJson: 'נתונים מובנים לייבוא תוכנתי',
+  fmtCsv: 'פורמט תואם גיליון אלקטרוני',
+  fmtPrisma: 'קובץ seed בטייפסקריפט עבור Prisma',
+  includeMetadata: 'כלול מטא-דאטה',
+  includeTimestamps: 'כלול חותמות זמן',
+
+  cancel: 'ביטול',
+  close: 'סגור',
+
+  // ── list header / filter bar ─────────────────────────────────────────────────
+  found: 'נמצא',
+  filtered: 'מסונן',
+  clearAll: 'נקה הכל',
+  advancedFilters: 'סינון מתקדם (שנה, דגם, דלק, מנוע, VIN)',
+  hasDirectPart: 'עם מק״ט',
+  noDirectPart: 'ללא מק״ט',
+  allNRules: (n: number) => `כל ${n} הכללים`,
+  showingOf: (shown: number, total: number) => `מוצגים ${shown} מתוך ${total} כללים`,
+  nSelected: (n: number) => (n === 1 ? 'נבחר אחד' : `${n} נבחרו`),
+  showRelated: (n: number) => `הצג ${n} כללים קשורים עבור`,
+
+  // ── rule editor ──────────────────────────────────────────────────────────────
+  editRule: 'עריכת כלל',
+  tabMatch: 'התאמה',
+  tabAction: 'פעולה',
+  tabHistory: 'היסטוריה',
+  vehicleFiltersOptional: 'סינון לפי רכב (לא חובה)',
+  decodeVinAutofill: 'פענח VIN למילוי אוטומטי',
+  pinnedDirectPart: 'מק״ט מוצמד (לא חובה)',
+  partNumber: 'מק״ט',
+  partNameInSchema: 'שם החלק (כפי שמופיע בשרטוט)',
+  inStock: 'במלאי',
+  outOfStock: 'אזל מהמלאי',
+  created: 'נוצר',
+  approvedAt: 'אושר',
+  rejectedAt: 'נדחה',
+  rejectionReason: 'סיבת הדחייה',
+  feedbackCount: 'מספר משובים',
+
+  // ── create wizard ────────────────────────────────────────────────────────────
+  stepPartTitle: 'איזה חלק הלקוח מבקש?',
+  stepPartHint: 'כתבו את זה כמו שלקוח היה אומר — בעברית או באנגלית. אנחנו נתאים לקטלוג הנכון.',
+  stepSupplierTitle: 'איפה לחפש אותו?',
+  stepSupplierHint: 'בחרו את קטלוג הספק שמחזיק את החלק הזה עבור הרכבים האלה.',
+  stepVehicleTitle: 'לאילו רכבים הכלל חל?',
+  stepVehicleHint: 'השאירו על "כל הרכבים", אלא אם החלק מתאים רק לדגמים או לשנים מסוימות.',
+  allVehicles: 'כל הרכבים',
+  allVehiclesSub: 'חל על כל רכב',
+  specificVehicles: 'רכבים מסוימים',
+  specificVehiclesSub: 'הגבלה לפי דגם, שנה, דלק…',
+  stepCatalogTitle: 'איפה החלק הזה יושב בקטלוג?',
+  stepCatalogHint: (supplier: string) =>
+    `הסבירו איך למצוא את החלק בתוך ${supplier} — או הדביקו מק״ט ותנו לנו למלא אוטומטית.`,
+  stepReviewTitle: 'סקירת הכלל החדש',
+  stepReviewHint: 'זה מה שעומד להיווצר. הריצו בדיקה חיה כדי לראות מה יקרה בפועל.',
+  duplicateExists: 'כבר קיים כלל תואם',
+  supplier: 'ספק',
+  vehicles: 'רכבים',
+  optional: 'לא חובה',
+
+  // Hints and placeholders. The CATALOG ITSELF IS ENGLISH — PSA's tree really does read
+  // `Mechanical › Engine - Lubrication › ENGINE OIL FILTER` — so the examples stay in the
+  // language the field is actually filled in, with the instruction around them in Hebrew.
+  hintCategory: 'הקבוצה הרחבה, למשל Engine, Brakes, Body.',
+  hintSubcategory: 'קבוצה צרה יותר בתוך הקטגוריה, למשל Filters.',
+  hintSchema: 'שם קבוצת החלקים / השרטוט המדויק בקטלוג.',
+  hintPartName: 'איך החלק רשום בתוך השרטוט, למשל OIL SEPARATOR SEAL.',
+  phPartDesc: 'לדוגמה: פילטר שמן · brake pad set',
+  phFuel: 'בנזין, דיזל, חשמלי…',
+  phCategory: 'לדוגמה: Engine',
+  phSubcategory: 'לדוגמה: Filters',
+  phSchema: 'לדוגמה: ENGINE OIL FILTER',
+  phPartName: 'לדוגמה: OIL SEPARATOR SEAL',
+  phPartNumber: 'לדוגמה: 6466S5 — השאירו ריק ללא הצמדה',
+  phLookupVin: 'VIN — נדרש רק לחלק שלא ראינו קודם (חיפוש חי, עד ~90 שניות)',
+
+  /* Counted strings. Hebrew has no "1 suggestion / 2 suggestions" split the way English does —
+     the noun stays plural from 2 up and the count sits before it — so these are written out
+     rather than assembled from a stem plus an 's'. */
+  considered: (n: number) => (n === 1 ? 'נבחן מועמד אחד' : `נבחנו ${n} מועמדים`),
+  selectedOf: (sel: number, total: number) => `נבחרו ${sel} מתוך ${total}`,
+  createSuggestions: (n: number) =>
+    n === 0 ? 'צור הצעות' : n === 1 ? 'צור הצעה אחת' : `צור ${n} הצעות`,
 }

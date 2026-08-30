@@ -16,6 +16,7 @@ import { RuleCoverageReport } from './RuleCoverageReport'
 import { ExportFlowDecisionsModal } from './ExportFlowDecisionsModal'
 import { logger } from '@/lib/logger'
 import { toast } from '@/lib/toast'
+import { L } from './labels'
 
 interface FlowDecisionsPageProps {
   initialEditId?: string
@@ -267,13 +268,13 @@ export default function FlowDecisionsPage({ initialEditId }: FlowDecisionsPagePr
             )}
             {foundById && (
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-md border border-sky-500/30 bg-sky-950/30 px-3 py-2 text-xs text-sky-200">
-                <span>Found <b>{foundById.partDescription}</b> · <code className="rounded bg-slate-900/60 px-1 font-mono text-sky-300">{foundById.id}</code></span>
+                <span>{L.found} <b dir="auto">{foundById.partDescription}</b> · <code className="rounded bg-slate-900/60 px-1 font-mono text-sky-300" dir="ltr">{foundById.id}</code></span>
                 {relatedCount > 1 && (
                   <button
                     onClick={() => setFilters({ ...EMPTY_FILTERS, search: foundById.partDescription })}
                     className="inline-flex items-center gap-1 rounded-md bg-sky-600/80 px-2.5 py-1 font-medium text-white transition-colors hover:bg-sky-500"
                   >
-                    Show {relatedCount} related rules for “{foundById.partDescription}”
+                    {L.showRelated(relatedCount)} “{foundById.partDescription}”
                   </button>
                 )}
               </div>
@@ -281,9 +282,9 @@ export default function FlowDecisionsPage({ initialEditId }: FlowDecisionsPagePr
             <div className="mb-2 flex items-center justify-between text-xs text-slate-400">
               <span>
                 {filtered.length === counts.total
-                  ? <>All <b className="text-slate-200">{counts.total}</b> rules</>
-                  : <>Showing <b className="text-slate-200">{filtered.length}</b> of {counts.total} rules <span className="text-slate-500">(filtered)</span></>}
-                {selectedIds.length > 0 && <span className="ml-2 text-primary">· {selectedIds.length} selected</span>}
+                  ? <>{L.allNRules(counts.total)}</>
+                  : <>{L.showingOf(filtered.length, counts.total)} <span className="text-slate-500">({L.filtered})</span></>}
+                {selectedIds.length > 0 && <span className="ml-2 text-primary">· {L.nSelected(selectedIds.length)}</span>}
               </span>
             </div>
             <RulesTable

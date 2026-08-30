@@ -5,6 +5,7 @@ import { X, Loader2, ScanSearch, Check, XCircle } from 'lucide-react'
 import { logger } from '@/lib/logger'
 import { toast } from '@/lib/toast'
 import { useModalA11y } from '@/hooks/use-modal-a11y'
+import { L } from './labels'
 
 interface ScanSuggestion {
   partDescription: string
@@ -82,35 +83,35 @@ export function RetroScanDrawer({ onClose, onApplied }: Props) {
       onClose()
     } catch (e) {
       logger.error('Apply suggestions failed:', e)
-      toast.error('Failed to apply some suggestions')
+      toast.error(L.applySomeFailed)
     }
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/30" role="dialog" aria-modal="true" aria-label="Retro-scan suggestions" onClick={onClose}>
+    <div className="fixed inset-0 z-50 bg-black/30" role="dialog" aria-modal="true" aria-label={L.retroTitle} onClick={onClose}>
       <div ref={panelRef} className="fixed inset-y-0 right-0 flex w-full max-w-2xl flex-col bg-white shadow-2xl dark:bg-slate-900" onClick={e => e.stopPropagation()}>
         <header className="flex items-center justify-between border-b border-slate-200 px-5 py-3 dark:border-slate-800">
           <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-900 dark:text-slate-100">
             <ScanSearch className="h-5 w-5 text-indigo-500" />
-            Retro-scan suggestions
+            {L.retroTitle}
           </h2>
-          <button onClick={onClose} className="rounded-md p-1 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" aria-label="Close drawer">
+          <button onClick={onClose} className="rounded-md p-1 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" aria-label={L.close}>
             <X className="h-5 w-5" />
           </button>
         </header>
 
         <div className="border-b border-slate-200 bg-slate-50 px-5 py-3 text-sm dark:border-slate-800 dark:bg-slate-900/60">
           <p className="mb-3 text-slate-600 dark:text-slate-400">
-            Scans recent search history for part queries that don't yet have a flow-decision rule. Review proposed routings, then create the ones you want.
+            {L.retroBlurb}
           </p>
           <div className="flex flex-wrap items-end gap-3">
             <label className="block">
-              <span className="text-xs font-medium uppercase tracking-wide text-slate-500">Days back</span>
+              <span className="text-xs font-medium uppercase tracking-wide text-slate-500">{L.daysBack}</span>
               <input type="number" value={daysBack} onChange={e => setDaysBack(parseInt(e.target.value) || 30)}
                 className="mt-1 block w-24 rounded-md border border-slate-200 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-800" />
             </label>
             <label className="block">
-              <span className="text-xs font-medium uppercase tracking-wide text-slate-500">Max suggestions</span>
+              <span className="text-xs font-medium uppercase tracking-wide text-slate-500">{L.maxSuggestions}</span>
               <input type="number" value={limit} onChange={e => setLimit(parseInt(e.target.value) || 50)}
                 className="mt-1 block w-24 rounded-md border border-slate-200 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-800" />
             </label>
@@ -120,23 +121,23 @@ export function RetroScanDrawer({ onClose, onApplied }: Props) {
               className="ml-auto inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
             >
               {scanning ? <Loader2 className="h-4 w-4 animate-spin" /> : <ScanSearch className="h-4 w-4" />}
-              Run scan
+              {L.runScan}
             </button>
           </div>
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-3">
           {!scanned && !scanning && (
-            <p className="py-10 text-center text-sm text-slate-500">Run a scan to see suggestions.</p>
+            <p className="py-10 text-center text-sm text-slate-500">{L.retroIdle}</p>
           )}
           {scanning && (
             <div className="flex flex-col items-center justify-center py-20 text-slate-500">
               <Loader2 className="mb-2 h-6 w-6 animate-spin" />
-              Scanning search history...
+              {L.retroScanning}
             </div>
           )}
           {scanned && suggestions.length === 0 && (
-            <p className="py-10 text-center text-sm text-slate-500">No new suggestions found in the scan window.</p>
+            <p className="py-10 text-center text-sm text-slate-500">{L.retroEmpty}</p>
           )}
           {suggestions.length > 0 && (
             <ul className="divide-y divide-slate-200 dark:divide-slate-800">
@@ -150,13 +151,13 @@ export function RetroScanDrawer({ onClose, onApplied }: Props) {
                 >
                   <input type="checkbox" checked={selected.has(i)} onChange={() => toggle(i)} className="mt-1 rounded border-slate-300" />
                   <div className="flex-1">
-                    <div className="font-medium text-slate-900 dark:text-slate-100">{s.partDescription}</div>
+                    <div className="font-medium text-slate-900 dark:text-slate-100" dir="auto">{s.partDescription}</div>
                     <div className="text-xs text-slate-500">
                       <span className="font-mono">{s.lambdaTarget}</span> · {s.category} › {s.subcategory} › {s.schema}
-                      {s.occurrences && <> · seen {s.occurrences}×</>}
+                      {s.occurrences && <> · {L.seen} {s.occurrences}×</>}
                     </div>
                     {s.vehicleFilters && Object.keys(s.vehicleFilters).length > 0 && (
-                      <div className="mt-1 text-xs text-slate-400">filters: {JSON.stringify(s.vehicleFilters)}</div>
+                      <div className="mt-1 text-xs text-slate-400">{L.filters}: {JSON.stringify(s.vehicleFilters)}</div>
                     )}
                   </div>
                 </li>
@@ -167,10 +168,10 @@ export function RetroScanDrawer({ onClose, onApplied }: Props) {
 
         <footer className="border-t border-slate-200 px-5 py-3 dark:border-slate-800">
           <div className="flex items-center justify-between">
-            <span className="text-sm text-slate-500">{selected.size} of {suggestions.length} selected</span>
+            <span className="text-sm text-slate-500">{L.selectedOf(selected.size, suggestions.length)}</span>
             <div className="flex gap-2">
               <button onClick={onClose} className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800">
-                Cancel
+                {L.cancel}
               </button>
               <button
                 onClick={apply}
@@ -178,7 +179,7 @@ export function RetroScanDrawer({ onClose, onApplied }: Props) {
                 className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
               >
                 <Check className="h-4 w-4" />
-                Create {selected.size > 0 ? selected.size : ''} suggestion{selected.size === 1 ? '' : 's'}
+                {L.createSuggestions(selected.size)}
               </button>
             </div>
           </div>

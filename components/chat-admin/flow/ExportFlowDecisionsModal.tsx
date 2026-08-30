@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { X, Download, Database, FileJson, Code, Table } from 'lucide-react'
+import { L } from './labels'
 
 // Nested export shape this modal consumes. The Flow Decisions page adapts its
 // flat records into this shape via `toExportShape` before passing them in.
@@ -312,7 +313,7 @@ export function ExportFlowDecisionsModal({ isOpen, onClose, decisions }: ExportF
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4">
         <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
           <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-            Export Flow Decisions
+            {L.exportTitle}
           </h2>
           <button
             onClick={onClose}
@@ -325,7 +326,7 @@ export function ExportFlowDecisionsModal({ isOpen, onClose, decisions }: ExportF
         <div className="p-6 space-y-6">
           <div>
             <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-              Export Format
+              {L.exportFormat}
             </h3>
             <div className="space-y-2">
               <label className="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
@@ -339,7 +340,7 @@ export function ExportFlowDecisionsModal({ isOpen, onClose, decisions }: ExportF
                 <Database className="w-5 h-5 mr-2 text-gray-600 dark:text-gray-400" />
                 <div>
                   <div className="font-medium">SQL (PostgreSQL)</div>
-                  <div className="text-sm text-gray-500">Direct database import with ON CONFLICT handling</div>
+                  <div className="text-sm text-gray-500">{L.fmtSql}</div>
                 </div>
               </label>
 
@@ -354,7 +355,7 @@ export function ExportFlowDecisionsModal({ isOpen, onClose, decisions }: ExportF
                 <FileJson className="w-5 h-5 mr-2 text-gray-600 dark:text-gray-400" />
                 <div>
                   <div className="font-medium">JSON</div>
-                  <div className="text-sm text-gray-500">Structured data for programmatic import</div>
+                  <div className="text-sm text-gray-500">{L.fmtJson}</div>
                 </div>
               </label>
 
@@ -369,7 +370,7 @@ export function ExportFlowDecisionsModal({ isOpen, onClose, decisions }: ExportF
                 <Table className="w-5 h-5 mr-2 text-gray-600 dark:text-gray-400" />
                 <div>
                   <div className="font-medium">CSV</div>
-                  <div className="text-sm text-gray-500">Spreadsheet compatible format</div>
+                  <div className="text-sm text-gray-500">{L.fmtCsv}</div>
                 </div>
               </label>
 
@@ -384,7 +385,7 @@ export function ExportFlowDecisionsModal({ isOpen, onClose, decisions }: ExportF
                 <Code className="w-5 h-5 mr-2 text-gray-600 dark:text-gray-400" />
                 <div>
                   <div className="font-medium">Prisma Seed</div>
-                  <div className="text-sm text-gray-500">TypeScript seed file for Prisma</div>
+                  <div className="text-sm text-gray-500">{L.fmtPrisma}</div>
                 </div>
               </label>
             </div>
@@ -392,7 +393,7 @@ export function ExportFlowDecisionsModal({ isOpen, onClose, decisions }: ExportF
 
           <div>
             <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-              Export Options
+              {L.exportOptions}
             </h3>
             <div className="space-y-2">
               <label className="flex items-center">
@@ -402,7 +403,7 @@ export function ExportFlowDecisionsModal({ isOpen, onClose, decisions }: ExportF
                   onChange={(e) => setIncludeMetadata(e.target.checked)}
                   className="mr-2"
                 />
-                <span className="text-sm text-gray-700 dark:text-gray-300">Include metadata</span>
+                <span className="text-sm text-gray-700 dark:text-gray-300">{L.includeMetadata}</span>
               </label>
               <label className="flex items-center">
                 <input
@@ -411,7 +412,7 @@ export function ExportFlowDecisionsModal({ isOpen, onClose, decisions }: ExportF
                   onChange={(e) => setIncludeTimestamps(e.target.checked)}
                   className="mr-2"
                 />
-                <span className="text-sm text-gray-700 dark:text-gray-300">Include timestamps</span>
+                <span className="text-sm text-gray-700 dark:text-gray-300">{L.includeTimestamps}</span>
               </label>
             </div>
           </div>
@@ -426,14 +427,14 @@ export function ExportFlowDecisionsModal({ isOpen, onClose, decisions }: ExportF
             onClick={onClose}
             className="px-sp-lg py-sp-sm text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 min-h-[44px]"
           >
-            Cancel
+            {L.cancel}
           </button>
           <button
             onClick={handleExport}
             className="px-sp-lg py-sp-sm text-sm font-medium text-primary-foreground bg-primary hover:bg-primary/90 rounded-lg flex items-center gap-sp-sm min-h-[44px]"
           >
             <Download className="w-4 h-4" />
-            Export
+            {L.export}
           </button>
         </div>
       </div>
