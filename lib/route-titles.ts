@@ -69,6 +69,7 @@ const EXACT: Record<string, RouteTitle> = {
   '/competitors': { he: 'מתחרים' },
   '/shipments': { he: 'משלוחים' },
   '/shipments/on-the-way': { he: 'בדרך' },
+  '/picking': { he: 'ליקוט במחסן' },
   '/deliveries': { he: 'חלוקה' },
   '/deliveries/driver': { he: 'מסך נהג' },
   '/vehicle-intelligence': { key: 'page.vehicleIntelligence', he: 'מודיעין רכב' },

@@ -29,7 +29,7 @@ import {
   CalendarRange, CarFront, ClipboardList, Container, DollarSign, FileBarChart,
   FileSearch, FileText, FlaskConical, GitBranch, HeartPulse, Landmark,
   Languages, LayoutDashboard, Link2, ListRestart, MessageSquare,
-  NotebookPen, Package, PackageCheck, PackageX, Percent, Radar, Receipt,
+  NotebookPen, Package, PackageCheck, PackageSearch, PackageX, Percent, Radar, Receipt,
   ReceiptText, RotateCcw, Scale, SearchX, ShoppingBag, ShoppingCart, Sparkles,
   Sun, Sunrise, Swords, Target, ThumbsUp, Trash2, TrendingDown, Truck, Undo2,
   Users, Wallet, Warehouse,
@@ -239,6 +239,10 @@ export const NAV_SECTIONS: NavSection[] = [
         // Its tab strip leads with 'on the way'; that screen had no nav entry.
         children: [{ href: '/shipments/on-the-way', labelKey: 'shipmentsOnTheWay', icon: Truck }],
       },
+      // Between the shelf and the driver. /shipments is goods in and
+      // /deliveries begins once a driver has the box; picking had no screen at
+      // all, and it is the only place the ERP gets contradicted by a person.
+      { href: '/picking', labelKey: 'picking', icon: PackageSearch },
       { href: '/deliveries', labelKey: 'deliveries', icon: Truck },
       // Fullscreen phone view (see FULLSCREEN_PATHS) -- only meaningful on mobile.
       { href: '/deliveries/driver', labelKey: 'deliveriesDriver', icon: Truck, surfaces: ['mobile'] },
