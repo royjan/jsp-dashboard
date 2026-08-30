@@ -83,7 +83,7 @@ export function LiveSimulatorDock({ highlightRuleId }: Props) {
         className="flex w-full items-center gap-2 px-6 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800"
       >
         <FlaskConical className="h-4 w-4 text-indigo-500" />
-        <span>Live simulator</span>
+        <span>סימולטור חי</span>
         {result?.bestMatch && (
           <span className={`rounded-full px-2 py-0.5 text-xs ${winnerIsHighlighted ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'}`}>
             {winnerIsHighlighted ? 'this rule wins' : 'rule selected'}
@@ -111,10 +111,10 @@ export function LiveSimulatorDock({ highlightRuleId }: Props) {
                 <Field label="VIN (optional)">
                   <input type="text" value={vin} onChange={e => setVin(e.target.value)} className="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs font-mono dark:border-slate-700 dark:bg-slate-800" />
                 </Field>
-                <Field label="Year">
+                <Field label="שנה">
                   <input type="number" value={year} onChange={e => setYear(e.target.value)} className="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-800" />
                 </Field>
-                <Field label="Model">
+                <Field label="דגם">
                   <input type="text" value={model} onChange={e => setModel(e.target.value)} className="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-800" />
                 </Field>
                 <Field label="Fuel">

@@ -8,6 +8,7 @@ import { copyText } from '@/lib/clipboard'
 import { FLOW_STATUS_PILL } from '@/components/chat-admin/shared/colors'
 import { compactCount, relTime } from '@/lib/chat-admin/format'
 import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
+import { he } from './labels'
 
 type SortKey = 'partDescription' | 'lambdaTarget' | 'status' | 'updatedAt' | 'category' | 'feedbackCount'
 const PAGE_SIZES = [25, 50, 100, 200]
@@ -29,7 +30,7 @@ function buildColumns(
   return [
     {
       key: 'status',
-      header: 'Status',
+      header: 'סטטוס',
       sortable: true,
       sortKey: 'status',
       headerClassName: 'w-28',
@@ -38,7 +39,7 @@ function buildColumns(
     },
     {
       key: 'partDescription',
-      header: 'Part description',
+      header: 'תיאור החלק',
       sortable: true,
       sortKey: 'partDescription',
       headerClassName: 'w-[20%]',
@@ -65,7 +66,7 @@ function buildColumns(
     },
     {
       key: 'lambdaTarget',
-      header: 'Lambda',
+      header: 'פורטל',
       sortable: true,
       sortKey: 'lambdaTarget',
       headerClassName: 'w-24',
@@ -78,22 +79,26 @@ function buildColumns(
     },
     {
       key: 'category',
-      header: 'Category / schema',
+      header: 'קטגוריה / שרטוט',
       sortable: true,
       sortKey: 'category',
       headerClassName: 'w-[22%]',
       title: r => `${r.category} › ${r.subcategory} › ${r.schema}`,
       cell: r => (
         <div className="text-sm">
-          <div className="truncate font-mono text-xs">{r.category} › {r.subcategory}</div>
-          <div className="truncate font-mono text-xs text-muted-foreground">{r.schema}</div>
+          {/* dir="auto" per STRING, not per table. These cells hold three scripts at once:
+              PSA routes are English, MG's are Chinese (动力总成 › 点火组件), and operators type
+              Hebrew. One direction for the column would put one of them against the wrong
+              edge — which is what the LTR override used to do to every Hebrew description. */}
+          <div className="truncate font-mono text-xs" dir="auto">{r.category} › {r.subcategory}</div>
+          <div className="truncate font-mono text-xs text-muted-foreground" dir="auto">{r.schema}</div>
         </div>
       ),
       exportValue: r => `${r.category} › ${r.subcategory} › ${r.schema}`,
     },
     {
       key: 'vehicle',
-      header: 'Vehicle',
+      header: 'רכב',
       headerClassName: 'w-[14%]',
       hideOnMobile: true,
       cell: r => {
@@ -110,11 +115,11 @@ function buildColumns(
           <span className="text-xs text-muted-foreground">any</span>
         )
       },
-      exportValue: r => describeVehicle(r) ?? 'any',
+      exportValue: r => describeVehicle(r) ?? 'כל הרכבים',
     },
     {
       key: 'feedbackCount',
-      header: <span title="Feedback signals received · confidence. Higher = more trusted.">Activity</span>,
+      header: <span title="אותות משוב שהתקבלו · רמת ביטחון. גבוה יותר = אמין יותר.">פעילות</span>,
       exportHeader: 'Feedback',
       sortable: true,
       sortKey: 'feedbackCount',
@@ -124,21 +129,21 @@ function buildColumns(
     },
     {
       key: 'direct',
-      header: 'Direct',
+      header: 'ישיר',
       align: 'center',
       headerClassName: 'w-14',
       hideOnMobile: true,
       cell: r =>
         hasDirectPart(r) ? (
-          <Zap aria-label="Has direct part" className="mx-auto h-4 w-4 fill-emerald-400 text-emerald-400" />
+          <Zap aria-label={'יש מק"ט ישיר'} className="mx-auto h-4 w-4 fill-emerald-400 text-emerald-400" />
         ) : (
-          <span className="sr-only">No direct part</span>
+          <span className="sr-only">אין מק"ט ישיר</span>
         ),
-      exportValue: r => (hasDirectPart(r) ? 'yes' : 'no'),
+      exportValue: r => (hasDirectPart(r) ? 'כן' : 'לא'),
     },
     {
       key: 'updatedAt',
-      header: 'Updated',
+      header: 'עודכן',
       sortable: true,
       sortKey: 'updatedAt',
       headerClassName: 'w-24',
@@ -149,21 +154,21 @@ function buildColumns(
     },
     {
       key: 'actions',
-      header: 'Actions',
+      header: 'פעולות',
       align: 'end',
       headerClassName: 'w-24',
       cell: r => (
         // inline quick actions — appear on row hover, no need to open the editor
         <div className="flex items-center justify-end gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
           {onSetStatus && r.status !== 'approved' && (
-            <RowAction title="Approve" tone="hover:bg-emerald-500/20 hover:text-emerald-400"
+            <RowAction title="אשר" tone="hover:bg-emerald-500/20 hover:text-emerald-400"
               onClick={e => { e.stopPropagation(); onSetStatus(r.id, 'approved') }}><Check className="h-3.5 w-3.5" /></RowAction>
           )}
           {onSetStatus && r.status !== 'rejected' && (
-            <RowAction title="Reject" tone="hover:bg-rose-500/20 hover:text-rose-400"
+            <RowAction title="דחה" tone="hover:bg-rose-500/20 hover:text-rose-400"
               onClick={e => { e.stopPropagation(); onSetStatus(r.id, 'rejected') }}><X className="h-3.5 w-3.5" /></RowAction>
           )}
-          <RowAction title="Edit" tone="hover:bg-muted"
+          <RowAction title="ערוך" tone="hover:bg-muted"
             onClick={e => { e.stopPropagation(); onRowClick(r.id) }}><Pencil className="h-3.5 w-3.5" /></RowAction>
         </div>
       ),
@@ -181,7 +186,7 @@ export function RulesTable({ rules, loading, selectedIds, onSelectionChange, onR
   const selectedKeys = useMemo(() => new Set<string | number>(selectedIds), [selectedIds])
 
   return (
-    <div dir="ltr">
+    <div>
       <DataTable<FlowDecisionRecord, SortKey>
         rows={rules}
         columns={columns}
@@ -200,7 +205,7 @@ export function RulesTable({ rules, loading, selectedIds, onSelectionChange, onR
         exportFileName="flow-rules"
         toolbar={
           <label className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-            <span>Per page</span>
+            <span>לעמוד</span>
             <select
               value={pageSize}
               onChange={e => setPageSize(Number(e.target.value))}
@@ -219,8 +224,8 @@ export function RulesTable({ rules, loading, selectedIds, onSelectionChange, onR
           subtitle: r => `${r.category} › ${r.schema}`,
           accent: r => r.status,
           fields: [
-            { label: 'Lambda', value: r => r.lambdaTarget },
-            { label: 'Updated', value: r => relTime(r.updatedAt) },
+            { label: 'פורטל', value: r => he(r.lambdaTarget) },
+            { label: 'עודכן', value: r => relTime(r.updatedAt) },
           ],
         }}
       />
@@ -273,7 +278,7 @@ function TrustSignal({ rule }: { rule: FlowDecisionRecord }) {
 function StatusPill({ status }: { status: string }) {
   return (
     <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium capitalize ring-1 ring-inset ${FLOW_STATUS_PILL[status] || 'bg-muted text-foreground ring-border'}`}>
-      {status}
+      {he(status)}
     </span>
   )
 }

@@ -256,7 +256,7 @@ export function VinPatternModal({ isOpen, onClose, initialPattern, onSave }: Vin
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="VIN Pattern Builder"
+      title="בונה תבנית VIN"
       size="xl"
       contentClassName="h-[70vh] max-h-[500px] flex flex-col"
     >

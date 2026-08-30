@@ -197,17 +197,17 @@ export default function FlowDecisionsPage({ initialEditId }: FlowDecisionsPagePr
   }), [flowDecisions])
 
   return (
-    <div dir="ltr" className="flex h-full min-h-screen flex-col bg-slate-950 text-slate-100">
+    <div className="flex h-full min-h-screen flex-col bg-slate-950 text-slate-100">
       <header className="relative sticky top-0 z-30 overflow-hidden border-b border-white/10 bg-slate-950/80 backdrop-blur-xl">
         <div className="relative flex flex-wrap items-center gap-3 px-6 py-4">
           <div className="flex-1 min-w-0">
             <h1 className="text-xl font-bold tracking-tight text-slate-100">
-              Flow Decisions
+              החלטות ניתוב
             </h1>
             <p className="mt-0.5 text-xs text-slate-400">
-              {counts.total} rules · {counts.approved} approved · {counts.suggestions} suggestions · {counts.rejected} rejected
+              {counts.total} כללים · {counts.approved} מאושרים · {counts.suggestions} הצעות · {counts.rejected} נדחו
               {view === 'rules' && filtered.length !== counts.total && (
-                <> · <span className="font-semibold text-cyan-300">{filtered.length} matching</span></>
+                <> · <span className="font-semibold text-cyan-300">{filtered.length} מתאימים</span></>
               )}
             </p>
           </div>
@@ -215,15 +215,15 @@ export default function FlowDecisionsPage({ initialEditId }: FlowDecisionsPagePr
           {/* Analysis tools — distinct from create/export */}
           <div className="flex items-center gap-2">
             <nav className="flex items-center gap-1 rounded-xl border border-white/10 bg-white/5 p-1">
-              <ViewTab active={view === 'rules'} onClick={() => setView('rules')} label="Rules" />
-              <ViewTab active={view === 'coverage'} onClick={() => setView('coverage')} label="Coverage" />
+              <ViewTab active={view === 'rules'} onClick={() => setView('rules')} label="כללים" />
+              <ViewTab active={view === 'coverage'} onClick={() => setView('coverage')} label="כיסוי" />
             </nav>
             <a
               href="/chat/flow-decisions/simulator"
               className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 text-sm font-medium text-slate-300 transition-colors hover:border-white/20 hover:bg-white/10 hover:text-slate-100"
             >
               <FlaskConical className="h-4 w-4 text-cyan-300" />
-              Full simulator
+              סימולטור מלא
             </a>
           </div>
 
@@ -233,17 +233,17 @@ export default function FlowDecisionsPage({ initialEditId }: FlowDecisionsPagePr
           {/* Create / export */}
           <div className="flex items-center gap-2">
             <ToolbarButton onClick={() => setRetroScanOpen(true)} icon={<ScanSearch className="h-4 w-4" />}>
-              Retro-scan
+              סריקה למפרע
             </ToolbarButton>
             <ToolbarButton onClick={() => setExportOpen(true)} icon={<Download className="h-4 w-4" />}>
-              Export
+              ייצוא
             </ToolbarButton>
             <button
               onClick={handleCreate}
               className="group relative inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground ring-1 ring-inset ring-white/10 transition-colors hover:bg-primary/90"
             >
               <Plus className="relative h-4 w-4" />
-              <span className="relative">New rule</span>
+              <span className="relative">כלל חדש</span>
             </button>
           </div>
         </div>

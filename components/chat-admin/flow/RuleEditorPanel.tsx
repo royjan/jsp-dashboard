@@ -197,12 +197,12 @@ export function RuleEditorPanel({ rule, isCreating, seedDescription, onClose, on
                 Vehicle filters (optional)
               </legend>
               <div className="grid grid-cols-2 gap-3">
-                <Field label="Year from"><NumberInput value={form.vehicleYearFrom} onChange={v => set('vehicleYearFrom', v)} /></Field>
-                <Field label="Year to"><NumberInput value={form.vehicleYearTo} onChange={v => set('vehicleYearTo', v)} /></Field>
-                <Field label="Model"><TextInput value={form.vehicleModel} onChange={v => set('vehicleModel', v)} /></Field>
-                <Field label="Fuel type"><TextInput value={form.vehicleFuelType} onChange={v => set('vehicleFuelType', v)} placeholder="petrol, diesel, electric..." /></Field>
-                <Field label="Engine model"><TextInput value={form.vehicleEngineModel} onChange={v => set('vehicleEngineModel', v)} /></Field>
-                <Field label="VIN pattern"><TextInput value={form.vinPattern} onChange={v => set('vinPattern', v)} placeholder="WAUZZZ..." /></Field>
+                <Field label="משנה"><NumberInput value={form.vehicleYearFrom} onChange={v => set('vehicleYearFrom', v)} /></Field>
+                <Field label="עד שנה"><NumberInput value={form.vehicleYearTo} onChange={v => set('vehicleYearTo', v)} /></Field>
+                <Field label="דגם"><TextInput value={form.vehicleModel} onChange={v => set('vehicleModel', v)} /></Field>
+                <Field label="סוג דלק"><TextInput value={form.vehicleFuelType} onChange={v => set('vehicleFuelType', v)} placeholder="petrol, diesel, electric..." /></Field>
+                <Field label="דגם מנוע"><TextInput value={form.vehicleEngineModel} onChange={v => set('vehicleEngineModel', v)} /></Field>
+                <Field label="תבנית VIN"><TextInput value={form.vinPattern} onChange={v => set('vinPattern', v)} placeholder="WAUZZZ..." /></Field>
               </div>
               <details className="mt-3">
                 <summary className="cursor-pointer text-xs text-slate-500 hover:text-slate-700">Decode VIN to autofill</summary>
@@ -234,7 +234,7 @@ export function RuleEditorPanel({ rule, isCreating, seedDescription, onClose, on
               </select>
             </Field>
             <div className="grid grid-cols-1 gap-3">
-              <Field label="Category" required>
+              <Field label="קטגוריה" required>
                 <AutocompleteInput
                   value={form.category}
                   onChange={v => set('category', v)}
@@ -243,7 +243,7 @@ export function RuleEditorPanel({ rule, isCreating, seedDescription, onClose, on
                   id="rule-category"
                 />
               </Field>
-              <Field label="Subcategory" required>
+              <Field label="תת-קטגוריה" required>
                 <AutocompleteInput
                   value={form.subcategory}
                   onChange={v => set('subcategory', v)}
@@ -252,7 +252,7 @@ export function RuleEditorPanel({ rule, isCreating, seedDescription, onClose, on
                   id="rule-subcategory"
                 />
               </Field>
-              <Field label="Schema" required>
+              <Field label="שרטוט" required>
                 <AutocompleteInput
                   value={form.schema}
                   onChange={v => set('schema', v)}
@@ -301,12 +301,12 @@ export function RuleEditorPanel({ rule, isCreating, seedDescription, onClose, on
         {tab === 'history' && rule && (
           <dl className="space-y-3 text-sm">
             <Row label="Created"><span className="font-mono">{formatDate(rule.createdAt)}</span> {rule.createdBy && `by ${rule.createdBy}`}</Row>
-            <Row label="Updated"><span className="font-mono">{formatDate(rule.updatedAt)}</span></Row>
+            <Row label="עודכן"><span className="font-mono">{formatDate(rule.updatedAt)}</span></Row>
             {rule.approvedAt && <Row label="Approved"><span className="font-mono">{formatDate(rule.approvedAt)}</span> {rule.approvedBy && `by ${rule.approvedBy}`}</Row>}
             {rule.rejectedAt && <Row label="Rejected"><span className="font-mono">{formatDate(rule.rejectedAt)}</span> {rule.rejectedBy && `by ${rule.rejectedBy}`}</Row>}
             {rule.rejectionReason && <Row label="Rejection reason">{rule.rejectionReason}</Row>}
-            {rule.source && <Row label="Source">{rule.source}</Row>}
-            {rule.confidence != null && <Row label="Confidence">{Number(rule.confidence).toFixed(2)}</Row>}
+            {rule.source && <Row label="מקור">{rule.source}</Row>}
+            {rule.confidence != null && <Row label="רמת ביטחון">{Number(rule.confidence).toFixed(2)}</Row>}
             {rule.feedbackCount > 0 && <Row label="Feedback count">{rule.feedbackCount}</Row>}
           </dl>
         )}

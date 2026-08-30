@@ -24,7 +24,7 @@ function Inner() {
   }
   const hasVehicle = Object.values(vehicle).some(Boolean)
   return (
-    <div dir="ltr" className="chat-admin">
+    <div className="chat-admin">
       <ObservatoryPage initialQuery={q} initialTab={tab} initialVehicle={hasVehicle ? vehicle : undefined} />
     </div>
   )

@@ -18,21 +18,21 @@ interface Props {
 }
 
 
-/** Built inside the component: the "Create rule" cell needs the onSeedRule callback. */
+/** Built inside the component: the "צור כלל" cell needs the onSeedRule callback. */
 function buildColumns(onSeedRule: (d: string) => void): DataTableColumn<CoverageRow>[] {
   return [
     {
       key: 'description',
-      header: 'Part description',
+      header: 'תיאור החלק',
       sortable: true,
       truncate: 'max-w-[320px]',
       title: r => r.description,
-      cell: r => <span className="font-medium">{r.description}</span>,
+      cell: r => <span className="font-medium" dir="auto">{r.description}</span>,
       exportValue: r => r.description,
     },
     {
       key: 'usageCount',
-      header: 'Usage',
+      header: 'שימוש',
       align: 'end',
       sortable: true,
       cell: r => (
@@ -45,7 +45,7 @@ function buildColumns(onSeedRule: (d: string) => void): DataTableColumn<Coverage
     },
     {
       key: 'hasRule',
-      header: 'Has rule',
+      header: 'יש כלל',
       align: 'center',
       sortable: true,
       // Sorted so the uncovered descriptions — the ones this report exists to
@@ -70,7 +70,7 @@ function buildColumns(onSeedRule: (d: string) => void): DataTableColumn<Coverage
             className="inline-flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90"
           >
             <Plus className="h-3 w-3" />
-            Create rule
+            צור כלל
           </button>
         ),
       exportValue: null,
@@ -122,10 +122,10 @@ export function RuleCoverageReport({ existingRules, onSeedRule }: Props) {
         <div>
           <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-900 dark:text-slate-100">
             <Map className="h-5 w-5 text-indigo-500" />
-            Coverage report
+            דוח כיסוי
           </h2>
           <p className="text-sm text-slate-500">
-            {total} part descriptions tracked · <span className="text-amber-600">{missingCount} have no rule</span>
+            {total} תיאורי חלקים במעקב · <span className="text-amber-600">{missingCount} ללא כלל</span>
           </p>
         </div>
         <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
@@ -135,7 +135,7 @@ export function RuleCoverageReport({ existingRules, onSeedRule }: Props) {
             onChange={e => setShowOnlyMissing(e.target.checked)}
             className="rounded border-slate-300"
           />
-          Show only uncovered
+          הצג רק ללא כלל
         </label>
       </div>
 
@@ -153,7 +153,7 @@ export function RuleCoverageReport({ existingRules, onSeedRule }: Props) {
         labels={{
           empty: showOnlyMissing
             ? 'Every tracked part description has at least one rule.'
-            : 'No part descriptions tracked yet.',
+            : 'No תיאורי חלקים במעקב yet.',
         }}
         mobileCard={{
           title: r => r.description,

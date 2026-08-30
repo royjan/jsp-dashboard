@@ -124,7 +124,7 @@ export function VinDecodeSection({
                 type="text"
                 value={vin}
                 onChange={(e) => setVin(e.target.value.toUpperCase())}
-                placeholder="Enter 17-character VIN..."
+                placeholder="הזן VIN בן 17 תווים…"
                 maxLength={17}
                 className={`w-full px-4 py-3 rounded-lg border text-lg font-mono tracking-wider
                   ${vinStatus === 'error'
@@ -188,15 +188,15 @@ export function VinDecodeSection({
               </div>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                 <div>
-                  <span className="text-gray-500 dark:text-gray-400">Manufacturer</span>
+                  <span className="text-gray-500 dark:text-gray-400">יצרן</span>
                   <p className="font-semibold text-gray-900 dark:text-white">{vehicleInfo.manufacturer || 'N/A'}</p>
                 </div>
                 <div>
-                  <span className="text-gray-500 dark:text-gray-400">Model</span>
+                  <span className="text-gray-500 dark:text-gray-400">דגם</span>
                   <p className="font-semibold text-gray-900 dark:text-white">{vehicleInfo.model || 'N/A'}</p>
                 </div>
                 <div>
-                  <span className="text-gray-500 dark:text-gray-400">Year</span>
+                  <span className="text-gray-500 dark:text-gray-400">שנה</span>
                   <p className="font-semibold text-gray-900 dark:text-white">{vehicleInfo.year || 'N/A'}</p>
                 </div>
                 <div>

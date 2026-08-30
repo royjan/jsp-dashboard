@@ -2,6 +2,7 @@
 
 import { Search, X } from 'lucide-react'
 import type { FlowDecisionStatus } from '@/types/chat-admin/flow-decision'
+import { L, he } from './labels'
 
 export interface RuleFilters {
   search: string
@@ -57,7 +58,7 @@ export function RuleFilterBar({ filters, onChange, onReset }: Props) {
     (filters.hasVehicleFilters !== 'any' ? 1 : 0)
 
   return (
-    <div dir="ltr" className="border-t border-white/10 px-6 py-3">
+    <div className="border-t border-white/10 px-6 py-3">
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-[280px] flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
@@ -65,52 +66,52 @@ export function RuleFilterBar({ filters, onChange, onReset }: Props) {
             type="search"
             value={filters.search}
             onChange={e => set('search', e.target.value)}
-            placeholder="Search by part description, category, schema..."
+            placeholder="חיפוש לפי תיאור חלק, קטגוריה או שרטוט…"
             className="w-full rounded-lg border border-white/10 bg-white/5 py-1.5 pl-9 pr-3 text-sm text-slate-100 placeholder:text-slate-500 focus:border-cyan-400/50 focus:outline-none focus:ring-2 focus:ring-ring"
           />
         </div>
 
         {(filters.category || filters.subcategory || filters.schema) && (
-          <ChipGroup label="Scope">
+          <ChipGroup label={L.scope}>
             {filters.category && <ScopeChip label={filters.category} onClear={() => set('category', '')} />}
             {filters.subcategory && <ScopeChip label={filters.subcategory} onClear={() => set('subcategory', '')} />}
             {filters.schema && <ScopeChip label={filters.schema} onClear={() => set('schema', '')} />}
           </ChipGroup>
         )}
 
-        <ChipGroup label="Status">
+        <ChipGroup label={L.status}>
           {STATUSES.map(s => (
             <Chip key={s} active={filters.status.includes(s)} onClick={() => set('status', toggleArray(filters.status, s))}>
-              {s}
+              {he(s)}
             </Chip>
           ))}
         </ChipGroup>
 
-        <ChipGroup label="Source">
+        <ChipGroup label={L.source}>
           <SelectChip
             value={filters.source}
-            options={[{ v: 'all', l: 'all' }, { v: 'manual', l: 'manual' }, { v: 'learned', l: 'learned (pins)' }]}
+            options={[{ v: 'all', l: he('all') }, { v: 'manual', l: he('manual') }, { v: 'learned', l: he('learned (pins)') }]}
             onChange={v => set('source', v as RuleFilters['source'])}
           />
         </ChipGroup>
 
-        <ChipGroup label="Lambda">
+        <ChipGroup label={L.lambda}>
           {LAMBDAS.map(l => (
             <Chip key={l} active={filters.lambdaTarget.includes(l)} onClick={() => set('lambdaTarget', toggleArray(filters.lambdaTarget, l))}>
-              {l}
+              {he(l)}
             </Chip>
           ))}
         </ChipGroup>
 
-        <ChipGroup label="Vehicle filters">
+        <ChipGroup label={L.vehicleFilters}>
           <SelectChip
             value={filters.hasVehicleFilters}
-            options={[{ v: 'any', l: 'any' }, { v: 'yes', l: 'has filters' }, { v: 'no', l: 'no filters' }]}
+            options={[{ v: 'any', l: he('any') }, { v: 'yes', l: he('has filters') }, { v: 'no', l: he('no filters') }]}
             onChange={v => set('hasVehicleFilters', v as RuleFilters['hasVehicleFilters'])}
           />
         </ChipGroup>
 
-        <ChipGroup label="Direct part">
+        <ChipGroup label={'מק"ט ישיר'}>
           <SelectChip
             value={filters.hasDirectPart}
             options={[{ v: 'any', l: 'any' }, { v: 'yes', l: 'has direct part' }, { v: 'no', l: 'no direct part' }]}
@@ -133,12 +134,12 @@ export function RuleFilterBar({ filters, onChange, onReset }: Props) {
           Advanced filters (year, model, fuel, engine, VIN)
         </summary>
         <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-6">
-          <NumberField placeholder="Year from" value={filters.yearFrom} onChange={v => set('yearFrom', v)} />
-          <NumberField placeholder="Year to" value={filters.yearTo} onChange={v => set('yearTo', v)} />
-          <TextField placeholder="Model" value={filters.model} onChange={v => set('model', v)} />
-          <TextField placeholder="Fuel type" value={filters.fuelType} onChange={v => set('fuelType', v)} />
-          <TextField placeholder="Engine model" value={filters.engineModel} onChange={v => set('engineModel', v)} />
-          <TextField placeholder="VIN pattern" value={filters.vinPattern} onChange={v => set('vinPattern', v)} />
+          <NumberField placeholder={L.yearFrom} value={filters.yearFrom} onChange={v => set('yearFrom', v)} />
+          <NumberField placeholder={L.yearTo} value={filters.yearTo} onChange={v => set('yearTo', v)} />
+          <TextField placeholder={L.model} value={filters.model} onChange={v => set('model', v)} />
+          <TextField placeholder={L.fuelType} value={filters.fuelType} onChange={v => set('fuelType', v)} />
+          <TextField placeholder={L.engineModel} value={filters.engineModel} onChange={v => set('engineModel', v)} />
+          <TextField placeholder={L.vinPattern} value={filters.vinPattern} onChange={v => set('vinPattern', v)} />
         </div>
       </details>
     </div>
@@ -149,7 +150,7 @@ function ScopeChip({ label, onClear }: { label: string; onClear: () => void }) {
   return (
     <span className="inline-flex max-w-[220px] items-center gap-1 rounded-full bg-fuchsia-500/15 px-2.5 py-1 text-xs font-medium text-fuchsia-200 ring-1 ring-inset ring-fuchsia-400/30">
       <span className="truncate">{label}</span>
-      <button onClick={onClear} className="shrink-0 rounded-full p-0.5 hover:bg-white/10" aria-label="Clear scope">
+      <button onClick={onClear} className="shrink-0 rounded-full p-0.5 hover:bg-white/10" aria-label="נקה תחולה">
         <X className="h-3 w-3" />
       </button>
     </span>

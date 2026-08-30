@@ -426,11 +426,10 @@ export default function CreateFlowWizard({ seedDescription, seedVehicle, existin
 
   return (
     <div
-      dir="ltr"
       className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6"
       role="dialog"
       aria-modal="true"
-      aria-label="Create flow rule"
+      aria-label="יצירת כלל ניתוב"
     >
       {/* Dark glass backdrop */}
       <motion.div
@@ -790,22 +789,22 @@ function StepVehicles({
             className="overflow-hidden"
           >
             <div className="mt-4 grid grid-cols-2 gap-3">
-              <DarkField label="Year from">
+              <DarkField label="משנה">
                 <DarkInput type="number" value={form.yearFrom} onChange={v => set('yearFrom', v)} placeholder="2015" />
               </DarkField>
-              <DarkField label="Year to">
+              <DarkField label="עד שנה">
                 <DarkInput type="number" value={form.yearTo} onChange={v => set('yearTo', v)} placeholder="2020" />
               </DarkField>
-              <DarkField label="Model">
+              <DarkField label="דגם">
                 <DarkInput value={form.model} onChange={v => set('model', v)} placeholder="208, Corsa…" />
               </DarkField>
-              <DarkField label="Fuel type">
+              <DarkField label="סוג דלק">
                 <DarkInput value={form.fuelType} onChange={v => set('fuelType', v)} placeholder="petrol, diesel, electric" />
               </DarkField>
-              <DarkField label="Engine model">
+              <DarkField label="דגם מנוע">
                 <DarkInput value={form.engineModel} onChange={v => set('engineModel', v)} placeholder="optional" />
               </DarkField>
-              <DarkField label="VIN pattern">
+              <DarkField label="תבנית VIN">
                 <DarkInput value={form.vinPattern} onChange={v => set('vinPattern', v)} placeholder="WAUZZZ…" mono />
               </DarkField>
             </div>
@@ -938,7 +937,7 @@ function StepMapping({
           {resolveMsg && <p className={`mt-2 text-xs ${msgColor}`}>{resolveMsg.text}</p>}
         </div>
 
-        <WizardAutocompleteField label="Category" hint="The broad group, e.g. Engine, Brakes, Body.">
+        <WizardAutocompleteField label="קטגוריה" hint="The broad group, e.g. Engine, Brakes, Body.">
           <AutocompleteInput
             id="wizard-category"
             value={form.category}
@@ -947,7 +946,7 @@ function StepMapping({
             placeholder="e.g. Engine"
           />
         </WizardAutocompleteField>
-        <WizardAutocompleteField label="Subcategory" hint="A narrower group inside the category, e.g. Filters.">
+        <WizardAutocompleteField label="תת-קטגוריה" hint="A narrower group inside the category, e.g. Filters.">
           <AutocompleteInput
             id="wizard-subcategory"
             value={form.subcategory}
@@ -956,7 +955,7 @@ function StepMapping({
             placeholder="e.g. Filters"
           />
         </WizardAutocompleteField>
-        <WizardAutocompleteField label="Schema" hint="The exact part group / diagram name in the catalog.">
+        <WizardAutocompleteField label="שרטוט" hint="The exact part group / diagram name in the catalog.">
           <AutocompleteInput
             id="wizard-schema"
             value={form.schema}
@@ -1106,9 +1105,9 @@ function StepReview({ form, lambda, duplicate }: { form: WizardState; lambda: st
       <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
         <SummaryRow label="Part" value={form.partDescription || '—'} />
         <SummaryRow label="Supplier" value={supplier.name} />
-        <SummaryRow label="Category" value={form.category || '—'} />
-        <SummaryRow label="Subcategory" value={form.subcategory || '—'} />
-        <SummaryRow label="Schema" value={form.schema || '—'} />
+        <SummaryRow label="קטגוריה" value={form.category || '—'} />
+        <SummaryRow label="תת-קטגוריה" value={form.subcategory || '—'} />
+        <SummaryRow label="שרטוט" value={form.schema || '—'} />
         <SummaryRow label="Vehicles" value={vehicleSummary(form)} />
       </div>
 
