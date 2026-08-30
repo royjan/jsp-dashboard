@@ -8,7 +8,7 @@ import { copyText } from '@/lib/clipboard'
 import { FLOW_STATUS_PILL } from '@/components/chat-admin/shared/colors'
 import { compactCount, relTime } from '@/lib/chat-admin/format'
 import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
-import { he } from './labels'
+import { he, L } from './labels'
 
 type SortKey = 'partDescription' | 'lambdaTarget' | 'status' | 'updatedAt' | 'category' | 'feedbackCount'
 const PAGE_SIZES = [25, 50, 100, 200]
