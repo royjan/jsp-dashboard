@@ -614,6 +614,12 @@ export function DataTable<TRow, TSortKey extends string = string>({
     onSelectionChange(next)
   }
 
+  // `undefined` means "derive one"; `false` means "keep the scrolling table".
+  const effectiveCard = React.useMemo(
+    () => (mobileCard === false ? undefined : (mobileCard ?? deriveMobileCard(columns))),
+    [mobileCard, columns],
+  )
+
   // ----- non-data states: never render a blank table -----
   if (error) {
     return (
@@ -631,12 +637,6 @@ export function DataTable<TRow, TSortKey extends string = string>({
 
   // Where cards give way to the table, from this table's own minWidth.
   const swap = swapClasses(minWidth)
-
-  // `undefined` means "derive one"; `false` means "keep the scrolling table".
-  const effectiveCard = React.useMemo(
-    () => (mobileCard === false ? undefined : (mobileCard ?? deriveMobileCard(columns))),
-    [mobileCard, columns],
-  )
 
   const cards = effectiveCard && !loading && pagedRows.length > 0 && (
     <div data-jan-ui="cards" className={cn('flex flex-col gap-2', swap.cards)}>
