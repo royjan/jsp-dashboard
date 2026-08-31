@@ -28,8 +28,12 @@ export async function GET(request: Request) {
     return NextResponse.json({ sourceAvailable: true, queue, disputes, shipped })
   } catch (error) {
     if (error instanceof InvagentUnavailable) {
+      // The cause goes to the log, where whoever can fix it is looking. The
+      // response carries only what a warehouse user can do something with —
+      // and never the name of a missing secret.
+      console.warn('[picking] invagent unavailable:', error.message)
       return NextResponse.json(
-        { sourceAvailable: false, reason: error.message },
+        { sourceAvailable: false, reason: error.userMessage },
         { status: 503 },
       )
     }

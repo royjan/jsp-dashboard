@@ -21,10 +21,22 @@ import { fetchSecretValue } from '@/lib/aws-secrets'
 
 const DEFAULT_URL = 'https://hxrytdimhxprnoqduilo.supabase.co'
 
+/**
+ * Two audiences, two strings.
+ *
+ * `message` is for the server log and names the actual cause — which env var,
+ * which HTTP status. `userMessage` is what a person in the warehouse reads, and
+ * "no INVAGENT_SUPABASE_SERVICE_KEY in env or the config secret" tells them
+ * nothing they can act on while quietly publishing our configuration to anyone
+ * who opens the page. Keeping the diagnostic OUT of the response is the point;
+ * the fix has always been to read the log, not the screen.
+ */
 export class InvagentUnavailable extends Error {
-  constructor(reason: string) {
+  readonly userMessage: string
+  constructor(reason: string, userMessage = 'אפליקציית הליקוט לא זמינה כרגע') {
     super(reason)
     this.name = 'InvagentUnavailable'
+    this.userMessage = userMessage
   }
 }
 
@@ -39,6 +51,7 @@ async function credentials() {
     throw new InvagentUnavailable(
       'no INVAGENT_SUPABASE_SERVICE_KEY in env or the config secret — the anon key is not a ' +
         'substitute, RLS would hide every row and the page would render an empty floor',
+      'אפליקציית הליקוט עדיין לא מחוברת',
     )
   }
   cached = { url: process.env.INVAGENT_SUPABASE_URL || DEFAULT_URL, key }
@@ -55,7 +68,12 @@ async function query<T>(table: string, params: Record<string, string | number | 
     // Picking state changes minute to minute; a cached floor is a wrong floor.
     cache: 'no-store',
   })
-  if (!res.ok) throw new InvagentUnavailable(`GET ${table} → HTTP ${res.status}`)
+  if (!res.ok) {
+    throw new InvagentUnavailable(
+      `GET ${table} → HTTP ${res.status}`,
+      'אפליקציית הליקוט לא עונה כרגע',
+    )
+  }
   return (await res.json()) as T[]
 }
 
