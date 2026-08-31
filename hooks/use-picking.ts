@@ -2,8 +2,24 @@
 
 import { useQuery } from '@tanstack/react-query'
 
+/**
+ * Where this row points in the rest of the dashboard.
+ *
+ * Null when the document could not be resolved in the ERP mirror — a row newer
+ * than the mirror, or a format the split does not recognise. The page renders
+ * those as plain text; an unresolved row must never become a link to a guess.
+ */
+export interface DocRef {
+  format: string
+  docNumber: string
+  year: string | null
+  customerCode: string | null
+  customerName: string | null
+}
+
 export interface PickOrder {
   document_number: string
+  doc?: DocRef | null
   status: string
   priority: string
   shipping_method: string | null
@@ -22,6 +38,7 @@ export interface DisputeGroup {
 
 export interface ShippedOrder {
   document_number: string
+  doc?: DocRef | null
   customer_name: string | null
   items_count: number
   total_quantity: number
@@ -33,6 +50,8 @@ export interface PickingResponse {
   sourceAvailable: boolean
   reason?: string
   queue: PickOrder[]
+  /** The queue hit its fetch cap — `queue.length` is a floor, not a total. */
+  queueCapped?: boolean
   disputes: { lines: number; bySku: DisputeGroup[] }
   shipped: { orders: ShippedOrder[]; timedOrders: number; avgPickSeconds: number | null }
 }

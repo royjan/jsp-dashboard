@@ -131,8 +131,27 @@ export interface DisputeLine {
   document_number: string
 }
 
+/**
+ * Invagent names a document by gluing the ERP format onto the number:
+ * `11128489` is format 11, document `128489` — which the ERP itself stores
+ * zero-padded to six digits, so the tail is already in its canonical form and
+ * needs no repadding. Confirmed against `dashboard.documents`, and across a
+ * 1,000-order sample every `document_number` is 8 digits carrying a known
+ * format prefix (11 חשבונית מס, 14 חשבונית עסקה, 19).
+ *
+ * Returns null rather than guessing at anything that does not match that shape:
+ * a wrong format silently links to somebody else's document.
+ */
+export function splitDocumentNumber(documentNumber: string): { format: string; number: string } | null {
+  if (!/^\d{8}$/.test(documentNumber)) return null
+  return { format: documentNumber.slice(0, 2), number: documentNumber.slice(2) }
+}
+
+/** How many outstanding orders the queue asks for. Exported so the caller can say when it capped. */
+export const PICK_QUEUE_LIMIT = 50
+
 /** Orders still on the floor. Excludes shipped — the queue is work outstanding. */
-export async function pickQueue(limit = 100): Promise<PickOrder[]> {
+export async function pickQueue(limit = PICK_QUEUE_LIMIT): Promise<PickOrder[]> {
   return query<PickOrder>('pick_orders', {
     select: 'document_number,status,priority,shipping_method,created_at',
     status: 'neq.shipped',

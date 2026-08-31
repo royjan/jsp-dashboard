@@ -14,12 +14,41 @@
  * of them is a stale mirror of the ERP's, and /stock already shows the live one.
  */
 
+import Link from 'next/link'
 import { PackageSearch, AlertTriangle } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
+import { ItemLink } from '@/components/shared/ItemLink'
+import { CustomerLink } from '@/components/shared/CustomerLink'
 import { formatNumber } from '@/lib/format'
-import { usePicking, type PickOrder, type DisputeGroup, type ShippedOrder } from '@/hooks/use-picking'
+import { usePicking, type PickOrder, type DisputeGroup, type ShippedOrder, type DocRef } from '@/hooks/use-picking'
+
+/**
+ * The document, where the rest of the dashboard already knows how to show it.
+ *
+ * Unresolved rows stay plain text rather than becoming a link to a guessed
+ * format — /documents/[format]/[number] would happily render somebody else's
+ * document under this order's number.
+ */
+function DocumentCell({ documentNumber, doc }: { documentNumber: string; doc?: DocRef | null }) {
+  if (!doc) return <span className="font-mono text-xs">{documentNumber}</span>
+  return (
+    <Link
+      href={`/documents/${encodeURIComponent(doc.format)}/${encodeURIComponent(doc.docNumber)}${doc.year ? `?year=${doc.year}` : ''}`}
+      className="font-mono text-xs text-primary transition-colors hover:underline hover:text-primary/80"
+    >
+      {doc.docNumber}
+    </Link>
+  )
+}
+
+/** The customer, linked when the ERP gave us a code — invagent only knows the name. */
+function CustomerCell({ name, doc }: { name?: string | null; doc?: DocRef | null }) {
+  const display = name || doc?.customerName
+  if (doc?.customerCode) return <CustomerLink code={doc.customerCode} name={display} />
+  return <span dir="auto">{display || '—'}</span>
+}
 
 /** Seconds as a person says them. Unknown stays unknown rather than becoming 0. */
 function duration(seconds: number | null): string {
@@ -33,7 +62,8 @@ function duration(seconds: number | null): string {
 
 const QUEUE_COLUMNS: DataTableColumn<PickOrder>[] = [
   { key: 'document_number', header: 'תעודה', sortable: true,
-    cell: o => <span className="font-mono text-xs">{o.document_number}</span> },
+    cell: o => <DocumentCell documentNumber={o.document_number} doc={o.doc} /> },
+  { key: 'customer', header: 'לקוח', cell: o => <CustomerCell doc={o.doc} /> },
   { key: 'status', header: 'סטטוס', sortable: true, cell: o => o.status },
   { key: 'priority', header: 'עדיפות', sortable: true,
     cell: o => (['urgent', 'high'].includes(String(o.priority).toLowerCase())
@@ -44,8 +74,9 @@ const QUEUE_COLUMNS: DataTableColumn<PickOrder>[] = [
 
 const DISPUTE_COLUMNS: DataTableColumn<DisputeGroup>[] = [
   { key: 'sku', header: 'מק״ט', sortable: true,
-    cell: d => <span className="font-mono text-xs">{d.sku}</span> },
-  { key: 'description', header: 'תיאור', cell: d => d.description || '—' },
+    cell: d => <ItemLink code={d.sku} name={d.description} showCode /> },
+  { key: 'description', header: 'תיאור',
+    cell: d => (d.description ? <ItemLink code={d.sku} name={d.description} /> : '—') },
   // The count is the whole point: one shortage is a picker having a bad minute,
   // a repeat is a shelf whose count is wrong. Default sort keeps repeats on top.
   { key: 'times', header: 'פעמים', sortable: true, cell: d => String(d.times) },
@@ -56,8 +87,9 @@ const DISPUTE_COLUMNS: DataTableColumn<DisputeGroup>[] = [
 
 const SHIPPED_COLUMNS: DataTableColumn<ShippedOrder>[] = [
   { key: 'document_number', header: 'תעודה', sortable: true,
-    cell: o => <span className="font-mono text-xs">{o.document_number}</span> },
-  { key: 'customer_name', header: 'לקוח', cell: o => o.customer_name || '—' },
+    cell: o => <DocumentCell documentNumber={o.document_number} doc={o.doc} /> },
+  { key: 'customer_name', header: 'לקוח',
+    cell: o => <CustomerCell name={o.customer_name} doc={o.doc} /> },
   { key: 'items_count', header: 'שורות', sortable: true, cell: o => String(o.items_count) },
   { key: 'total_quantity', header: 'יח׳', sortable: true, cell: o => formatNumber(o.total_quantity) },
   { key: 'pick_duration_seconds', header: 'זמן ליקוט', sortable: true,
@@ -69,6 +101,9 @@ export default function PickingPage() {
 
   const disputes = data?.disputes
   const shipped = data?.shipped
+  // The queue is fetched with a cap, so its length is a floor. "50" reads as the
+  // whole floor; "+50" says there is more behind it.
+  const queueCount = data ? `${formatNumber(data.queue.length)}${data.queueCapped ? '+' : ''}` : '—'
 
   return (
     <div className="space-y-4 md:space-y-6">
@@ -77,7 +112,7 @@ export default function PickingPage() {
         title="ליקוט במחסן"
         description={
           data
-            ? `${formatNumber(data.queue.length)} הזמנות בליקוט · ${formatNumber(disputes?.bySku.length ?? 0)} מק״טים לא נמצאו במדף`
+            ? `${queueCount} הזמנות בליקוט · ${formatNumber(disputes?.bySku.length ?? 0)} מק״טים לא נמצאו במדף`
             : 'מה נמצא כרגע על רצפת המחסן — בין המדף לנהג'
         }
       />
@@ -86,9 +121,7 @@ export default function PickingPage() {
         <Card>
           <CardContent className="p-4">
             <div className="text-xs text-muted-foreground">בליקוט כרגע</div>
-            <div className="text-2xl font-bold tabular-nums">
-              {data ? formatNumber(data.queue.length) : '—'}
-            </div>
+            <div className="text-2xl font-bold tabular-nums">{queueCount}</div>
           </CardContent>
         </Card>
         <Card>
@@ -157,12 +190,12 @@ export default function PickingPage() {
             error={isError ? (error as Error)?.message : undefined}
             onRetry={() => refetch()}
             exportFileName="תור-ליקוט"
-            minWidth="min-w-[560px]"
+            minWidth="min-w-[680px]"
             pageSize={25}
             labels={{ empty: 'אין כרגע הזמנות בליקוט' }}
             mobileCard={{
               title: o => o.document_number,
-              subtitle: o => o.shipping_method ?? '—',
+              subtitle: o => o.doc?.customerName || o.shipping_method || '—',
               accent: o => o.status,
               fields: [{ label: 'עדיפות', value: o => o.priority }],
             }}
