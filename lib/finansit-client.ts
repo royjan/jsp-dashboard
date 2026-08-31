@@ -765,8 +765,41 @@ export async function fetchDocumentDetailsByNumber(
   return wanted.map((n) => byNumber.get(String(parseInt(n, 10)))).filter(Boolean)
 }
 
+/**
+ * Single-document detail rides its own client: NO failover, and a timeout long
+ * enough for the answer to arrive.
+ *
+ * FINAPI serves this endpoint by reverse-scanning 7IVH.DAT from the newest
+ * record, so latency is proportional to how far back the document sits.
+ * Measured on the primary box, same call, only the number changing:
+ * 136000 (newest) 4.6s · 128505 14s (34.8s again under load) · 100000 and
+ * 020052 never returned, 504 at 60s. Nothing else on that box is slow —
+ * /health 8ms, /api/documents/formats 10ms, the BULK /api/documents/lines
+ * 122ms — so this is one scan, not an unhealthy host.
+ *
+ * The shared client's 15s attempt timeout sits inside that range, which turned
+ * a slow-but-successful read into 15s of waiting followed by a second attempt
+ * against 192.168.0.109. That box is worse here, not better: measured 504 after
+ * 60s for 128489 and 136000, and a confident 404 for 100000 — a document that
+ * exists. So failing over trades a slow answer for a wrong one, exactly as the
+ * bulk-lines client above already documents for its own endpoint.
+ *
+ * 45s is chosen to sit under FINAPI's own 60s gateway cut: past that the
+ * upstream has given up anyway, and waiting longer only holds the connection.
+ * The real fix is an index on FINAPI's side; this stops us adding to the wait.
+ */
+const docDetailClient = createClient({
+  baseUrl: process.env.FINANSIT_BASE_URL || FINANSIT_PRIMARY,
+  baseUrls: [process.env.FINANSIT_BASE_URL || FINANSIT_PRIMARY],
+  credentials: async () => {
+    await initializeSecrets()
+    return getSecret('FINANSIT_API_CREDENTIALS', '')
+  },
+  timeout: 45000,
+})
+
 export async function fetchDocumentDetail(format: number | string, number: number | string, year?: string): Promise<any> {
-  return client.documents.get(String(format), String(number), year ? { year } : undefined)
+  return docDetailClient.documents.get(String(format), String(number), year ? { year } : undefined)
 }
 
 export async function searchDocuments(params: Record<string, string>): Promise<any[]> {

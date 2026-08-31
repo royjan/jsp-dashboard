@@ -14,7 +14,9 @@
  * of them is a stale mirror of the ERP's, and /stock already shows the live one.
  */
 
+import { useRef } from 'react'
 import Link from 'next/link'
+import { useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { PackageSearch, AlertTriangle } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { PageHeader } from '@/components/shared/PageHeader'
@@ -31,11 +33,63 @@ import { usePicking, type PickOrder, type DisputeGroup, type ShippedOrder, type 
  * format — /documents/[format]/[number] would happily render somebody else's
  * document under this order's number.
  */
+/**
+ * Start the document fetch on hover, so the click does not begin a cold one.
+ *
+ * FINAPI reverse-scans its header file for a single document, and the cost grows
+ * with how far back the document sits — 4.6s for the newest, 14-35s a few
+ * thousand back, a 60s upstream timeout for the oldest. Our own cache is 7 days,
+ * so this is only ever paid once per document by whoever opens it first; hover
+ * moves that payment to a moment when nobody is staring at a blank page.
+ *
+ * The query key is the one the document page itself uses, so the click reuses
+ * this request rather than starting a second one.
+ *
+ * Two limits keep the hint from becoming a load generator on the ERP box: a
+ * dwell delay, so sweeping the pointer down a 50-row table fires nothing, and a
+ * per-session ceiling, because each prefetch can occupy that box for half a
+ * minute and a curious pointer must not be able to queue fifty of them.
+ */
+const PREFETCH_DWELL_MS = 400
+const PREFETCH_MAX = 8
+let prefetched = 0
+
+function prefetchDocument(qc: QueryClient, doc: DocRef) {
+  const key = ['document', doc.format, doc.docNumber, doc.year || '']
+  if (qc.getQueryState(key)) return
+  if (prefetched >= PREFETCH_MAX) return
+  prefetched += 1
+  qc.prefetchQuery({
+    queryKey: key,
+    queryFn: async () => {
+      const res = await fetch(`/api/documents/${doc.format}/${doc.docNumber}${doc.year ? `?year=${doc.year}` : ''}`)
+      if (!res.ok) throw new Error('Failed')
+      return res.json()
+    },
+    staleTime: 10 * 60 * 1000,
+  })
+}
+
 function DocumentCell({ documentNumber, doc }: { documentNumber: string; doc?: DocRef | null }) {
+  const qc = useQueryClient()
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const start = () => {
+    if (!doc || timer.current) return
+    timer.current = setTimeout(() => { timer.current = null; prefetchDocument(qc, doc) }, PREFETCH_DWELL_MS)
+  }
+  const cancel = () => {
+    if (timer.current) { clearTimeout(timer.current); timer.current = null }
+  }
+
   if (!doc) return <span className="font-mono text-xs">{documentNumber}</span>
   return (
     <Link
       href={`/documents/${encodeURIComponent(doc.format)}/${encodeURIComponent(doc.docNumber)}${doc.year ? `?year=${doc.year}` : ''}`}
+      onMouseEnter={start}
+      onMouseLeave={cancel}
+      onFocus={start}
+      onBlur={cancel}
       className="font-mono text-xs text-primary transition-colors hover:underline hover:text-primary/80"
     >
       {doc.docNumber}
