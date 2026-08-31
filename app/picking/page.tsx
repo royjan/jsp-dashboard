@@ -14,10 +14,10 @@
  * of them is a stale mirror of the ERP's, and /stock already shows the live one.
  */
 
-import { useRef } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useQueryClient, type QueryClient } from '@tanstack/react-query'
-import { PackageSearch, AlertTriangle } from 'lucide-react'
+import { PackageSearch, AlertTriangle, Search } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
@@ -114,6 +114,40 @@ function duration(seconds: number | null): string {
   return m ? `${h} שע׳ ${m} דק׳` : `${h} שע׳`
 }
 
+/**
+ * Substring search over the fields a row can plausibly be looked up by.
+ *
+ * Deliberately not the rendered text: a document is shown as `128489` but the
+ * warehouse says it out loud as `11128489`, and the customer is a link whose
+ * text is not in the row at all. Both spellings of the number are searchable,
+ * so whichever one someone has in front of them finds the row.
+ */
+function matches<T>(rows: T[], q: string, fields: (row: T) => Array<string | null | undefined>): T[] {
+  const needle = q.trim().toLowerCase()
+  if (!needle) return rows
+  return rows.filter(r => fields(r).some(v => v && String(v).toLowerCase().includes(needle)))
+}
+
+function TableSearch({ value, onChange, placeholder }: {
+  value: string
+  onChange: (v: string) => void
+  placeholder: string
+}) {
+  return (
+    <div className="relative">
+      <Search className="pointer-events-none absolute start-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+      <input
+        type="search"
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder={placeholder}
+        aria-label={placeholder}
+        className="h-8 w-56 rounded-md border bg-muted/40 ps-7 pe-2 text-xs outline-none focus:ring-2 focus:ring-ring"
+      />
+    </div>
+  )
+}
+
 const QUEUE_COLUMNS: DataTableColumn<PickOrder>[] = [
   { key: 'document_number', header: 'תעודה', sortable: true,
     cell: o => <DocumentCell documentNumber={o.document_number} doc={o.doc} /> },
@@ -153,8 +187,22 @@ const SHIPPED_COLUMNS: DataTableColumn<ShippedOrder>[] = [
 export default function PickingPage() {
   const { data, isLoading, isError, error, refetch } = usePicking()
 
+  const [queueQuery, setQueueQuery] = useState('')
+  const [shippedQuery, setShippedQuery] = useState('')
+
   const disputes = data?.disputes
   const shipped = data?.shipped
+
+  const queueRows = useMemo(
+    () => matches(data?.queue ?? [], queueQuery, o =>
+      [o.document_number, o.doc?.docNumber, o.doc?.customerName, o.status, o.priority, o.shipping_method]),
+    [data?.queue, queueQuery],
+  )
+  const shippedRows = useMemo(
+    () => matches(shipped?.orders ?? [], shippedQuery, o =>
+      [o.document_number, o.doc?.docNumber, o.customer_name, o.doc?.customerName, o.shipping_method]),
+    [shipped?.orders, shippedQuery],
+  )
   // The queue is fetched with a cap, so its length is a floor. "50" reads as the
   // whole floor; "+50" says there is more behind it.
   const queueCount = data ? `${formatNumber(data.queue.length)}${data.queueCapped ? '+' : ''}` : '—'
@@ -237,7 +285,7 @@ export default function PickingPage() {
         <CardContent className="p-3 sm:p-4">
           <div className="mb-2 text-sm font-semibold">תור הליקוט</div>
           <DataTable
-            rows={data?.queue ?? []}
+            rows={queueRows}
             columns={QUEUE_COLUMNS}
             getRowKey={o => o.document_number}
             loading={isLoading}
@@ -246,7 +294,12 @@ export default function PickingPage() {
             exportFileName="תור-ליקוט"
             minWidth="min-w-[680px]"
             pageSize={25}
-            labels={{ empty: 'אין כרגע הזמנות בליקוט' }}
+            toolbar={
+              <TableSearch value={queueQuery} onChange={setQueueQuery} placeholder="חיפוש תעודה, לקוח, סטטוס…" />
+            }
+            // Under a search, "there are no orders in picking" is a different
+            // claim from "nothing matched", and the floor may be full.
+            labels={{ empty: queueQuery ? 'אין תוצאות לחיפוש' : 'אין כרגע הזמנות בליקוט' }}
             mobileCard={{
               title: o => o.document_number,
               subtitle: o => o.doc?.customerName || o.shipping_method || '—',
@@ -261,7 +314,7 @@ export default function PickingPage() {
         <CardContent className="p-3 sm:p-4">
           <div className="mb-2 text-sm font-semibold">הזמנות שיצאו</div>
           <DataTable
-            rows={shipped?.orders ?? []}
+            rows={shippedRows}
             columns={SHIPPED_COLUMNS}
             getRowKey={o => `${o.document_number}/${o.shipped_at}`}
             loading={isLoading}
@@ -271,7 +324,10 @@ export default function PickingPage() {
             exportFileName="הזמנות-שיצאו"
             minWidth="min-w-[640px]"
             pageSize={25}
-            labels={{ empty: 'לא נשלחו הזמנות בטווח הזה' }}
+            toolbar={
+              <TableSearch value={shippedQuery} onChange={setShippedQuery} placeholder="חיפוש תעודה, לקוח…" />
+            }
+            labels={{ empty: shippedQuery ? 'אין תוצאות לחיפוש' : 'לא נשלחו הזמנות בטווח הזה' }}
             mobileCard={{
               title: o => o.customer_name || o.document_number,
               subtitle: o => o.document_number,

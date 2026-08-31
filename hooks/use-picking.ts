@@ -40,6 +40,8 @@ export interface ShippedOrder {
   document_number: string
   doc?: DocRef | null
   customer_name: string | null
+  /** Selected by lib/invagent's query and searchable here; no column shows it. */
+  shipping_method: string | null
   items_count: number
   total_quantity: number
   pick_duration_seconds: number | null
