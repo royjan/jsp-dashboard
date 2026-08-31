@@ -3,9 +3,9 @@
 import React, { useEffect, useState } from 'react'
 import { Loader2, Package, AlertTriangle, Database, Sparkles, Check } from 'lucide-react'
 import {
-  ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, Legend,
+  ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip,
 } from 'recharts'
-import { ChartGrid, AXIS_PROPS, BAR_RADIUS, BAR_MAX, PIE_PROPS, ACTIVE_BAR, ActivePieSector } from '@/components/charts/kit'
+import { ChartGrid, AXIS_PROPS, BAR_RADIUS, BAR_MAX, PIE_PROPS, ACTIVE_BAR, ActivePieSector, DonutCenter, ChartLegendChips } from '@/components/charts/kit'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -18,6 +18,39 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
       <div className="mb-2 text-[12px] font-medium text-slate-300">{title}</div>
       {children}
     </div>
+  )
+}
+
+type Slice = { name: string; value: number; fill: string }
+
+/**
+ * Donut + chips.
+ *
+ * Recharts' outside `label` and its in-SVG `<Legend>` both live INSIDE the 200px
+ * box: the legend shrinks the plot upward, so the ring's own labels ran off the
+ * top of the card and the counts were clipped. The value belongs in the chip and
+ * the total in the hole — nothing then has to be drawn outside the ring.
+ */
+function Donut({ data, label }: { data: Slice[]; label: string }) {
+  const total = data.reduce((a, d) => a + d.value, 0)
+  return (
+    <>
+      <div className="relative">
+        <ResponsiveContainer width="100%" height={200}>
+          <PieChart>
+            <Pie activeShape={ActivePieSector} data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={52} outerRadius={78} {...PIE_PROPS}>
+              {data.map((d, i) => <Cell key={i} fill={d.fill} />)}
+            </Pie>
+            <Tooltip />
+          </PieChart>
+        </ResponsiveContainer>
+        <DonutCenter value={total.toLocaleString('he-IL')} label={label} />
+      </div>
+      <ChartLegendChips
+        className="mt-1 justify-center"
+        items={data.map(d => ({ key: d.name, label: d.name, value: d.value.toLocaleString('he-IL'), color: d.fill }))}
+      />
+    </>
   )
 }
 
@@ -63,8 +96,8 @@ export default function RuleCorpusAnalytics() {
   if (error) return <div className="rounded-md border border-rose-500/40 bg-rose-950/30 p-3 text-sm text-rose-200">שגיאה: {error}</div>
   if (!s) return null
 
-  const status = (s.status || []).map((r: any) => ({ name: r.status, value: r.c }))
-  const scope = (s.scope || []).map((r: any) => ({ name: r.name === 'generic' ? 'גנרי' : 'ממוקד', value: r.c }))
+  const status: Slice[] = (s.status || []).map((r: any, i: number) => ({ name: r.status, value: Number(r.c) || 0, fill: STATUS_COLORS[r.status] || PALETTE[i % PALETTE.length] }))
+  const scope: Slice[] = (s.scope || []).map((r: any, i: number) => ({ name: r.name === 'generic' ? 'גנרי' : 'ממוקד', value: Number(r.c) || 0, fill: PALETTE[i % PALETTE.length] }))
   const confidence = (s.confidence || []).map((r: any) => ({ bucket: Number(r.bucket).toFixed(1), c: r.c }))
   const embHave = s.embeddings?.have ?? 0, embMiss = s.embeddings?.missing ?? 0
   const embPct = embHave + embMiss ? Math.round((embHave / (embHave + embMiss)) * 100) : 0
@@ -94,25 +127,11 @@ export default function RuleCorpusAnalytics() {
 
       <div className="grid gap-3 lg:grid-cols-2">
         <Card title="התפלגות סטטוס">
-          <ResponsiveContainer width="100%" height={200}>
-            <PieChart>
-              <Pie activeShape={ActivePieSector} data={status} dataKey="value" nameKey="name" innerRadius={45} outerRadius={75} label {...PIE_PROPS}>
-                {status.map((e: any, i: number) => <Cell key={i} fill={STATUS_COLORS[e.name] || PALETTE[i]} />)}
-              </Pie>
-              <Tooltip /><Legend wrapperStyle={{ fontSize: 11 }} />
-            </PieChart>
-          </ResponsiveContainer>
+          <Donut data={status} label="חוקים" />
         </Card>
 
         <Card title="ממוקד מול גנרי">
-          <ResponsiveContainer width="100%" height={200}>
-            <PieChart>
-              <Pie activeShape={ActivePieSector} data={scope} dataKey="value" nameKey="name" innerRadius={45} outerRadius={75} label {...PIE_PROPS}>
-                {scope.map((_: any, i: number) => <Cell key={i} fill={PALETTE[i]} />)}
-              </Pie>
-              <Tooltip /><Legend wrapperStyle={{ fontSize: 11 }} />
-            </PieChart>
-          </ResponsiveContainer>
+          <Donut data={scope} label="חוקים" />
         </Card>
 
         <Card title="חוקים לפי קטגוריה">
