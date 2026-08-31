@@ -54,8 +54,44 @@ async function credentials() {
       'אפליקציית הליקוט עדיין לא מחוברת',
     )
   }
+  // Point 2 of the header is the whole reason this file exists, and until now
+  // nothing enforced it: hand this function the anon key and every request
+  // succeeds, every table answers `[]`, and /picking renders an idle floor on a
+  // full warehouse — no error, nowhere, ever. Prove the key bypasses RLS before
+  // using it, and decline exactly as if it were missing.
+  if (!bypassesRls(key)) {
+    throw new InvagentUnavailable(
+      'INVAGENT_SUPABASE_SERVICE_KEY is set but is not a service_role key — RLS would hide ' +
+        'every row and PostgREST answers 200 with [], so the floor would look idle',
+      'אפליקציית הליקוט עדיין לא מחוברת',
+    )
+  }
   cached = { url: process.env.INVAGENT_SUPABASE_URL || DEFAULT_URL, key }
   return cached
+}
+
+/**
+ * Does this key bypass RLS?
+ *
+ * Legacy keys are JWTs carrying `"role":"service_role"`. The keys Supabase
+ * issues now are opaque — `sb_secret_…` bypasses RLS, `sb_publishable_…` is the
+ * anon key renamed — so there is nothing to decode and the prefix is the whole
+ * signal. Anything unrecognised fails closed; an unknown string is not proof.
+ *
+ * Kept in step with `finansit-sdk/src/invagent.ts`, which guards the same
+ * source for the MCP tools.
+ */
+function bypassesRls(key: string): boolean {
+  if (key.startsWith('sb_secret_')) return true
+  if (key.startsWith('sb_publishable_')) return false
+  const body = key.split('.')[1]
+  if (!body) return false
+  try {
+    const claims = JSON.parse(Buffer.from(body, 'base64url').toString('utf8')) as { role?: string }
+    return claims.role === 'service_role'
+  } catch {
+    return false
+  }
 }
 
 async function query<T>(table: string, params: Record<string, string | number | undefined>): Promise<T[]> {
