@@ -24,6 +24,7 @@ import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
 import { ItemLink } from '@/components/shared/ItemLink'
 import { CustomerLink } from '@/components/shared/CustomerLink'
 import { formatNumber } from '@/lib/format'
+import { statusLabel, priorityLabel, reasonLabel, statusRank, priorityRank, isHotPriority } from '@/lib/picking-labels'
 import { usePicking, type PickOrder, type DisputeGroup, type ShippedOrder, type DocRef } from '@/hooks/use-picking'
 
 /**
@@ -152,11 +153,14 @@ const QUEUE_COLUMNS: DataTableColumn<PickOrder>[] = [
   { key: 'document_number', header: 'תעודה', sortable: true,
     cell: o => <DocumentCell documentNumber={o.document_number} doc={o.doc} /> },
   { key: 'customer', header: 'לקוח', cell: o => <CustomerCell doc={o.doc} /> },
-  { key: 'status', header: 'סטטוס', sortable: true, cell: o => o.status },
-  { key: 'priority', header: 'עדיפות', sortable: true,
-    cell: o => (['urgent', 'high'].includes(String(o.priority).toLowerCase())
-      ? <span className="font-semibold text-destructive">{o.priority}</span>
-      : <span>{o.priority}</span>) },
+  { key: 'status', header: 'סטטוס', sortable: true, sortValue: o => statusRank(o.status),
+    cell: o => statusLabel(o.status) },
+  { key: 'priority', header: 'עדיפות', sortable: true, sortValue: o => priorityRank(o.priority),
+    // The cell is a node for the hot priorities, and a node exports as nothing.
+    exportValue: o => priorityLabel(o.priority),
+    cell: o => (isHotPriority(o.priority)
+      ? <span className="font-semibold text-destructive">{priorityLabel(o.priority)}</span>
+      : <span>{priorityLabel(o.priority)}</span>) },
   { key: 'shipping_method', header: 'אופן משלוח', cell: o => o.shipping_method ?? '—' },
 ]
 
@@ -170,7 +174,11 @@ const DISPUTE_COLUMNS: DataTableColumn<DisputeGroup>[] = [
   { key: 'times', header: 'פעמים', sortable: true, cell: d => String(d.times) },
   { key: 'quantityShort', header: 'יח׳ חסרות', sortable: true, cell: d => formatNumber(d.quantityShort) },
   { key: 'labelLocation', header: 'מדף במדבקה', cell: d => d.labelLocation ?? '—' },
-  { key: 'reasons', header: 'סיבה', cell: d => d.reasons.join(', ') || '—' },
+  // Deduped AFTER mapping: `Can't find` and `Cannot locate` are one reason in
+  // Hebrew, and grouping upstream happened on the raw strings, so a part short
+  // under both spellings would otherwise read "לא נמצא במדף, לא נמצא במדף".
+  { key: 'reasons', header: 'סיבה',
+    cell: d => [...new Set(d.reasons.map(reasonLabel))].join(', ') || '—' },
 ]
 
 const SHIPPED_COLUMNS: DataTableColumn<ShippedOrder>[] = [
@@ -195,7 +203,8 @@ export default function PickingPage() {
 
   const queueRows = useMemo(
     () => matches(data?.queue ?? [], queueQuery, o =>
-      [o.document_number, o.doc?.docNumber, o.doc?.customerName, o.status, o.priority, o.shipping_method]),
+      [o.document_number, o.doc?.docNumber, o.doc?.customerName,
+       o.status, statusLabel(o.status), o.priority, priorityLabel(o.priority), o.shipping_method]),
     [data?.queue, queueQuery],
   )
   const shippedRows = useMemo(
@@ -303,8 +312,8 @@ export default function PickingPage() {
             mobileCard={{
               title: o => o.document_number,
               subtitle: o => o.doc?.customerName || o.shipping_method || '—',
-              accent: o => o.status,
-              fields: [{ label: 'עדיפות', value: o => o.priority }],
+              accent: o => statusLabel(o.status),
+              fields: [{ label: 'עדיפות', value: o => priorityLabel(o.priority) }],
             }}
           />
         </CardContent>
