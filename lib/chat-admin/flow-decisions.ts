@@ -10,6 +10,7 @@ import { and, asc, desc, eq, gte, ilike, inArray, or, sql, count } from 'drizzle
 import { getDb, query } from '@/lib/db'
 import { flowDecisionsV2, partDescriptions, directParts, wordMappings } from '@/lib/db/schema'
 import { embedText, toVectorLiteral } from '@/lib/chat-admin/embeddings'
+import { getIcsStats } from '@/lib/ics-stats'
 import type { FlowDecisionRecord, FlowDecisionStatus } from '@/types/chat-admin/flow-decision'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -533,11 +534,46 @@ async function getHebrewTranslations(englishTerms: string[]): Promise<Map<string
   }
 }
 
+/**
+ * Vehicle models for the דגם filter, from the national registry snapshot
+ * (`ics."Vehicles"` via getIcsStats). These are the SAME modelName strings the
+ * runtime matcher compares against with case-insensitive equality, so the rule
+ * editor should offer them verbatim — plus rules' own vehicle_model values, so
+ * an already-used spelling always autocompletes even when the ICS cache is cold.
+ * Popularity-ordered; manufacturer lets the UI search by brand (e.g. "peugeot").
+ */
+async function getVehicleModelSuggestions(db: Awaited<ReturnType<typeof getDb>>) {
+  const [stats, ruleRows] = await Promise.all([
+    getIcsStats().catch(() => null),
+    db
+      .selectDistinct({ v: flowDecisionsV2.vehicleModel })
+      .from(flowDecisionsV2)
+      .where(and(sql`status <> 'rejected'`, sql`${flowDecisionsV2.vehicleModel} IS NOT NULL`)),
+  ])
+  const out: { model: string; manufacturer: string }[] = []
+  const seen = new Set<string>()
+  for (const m of stats?.topModels ?? []) {
+    if (!m.model || m.model === 'Unknown') continue
+    const key = m.model.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push({ model: m.model, manufacturer: m.manufacturer === 'Unknown' ? '' : m.manufacturer })
+  }
+  for (const r of ruleRows) {
+    const v = (r.v || '').trim()
+    if (!v || seen.has(v.toLowerCase())) continue
+    seen.add(v.toLowerCase())
+    out.push({ model: v, manufacturer: '' })
+  }
+  return out
+}
+
 export async function getAutocomplete(lambdaId = 'all'): Promise<{
   categories: BilingualSuggestion[]
   subcategories: BilingualSuggestion[]
   schemas: BilingualSuggestion[]
   partDescriptions: BilingualSuggestion[]
+  vehicleModels: { model: string; manufacturer: string }[]
 }> {
   const db = await getDb()
   const base = lambdaId === 'all'
@@ -552,11 +588,12 @@ export async function getAutocomplete(lambdaId = 'all'): Promise<{
       .orderBy(asc(col))
     return rows.map((r) => r.v).filter(Boolean) as string[]
   }
-  const [categories, subcategories, schemas, parts] = await Promise.all([
+  const [categories, subcategories, schemas, parts, vehicleModels] = await Promise.all([
     distinctCol(flowDecisionsV2.category),
     distinctCol(flowDecisionsV2.subcategory),
     distinctCol(flowDecisionsV2.schema),
     distinctCol(flowDecisionsV2.partDescription),
+    getVehicleModelSuggestions(db),
   ])
   const allTerms = [...new Set([...categories, ...subcategories, ...schemas, ...parts])]
   const hebrewMap = await getHebrewTranslations(allTerms)
@@ -566,6 +603,7 @@ export async function getAutocomplete(lambdaId = 'all'): Promise<{
     subcategories: toBi(subcategories),
     schemas: toBi(schemas),
     partDescriptions: toBi(parts),
+    vehicleModels,
   }
 }
 

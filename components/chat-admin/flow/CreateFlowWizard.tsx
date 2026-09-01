@@ -51,6 +51,8 @@ interface AutocompleteData {
   categories: string[]
   subcategories: string[]
   schemas: string[]
+  /** Registry models — the exact modelName strings the matcher compares against. */
+  vehicleModels: { model: string; manufacturer: string }[]
 }
 
 const EMPTY_AUTOCOMPLETE: AutocompleteData = {
@@ -58,6 +60,7 @@ const EMPTY_AUTOCOMPLETE: AutocompleteData = {
   categories: [],
   subcategories: [],
   schemas: [],
+  vehicleModels: [],
 }
 
 interface SupplierDef {
@@ -264,6 +267,9 @@ export default function CreateFlowWizard({ seedDescription, seedVehicle, existin
           categories: pluck(d.categories),
           subcategories: pluck(d.subcategories),
           schemas: pluck(d.schemas),
+          vehicleModels: Array.isArray(d.vehicleModels)
+            ? (d.vehicleModels as { model?: string; manufacturer?: string }[]).filter(m => m?.model) as { model: string; manufacturer: string }[]
+            : [],
         })
       })
       .catch(() => {
@@ -509,7 +515,7 @@ export default function CreateFlowWizard({ seedDescription, seedVehicle, existin
                 <StepSupplier selected={lambda} onSelect={id => set('suppliers', [id])} />
               )}
               {step === 2 && (
-                <StepVehicles form={form} set={set} />
+                <StepVehicles form={form} set={set} models={autocomplete.vehicleModels} />
               )}
               {step === 3 && (
                 <StepMapping
@@ -752,9 +758,11 @@ function StepSupplier({ selected, onSelect }: { selected: string; onSelect: (id:
 function StepVehicles({
   form,
   set,
+  models,
 }: {
   form: WizardState
   set: <K extends keyof WizardState>(key: K, value: WizardState[K]) => void
+  models: { model: string; manufacturer: string }[]
 }) {
   const specific = form.vehicleScope === 'specific'
   return (
@@ -797,7 +805,22 @@ function StepVehicles({
                 <DarkInput type="number" value={form.yearTo} onChange={v => set('yearTo', v)} placeholder="2020" />
               </DarkField>
               <DarkField label="דגם">
-                <DarkInput value={form.model} onChange={v => set('model', v)} placeholder="208, Corsa…" />
+                {/* Saved value must be the registry modelName verbatim (exact-match
+                    at runtime) — the brand is search-only, so typing "peugeot"
+                    surfaces its models but picking one inserts just the model. */}
+                <div className="[&_input]:h-11 [&_input]:rounded-xl [&_input]:border-white/15 [&_input]:bg-white/5 [&_input]:px-3 [&_input]:text-sm [&_input]:text-slate-100 [&_input]:placeholder:text-slate-500">
+                  <AutocompleteInput
+                    id="wizard-vehicle-model"
+                    value={form.model}
+                    onChange={v => set('model', v)}
+                    items={models.map(m => ({
+                      value: m.model,
+                      label: m.manufacturer ? `${m.model} · ${m.manufacturer}` : m.model,
+                      search: m.manufacturer,
+                    }))}
+                    placeholder={L.phModel}
+                  />
+                </div>
               </DarkField>
               <DarkField label="סוג דלק">
                 <DarkInput value={form.fuelType} onChange={v => set('fuelType', v)} placeholder={L.phFuel} />

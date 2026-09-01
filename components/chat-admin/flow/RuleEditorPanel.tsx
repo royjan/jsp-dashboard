@@ -31,6 +31,8 @@ interface AutocompleteData {
   categories: string[]
   subcategories: string[]
   schemas: string[]
+  /** Registry models — the exact modelName strings the matcher compares against. */
+  vehicleModels: { model: string; manufacturer: string }[]
 }
 
 const EMPTY_AUTOCOMPLETE: AutocompleteData = {
@@ -38,6 +40,7 @@ const EMPTY_AUTOCOMPLETE: AutocompleteData = {
   categories: [],
   subcategories: [],
   schemas: [],
+  vehicleModels: [],
 }
 
 export function RuleEditorPanel({ rule, isCreating, seedDescription, onClose, onSaved, onDeleted }: Props) {
@@ -73,6 +76,10 @@ export function RuleEditorPanel({ rule, isCreating, seedDescription, onClose, on
           categories: pluck(d.categories),
           subcategories: pluck(d.subcategories),
           schemas: pluck(d.schemas),
+          vehicleModels: Array.isArray(d.vehicleModels)
+            ? (d.vehicleModels as { model?: string; manufacturer?: string }[])
+                .filter((m): m is { model: string; manufacturer: string } => Boolean(m?.model))
+            : [],
         })
       })
       .catch(() => {
@@ -200,7 +207,22 @@ export function RuleEditorPanel({ rule, isCreating, seedDescription, onClose, on
               <div className="grid grid-cols-2 gap-3">
                 <Field label="משנה"><NumberInput value={form.vehicleYearFrom} onChange={v => set('vehicleYearFrom', v)} /></Field>
                 <Field label="עד שנה"><NumberInput value={form.vehicleYearTo} onChange={v => set('vehicleYearTo', v)} /></Field>
-                <Field label="דגם"><TextInput value={form.vehicleModel} onChange={v => set('vehicleModel', v)} /></Field>
+                <Field label="דגם">
+                  {/* The value saved must be the registry modelName verbatim — the
+                      matcher does exact (case-insensitive) equality — so the dropdown
+                      inserts item.value (the model) while the brand is search-only. */}
+                  <AutocompleteInput
+                    value={form.vehicleModel}
+                    onChange={v => set('vehicleModel', v)}
+                    items={autocomplete.vehicleModels.map(m => ({
+                      value: m.model,
+                      label: m.manufacturer ? `${m.model} · ${m.manufacturer}` : m.model,
+                      search: m.manufacturer,
+                    }))}
+                    placeholder={L.phModel}
+                    id="rule-vehicle-model"
+                  />
+                </Field>
                 <Field label="סוג דלק"><TextInput value={form.vehicleFuelType} onChange={v => set('vehicleFuelType', v)} placeholder={L.phFuel} /></Field>
                 <Field label="דגם מנוע"><TextInput value={form.vehicleEngineModel} onChange={v => set('vehicleEngineModel', v)} /></Field>
                 <Field label="תבנית VIN"><TextInput value={form.vinPattern} onChange={v => set('vinPattern', v)} placeholder="WAUZZZ..." /></Field>

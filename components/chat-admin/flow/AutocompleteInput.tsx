@@ -1,12 +1,23 @@
 'use client'
 
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+
+export interface AutocompleteItem {
+  /** What gets written into the field when picked. */
+  value: string
+  /** Shown in the dropdown; defaults to value. */
+  label?: string
+  /** Extra text the query also matches against (e.g. the car brand for a model). */
+  search?: string
+}
 
 interface AutocompleteInputProps {
   value: string
   onChange: (value: string) => void
-  suggestions: string[]
+  suggestions?: string[]
+  /** Structured alternative to `suggestions` — takes precedence when given. */
+  items?: AutocompleteItem[]
   placeholder: string
   className?: string
   id?: string  // Add unique ID prop
@@ -16,14 +27,25 @@ export default function AutocompleteInput({
   value,
   onChange,
   suggestions,
+  items,
   placeholder,
   className = '',
   id
 }: AutocompleteInputProps) {
   const [showSuggestions, setShowSuggestions] = useState(false)
-  const [filteredSuggestions, setFilteredSuggestions] = useState<string[]>([])
   const wrapperRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+
+  const filteredSuggestions = useMemo<AutocompleteItem[]>(() => {
+    const all: AutocompleteItem[] =
+      items ?? (suggestions || []).filter(Boolean).map(s => ({ value: s }))
+    if (!value) return all
+    const q = value.toLowerCase()
+    return all.filter(item =>
+      item.value.toLowerCase().includes(q) ||
+      (item.search && item.search.toLowerCase().includes(q))
+    )
+  }, [value, suggestions, items])
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -36,25 +58,14 @@ export default function AutocompleteInput({
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  useEffect(() => {
-    if (value && suggestions) {
-      const filtered = (suggestions || []).filter(suggestion =>
-        suggestion && suggestion.toLowerCase().includes(value.toLowerCase())
-      )
-      setFilteredSuggestions(filtered)
-    } else {
-      setFilteredSuggestions(suggestions || [])
-    }
-  }, [value, suggestions])
-
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value
     onChange(newValue)
     setShowSuggestions(true)
   }
 
-  const handleSuggestionClick = (suggestion: string) => {
-    onChange(suggestion)
+  const handleSuggestionClick = (suggestion: AutocompleteItem) => {
+    onChange(suggestion.value)
     setShowSuggestions(false)
   }
 
@@ -87,14 +98,14 @@ export default function AutocompleteInput({
               <button
                 key={index}
                 type="button"
-                className="w-full text-left px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 
+                className="w-full text-left px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-700
                          text-sm text-gray-700 dark:text-gray-300 first:rounded-t-lg"
                 onMouseDown={(e) => {
                   e.preventDefault()
                   handleSuggestionClick(suggestion)
                 }}
               >
-                {suggestion}
+                {suggestion.label ?? suggestion.value}
               </button>
             ))}
             {filteredSuggestions.length > 5 && (
@@ -112,7 +123,7 @@ export default function AutocompleteInput({
                         handleSuggestionClick(suggestion)
                       }}
                     >
-                      {suggestion}
+                      {suggestion.label ?? suggestion.value}
                     </button>
                   ))}
                 </div>

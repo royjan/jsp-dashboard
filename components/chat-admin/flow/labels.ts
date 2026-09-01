@@ -200,6 +200,7 @@ export const L = {
   hintPartName: 'איך החלק רשום בתוך השרטוט, למשל OIL SEPARATOR SEAL.',
   phPartDesc: 'לדוגמה: פילטר שמן · brake pad set',
   phFuel: 'בנזין, דיזל, חשמלי…',
+  phModel: 'דגם או יצרן — 208, Peugeot…',
   phCategory: 'לדוגמה: Engine',
   phSubcategory: 'לדוגמה: Filters',
   phSchema: 'לדוגמה: ENGINE OIL FILTER',
