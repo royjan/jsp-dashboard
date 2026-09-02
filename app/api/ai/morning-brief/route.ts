@@ -320,9 +320,11 @@ ${stockAlerts.length > 0
         // gemini-3.7-flash is a thinking model that once emitted its REASONING as
         // syntactically-valid JSON ("JSON wrapper or markdown? Yes...** Final Output
         // Construction**") which sailed through parsing straight into the group chat.
-        // Force JSON output mode and turn thinking off for this structured call.
+        // Force JSON output mode and keep thinking at the lowest level this structured call
+        // can have: `thinkingBudget: 0` was the Gemini 2.x integer knob; on 3.7+ the enum
+        // `thinkingLevel` is the documented control, and `minimal` is rejected there (400).
         providerOptions: {
-          google: { responseMimeType: 'application/json', thinkingConfig: { thinkingBudget: 0 } },
+          google: { responseMimeType: 'application/json', thinkingConfig: { thinkingLevel: 'low' } },
         },
       })
 

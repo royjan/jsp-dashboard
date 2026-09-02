@@ -2,10 +2,14 @@ import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import type { generateText as generateTextType } from 'ai'
 import { getSecret } from './aws-secrets'
 
-// Primary/fallback for ALL Gemini usage (user decision 2026-07-22): 3.6-flash first,
-// 3.5-flash when the primary errors. Env-overridable for instant rollback.
-const GEMINI_PRIMARY = process.env.GEMINI_MODEL || 'gemini-3.7-flash'
+// Primary/fallback for ALL Gemini usage: 3.8-flash first (2026-09-02; 3.7 before it, 3.6
+// before that), 3.5-flash when the primary errors. Env-overridable for instant rollback.
+const GEMINI_PRIMARY = process.env.GEMINI_MODEL || 'gemini-3.8-flash'
 const GEMINI_FALLBACK = process.env.GEMINI_MODEL_FALLBACK || 'gemini-3.5-flash'
+// Every call names its thinking level. Gemini 3.8 otherwise defaults to `medium`, the slowest
+// setting on short calls (benched 2026-09-02); `low` is the cheapest level 3.7/3.8 accept and
+// 3.5 accepts it too, so the same option is legal on the fallback. `minimal` is a 400 on 3.7+.
+const GEMINI_THINKING_LEVEL = (process.env.GEMINI_THINKING_LEVEL || 'low') as 'minimal' | 'low' | 'medium' | 'high'
 
 function google() {
   const apiKey = getSecret('GEMINI_API_KEY')
@@ -33,11 +37,20 @@ type GenerateArgs = Omit<Parameters<typeof generateTextType>[0], 'model'>
  *  can't be transparently restarted once chunks were sent. */
 export async function generateTextWithFallback(args: GenerateArgs) {
   const { generateText } = await import('ai')
+  // A caller's own google options win field by field, but the thinking level is always set.
+  const callerGoogle = ((args as { providerOptions?: { google?: Record<string, unknown> } }).providerOptions?.google) || {}
+  const withThinking = {
+    ...(args as object),
+    providerOptions: {
+      ...((args as { providerOptions?: object }).providerOptions || {}),
+      google: { thinkingConfig: { thinkingLevel: GEMINI_THINKING_LEVEL }, ...callerGoogle },
+    },
+  }
   try {
-    return await generateText({ ...(args as object), model: getGeminiFlash() } as Parameters<typeof generateTextType>[0])
+    return await generateText({ ...withThinking, model: getGeminiFlash() } as unknown as Parameters<typeof generateTextType>[0])
   } catch (e) {
     console.warn(`[gemini] ${GEMINI_PRIMARY} failed, falling back to ${GEMINI_FALLBACK}:`, e instanceof Error ? e.message : e)
-    return await generateText({ ...(args as object), model: getGeminiFallback() } as Parameters<typeof generateTextType>[0])
+    return await generateText({ ...withThinking, model: getGeminiFallback() } as unknown as Parameters<typeof generateTextType>[0])
   }
 }
 
