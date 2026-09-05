@@ -19,6 +19,7 @@
  */
 
 import * as React from 'react'
+import { syncMotionTokens } from './motion'
 
 export interface JanUIConfig {
   /** How this app renders a plain number. Defaults to en-US grouping. */
@@ -74,6 +75,11 @@ export function JanUIProvider({
     overrides.ErrorState,
     overrides.EmptyState,
   ])
+
+  /* tokens.css owns the motion curve; motion.ts carries a static copy of it for
+     render and for the server. This is where the two are reconciled, once. */
+  React.useEffect(() => { syncMotionTokens() }, [])
+
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }
 

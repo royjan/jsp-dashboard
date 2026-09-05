@@ -6,10 +6,22 @@
  * `provenance` is optional and unstyled here on purpose — pass a <Chip>. A tile
  * that can only show a figure is how a five-month-old snapshot passes for live,
  * so the slot exists even when a caller leaves it empty.
+ *
+ * `pending` is the state the tile did not have. /stock renders four of these
+ * reading `0` for nineteen seconds while the query is in flight, and a zero on a
+ * dead-stock tile is an answer, not a wait. When `pending` is set the figure is
+ * not drawn at all — see PendingState.tsx for why that is the rule.
+ *
+ * `spark` exists so a ROW of tiles composes. The overview screen has four and
+ * only two carry a trend line, which is why they read as four unrelated boxes
+ * rather than one header. The line shows direction; the figure remains the only
+ * thing anyone reads a number off.
  */
 
 import * as React from 'react'
 import { cn } from './cn'
+import { PendingBar } from './PendingState'
+import { Sparkline } from './charts'
 
 export interface StatTileProps {
   label: React.ReactNode
@@ -19,6 +31,12 @@ export interface StatTileProps {
   /** Usually a <Chip> saying live / cached / sampled / unavailable. */
   provenance?: React.ReactNode
   tone?: 'default' | 'good' | 'bad'
+  /** The value is not known YET. Suppresses `value` — never renders as zero. */
+  pending?: boolean
+  /** What is being read, for the pending state's own label. */
+  waitingFor?: string
+  /** Trend series. Direction sets the hue; it carries no readable scale. */
+  spark?: number[]
   /** Index in a group, for the staggered entrance. */
   index?: number
   className?: string
@@ -31,7 +49,8 @@ const TONE = {
 } as const
 
 export function StatTile({
-  label, value, detail, provenance, tone = 'default', index = 0, className,
+  label, value, detail, provenance, tone = 'default',
+  pending = false, waitingFor, spark, index = 0, className,
 }: StatTileProps) {
   return (
     <div
@@ -47,9 +66,20 @@ export function StatTile({
         {provenance}
       </div>
       <div className={cn('mt-0.5 text-2xl font-semibold tabular-nums tracking-tight', TONE[tone])}>
-        {value}
+        {pending ? <PendingBar width="68%" height="h-7" /> : value}
       </div>
-      {detail && <div className="mt-0.5 text-[11px] text-[var(--jan-faint)]">{detail}</div>}
+      {pending ? (
+        <div className="mt-0.5 text-[11px] text-[var(--jan-faint)]">
+          {waitingFor ? `קורא ${waitingFor}…` : 'טוען…'}
+        </div>
+      ) : (
+        detail && <div className="mt-0.5 text-[11px] text-[var(--jan-faint)]">{detail}</div>
+      )}
+      {/* Drawn only with a real series AND a real value: a trend line beside a
+          skeleton implies the figure it is a trend of has already arrived. */}
+      {!pending && spark && spark.length > 1 && (
+        <Sparkline values={spark} height={26} draw className="mt-2" />
+      )}
     </div>
   )
 }

@@ -22,6 +22,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useWaitedTooLong, Swap, SkeletonBar } from '@/lib/jan-ui'
 import { StockPageSkeleton } from '@/components/layout/PageSkeleton'
 import { cn } from '@/lib/utils'
 import { deriveBrand, brandChipClasses } from '@/lib/brand'
@@ -748,6 +749,7 @@ function StockPageContent() {
   // Data
   const { data: deadData, isLoading: deadLoading } = useDeadStock(yearsFilter)
   const { data: itemsData, isLoading: itemsLoading } = useItems()
+  const stockWaitedTooLong = useWaitedTooLong(8)
   const { data: abcData } = useABCClassification()
   const { data: reorderData } = useReorderRecommendations()
   // Per-item lead time and demand variability. Deliberately non-blocking: if it
@@ -996,37 +998,58 @@ function StockPageContent() {
         ]}
       />
 
-      {/* ── 2. Stock health cards ── */}
+      {/* ── 2. Stock health cards ──
+          THESE COUNT `itemsWithStock`, WHICH IS EMPTY UNTIL THE FETCH LANDS. Until
+          it did, all four rendered `0` — and `useItems()` takes ~19s on a cold
+          catalogue. "מלאי מת 0" is not a spinner; it is an answer, and it is the
+          answer a warehouse manager acts on. The four figures are now withheld
+          while `itemsLoading`, because a value that is not known must not be
+          drawn as a number.
+
+          StockPageSkeleton above is a SUSPENSE fallback — it covers this
+          component's own code-split load, not its data — which is why the gap
+          existed with a skeleton already imported on the page. */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3 md:gap-4">
-        <Card>
-          <CardContent className="p-4 text-center space-y-1">
-            <p className="text-xl sm:text-2xl font-bold text-foreground">{formatNumber(totalStockItems)}</p>
-            <p className="text-xs text-muted-foreground">סה״כ פריטים במלאי</p>
-            <Badge variant="outline" className="text-[10px]">עם מלאי</Badge>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 text-center space-y-1">
-            <p className="text-xl sm:text-2xl font-bold text-emerald-500">{formatNumber(healthyItems)}</p>
-            <p className="text-xs text-muted-foreground">{t('healthy')}</p>
-            <Badge variant="success" className="text-[10px]">{t('soldYear')}</Badge>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 text-center space-y-1">
-            <p className="text-xl sm:text-2xl font-bold text-amber-500">{formatNumber(slowMoving)}</p>
-            <p className="text-xs text-muted-foreground">תנועה איטית</p>
-            <Badge variant="warning" className="text-[10px]">שנה שעברה בלבד</Badge>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 text-center space-y-1">
-            <p className="text-xl sm:text-2xl font-bold text-red-500">{formatNumber(deadCount)}</p>
-            <p className="text-xs text-muted-foreground">{t('deadStock')}</p>
-            <Badge variant="destructive" className="text-[10px]">ללא מכירות 2+ שנים</Badge>
-          </CardContent>
-        </Card>
+        {[
+          { value: totalStockItems, label: 'סה״כ פריטים במלאי', tone: 'text-foreground',
+            badge: <Badge variant="outline" className="text-[10px]">עם מלאי</Badge> },
+          { value: healthyItems, label: t('healthy'), tone: 'text-emerald-500',
+            badge: <Badge variant="success" className="text-[10px]">{t('soldYear')}</Badge> },
+          { value: slowMoving, label: 'תנועה איטית', tone: 'text-amber-500',
+            badge: <Badge variant="warning" className="text-[10px]">שנה שעברה בלבד</Badge> },
+          { value: deadCount, label: t('deadStock'), tone: 'text-red-500',
+            badge: <Badge variant="destructive" className="text-[10px]">ללא מכירות 2+ שנים</Badge> },
+        ].map((kpi) => (
+          <Card key={kpi.label}>
+            <CardContent className="p-4 text-center space-y-1">
+              {/* The placeholder is a bar INSIDE the same <p>, so the paragraph's
+                  own line-height fixes the height and the card cannot resize when
+                  the figure lands. The old `h-7` skeleton was 28px against text
+                  that is 28px at base and 32px from `sm:` up, so every card on a
+                  tablet twitched at the exact moment the reader looked at it. */}
+              <Swap
+                pending={itemsLoading}
+                skeleton={
+                  <p className={cn('text-xl sm:text-2xl font-bold', kpi.tone)}>
+                    <SkeletonBar w="4.5ch" h={20} className="mx-auto" />
+                  </p>
+                }
+              >
+                <p className={cn('text-xl sm:text-2xl font-bold', kpi.tone)}>{formatNumber(kpi.value)}</p>
+              </Swap>
+              <p className="text-xs text-muted-foreground">{kpi.label}</p>
+              {kpi.badge}
+            </CardContent>
+          </Card>
+        ))}
       </div>
+      {/* Nineteen seconds of unexplained skeleton reads as a hang, and a reload
+          restarts the same nineteen seconds. Say why, once it is worth saying. */}
+      {itemsLoading && stockWaitedTooLong && (
+        <p className="-mt-1 text-xs text-amber-500">
+          קורא את כל הקטלוג — זה לוקח כ-20 שניות בטעינה קרה. אין צורך לרענן.
+        </p>
+      )}
 
       {/* ── 3. ABC KPI cards ── */}
       {abcSummary && (
