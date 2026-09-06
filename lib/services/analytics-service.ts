@@ -1235,13 +1235,42 @@ export async function getDemandAnalysis(dateFrom?: string, dateTo?: string, forc
      * 115 rows no matter how far back it started. Fixing the route and the cap
      * without this changed nothing a reader could see.
      *
-     * It is still bounded — this runs while somebody waits on a chart — but the
-     * bound is now shared with the pagination above, so the fetching and the
-     * reading agree instead of pulling 8,000 quotes to look at 100. */
-    const analysed = allQuotes.slice(0, MAX_QUOTES_ANALYSED)
+     * THE BOUND IS A NUMBER SPAN, NOT A COUNT, and that is not a detail.
+     * `fetchDocumentDetailsByNumber` serves the whole set in ONE feed call when
+     * the set's doc_number span is <= 2000, and otherwise falls back to
+     * per-document reads twenty at a time. A flat count of 2000 quotes over a
+     * year spans far more than 2000 numbers, so it left the feed path and became
+     * a hundred sequential round trips: measured on the box, year-to-date then
+     * returned 25 items / 30 requests while a TWELVE-DAY window returned 1,465 /
+     * 2,459. A wider range answering with less is worse than the bug I was
+     * fixing, and a plain count is what caused it.
+     *
+     * So: take the newest quotes while they still fit the feed's window. That
+     * maximises what a range can actually describe and keeps every request on
+     * the one-call path. */
+    const FEED_SPAN = 2000
+    const numbered = allQuotes
+      .map((q: any) => ({ q, n: parseInt(String(q.doc_number ?? ''), 10) }))
+      .filter((x: { n: number }) => Number.isFinite(x.n))
+      .sort((a: { n: number }, b: { n: number }) => b.n - a.n)
+
+    const analysed: any[] = []
+    if (numbered.length > 0) {
+      const newest = numbered[0].n
+      for (const { q, n } of numbered) {
+        if (newest - n + 1 > FEED_SPAN) break
+        if (analysed.length >= MAX_QUOTES_ANALYSED) break
+        analysed.push(q)
+      }
+    }
+    const spanUsed = analysed.length > 1
+      ? parseInt(String(analysed[0].doc_number), 10) - parseInt(String(analysed[analysed.length - 1].doc_number), 10) + 1
+      : analysed.length
     console.log(
-      `[Analytics] Demand: analysing ${analysed.length} of ${allQuotes.length} quotes` +
-        (allQuotes.length > analysed.length ? ' (truncated — the oldest in range are not read)' : ''),
+      `[Analytics] Demand: analysing ${analysed.length} of ${allQuotes.length} quotes, doc-number span ${spanUsed}` +
+        (allQuotes.length > analysed.length
+          ? ' (the oldest in range are not read — they fall outside the feed window)'
+          : ''),
     )
     const recentQuotes = analysed
     const allDetails = [await fetchDocumentDetailsByNumber(31, recentQuotes.map((q: any) => q.doc_number))]
