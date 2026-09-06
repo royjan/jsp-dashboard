@@ -90,8 +90,8 @@ function TransitionCard({ t: transition, onAcknowledge }: { t: Transition; onAck
            layout. */
         'transition-all',
         deteriorating
-          ? 'shadow-[inset_3px_0_0_var(--color-red-500)]'
-          : 'shadow-[inset_3px_0_0_var(--color-emerald-500)]',
+          ? 'shadow-[inset_3px_0_0_var(--destructive)]'
+          : 'shadow-[inset_3px_0_0_var(--success)]',
         transition.acknowledged && 'opacity-60'
       )}
     >

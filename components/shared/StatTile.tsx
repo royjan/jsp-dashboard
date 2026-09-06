@@ -19,7 +19,7 @@ import { motion } from 'framer-motion'
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
-import { Skeleton } from '@/components/ui/skeleton'
+import { Swap, SkeletonBar } from '@/lib/jan-ui'
 import { cardVariants } from '@/lib/motion'
 import { formatPercentDelta } from '@/lib/format'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
@@ -112,8 +112,18 @@ export function StatTile({
             <span className="truncate">{label}</span>
           </div>
 
+          {/* THE PLACEHOLDER LIVES INSIDE THE FIGURE'S OWN PARAGRAPH, so the
+              paragraph's line-height fixes the height and the tile cannot resize
+              when the number lands. `h-6` was 24px against text that is 28px at
+              base and 32px from `sm:` up, so every tile on this row twitched at
+              the moment the reader looked at it. `Swap` also cross-fades rather
+              than cutting, and withholds the skeleton entirely for an answer that
+              returns inside 90ms — four frames of grey reads as a glitch, not as
+              speed. Seven screens pass `loading`. */}
           <div className="mt-1.5 text-lg font-bold tabular-nums sm:text-xl">
-            {loading ? <Skeleton className="h-6 w-24" /> : value}
+            <Swap pending={!!loading} skeleton={<SkeletonBar w="6ch" h={18} />}>
+              {value}
+            </Swap>
           </div>
 
           {((direction && !hideDelta) || hint) && !loading && (

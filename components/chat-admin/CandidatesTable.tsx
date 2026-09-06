@@ -287,7 +287,7 @@ export default function CandidatesTable({ candidates, vehicleData = {} }: Candid
            pixels out of line with every other row's — the mark moved the thing it
            was marking. */
         r.c.isSelected
-          ? 'bg-emerald-50 dark:bg-emerald-900/20 shadow-[inset_3px_0_0_var(--color-emerald-500)]'
+          ? 'bg-emerald-50 dark:bg-emerald-900/20 shadow-[inset_3px_0_0_var(--success)]'
           : undefined
       }
       toolbar={
