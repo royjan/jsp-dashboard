@@ -1115,6 +1115,16 @@ async function _getItemsImpl(cacheKey: string, staleCacheKey?: string): Promise<
 
 // ── Demand Analysis ──
 
+/* How many quotes the demand analysis actually READS.
+ *
+ * One number, used by both the pagination and the slice below it, so the two
+ * cannot disagree — which is exactly what went wrong: the fetch was walking
+ * 8,000 quotes so the reader could look at 100. Raising it widens the window a
+ * date range can meaningfully describe; it also costs FINAPI calls on a page
+ * somebody is waiting for, which is why it is a constant with a comment rather
+ * than a number buried in a slice. */
+const MAX_QUOTES_ANALYSED = 2000
+
 export async function getDemandAnalysis(dateFrom?: string, dateTo?: string, forceRefresh = false): Promise<DemandItem[]> {
   const cacheKey = `analytics:demand:${dateFrom || 'all'}:${dateTo || 'all'}`
   const cached = forceRefresh ? null : await getCached<DemandItem[]>(cacheKey)
@@ -1180,6 +1190,8 @@ export async function getDemandAnalysis(dateFrom?: string, dateTo?: string, forc
           console.log(`[Analytics] Demand quotes ${y} p${pages}: ${batch.length} (${yFrom} to ${cursorTo})`)
           allQuotes = allQuotes.concat(batch)
           if (batch.length < PAGE) break
+          // Enough to fill the reader below; more would be fetched and dropped.
+          if (allQuotes.length >= MAX_QUOTES_ANALYSED) { demandCapped = true; break }
 
           // Oldest date in the batch; ask again ending the day before it.
           let oldest = ''
@@ -1212,10 +1224,26 @@ export async function getDemandAnalysis(dateFrom?: string, dateTo?: string, forc
         (demandCapped ? ' — CAPPED: the page bound was reached, so this is a floor, not the period total' : ''),
     )
 
-    // Line items for the selected quotes — one feed call covering their number
-    // range where possible, per-document reads for the rest. The quote SET is
-    // unchanged: these are exactly the quotes the date filtering above picked.
-    const recentQuotes = allQuotes.slice(0, 100)
+    /* Line items for the selected quotes — one feed call covering their number
+     * range where possible, per-document reads for the rest.
+     *
+     * THIS SLICE WAS 100, AND IT WAS THE REAL ANSWER TO "why does the date range
+     * do nothing". Everything above it — the range, the row cap, the pagination
+     * — decides WHICH quotes are found; this decides which are READ. At 100,
+     * with `direction: desc`, the answer was always "the newest hundred quotes
+     * ending on date_to", so every window ending today produced the identical
+     * 115 rows no matter how far back it started. Fixing the route and the cap
+     * without this changed nothing a reader could see.
+     *
+     * It is still bounded — this runs while somebody waits on a chart — but the
+     * bound is now shared with the pagination above, so the fetching and the
+     * reading agree instead of pulling 8,000 quotes to look at 100. */
+    const analysed = allQuotes.slice(0, MAX_QUOTES_ANALYSED)
+    console.log(
+      `[Analytics] Demand: analysing ${analysed.length} of ${allQuotes.length} quotes` +
+        (allQuotes.length > analysed.length ? ' (truncated — the oldest in range are not read)' : ''),
+    )
+    const recentQuotes = analysed
     const allDetails = [await fetchDocumentDetailsByNumber(31, recentQuotes.map((q: any) => q.doc_number))]
     for (const batchDetails of allDetails) {
       for (const detail of batchDetails) {
