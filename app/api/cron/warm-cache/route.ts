@@ -7,6 +7,7 @@ import { query, getDb } from '@/lib/db'
 import { monthlySales, dailySales } from '@/lib/db/schema'
 import { sql } from 'drizzle-orm'
 import { syncDailySalesRange, recentWindow } from '@/lib/services/daily-sales-sync'
+import { demandWatermark, ingestRange } from '@/lib/services/demand-store'
 import { DOC_FORMATS, CACHE_VERSIONS } from '@/lib/constants'
 import {
   getItems,
@@ -297,6 +298,71 @@ async function runWarmCache(mode: string, from?: number, to?: number) {
     // users the cold path mid-day.
     const warmSteps: [string, () => Promise<unknown>][] = [
       ['getDashboardData', () => getDashboardData(true)],
+      /* Advance `dashboard.demand_daily` BEFORE warming the demand cache, or the
+       * warm run stores an answer computed against yesterday's watermark and the
+       * new days only appear two hours later.
+       *
+       * Budgeted in QUOTES, not days. The feed cannot serve format 31 in one
+       * call, so each quote is an individual FINAPI read at ~0.7s. A day-bounded
+       * catch-up is therefore unbounded work: fourteen days is ~2,000 quotes and
+       * ~23 minutes of sustained load on the box that also answers the phone
+       * system — asking for that is what pushed FINAPI into 503 "Server busy"
+       * while this was being built. 400 quotes is roughly 5 minutes, comfortably
+       * inside a 2-hourly slot, and the steady state (~120 quotes/day) is well
+       * under it. When it is behind it catches up a few days per run and says so
+       * rather than silently serving a short range.
+       *
+       * A failure here must NOT take the rest of the warm run down, and must not
+       * be mistaken for "no demand" — `ingestRange` throws rather than writing an
+       * empty day, and that throw is caught by the step runner below. */
+      ['demand-daily-ingest', async () => {
+        const watermark = await demandWatermark()
+        if (!watermark) {
+          console.warn('[Warm] demand_daily is empty — run scripts/build-demand-daily.ts once to seed it')
+          return { skipped: 'empty' }
+        }
+        if (watermark >= today) return { upToDate: watermark }
+        /* DON'T WALK WHAT THIS PATH CANNOT REACH.
+         *
+         * The per-document endpoint reverse-scans from the newest record, so its
+         * latency grows with how far back a document sits — recent quotes read in
+         * ~0.7s, ones a few thousand back time out entirely. The table's gap
+         * begins 2026-05-13, ~17,000 documents back, because FINAPI's BULK
+         * document-lines source has been answering 503 "No data source available
+         * for document lines" for every range since — which is the same reason
+         * `dashboard.document_lines` stopped advancing that day.
+         *
+         * Attempting it anyway would spend 400 doomed reads against the box that
+         * also answers the phone system, every two hours, forever. So: only walk
+         * a tail this path can actually serve, and otherwise say plainly that the
+         * upstream loader is the thing that needs fixing. The moment the bulk
+         * source returns and the archive advances, the watermark moves and this
+         * resumes on its own. */
+        const REACHABLE_DAYS = 21
+        const lagDays = Math.round(
+          (new Date(today + 'T00:00:00Z').getTime() - new Date(watermark + 'T00:00:00Z').getTime()) / 86400000,
+        )
+        if (lagDays > REACHABLE_DAYS) {
+          console.warn(
+            `[Warm] demand_daily watermark ${watermark} is ${lagDays} days behind — beyond what the ` +
+              `per-document path can serve. The archive loader (dashboard.document_lines) is the fix; ` +
+              `FINAPI /api/documents/lines is currently 503 "No data source available". Skipping.`,
+          )
+          return { stalled: watermark, lagDays }
+        }
+        // Re-ingest the watermark day itself: it may have been only partly
+        // written when the previous run took its snapshot.
+        const res = await ingestRange(watermark, today, 400)
+        const behindDays = Math.round(
+          (new Date(today + 'T00:00:00Z').getTime() - new Date((res.through || watermark) + 'T00:00:00Z').getTime()) / 86400000,
+        )
+        console.log(
+          `[Warm] demand_daily ${watermark}..${res.through ?? '(none)'}: ` +
+            `${res.quotes} quotes, ${res.days} days, ${res.rows} rows` +
+            (behindDays > 0 ? ` — still ${behindDays} days behind, catching up next run` : ' — current'),
+        )
+        return res
+      }],
       ['getDemandAnalysis', () => getDemandAnalysis(yearStart, today, true)],
       ['getSalesData-ytd', () => getSalesData('ytd')],
       ['getSeasonalData', () => getSeasonalData(twoYearsAgo, today, true)],

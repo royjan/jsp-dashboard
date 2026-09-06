@@ -2,6 +2,7 @@ import { client, fetchItems, fetchItemsBatch, fetchDocuments, fetchRecentDocumen
 import { getCached, setCache, deleteCache } from '../redis-client'
 import { query as dbQuery } from '../db'
 import { readQueryAsync } from '../neon-read'
+import { demandWatermark, readDemand } from './demand-store'
 import { CACHE_TTL, CACHE_VERSIONS, DOC_FORMATS, MONTH_NAMES } from '../constants'
 import type { DemandItem, SalesDataPoint, SeasonalDataPoint, DeadStockItem, ReorderItem, FinansitItem, DashboardData, TopSellingItem } from '../types'
 import { fixRtlItemName } from '../rtl-fix'
@@ -1136,7 +1137,8 @@ export async function getDemandAnalysis(dateFrom?: string, dateTo?: string, forc
   const default90d = new Date(now.getTime() - 90 * 86400000).toISOString().split('T')[0]
   const effDateFrom = dateFrom || default90d
   const effDateTo = dateTo || now.toISOString().split('T')[0]
-  const fromYear = parseInt(effDateFrom.substring(0, 4), 10)
+  // The live walk now starts at the archive watermark, not at the range start,
+  // so its first year is `liveFromYear` below rather than the range's own.
   const toYear = parseInt(effDateTo.substring(0, 4), 10)
 
   const items = await getItems()
@@ -1145,14 +1147,63 @@ export async function getDemandAnalysis(dateFrom?: string, dateTo?: string, forc
   const chainMap = await getChainMap()
   const demandMap = new Map<string, { count: number; qty: number }>()
 
-  // Fetch quotes via FINAPI HTTP API
-  {
+  const addDemand = (rawCode: string, count: number, qty: number) => {
+    if (!rawCode || rawCode.length <= 1) return
+    const code = chainMap.get(rawCode) || rawCode
+    const existing = demandMap.get(code) || { count: 0, qty: 0 }
+    existing.count += count
+    existing.qty += qty
+    demandMap.set(code, existing)
+  }
+
+  /* MOST OF THE RANGE COMES FROM POSTGRES NOW, AND THAT IS THE WHOLE FIX.
+   *
+   * The live walk below cannot describe a wide range: the feed serves a set in
+   * one call only while its doc_number span is <= 2000, so widening the dates
+   * pushed the request off the fast path and it answered with LESS. Year-to-date
+   * returned 25 items where a twelve-day window returned 1,465. The workaround
+   * was to read the newest 2000-number window and log that the answer is a floor.
+   *
+   * `dashboard.demand_daily` removes the ceiling for every day it covers — it is
+   * aggregated from the quote-line archive, which reaches back to 2024. The live
+   * walk is now only asked for days NEWER than that table's watermark, which is
+   * a short tail kept current by the cron. A range that ends inside the covered
+   * period makes no FINAPI calls for demand at all.
+   *
+   * If the table is empty or unreachable the tail is the whole range, which is
+   * exactly the old behaviour — this degrades to what it replaced rather than
+   * to an error. */
+  let liveFrom = effDateFrom
+  let servedFromArchive = 0
+  try {
+    const watermark = await demandWatermark()
+    if (watermark && watermark >= effDateFrom) {
+      const archiveTo = watermark < effDateTo ? watermark : effDateTo
+      const stored = await readDemand(effDateFrom, archiveTo)
+      for (const [code, t] of stored) addDemand(code, t.count, t.qty)
+      servedFromArchive = stored.size
+      const next = new Date(archiveTo + 'T00:00:00Z')
+      next.setUTCDate(next.getUTCDate() + 1)
+      liveFrom = next.toISOString().slice(0, 10)
+      console.log(
+        `[Analytics] Demand: ${servedFromArchive} item rows from demand_daily for ${effDateFrom}..${archiveTo}` +
+          (liveFrom > effDateTo ? ' — range fully covered, no FINAPI walk' : ` — walking FINAPI for ${liveFrom}..${effDateTo}`),
+      )
+    }
+  } catch (e: any) {
+    console.warn('[Analytics] demand_daily unavailable, falling back to the live walk:', e?.message)
+  }
+
+  const liveFromYear = parseInt(liveFrom.substring(0, 4), 10)
+
+  // Fetch the remaining tail via FINAPI HTTP API
+  if (liveFrom <= effDateTo) {
     let allQuotes: any[] = []
     // True when the walk stopped on its page bound rather than on the range —
     // the caller must be able to say "this is a floor, not the total".
     let demandCapped = false
-    for (let y = fromYear; y <= toYear; y++) {
-      const yFrom = y === fromYear ? effDateFrom : `${y}-01-01`
+    for (let y = liveFromYear; y <= toYear; y++) {
+      const yFrom = y === liveFromYear ? liveFrom : `${y}-01-01`
       const yTo = y === toYear ? effDateTo : `${y}-12-31`
       /* THE ROW CAP MADE THE DATE RANGE INERT.
        *
@@ -1278,13 +1329,7 @@ export async function getDemandAnalysis(dateFrom?: string, dateTo?: string, forc
       for (const detail of batchDetails) {
         if (!detail?.lines) continue
         for (const line of detail.lines) {
-          const rawCode = line.item_code
-          if (!rawCode || rawCode.length <= 1) continue
-          const code = chainMap.get(rawCode) || rawCode
-          const existing = demandMap.get(code) || { count: 0, qty: 0 }
-          existing.count += 1
-          existing.qty += line.quantity || 1
-          demandMap.set(code, existing)
+          addDemand(line.item_code, 1, line.quantity || 1)
         }
       }
     }
