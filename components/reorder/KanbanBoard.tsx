@@ -150,7 +150,7 @@ export function KanbanBoard({ data }: KanbanBoardProps) {
         ))}
       </div>
 
-      <DragOverlay dropAnimation={{ duration: 200, easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)' }}>
+      <DragOverlay dropAnimation={{ duration: 200, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' }}>
         {activeItem && activeStage ? (
           <div className="w-[280px] opacity-90">
             <KanbanCard item={activeItem} stage={activeStage} />

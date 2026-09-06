@@ -282,7 +282,13 @@ export default function CandidatesTable({ candidates, vehicleData = {} }: Candid
       // The selected rule is the answer to "why did the bot pick this one",
       // so it stays marked no matter where the sort puts it.
       rowClassName={r =>
-        r.c.isSelected ? 'bg-emerald-50 dark:bg-emerald-900/20 border-s-4 border-emerald-500' : undefined
+        /* An inset rule rather than a thick inline-start border. A border on a
+           table row is part of the box, so the selected row's cells shifted four
+           pixels out of line with every other row's — the mark moved the thing it
+           was marking. */
+        r.c.isSelected
+          ? 'bg-emerald-50 dark:bg-emerald-900/20 shadow-[inset_3px_0_0_var(--color-emerald-500)]'
+          : undefined
       }
       toolbar={
         <div className="flex flex-wrap items-center gap-2 text-sm">

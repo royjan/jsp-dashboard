@@ -1,0 +1,16 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "gray-on-color",
+        "value": "*",
+        "files": [
+          "components/chat-admin/ui/Modal.tsx"
+        ],
+        "createdAt": "2026-09-06T03:23:24.894Z"
+      }
+    ]
+  }
+}

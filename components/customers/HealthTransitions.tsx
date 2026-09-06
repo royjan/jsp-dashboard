@@ -84,8 +84,14 @@ function TransitionCard({ t: transition, onAcknowledge }: { t: Transition; onAck
   return (
     <Card
       className={cn(
-        'border-s-4 transition-all',
-        deteriorating ? 'border-s-red-500' : 'border-s-emerald-500',
+        /* An inset rule, not a 4px border. The border was part of the box, so it
+           pushed the card's contents 4px off the inline edge and its square end
+           overshot the rounded corner. This follows the radius and costs no
+           layout. */
+        'transition-all',
+        deteriorating
+          ? 'shadow-[inset_3px_0_0_var(--color-red-500)]'
+          : 'shadow-[inset_3px_0_0_var(--color-emerald-500)]',
         transition.acknowledged && 'opacity-60'
       )}
     >

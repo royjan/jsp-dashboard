@@ -24,9 +24,14 @@ export function LearningLoopStrip({ total, addedInRange, daily }: LearningLoopSt
     <div className="flex flex-col items-stretch gap-4 sm:flex-row sm:items-center">
       <div className="shrink-0">
         <div className="flex items-center gap-2 text-sm text-[var(--color-text-tertiary,#8a8a90)]">
-          <GraduationCap className="h-4 w-4 text-violet-400" /> Learned pins
+          {/* The violet is gone from both the icon and the figure. A running total
+              is not a state, so it does not get a hue — it is set in the panel's
+              own foreground, and the only colour in the row is the delta, which is
+              the part that actually says something changed. Violet-on-dark is also
+              the palette every generated dashboard reaches for. */}
+          <GraduationCap className="h-4 w-4 text-[var(--color-text-tertiary,#8a8a90)]" /> Learned pins
         </div>
-        <div className="mt-1 text-2xl font-semibold text-violet-400">
+        <div className="mt-1 text-2xl font-semibold text-[var(--color-text-primary,#e8e8ea)]">
           {total.toLocaleString()}
           <span className="ml-2 text-sm font-medium text-emerald-400">+{addedInRange.toLocaleString()} this period</span>
         </div>

@@ -303,7 +303,7 @@ export function MobileNav() {
               className={cn(
                 'absolute bottom-[calc(1.375rem+env(safe-area-inset-bottom))] left-1/2',
                 'flex items-center justify-center rounded-full border bg-card text-foreground shadow-xl',
-                'transition-[transform,opacity] duration-[450ms] [transition-timing-function:cubic-bezier(.34,1.56,.64,1)]',
+                'transition-[transform,opacity] duration-[450ms] [transition-timing-function:cubic-bezier(.22,1,.36,1)]',
                 'motion-reduce:transition-none active:scale-95',
                 orbitOpen ? 'opacity-100' : 'pointer-events-none opacity-0',
               )}
@@ -480,7 +480,7 @@ export function MobileNav() {
         className={cn(
           'fixed bottom-[calc(1.375rem+env(safe-area-inset-bottom))] left-1/2 z-[51] lg:hidden',
           'flex items-center justify-center rounded-[1.4rem] bg-primary text-primary-foreground shadow-lg shadow-primary/30',
-          'transition-[transform,border-radius] duration-500 [transition-timing-function:cubic-bezier(.34,1.56,.64,1)]',
+          'transition-[transform,border-radius] duration-500 [transition-timing-function:cubic-bezier(.22,1,.36,1)]',
           'motion-reduce:transition-none',
           anyOpen ? '-translate-x-1/2 rotate-[135deg] rounded-full' : '-translate-x-1/2',
         )}
