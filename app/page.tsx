@@ -434,8 +434,30 @@ function HomePageContent() {
           {demandLoading ? (
             <Skeleton className="w-full h-[400px]" />
           ) : filteredScatter.length === 0 ? (
-            <div className="flex items-center justify-center h-[220px] sm:h-[280px] lg:h-[350px] text-muted-foreground text-sm">
-              {t('noInsights')}
+            /* "אין נתונים להצגה" alone is a dead end, and worse, it is ambiguous:
+               it reads as "nobody asked for anything in this period", which is a
+               business fact the reader will act on. It is far more often a
+               question that was never actually asked — the range is in the future,
+               or it predates what the quote feed can be walked back to. Say which
+               range produced the emptiness, and give the way out. */
+            <div className="flex flex-col items-center justify-center gap-2 h-[220px] sm:h-[280px] lg:h-[350px] text-center px-4">
+              <p className="text-sm text-muted-foreground">{t('noInsights')}</p>
+              <p className="text-xs text-muted-foreground/70">
+                לא נמצאו פריטים שהוצעו בהצעות מחיר בטווח {formatDate(demandDateFrom)} – {formatDate(demandDateTo)}.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  const today = new Date()
+                  const from = new Date(today)
+                  from.setDate(from.getDate() - 90)
+                  setDemandDateFrom(from.toISOString().slice(0, 10))
+                  setDemandDateTo(today.toISOString().slice(0, 10))
+                }}
+                className="text-xs font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring rounded-sm"
+              >
+                הצג את 90 הימים האחרונים
+              </button>
             </div>
           ) : (
             <div className="h-[250px] sm:h-[320px] lg:h-[400px]">
@@ -468,8 +490,12 @@ function HomePageContent() {
                     const p = payload?.[0]?.payload
                     if (!p) return ''
                     const parts = [`${p.name} (${p.code})`]
-                    if (p.sale_date) parts.push(`Last sale: ${formatDate(p.sale_date)}`)
-                    return parts.join('\n')
+                    /* Hebrew, and joined with a separator that actually shows.
+                       Recharts renders this label as text inside a div — the '\n'
+                       that used to join these collapsed to a single space, so the
+                       date ran into the item name as one unbroken string. */
+                    if (p.sale_date) parts.push(`מכירה אחרונה: ${formatDate(p.sale_date)}`)
+                    return parts.join(' · ')
                   }}
                   labelStyle={{ color: 'var(--popover-foreground)', fontWeight: 'bold' }}
                   itemStyle={{ color: 'var(--popover-foreground)' }}

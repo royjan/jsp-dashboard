@@ -959,14 +959,24 @@ function StockPageContent() {
     children: React.ReactNode
     className?: string
   }) => (
+    /* The click target is a real <button> inside the <th>, not an onClick on the
+       <th> itself. A <th> is not focusable and takes no keypress, so all eleven
+       sortable columns here were mouse-only — Tab walked straight past them, and
+       a screen reader announced "מלאי" with no hint that it sorts or which way it
+       is sorted. `aria-sort` on the cell is what carries that; it is the one
+       attribute that makes a sortable table legible without sight of the arrow. */
     <th
-      className={cn('pb-2 font-medium cursor-pointer select-none hover:text-foreground transition-colors whitespace-nowrap', className)}
-      onClick={() => handleSort(field)}
+      className={cn('pb-2 font-medium select-none whitespace-nowrap', className)}
+      aria-sort={sortField !== field ? 'none' : sortDir === 'asc' ? 'ascending' : 'descending'}
     >
-      <span className="inline-flex items-center gap-1">
+      <button
+        type="button"
+        onClick={() => handleSort(field)}
+        className="inline-flex items-center gap-1 hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring rounded-sm"
+      >
         {children}
         <ArrowUpDown className={cn('h-3 w-3 shrink-0', sortField === field ? 'text-foreground' : 'text-muted-foreground/50')} />
-      </span>
+      </button>
     </th>
   )
 
@@ -1013,11 +1023,16 @@ function StockPageContent() {
         {[
           { value: totalStockItems, label: 'סה״כ פריטים במלאי', tone: 'text-foreground',
             badge: <Badge variant="outline" className="text-[10px]">עם מלאי</Badge> },
-          { value: healthyItems, label: t('healthy'), tone: 'text-emerald-500',
+          /* Semantic tokens, not palette. `text-emerald-500` is one fixed hex with
+             no dark counterpart — it is how ~2,600 unpaired utilities accumulated
+             in this repo. `--success`/`--warning`/`--destructive` are declared per
+             theme, and they are also the tokens the Badge beside each figure already
+             uses, so the number and its badge stopped disagreeing in dark mode. */
+          { value: healthyItems, label: t('healthy'), tone: 'text-success',
             badge: <Badge variant="success" className="text-[10px]">{t('soldYear')}</Badge> },
-          { value: slowMoving, label: 'תנועה איטית', tone: 'text-amber-500',
+          { value: slowMoving, label: 'תנועה איטית', tone: 'text-warning',
             badge: <Badge variant="warning" className="text-[10px]">שנה שעברה בלבד</Badge> },
-          { value: deadCount, label: t('deadStock'), tone: 'text-red-500',
+          { value: deadCount, label: t('deadStock'), tone: 'text-destructive',
             badge: <Badge variant="destructive" className="text-[10px]">ללא מכירות 2+ שנים</Badge> },
         ].map((kpi) => (
           <Card key={kpi.label}>
@@ -1263,14 +1278,31 @@ function StockPageContent() {
                 </div>
               )}
 
-              {/* Horizontally scrollable table */}
+              {/* Horizontally scrollable table.
+                  The <thead> below is `sticky top-0` and does not stick: sticky
+                  resolves against the nearest SCROLLPORT, and `overflow-x-auto`
+                  already made this div one (per the overflow spec, `visible` on the
+                  other axis computes to `auto`), but nothing constrains its height so
+                  it never scrolls vertically. Left alone deliberately — this table
+                  paginates at PAGE_SIZE=10, so ten rows rarely reach the fold and
+                  capping the height here would only trade a page scroll for a nested
+                  one. Measured: clientHeight 627 = scrollHeight 627 at 1440x900. If
+                  the page size ever grows, that cap is the fix. */}
               <TooltipProvider delayDuration={0}>
               <div className="overflow-x-auto -mx-4 md:mx-0">
                 <table className="text-sm" style={{ minWidth: '1100px' }}>
-                  <thead className="sticky top-0 bg-background z-10">
+                  <thead className="sticky top-0 bg-background z-20">
                     <tr className="border-b">
-                      {/* Group: פריט (sticky) */}
-                      <th className="pb-2 font-medium text-start ps-4 md:ps-0 sticky left-0 bg-background z-10 min-w-[200px]">
+                      {/* Group: פריט (sticky).
+                          `start-0`, NOT `left-0`. `left` is physical and this page is
+                          dir="rtl", so the item column — which is the FIRST column and
+                          therefore the RIGHTMOST one — was pinned to the far left edge
+                          it never reaches. It simply scrolled away like any other
+                          column, which is the one thing a frozen column exists to
+                          prevent: by column 8 the reader had numbers with no item
+                          beside them. z-30 so the corner cell stays above the rest of
+                          the header row, which is now sticky in the other axis. */}
+                      <th className="pb-2 font-medium text-start ps-4 md:ps-0 sticky start-0 bg-background z-30 min-w-[200px]">
                         <span className="inline-flex items-center gap-1">פריט</span>
                       </th>
 
@@ -1380,7 +1412,7 @@ function StockPageContent() {
                           )}
                         >
                           {/* פריט (sticky) */}
-                          <td className="py-2 ps-4 md:ps-0 sticky left-0 bg-background z-10 border-r border-muted/30">
+                          <td className="py-2 ps-4 md:ps-0 sticky start-0 bg-background z-10 border-e border-muted/30">
                             <div className="flex items-start gap-1.5">
                               <EbayRecommendButton itemCode={item.code} itemName={item.name} />
                               <div className="min-w-0">
