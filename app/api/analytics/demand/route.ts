@@ -29,13 +29,20 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const view = searchParams.get('view') || 'overview'
     const days = parseInt(searchParams.get('days') || '30', 10)
+    /* THE PICKER WAS DECORATIVE. The page sends `date_from`/`date_to` on every
+       change and this route never read them, so `getDemandAnalysis()` fell back
+       to its own 90-day default and returned the same 115 rows whatever range
+       was chosen. It takes a range and caches per range — it was only ever
+       missing the arguments. */
+    const dateFrom = searchParams.get('date_from') || undefined
+    const dateTo = searchParams.get('date_to') || undefined
 
     const cutoff = new Date(Date.now() - days * 86400000).toISOString()
 
     if (view === 'overview') {
       // Run all queries in parallel
       const [erpDemand, searchMetrics, topSearched, zeroResults, trending] = await Promise.all([
-        getDemandAnalysis().catch(() => []),
+        getDemandAnalysis(dateFrom, dateTo).catch(() => []),
         getSearchMetrics(cutoff),
         getTopSearchedItems(cutoff, 20),
         getZeroResultQueries(cutoff, 20),

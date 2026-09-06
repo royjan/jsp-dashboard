@@ -223,7 +223,9 @@ function HomePageContent() {
 
   // ── Demand section state ──
   const [demandMode, setDemandMode] = useState<'count' | 'qty'>((get('dmode') as 'count' | 'qty') || 'count')
-  const [demandDateFrom, setDemandDateFrom] = useState(get('dfrom') || `${currentYear - 1}-01-01`)
+  // Year to date. It was `currentYear - 1`, which mixed two years of buying
+  // behaviour into one "what is in demand" answer.
+  const [demandDateFrom, setDemandDateFrom] = useState(get('dfrom') || `${currentYear}-01-01`)
   const [demandDateTo, setDemandDateTo] = useState(get('dto') || today)
   const [hoveredCode, setHoveredCode] = useState<string | null>(null)
 
@@ -237,7 +239,12 @@ function HomePageContent() {
 
   const topItemColumns = useMemo(() => TOP_ITEM_COLUMNS(t), [t])
 
-  const demandItems = demandData?.items || []
+  /* `/api/analytics/demand?view=overview` answers
+     `{ erp_demand: { items, count }, search_metrics, top_searched, … }` —
+     the ERP rows are one level down. Reading `demandData.items` got undefined,
+     so BOTH the demand bar chart and the demand-vs-stock scatter rendered their
+     empty states against 115 rows that had arrived and been thrown away. */
+  const demandItems = demandData?.erp_demand?.items || []
   const enrichedItems = itemsData?.items || []
   const stockMap = useMemo(() => new Map<string, any>(enrichedItems.map((i: any) => [i.code, i])), [enrichedItems])
 

@@ -1047,7 +1047,7 @@ function StockPageContent() {
           restarts the same nineteen seconds. Say why, once it is worth saying. */}
       {itemsLoading && stockWaitedTooLong && (
         <p className="-mt-1 text-xs text-amber-500">
-          קורא את כל הקטלוג — זה לוקח כ-20 שניות בטעינה קרה. אין צורך לרענן.
+          קורא את כל הקטלוג — זה לוקח כ-60 שניות בטעינה קרה. אין צורך לרענן.
         </p>
       )}
 
@@ -1399,13 +1399,34 @@ function StockPageContent() {
                                       {item.alias_codes.slice(0, 2).join(', ')}
                                     </div>
                                   </TooltipTrigger>
-                                  <TooltipContent side="bottom" className="font-mono text-xs">
-                                    {chain.map((c, ci) => (
-                                      <span key={c}>
-                                        {ci > 0 && <span className="mx-1 opacity-60">→</span>}
-                                        {c === item.code ? <strong>{c}</strong> : c}
-                                      </span>
-                                    ))}
+                                  <TooltipContent side="bottom" className="max-w-[420px] font-mono text-xs">
+                                    <div className="flex flex-wrap items-center">
+                                      {chain.map((c, ci) => (
+                                        <span key={c}>
+                                          {ci > 0 && <span className="mx-1 opacity-60">→</span>}
+                                          {c === item.code ? <strong>{c}</strong> : c}
+                                        </span>
+                                      ))}
+                                    </div>
+                                    {/* SIX CODES AND ONE BOLD ONE SAYS NOTHING ON ITS OWN.
+                                        This chain is oldest → newest, and our canonical code
+                                        is not always the last entry: the manufacturer's
+                                        catalogue reaches past it, so a row can be stocked
+                                        under a number the catalogue has already superseded
+                                        three times. That is the one fact in the tooltip worth
+                                        acting on, and it was the only one not written down. */}
+                                    <div className="mt-1.5 border-t border-border/50 pt-1.5 font-sans text-[11px] leading-relaxed">
+                                      {chain[chain.length - 1] === item.code ? (
+                                        <span className="text-muted-foreground">
+                                          המודגש הוא הקוד שלנו, והוא גם העדכני בשרשרת.
+                                        </span>
+                                      ) : (
+                                        <span className="text-amber-500">
+                                          המודגש הוא הקוד שלנו. הקטלוג ממשיך אחריו — העדכני הוא{' '}
+                                          <span className="font-mono font-semibold">{chain[chain.length - 1]}</span>.
+                                        </span>
+                                      )}
+                                    </div>
                                   </TooltipContent>
                                 </UITooltip>
                               ) : (
