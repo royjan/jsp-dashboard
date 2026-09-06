@@ -55,9 +55,43 @@ export async function getDb(): Promise<NodePgDatabase<typeof schema>> {
  * Kept for backwards compatibility and complex queries
  * that are cleaner as raw SQL.
  */
+/* DNS-ONLY RETRY, and the "only" is the whole design.
+ *
+ * Neon is reached by hostname, and the box resolves it through Docker's embedded
+ * resolver. That intermittently answers `EAI_AGAIN` — observed on this container
+ * while probing the demand endpoint: the request failed outright and the chart
+ * rendered it as "no data", which is indistinguishable from an empty result. It
+ * cleared on the next attempt.
+ *
+ * A generic retry here would be dangerous: `query()` runs upserts as well as
+ * reads, and a connection dropped MID-statement may or may not have applied it.
+ * `EAI_AGAIN` and `ENOTFOUND` are different in kind — they fail before a socket
+ * exists, so the statement provably never reached Postgres and re-sending it
+ * cannot double-apply anything. Nothing else is retried, deliberately.
+ */
+const DNS_FAILURES = new Set(['EAI_AGAIN', 'ENOTFOUND'])
+
+function isDnsFailure(e: unknown): boolean {
+  const code = (e as { code?: string } | null)?.code
+  return !!code && DNS_FAILURES.has(code)
+}
+
 export async function query(sql: string, params?: any[]) {
   const p = await getPool()
-  return p.query(sql, params)
+  let lastErr: unknown
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      return await p.query(sql, params)
+    } catch (e) {
+      if (!isDnsFailure(e)) throw e
+      lastErr = e
+      console.warn(
+        `[db] DNS resolution failed (${(e as { code?: string }).code}), attempt ${attempt + 1}/3 — retrying`,
+      )
+      await new Promise((r) => setTimeout(r, 250 * (attempt + 1)))
+    }
+  }
+  throw lastErr
 }
 
 /**

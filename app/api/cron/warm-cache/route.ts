@@ -269,9 +269,27 @@ async function runWarmCache(mode: string, from?: number, to?: number) {
 
     // Warm all analytics caches
     const now = new Date()
-    const yearStart = `${now.getFullYear()}-01-01`
-    const today = now.toISOString().split('T')[0]
-    const twoYearsAgo = `${now.getFullYear() - 2}-01-01`
+
+    /* WARM THE KEY THE BROWSERS WILL ACTUALLY ASK FOR.
+     *
+     * These keys are `analytics:demand:<from>:<to>`, and the overview page builds
+     * `<to>` from `formatDate(new Date(), 'iso')` — which uses getDate/getMonth,
+     * i.e. the reader's LOCAL date. This ran in the container, in UTC. Israel is
+     * UTC+2/+3, so between midnight and 3am local the browser asks for tomorrow's
+     * date while the warmer stored yesterday's: a guaranteed miss, and a miss on
+     * this key is the two-minute cold path on the first screen of the app.
+     *
+     * Everyone using this dashboard is in Israel, so the warmer computes the date
+     * the way its readers do rather than the way its server clock does. */
+    const today = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Jerusalem',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(now)
+    // Same clock as `today`, or the first of January repeats the identical bug.
+    const yearStart = `${today.slice(0, 4)}-01-01`
+    const twoYearsAgo = `${Number(today.slice(0, 4)) - 2}-01-01`
 
     // Every step recomputes and re-SETs its key (forceRefresh) so the Redis TTL
     // restarts on each warm. Warming through the cache-hit path would leave the
