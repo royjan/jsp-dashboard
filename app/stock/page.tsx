@@ -22,7 +22,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
-import { useWaitedTooLong, Swap, SkeletonBar } from '@/lib/jan-ui'
+import { useWaitedTooLong, Swap, SkeletonBar, useFocusRow, FocusExit } from '@/lib/jan-ui'
 import { StockPageSkeleton } from '@/components/layout/PageSkeleton'
 import { cn } from '@/lib/utils'
 import { deriveBrand, brandChipClasses } from '@/lib/brand'
@@ -741,6 +741,13 @@ function StockPageContent() {
   const [sortField, setSortField] = useState<UnitSortField>((get('sort') as UnitSortField) || 'capital_tied')
   const [sortDir, setSortDir] = useState<SortDir>((get('dir') as SortDir) || 'desc')
   const [page, setPage] = useState(0)
+  /* Focus mode. This table is fourteen columns and 1,100px wide at minimum, so
+     the reader's actual job is to carry ONE item across a span wider than the
+     screen. A hover tint cannot survive that trip — it is gone the moment the
+     pointer leaves to scroll. Focus holds the row at full strength, drops its
+     neighbours to 35% so they still give context, and marks it with a callout
+     rule down its start edge. Escape leaves; so does clicking the row again. */
+  const { toggle: toggleFocus, rowClass: focusRowClass, active: focusActive, setFocused } = useFocusRow<string>()
   const [abcDropdownOpen, setAbcDropdownOpen] = useState(false)
   const abcDropdownRef = useRef<HTMLDivElement>(null)
   const [tierDropdownOpen, setTierDropdownOpen] = useState(false)
@@ -1245,6 +1252,11 @@ function StockPageContent() {
                 <span className="text-xs text-muted-foreground whitespace-nowrap">
                   {formatNumber(filteredUnified.length)} / {formatNumber(unifiedItems.length)} פריטים
                 </span>
+
+                {/* Focus mode is entered by clicking a row, which is not a gesture
+                    that announces itself. This is the way out for someone who did
+                    it by accident and does not know Escape works. */}
+                <FocusExit active={focusActive} onExit={() => setFocused(null)} />
               </div>
 
               {/* Alias resolution banner */}
@@ -1405,8 +1417,26 @@ function StockPageContent() {
                       return (
                         <tr
                           key={`${item.code}-${idx}`}
+                          /* Staggered entry, through the bridge's own `.jan-row-in`
+                             rather than <Reveal> — DataTable already uses it here, and
+                             two mechanisms doing the same job on the same screen is how
+                             a shared library stops feeling shared. --jan-row-i is the
+                             row's position; the keyframe clamps the delay so a page of
+                             rows finishes painting instead of trailing. Keyed by code,
+                             so it plays on mount and page change, not on every sort. */
+                          style={{ ['--jan-row-i' as string]: String(idx) }}
+                          /* The row is the focus target, but it is full of links and
+                             buttons. Toggling on any click would make every item link
+                             also change the focus, so the handler stands down when the
+                             click began on something that has its own job. */
+                          onClick={(e) => {
+                            if ((e.target as HTMLElement).closest('a,button,input')) return
+                            toggleFocus(item.code)
+                          }}
                           className={cn(
-                            'border-b hover:bg-muted/50 transition-colors',
+                            'border-b hover:bg-muted/50 transition-colors cursor-pointer',
+                            'jan-row-in',
+                            focusRowClass(item.code),
                             item.is_dead && 'bg-red-50/30 dark:bg-red-950/10',
                             !item.is_dead && item.is_at_risk && 'bg-amber-50/30 dark:bg-amber-950/10',
                           )}

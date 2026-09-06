@@ -40,7 +40,11 @@ export function useFocusRow<T extends string | number>() {
       cn(
         'transition-opacity duration-[var(--jan-base)] ease-[var(--jan-ease)]',
         focused !== null && focused !== id && 'opacity-[.35]',
-        focused === id && 'shadow-[inset_3px_0_0_var(--jan-callout)]',
+        // --jan-edge-x, not a literal 3px: box-shadow has no logical form, so the
+        // sign is flipped for RTL in tokens.css. Hard-coded, the callout rule sat
+        // on the row's END edge in Hebrew — the opposite side from every other
+        // start-aligned cue in these apps.
+        focused === id && 'shadow-[inset_var(--jan-edge-x)_0_0_var(--jan-callout)]',
       ),
     [focused],
   )

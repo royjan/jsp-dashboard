@@ -21,7 +21,15 @@
   --jan-ease:cubic-bezier(.25,.46,.45,.94);
   --jan-fast:.15s; --jan-base:.3s; --jan-slow:.4s;
   --jan-stagger:50ms; --jan-radius:var(--radius, 6px);
+
+  /* A LOGICAL EDGE FOR box-shadow, WHICH HAS NO LOGICAL FORM.
+     Focus mode draws its callout rule with an inset shadow so it costs no
+     layout width — but `inset 3px 0 0` is always the physical LEFT, and this
+     app is dir="rtl". Hard-coded, the rule landed on the row's END edge, the
+     opposite side from every other start-aligned cue here. */
+  --jan-edge-x:3px;
 }
+[dir="rtl"]{ --jan-edge-x:-3px; }
 @keyframes jan-rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 @media (prefers-reduced-motion: reduce){
   .jan-anim,.jan-anim *{animation-duration:.001ms!important;transition-duration:.001ms!important}
