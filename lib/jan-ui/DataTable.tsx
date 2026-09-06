@@ -240,6 +240,15 @@ export interface DataTableProps<TRow, TSortKey extends string = string> {
   minWidth?: string
   /**
    * Max height for the vertical scroll area (keeps the sticky header useful).
+   *
+   * A CSS LENGTH — `'70vh'`, `'480px'` — NOT a Tailwind class. Note that
+   * `minWidth` directly above takes the opposite kind of value (a class,
+   * `'min-w-[700px]'`); the two neighbouring props disagree, which has caught
+   * at least one call site that passed `'max-h-[70vh]'` here and got an
+   * invalid style, no scroll area, and therefore an inert sticky header —
+   * failing silently, which is the worst way for it to fail. A `max-h-[...]`
+   * class is unwrapped below rather than ignored.
+   *
    * Omit it and a table longer than STICKY_MIN_ROWS gets DEFAULT_MAX_HEIGHT so
    * its header actually sticks; short tables are left to flow with the page.
    * Pass `'none'` to opt out entirely (e.g. a table that is already inside its
@@ -543,10 +552,18 @@ export function DataTable<TRow, TSortKey extends string = string>({
   // maxHeight still wins: a wide grid with a 50-row page (the comparison one)
   // scrolls past its header long before the pager, and there the caller is
   // asking for the sticky header on purpose.
+  // Unwrap a Tailwind `max-h-[70vh]` into the `70vh` this prop actually wants.
+  // See the prop's doc: `minWidth` next to it takes a class, so passing one here
+  // is the natural mistake, and it used to fail silently.
+  const asLength = (v: string | undefined) => {
+    if (!v) return v
+    const m = /^max-h-\[(.+)\]$/.exec(v)
+    return m ? m[1] : v
+  }
   const effectiveMaxHeight =
     maxHeight === 'none'
       ? undefined
-      : (maxHeight ?? (!pageSize && rows.length > STICKY_MIN_ROWS ? DEFAULT_MAX_HEIGHT : undefined))
+      : (asLength(maxHeight) ?? (!pageSize && rows.length > STICKY_MIN_ROWS ? DEFAULT_MAX_HEIGHT : undefined))
 
   // ----- selection helpers -----
   // NOTE: every hook must run before the `error` early-return below. This
@@ -726,22 +743,38 @@ export function DataTable<TRow, TSortKey extends string = string>({
                     headPad,
                     'font-medium whitespace-nowrap',
                     alignClass(col.align),
-                    col.sortable && 'cursor-pointer select-none hover:text-foreground transition-colors',
                     col.hideOnMobile && 'hidden sm:table-cell',
                     col.headerClassName,
                   )}
-                  onClick={() => toggleSort(col)}
                   aria-sort={col.sortable ? (active ? (sort!.dir === 'asc' ? 'ascending' : 'descending') : 'none') : undefined}
                 >
-                  <span className={cn('inline-flex items-center gap-1', col.align === 'end' && 'flex-row-reverse', col.align === 'center' && 'justify-center')}>
-                    {col.header}
-                    {col.sortable && (
-                      <>
-                        <ArrowUpDown className={cn('h-3 w-3 shrink-0', active ? 'text-primary' : 'text-muted-foreground/30')} />
-                        {active && <span className="text-primary text-[10px]">{sort!.dir === 'desc' ? '▼' : '▲'}</span>}
-                      </>
-                    )}
-                  </span>
+                  {/* THE SORT CONTROL IS A BUTTON, NOT AN onClick ON THE <th>.
+                      A <th> is not focusable and takes no keypress, so every
+                      sortable column in every app using this table was
+                      mouse-only: Tab walked straight past them, and a screen
+                      reader announced the column with no hint that it sorts.
+                      `aria-sort` stays on the CELL, which is where the ARIA
+                      spec puts it; only the activation moves inward. */}
+                  {col.sortable ? (
+                    <button
+                      type="button"
+                      onClick={() => toggleSort(col)}
+                      className={cn(
+                        'inline-flex items-center gap-1 select-none hover:text-foreground transition-colors',
+                        'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring rounded-sm',
+                        col.align === 'end' && 'flex-row-reverse',
+                        col.align === 'center' && 'justify-center',
+                      )}
+                    >
+                      {col.header}
+                      <ArrowUpDown className={cn('h-3 w-3 shrink-0', active ? 'text-primary' : 'text-muted-foreground/30')} />
+                      {active && <span className="text-primary text-[10px]">{sort!.dir === 'desc' ? '▼' : '▲'}</span>}
+                    </button>
+                  ) : (
+                    <span className={cn('inline-flex items-center gap-1', col.align === 'end' && 'flex-row-reverse', col.align === 'center' && 'justify-center')}>
+                      {col.header}
+                    </span>
+                  )}
                 </th>
               )
             })}
