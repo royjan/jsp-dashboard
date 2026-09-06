@@ -1138,20 +1138,64 @@ export async function getDemandAnalysis(dateFrom?: string, dateTo?: string, forc
   // Fetch quotes via FINAPI HTTP API
   {
     let allQuotes: any[] = []
+    // True when the walk stopped on its page bound rather than on the range —
+    // the caller must be able to say "this is a floor, not the total".
+    let demandCapped = false
     for (let y = fromYear; y <= toYear; y++) {
       const yFrom = y === fromYear ? effDateFrom : `${y}-01-01`
       const yTo = y === toYear ? effDateTo : `${y}-12-31`
-      const params: Record<string, string> = {
-        format: String(DOC_FORMATS.QUOTE),
-        date_from: yFrom,
-        date_to: yTo,
-        limit: '1000',
-        direction: 'desc',
-      }
+      /* THE ROW CAP MADE THE DATE RANGE INERT.
+       *
+       * One call, `limit: 1000`, `direction: desc` — the NEWEST thousand quotes
+       * in the window. Jan writes more than a thousand quotes in five weeks, so
+       * every window ending today returned the same thousand documents:
+       * 01.01.2026→06.09 and 01.08.2026→06.09 produced byte-identical demand,
+       * because the "from" date never reached a row the cap had not already
+       * cut. Only `date_to` did anything.
+       *
+       * There is no offset to page with, so the window is walked backwards
+       * instead: take the newest batch, then ask again ending one day before
+       * the OLDEST date it returned. Bounded, because this is an interactive
+       * page and an unbounded walk over a five-year range is not something a
+       * chart should do while somebody waits.
+       *
+       * When the bound IS hit the answer is a floor, not the total, and right
+       * now that fact only reaches the log. Surfacing it on the chart means
+       * changing this function's return type, which every caller shares; that
+       * is a wider change than this bug earns and it is left undone on purpose
+       * rather than half-done. */
+      const PAGE = 1000
+      const MAX_PAGES = 8
+      let cursorTo = yTo
+      let pages = 0
       try {
-        const yearQuotes = await searchDocuments(params)
-        console.log(`[Analytics] Demand quotes ${y}: ${yearQuotes.length} (${yFrom} to ${yTo})`)
-        allQuotes = allQuotes.concat(yearQuotes)
+        for (; pages < MAX_PAGES; pages++) {
+          const batch = await searchDocuments({
+            format: String(DOC_FORMATS.QUOTE),
+            date_from: yFrom,
+            date_to: cursorTo,
+            limit: String(PAGE),
+            direction: 'desc',
+          })
+          console.log(`[Analytics] Demand quotes ${y} p${pages}: ${batch.length} (${yFrom} to ${cursorTo})`)
+          allQuotes = allQuotes.concat(batch)
+          if (batch.length < PAGE) break
+
+          // Oldest date in the batch; ask again ending the day before it.
+          let oldest = ''
+          for (const q of batch) {
+            const d = String(q.doc_date || '')
+            if (d && (!oldest || d < oldest)) oldest = d
+          }
+          if (!oldest || oldest <= yFrom) break
+          const prev = new Date(oldest + 'T00:00:00Z')
+          prev.setUTCDate(prev.getUTCDate() - 1)
+          const next = prev.toISOString().slice(0, 10)
+          // A day holding more than PAGE quotes on its own would otherwise spin.
+          if (next >= cursorTo) { demandCapped = true; break }
+          cursorTo = next
+        }
+        if (pages >= MAX_PAGES) demandCapped = true
       } catch (e) {
         console.warn(`[Analytics] Demand quotes ${y} search failed, trying fetchDocuments:`, e)
         if (y === activeYear) {
@@ -1163,7 +1207,10 @@ export async function getDemandAnalysis(dateFrom?: string, dateTo?: string, forc
         }
       }
     }
-    console.log(`[Analytics] Demand: ${allQuotes.length} total quotes from HTTP for ${effDateFrom} to ${effDateTo}`)
+    console.log(
+      `[Analytics] Demand: ${allQuotes.length} total quotes from HTTP for ${effDateFrom} to ${effDateTo}` +
+        (demandCapped ? ' — CAPPED: the page bound was reached, so this is a floor, not the period total' : ''),
+    )
 
     // Line items for the selected quotes — one feed call covering their number
     // range where possible, per-document reads for the rest. The quote SET is
