@@ -88,12 +88,23 @@ export function ProgressToast({
             done ? 'bg-[var(--jan-verdigris)]' : 'bg-[var(--jan-callout)]',
             // An unknown duration gets a travelling bar, not a fake percentage.
             progress === undefined && !done && 'w-1/3 motion-safe:animate-pulse',
+            // A KNOWN duration scales instead of resizing. Animating `width` puts
+            // this bar through layout on every frame of every tick, and it is on
+            // screen precisely while the main thread is busy with the fetch it is
+            // reporting on — the one moment it cannot afford to compete. `scaleX`
+            // is compositor-only.
+            //
+            // The origin has to follow the writing direction or the bar fills
+            // from the wrong end, which in Hebrew is every one of these apps.
+            progress !== undefined || done
+              ? 'w-full origin-right ltr:origin-left will-change-transform'
+              : '',
           )}
           style={
             progress !== undefined || done
               ? {
-                  width: `${Math.round((done ? 1 : progress ?? 0) * 100)}%`,
-                  transition: 'width var(--jan-base) var(--jan-ease)',
+                  transform: `scaleX(${done ? 1 : progress ?? 0})`,
+                  transition: 'transform var(--jan-base) var(--jan-ease)',
                 }
               : undefined
           }
