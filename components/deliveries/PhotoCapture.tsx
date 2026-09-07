@@ -3,6 +3,9 @@
 import { useState, useRef } from 'react'
 import { Camera, X, Loader2, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import {
+  blobToDataUrl, dataUrlBytes, downscaleImage, formatBytes,
+} from '@/lib/downscale-image'
 
 interface PhotoCaptureProps {
   deliveryId: string
@@ -13,17 +16,32 @@ interface PhotoCaptureProps {
 export function PhotoCapture({ deliveryId, photoType = 'delivery', onUploaded }: PhotoCaptureProps) {
   const [preview, setPreview] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
+  // What the driver is about to send, and what the camera handed us. The photo
+  // travels as base64 inside a JSON body over a phone signal at someone's door,
+  // so the size is worth showing rather than hiding.
+  const [size, setSize] = useState<{ sent: number; original: number } | null>(null)
+  const [preparing, setPreparing] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  const handleCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
 
-    const reader = new FileReader()
-    reader.onload = () => {
-      setPreview(reader.result as string)
+    setPreparing(true)
+    try {
+      // Downscale BEFORE the data URL exists: base64 of a 6MB phone JPEG is an
+      // ~8MB string that is then held in state, POSTed, and stored as the row.
+      // Failure here returns the original, so a photo is never lost to it.
+      const { blob } = await downscaleImage(file)
+      const dataUrl = await blobToDataUrl(blob)
+      setPreview(dataUrl)
+      setSize({ sent: dataUrlBytes(dataUrl), original: file.size })
+    } catch {
+      setPreview(null)
+      setSize(null)
+    } finally {
+      setPreparing(false)
     }
-    reader.readAsDataURL(file)
   }
 
   const handleUpload = async () => {
@@ -44,6 +62,7 @@ export function PhotoCapture({ deliveryId, photoType = 'delivery', onUploaded }:
         const data = await res.json()
         onUploaded?.(data)
         setPreview(null)
+        setSize(null)
         if (inputRef.current) inputRef.current.value = ''
       }
     } catch (err) {
@@ -55,6 +74,7 @@ export function PhotoCapture({ deliveryId, photoType = 'delivery', onUploaded }:
 
   const handleClear = () => {
     setPreview(null)
+    setSize(null)
     if (inputRef.current) inputRef.current.value = ''
   }
 
@@ -74,10 +94,20 @@ export function PhotoCapture({ deliveryId, photoType = 'delivery', onUploaded }:
         <Button
           variant="outline"
           className="w-full h-14 text-base gap-2"
+          disabled={preparing}
           onClick={() => inputRef.current?.click()}
         >
-          <Camera className="h-5 w-5" />
-          צלם תמונה
+          {preparing ? (
+            <>
+              <Loader2 className="h-5 w-5 animate-spin" />
+              מכין תמונה...
+            </>
+          ) : (
+            <>
+              <Camera className="h-5 w-5" />
+              צלם תמונה
+            </>
+          )}
         </Button>
       )}
 
@@ -96,6 +126,15 @@ export function PhotoCapture({ deliveryId, photoType = 'delivery', onUploaded }:
               <X className="h-4 w-4" />
             </button>
           </div>
+
+          {size && (
+            <p className="text-xs text-muted-foreground">
+              {formatBytes(size.sent)}
+              {size.original > size.sent * 1.2 && (
+                <> · הוקטן מ-{formatBytes(size.original)}</>
+              )}
+            </p>
+          )}
 
           <Button
             onClick={handleUpload}
