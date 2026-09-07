@@ -70,8 +70,15 @@ export function parsePastedMoney(raw: unknown): number | null {
  */
 function tokenize(line: string): string[] {
   if (line.includes('\t')) return line.split('\t')
-  if (line.split(/\s+/).length >= 2) return line.split(/\s+/)
-  return line.split(/[,;]/)
+  // A comma-separated line usually has a space after the comma too, so the
+  // whitespace split wins and leaves the separator glued to the token:
+  // "9833351080, 38" produced the code "9833351080," — normalised away for the
+  // lookup, but shown to the user in the table exactly like that. Strip a
+  // leading/trailing separator from each field rather than reordering the
+  // rules, which would break "0249E6  52.60  מקורי".
+  const strip = (t: string) => t.trim().replace(/^[,;]+|[,;]+$/g, '')
+  if (line.split(/\s+/).length >= 2) return line.split(/\s+/).map(strip)
+  return line.split(/[,;]/).map(strip)
 }
 
 /**

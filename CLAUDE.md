@@ -210,11 +210,45 @@ node scripts/mobile-sweep.mjs /stock /competitors     # widths 360,390,430
 WIDTHS=390 OUT=/tmp/shots node scripts/mobile-sweep.mjs /
 ```
 
-**This app has no test runner.** jan-portal has 127 `*.test.*` files (vitest +
-jsdom + supertest); here there are none, so the sweep above and `npm run build`
-are the only automated gates. New pure helpers are written to be testable
-(`lib/fake-scan.ts`, `lib/paste-prices.ts`, `lib/downscale-image.ts` are all
-side-effect free) for whenever that changes.
+```bash
+npm test             # vitest run — the pure helpers
+npm run test:watch
+```
+
+**Never `npm install --legacy-peer-deps` in this repo.** The Dockerfile's
+`npm ci --legacy-peer-deps` is fine — `ci` installs exactly what the lockfile
+says — but `install` with that flag RE-RESOLVES the tree without peer
+dependencies and drops packages that only arrive that way. Adding vitest with
+it silently removed `react-is`, and the next build failed inside recharts
+(`Module not found: 'react-is'` from Pie.js/Line.js) with nothing pointing at
+the install that caused it. Plain `npm install` keeps them. After any
+dependency change, check the lockfile for real drift rather than eyeballing the
+diff size — npm reorders the whole file, so a clean add still shows ~9,000
+changed lines:
+
+```bash
+python3 -c "
+import json,subprocess
+v=lambda t:{k:x.get('version') for k,x in json.loads(t)['packages'].items() if k}
+o=v(subprocess.run(['git','show','HEAD:package-lock.json'],capture_output=True,text=True).stdout)
+n=v(open('package-lock.json').read())
+print('added',len(set(n)-set(o)),'removed',len(set(o)-set(n)),
+      'changed',len([k for k in set(o)&set(n) if o[k]!=n[k]]))"
+```
+
+**The suite covers PURE helpers only, and that is the intended boundary.** A
+function whose inputs and outputs are values — a classifier, a parser, a
+formatter — belongs in it; anything needing a DOM, Neon or FINAPI does not, and
+is still gated the way the rest of this app is (`npm run build`, the sweep, and
+a real request against the box). `vitest.config.ts` runs `environment: 'node'`
+and excludes `lib/jan-ui/`, which is a vendored copy whose tests belong to
+`~/WebstormProjects/jan-ui`.
+
+Write the helper pure and it can be tested at all: that is why `fake-scan.ts`
+takes `now` as an argument and `classifySuspect` takes its threshold rather than
+reading a slider. The first run of this suite caught a real bug — a pasted
+`9833351080, 38` displayed the code as `9833351080,` — which nothing else here
+would have found.
 
 ## Environment Variables
 
