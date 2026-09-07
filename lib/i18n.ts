@@ -430,6 +430,8 @@ export const translations = {
     openForFollowUp: 'פתוחות למעקב',
     openQuoteValue: 'ערך הצעות פתוחות',
     convertedQuotes: 'הצעות שהומרו',
+    largestOpenQuote: 'ההצעה הגדולה ביותר',
+    seeRealConversion: 'אחוז ההמרה האמיתי במסך ההמרות',
     topOpenQuotes: 'הצעות פתוחות מובילות',
 
     // Customer Detail
@@ -1193,6 +1195,8 @@ export const translations = {
     openForFollowUp: 'Open for Follow-up',
     openQuoteValue: 'Open Quote Value',
     convertedQuotes: 'Converted Quotes',
+    largestOpenQuote: 'Largest Quote',
+    seeRealConversion: 'Real conversion rate is on the conversion screen',
     topOpenQuotes: 'Top Open Quotes',
 
     // Customer Detail

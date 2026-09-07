@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
+import Link from 'next/link'
 import { motion } from 'framer-motion'
 import { useGapAnalysis, useFollowUpStats } from '@/hooks/use-analytics'
 import { useLocale } from '@/lib/locale-context'
@@ -74,7 +75,7 @@ function FollowUpWidget() {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-2 sm:gap-3">
           <div className="space-y-1">
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <Send className="h-3 w-3 text-blue-500" />
@@ -84,26 +85,31 @@ function FollowUpWidget() {
           </div>
           <div className="space-y-1">
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <TrendingUp className="h-3 w-3 text-green-500" />
-              {t('convertedQuotes')}
-            </div>
-            <div className="text-lg font-bold">{formatNumber(data.converted_quotes ?? 0)}</div>
-          </div>
-          <div className="space-y-1">
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <SearchX className="h-3 w-3 text-amber-500" />
-              {t('followUpConversion')}
-            </div>
-            <div className="text-lg font-bold">{data.conversion_rate ?? 0}%</div>
-          </div>
-          <div className="space-y-1">
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <DollarSign className="h-3 w-3 text-red-500" />
               {t('openQuoteValue')}
             </div>
             <div className="text-lg font-bold">{formatCurrency(data.open_value ?? 0)}</div>
           </div>
+          <div className="space-y-1">
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <TrendingUp className="h-3 w-3 text-green-500" />
+              {t('largestOpenQuote')}
+            </div>
+            <div className="text-lg font-bold">{formatCurrency(data.largest_open ?? 0)}</div>
+          </div>
         </div>
+
+        {/* The conversion pair that used to sit here counted status='1', which
+            is not conversion in this ERP — it sits on 0.5% of all quotes, so
+            the tile read a flat 0% forever. The real figure is a quote-to-
+            invoice match, and it has its own screen. */}
+        <Link
+          href="/conversion"
+          className="mt-3 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+        >
+          <SearchX className="h-3 w-3" />
+          {t('seeRealConversion')}
+        </Link>
 
         {/* Top open quotes table */}
         {data.top_open && data.top_open.length > 0 && (
@@ -239,7 +245,7 @@ export default function GapAnalysisPage() {
       />
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-2 sm:gap-3">
         {[
           { label: t('gapItems'), value: formatNumber(data?.count ?? 0), icon: SearchX, color: 'text-red-600' },
           { label: t('lostQty'), value: formatNumber(data?.total_lost_qty ?? 0), icon: Package, color: 'text-orange-600' },

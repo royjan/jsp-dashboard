@@ -7,12 +7,26 @@ import { client } from '@/lib/finansit-client'
 /**
  * GET /api/analytics/followups
  *
- * Computes quote follow-up analytics:
- * - How many open quotes are from ~48h ago (candidates for follow-up)
- * - How many of those have items in stock (actionable)
- * - Conversion rate of quotes overall
+ * Recent quotes worth chasing: how many were raised in the window, what they
+ * are worth, and the largest ones by value.
  *
- * This is a read-only analytics endpoint for the dashboard widget.
+ * TWO THINGS THIS DELIBERATELY NO LONGER DOES (2026-09-07).
+ *
+ * It no longer reports a conversion rate. It computed one as
+ * `status='1' / (status='0' + status='1')` over the same window, which is not
+ * what conversion means in this ERP: status '1' sits on 2,619 of the 497,374
+ * format-31 documents in `dashboard.documents` (0.5%), so the ratio was pinned
+ * near zero by construction. /gap rendered it as a flat "0%" beside two figures
+ * that were correct, which is the believable-zero failure this codebase keeps
+ * paying for. The real analytic — `getConversionAnalysis`, behind
+ * /api/analytics/conversion — decides conversion by matching quotes to that
+ * customer's invoices and answers 63% over 90 days. A widget cannot afford that
+ * call, so it now links there instead of inventing its own number.
+ *
+ * And it no longer hardcodes `year: '2026'`, which it did in both searches. It
+ * would have kept asking for 2026 in January and quietly returned nothing —
+ * a silent empty panel rather than an error. The year now comes from the
+ * window, and a window straddling New Year asks for both.
  */
 export async function GET(request: Request) {
   try {
@@ -28,71 +42,55 @@ export async function GET(request: Request) {
     const dateFromStr = dateFrom.toISOString().slice(0, 10)
     const dateToStr = dateTo.toISOString().slice(0, 10)
 
-    // Get open quotes (status=0) in the window
-    const openQuotesResult = await client.documents.search({
-      doc_format: '31',
-      status: '0',
-      date_from: dateFromStr,
-      date_to: dateToStr,
-      year: '2026',
-      limit: 500,
-    })
+    // Btrieve is partitioned by year, so the search wants one. A 3-day window in
+    // the first days of January spans two of them.
+    const years = [...new Set([dateFrom.getUTCFullYear(), dateTo.getUTCFullYear()])]
 
-    const openQuotes = openQuotesResult.documents || []
-
-    // Get converted quotes (status=1) in the same window for conversion rate
-    const convertedQuotesResult = await client.documents.search({
-      doc_format: '31',
-      status: '1',
-      date_from: dateFromStr,
-      date_to: dateToStr,
-      year: '2026',
-      limit: 500,
-    })
-
-    const convertedQuotes = convertedQuotesResult.documents || []
-
-    const totalQuotes = openQuotes.length + convertedQuotes.length
-    const conversionRate = totalQuotes > 0
-      ? Math.round((convertedQuotes.length / totalQuotes) * 100)
-      : 0
-
-    // Calculate total value of open quotes
-    const openValue = openQuotes.reduce(
-      (sum: number, q: any) => sum + (q.grand_total || q.total || 0),
-      0
+    const results = await Promise.all(
+      years.map(year =>
+        client.documents.search({
+          doc_format: '31',
+          status: '0',
+          date_from: dateFromStr,
+          date_to: dateToStr,
+          year: String(year),
+          limit: 500,
+        }),
+      ),
     )
 
-    const convertedValue = convertedQuotes.reduce(
+    const quotes = results.flatMap(r => r.documents || [])
+
+    const openValue = quotes.reduce(
       (sum: number, q: any) => sum + (q.grand_total || q.total || 0),
-      0
+      0,
+    )
+
+    const byValue = [...quotes].sort(
+      (a: any, b: any) => (b.grand_total || b.total || 0) - (a.grand_total || a.total || 0),
     )
 
     return NextResponse.json({
-      period: { date_from: dateFromStr, date_to: dateToStr },
-      open_quotes: openQuotes.length,
-      converted_quotes: convertedQuotes.length,
-      total_quotes: totalQuotes,
-      conversion_rate: conversionRate,
+      period: { date_from: dateFromStr, date_to: dateToStr, years },
+      open_quotes: quotes.length,
       open_value: Math.round(openValue),
-      converted_value: Math.round(convertedValue),
-      // Top open quotes by value (for display)
-      top_open: openQuotes
-        .sort((a: any, b: any) => (b.grand_total || 0) - (a.grand_total || 0))
-        .slice(0, 10)
-        .map((q: any) => ({
-          doc_number: q.doc_number,
-          customer_name: q.customer_name,
-          customer_code: q.customer_code,
-          total: q.grand_total || q.total || 0,
-          date: q.doc_date,
-        })),
+      largest_open: Math.round(byValue[0]?.grand_total || byValue[0]?.total || 0),
+      // `limit: 500` per year is a cap, not a total — say so, so a busy week
+      // reads as "at least 500" rather than as the whole picture.
+      truncated: results.some(r => (r.documents || []).length >= 500),
+      top_open: byValue.slice(0, 10).map((q: any) => ({
+        doc_number: q.doc_number,
+        customer_name: q.customer_name,
+        customer_code: q.customer_code,
+        total: q.grand_total || q.total || 0,
+        date: q.doc_date,
+      })),
     })
   } catch (error) {
     console.error('[followups] Error:', error)
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Failed' },
-      { status: 500 }
+      { status: 500 },
     )
   }
 }
