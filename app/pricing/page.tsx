@@ -68,8 +68,14 @@ function TierCell({ tier, maxQty }: { tier: ElasticityTier; maxQty: number }) {
 
   const intensity = maxQty > 0 ? tier.avg_qty / maxQty : 0
   const bgAlpha = Math.max(0.05, Math.min(0.85, intensity))
+  // A <div>, NOT a <td>: this renders inside a DataTable `cell:`, which already
+  // wraps what it returns in a <td>. It used to return its own, which is
+  // invalid HTML (`<td> cannot be a child of <td>`) and a React hydration error
+  // on every load of this page — left over from before the table moved to
+  // <DataTable>. The negative inset lets the intensity wash still cover the
+  // cell's padding, which is what the <td> version did.
   return (
-    <td className="py-1.5 px-2 text-center relative">
+    <div className="relative -mx-1 -my-0.5 px-1 py-0.5">
       <div
         className="absolute inset-0 rounded-sm transition-opacity"
         style={{
@@ -85,7 +91,7 @@ function TierCell({ tier, maxQty }: { tier: ElasticityTier; maxQty: number }) {
           {formatCurrency(tier.price_range[1])}
         </div>
       </div>
-    </td>
+    </div>
   )
 }
 
