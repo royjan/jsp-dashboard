@@ -95,11 +95,28 @@ for (const width of WIDTHS) {
     locale: 'he-IL',
   })
   const page = await ctx.newPage()
-  const consoleErrors = []
-  page.on('console', m => m.type() === 'error' && consoleErrors.push(m.text().slice(0, 200)))
+  // Console errors are attributed to the route being loaded when they arrive.
+  // Pooling them per width (which this did first) makes them nearly useless:
+  // you learn that SOMETHING on the app logs a hydration error, not what.
+  let current = null
+  const errorsByRoute = new Map()
+  const noteError = (text) => {
+    if (!current) return
+    const seen = errorsByRoute.get(current) ?? new Set()
+    seen.add(text.replace(/\s+/g, ' ').slice(0, 160))
+    errorsByRoute.set(current, seen)
+  }
+  page.on('console', m => m.type() === 'error' && noteError(m.text()))
+  page.on('pageerror', e => noteError(`uncaught: ${e.message}`))
+  // A failed request is invisible in the console when the app catches it, and a
+  // caught 500 is exactly how this codebase renders zeros instead of an error.
+  page.on('response', r => {
+    if (r.status() >= 500) noteError(`HTTP ${r.status()} ${new URL(r.url()).pathname}`)
+  })
 
   for (const route of ROUTES) {
     const name = route.replace(/^\//, '').replace(/[/?=&]/g, '-') || 'home'
+    current = route
     await page.goto(BASE + route, { waitUntil: 'networkidle', timeout: 45_000 }).catch(() => {})
     // Tables and charts settle a frame or two after the fetch resolves.
     await page.waitForTimeout(2000)
@@ -140,11 +157,13 @@ for (const width of WIDTHS) {
     } else {
       console.log(`✓ ${route} @${width}`)
     }
+
+    // Errors are reported under the route that produced them, and do NOT fail
+    // the run — overflow is what this gate is for; the rest is a lead.
+    for (const e of errorsByRoute.get(route) ?? []) console.log(`    ! ${e}`)
   }
 
-  if (consoleErrors.length) {
-    console.log(`  console errors @${width}: ${[...new Set(consoleErrors)].slice(0, 3).join(' | ')}`)
-  }
+  current = null
   await ctx.close()
 }
 
