@@ -120,8 +120,9 @@ Credentials from AWS Secrets Manager (`FINANSIT_API_CREDENTIALS`).
 
 **The cache is plain Redis over `REDIS_URL`, not Upstash.** `lib/redis-client.ts`
 reads `REDIS_URL` (env, else the `REDIS_URL` key of the config secret) and talks
-ioredis/TCP; the `UPSTASH_REDIS_REST_*` keys sitting in AWS Secrets Manager are
-read by nothing here. Two lines of this file said Upstash for a long time, which
+ioredis/TCP. The `UPSTASH_REDIS_REST_*` keys in AWS Secrets Manager belong to
+**partly**, which shares that secret — they are not stale dashboard config and
+must not be cleaned up as such. Two lines of this file said Upstash for a long time, which
 sends anyone debugging a cache miss to the wrong dashboard. Without
 `REDIS_URL` — every local checkout, since `.env.local` has none — it degrades to
 an in-process `Map`, so a dev server starts cold every time and a first `/gap`
