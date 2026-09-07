@@ -53,7 +53,7 @@ lib/
     analytics-service.ts      # Data aggregation & calculations
   i18n.ts                     # Hebrew/English translations
   aws-secrets.ts              # AWS Secrets Manager
-  redis-client.ts             # Upstash Redis caching
+  redis-client.ts             # Redis cache (ioredis over REDIS_URL) + in-memory fallback
   gemini.ts                   # Google Gemini AI integration
 
 hooks/
@@ -75,7 +75,7 @@ data/
 | Data Fetching | TanStack React Query |
 | ERP API | @jan/finansit-sdk (centralized SDK) |
 | Database | PostgreSQL (Neon) via Drizzle ORM |
-| Cache | Upstash Redis (3h TTL, 48h for seasonal) |
+| Cache | Redis via `REDIS_URL` (ioredis, TCP) — 3h TTL, 48h for seasonal |
 | AI | Google Gemini (reorder recommendations, insights) |
 | Deploy | Dokploy (builds from `main` via Dockerfile) |
 | Secrets | AWS Secrets Manager |
@@ -117,6 +117,16 @@ Central data source. The dashboard wraps `@jan/finansit-sdk` in `lib/finansit-cl
 Credentials from AWS Secrets Manager (`FINANSIT_API_CREDENTIALS`).
 
 ## Caching Strategy
+
+**The cache is plain Redis over `REDIS_URL`, not Upstash.** `lib/redis-client.ts`
+reads `REDIS_URL` (env, else the `REDIS_URL` key of the config secret) and talks
+ioredis/TCP; the `UPSTASH_REDIS_REST_*` keys sitting in AWS Secrets Manager are
+read by nothing here. Two lines of this file said Upstash for a long time, which
+sends anyone debugging a cache miss to the wrong dashboard. Without
+`REDIS_URL` — every local checkout, since `.env.local` has none — it degrades to
+an in-process `Map`, so a dev server starts cold every time and a first `/gap`
+load takes ~45s against ~0.3s in production. That is the environment, not a
+regression.
 
 - **Redis (3h TTL)**: Dashboard KPIs, item lists, document headers, analytics
 - **Redis (48h TTL)**: Seasonal data (changes infrequently)
