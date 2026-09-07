@@ -6,7 +6,13 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { useLocale } from '@/lib/locale-context'
 import { formatNumber } from '@/lib/constants'
-import { useUploadCompetitorFile, useCompetitorUploads, DuplicateUploadError } from '@/hooks/use-competitors'
+import {
+  useUploadCompetitorFile,
+  usePreviewCompetitorFile,
+  useCompetitorUploads,
+  DuplicateUploadError,
+  type CompetitorPreview,
+} from '@/hooks/use-competitors'
 import { Upload, FileSpreadsheet, CheckCircle2, AlertCircle, Loader2, X } from 'lucide-react'
 import { DataTable } from '@/components/shared/DataTable'
 
@@ -34,16 +40,25 @@ export function CompetitorUploader() {
   const [file, setFile] = useState<File | null>(null)
   const [result, setResult] = useState<{ sheets: SheetSummary[] } | null>(null)
   const [duplicate, setDuplicate] = useState<DuplicateUploadError | null>(null)
+  const [preview, setPreview] = useState<CompetitorPreview | null>(null)
   const [dragOver, setDragOver] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const uploadMutation = useUploadCompetitorFile()
+  const previewMutation = usePreviewCompetitorFile()
   const { data: uploadsData } = useCompetitorUploads()
 
+  // READ THE FILE BEFORE COMMITTING IT. The sheet -> competitor mapping is keyed on the
+  // sheet's NAME, and until now the only way to see what a file would do was to import it and
+  // read the summary afterwards — by which time the rows are in. The dry run is the same
+  // parser on the server, one step short of the insert, so what is shown here is what will
+  // happen (Roy, 2026-09-07: "why not a preview").
   const handleFile = useCallback((f: File) => {
     setFile(f)
     setResult(null)
     setDuplicate(null)
-  }, [])
+    setPreview(null)
+    previewMutation.mutate({ file: f }, { onSuccess: setPreview })
+  }, [previewMutation])
 
   const handleUpload = async (force = false) => {
     if (!file) return
@@ -90,7 +105,8 @@ export function CompetitorUploader() {
                 <span className="text-xs text-muted-foreground">({Math.round(file.size / 1024)} KB)</span>
               </div>
               <div className="flex items-center gap-2">
-                <Button size="sm" onClick={() => handleUpload(false)} disabled={uploadMutation.isPending}>
+                <Button size="sm" onClick={() => handleUpload(false)}
+                        disabled={uploadMutation.isPending || previewMutation.isPending}>
                   {uploadMutation.isPending ? (
                     <Loader2 className="h-3 w-3 animate-spin me-1" />
                   ) : (
@@ -98,10 +114,95 @@ export function CompetitorUploader() {
                   )}
                   {uploadMutation.isPending ? t('suppliers.processing') : t('suppliers.confirmUpload')}
                 </Button>
-                <button onClick={() => { setFile(null); setResult(null); setDuplicate(null) }}>
+                <button onClick={() => { setFile(null); setResult(null); setDuplicate(null); setPreview(null) }}>
                   <X className="h-4 w-4 text-muted-foreground hover:text-foreground" />
                 </button>
               </div>
+            </div>
+          )}
+
+          {/* What this file WOULD import — read on the server, nothing written */}
+          {file && previewMutation.isPending && (
+            <div className="mt-3 flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              {t('competitors.readingFile')}
+            </div>
+          )}
+          {previewMutation.isError && (
+            <div className="mt-3 p-3 rounded-lg border border-destructive/40 text-sm flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 text-destructive shrink-0" />
+              {previewMutation.error instanceof Error ? previewMutation.error.message : 'Preview failed'}
+            </div>
+          )}
+          {preview && !result && (
+            <div className="mt-3 rounded-lg border divide-y">
+              <div className="flex items-center gap-2 px-3 py-2 text-sm">
+                <FileSpreadsheet className="h-4 w-4 text-primary shrink-0" />
+                <span className="font-medium">{t('competitors.previewTitle')}</span>
+                <span className="text-muted-foreground">
+                  {formatNumber(preview.sheets.length)} {t('competitors.previewSheets')} ·{' '}
+                  {formatNumber(preview.sheets.reduce((n, s) => n + s.parsedRows, 0))}{' '}
+                  {t('competitors.previewRows')}
+                </span>
+                {preview.alreadyUploadedAt && (
+                  <Badge variant="warning" className="ms-auto">
+                    {t('competitors.previewAlready')}{' '}
+                    {new Date(preview.alreadyUploadedAt).toLocaleDateString('he-IL')}
+                  </Badge>
+                )}
+              </div>
+              {preview.sheets.map(s => (
+                <div key={s.sheet} className="px-3 py-2 space-y-1.5">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+                    <span className="font-medium">{s.competitor}</span>
+                    <span className="text-xs text-muted-foreground">({s.sheet})</span>
+                    <span className="text-muted-foreground">
+                      {formatNumber(s.parsedRows)} / {formatNumber(s.rawRows)} {t('competitors.previewRows')}
+                    </span>
+                    {s.skippedRows > 0 && (
+                      <Badge variant="secondary">
+                        {formatNumber(s.skippedRows)} {t('competitors.previewSkipped')}
+                      </Badge>
+                    )}
+                    {s.errors.length > 0 && (
+                      <Badge variant="warning">
+                        {formatNumber(s.errors.length)} {t('suppliers.errors')}
+                      </Badge>
+                    )}
+                  </div>
+                  {s.errors.length > 0 && (
+                    <p className="text-xs text-warning truncate" title={s.errors.join(' · ')}>
+                      {s.errors[0]}
+                    </p>
+                  )}
+                  {s.sample.length > 0 && (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs min-w-[420px]">
+                        <thead className="text-muted-foreground">
+                          <tr>
+                            <th className="text-start font-normal py-1 pe-3">{t('competitors.previewCode')}</th>
+                            <th className="text-start font-normal py-1 pe-3">{t('competitors.previewName')}</th>
+                            <th className="text-end font-normal py-1 ps-3">{t('competitors.previewPrice')}</th>
+                            <th className="text-end font-normal py-1 ps-3">{t('competitors.previewStock')}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {s.sample.map((r, i) => (
+                            <tr key={`${r.itemCode}-${i}`} className="border-t border-border/40">
+                              <td className="py-1 pe-3 font-mono">{r.itemCode}</td>
+                              <td className="py-1 pe-3 truncate max-w-[220px]" title={r.name ?? ''}>{r.name ?? '—'}</td>
+                              <td className="py-1 ps-3 text-end tabular-nums">
+                                {r.netPrice != null ? formatNumber(r.netPrice) : r.grossPrice != null ? formatNumber(r.grossPrice) : '—'}
+                              </td>
+                              <td className="py-1 ps-3 text-end">{r.stockStatus ?? '—'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           )}
 

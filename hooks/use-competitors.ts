@@ -49,6 +49,46 @@ export function useCompetitorUploads() {
   })
 }
 
+/** What the import WOULD do with this file — same parser, nothing written. */
+export interface CompetitorPreviewSheet {
+  sheet: string
+  competitor: string
+  parsedRows: number
+  rawRows: number
+  skippedRows: number
+  errors: string[]
+  sample: Array<{
+    itemCode: string
+    name: string | null
+    brand: string | null
+    netPrice: number | null
+    grossPrice: number | null
+    stockStatus: string | null
+    genuineness: string | null
+  }>
+}
+
+export interface CompetitorPreview {
+  preview: true
+  fileName: string
+  alreadyUploadedAt: string | null
+  sheets: CompetitorPreviewSheet[]
+}
+
+export function usePreviewCompetitorFile() {
+  return useMutation<CompetitorPreview, Error, { file: File }>({
+    mutationFn: async ({ file }) => {
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('dryRun', 'true')
+      const res = await fetch('/api/competitors/upload', { method: 'POST', body: formData })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(body.error || 'Failed to read file')
+      return body
+    },
+  })
+}
+
 export function useUploadCompetitorFile() {
   const qc = useQueryClient()
   return useMutation({

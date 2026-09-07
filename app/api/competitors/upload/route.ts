@@ -38,6 +38,12 @@ export async function POST(request: Request) {
     const formData = await request.formData()
     const file = formData.get('file') as File | null
     const force = formData.get('force') === 'true'
+    // A DRY RUN READS THE FILE AND WRITES NOTHING. The sheet -> competitor mapping is the
+    // risky half of this import (it is keyed on the sheet's NAME), and until now the only way
+    // to see it was to import and read the summary afterwards. Same parser, same workbook,
+    // same mapping — stopped one step before the insert — so the preview cannot drift from
+    // what the upload will do.
+    const dryRun = formData.get('dryRun') === 'true'
 
     if (!file) {
       return NextResponse.json({ error: 'file is required' }, { status: 400 })
@@ -51,7 +57,9 @@ export async function POST(request: Request) {
     const fileHash = createHash('sha256').update(buffer).digest('hex')
 
     // Same file already imported? Require an explicit force to duplicate history.
-    if (!force) {
+    // On a dry run this is INFORMATION, not a refusal: the preview says so and the operator
+    // decides, rather than being 409'd before seeing what is in the file.
+    if (!force && !dryRun) {
       const existing = await db
         .select({ id: competitorUploads.id, uploadedAt: competitorUploads.uploadedAt })
         .from(competitorUploads)
@@ -69,6 +77,35 @@ export async function POST(request: Request) {
     const sheets = parseWorkbook(workbook)
     if (!sheets.length) {
       return NextResponse.json({ error: 'No competitor sheets found in the workbook' }, { status: 400 })
+    }
+
+    if (dryRun) {
+      const [seen] = await db
+        .select({ id: competitorUploads.id, uploadedAt: competitorUploads.uploadedAt })
+        .from(competitorUploads)
+        .where(eq(competitorUploads.fileHash, fileHash))
+        .limit(1)
+      return NextResponse.json({
+        preview: true,
+        fileName,
+        alreadyUploadedAt: seen?.uploadedAt ?? null,
+        sheets: sheets.map(s => ({
+          sheet: s.sheetName,
+          competitor: s.competitorName,
+          // `rows` is what SURVIVED parsing — the number that will actually be stored, up to
+          // the conflict-skips the insert itself decides. Shown beside rawRows so a sheet that
+          // loses most of its lines is visible BEFORE it is imported, not after.
+          parsedRows: s.rows.length,
+          rawRows: s.rawRows,
+          skippedRows: s.skippedRows,
+          errors: s.errors.slice(0, 20),
+          sample: s.rows.slice(0, 5).map(r => ({
+            itemCode: r.itemCode, name: r.name, brand: r.brand,
+            netPrice: r.netPrice, grossPrice: r.grossPrice,
+            stockStatus: r.stockStatus, genuineness: r.genuineness,
+          })),
+        })),
+      })
     }
 
     const [upload] = await db
