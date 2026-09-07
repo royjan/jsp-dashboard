@@ -67,6 +67,7 @@ const EXACT: Record<string, RouteTitle> = {
   '/inquiries': { key: 'supplierInquiries', he: 'פניות לספקים' },
   '/invoices': { key: 'supplierInvoices', he: 'חשבוניות ספקים' },
   '/competitors': { he: 'מתחרים' },
+  '/competitors/fakes': { he: 'חשד לזיופים' },
   '/shipments': { he: 'משלוחים' },
   '/shipments/on-the-way': { he: 'בדרך' },
   '/picking': { he: 'ליקוט במחסן' },

@@ -31,7 +31,7 @@ import {
   Languages, LayoutDashboard, Link2, ListRestart, MessageSquare,
   NotebookPen, Package, PackageCheck, PackageSearch, PackageX, Percent, Radar, Receipt,
   ReceiptText, RotateCcw, Scale, SearchX, ShoppingBag, ShoppingCart, Sparkles,
-  Sun, Sunrise, Swords, Target, ThumbsUp, Trash2, TrendingDown, Truck, Undo2,
+  ShieldAlert, Sun, Sunrise, Swords, Target, ThumbsUp, Trash2, TrendingDown, Truck, Undo2,
   Users, Wallet, Warehouse,
 } from 'lucide-react'
 import type { TranslationKey } from '@/lib/i18n'
@@ -168,7 +168,10 @@ export const NAV_SECTIONS: NavSection[] = [
       // Moved out of the old 'operations' bucket. Neither is something you DO
       // -- they are things you look at to decide, which is what this section
       // is for. In operations they sat between shipments and stock alerts.
-      { href: '/competitors', labelKey: 'competitors', icon: Swords },
+      {
+        href: '/competitors', labelKey: 'competitors', icon: Swords,
+        children: [{ href: '/competitors/fakes', labelKey: 'counterfeits', icon: ShieldAlert }],
+      },
       { href: '/vehicle-intelligence', labelKey: 'vehicleIntelligence', icon: CarFront },
     ],
   },
