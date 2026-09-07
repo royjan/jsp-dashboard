@@ -30,6 +30,10 @@ export interface JanUIConfig {
    * formats currency itself.
    */
   useMoneyHidden: () => boolean
+  /** True when a figure should be withheld because it is a DECLINE — demo mode
+   *  hides bad news, not all news. StatTile asks before drawing a delta.
+   *  Defaults to never hiding, so an app that has no such mode is unaffected. */
+  isDeclineHidden: (isDecline: boolean) => boolean
   /** Locale used by the shared comparator. 'he' matches the dashboard. */
   locale: string
   /**
@@ -59,6 +63,7 @@ const DEFAULTS: JanUIConfig = {
   // An app with no demo mode is never hiding money. A constant `false` keeps
   // the hook call unconditional, which matters — see DataTable.
   useMoneyHidden: () => false,
+  isDeclineHidden: () => false,
   locale: 'he',
 }
 
@@ -71,6 +76,7 @@ export function JanUIProvider({
   const value = React.useMemo(() => ({ ...DEFAULTS, ...overrides }), [
     overrides.formatNumber,
     overrides.useMoneyHidden,
+    overrides.isDeclineHidden,
     overrides.locale,
     overrides.ErrorState,
     overrides.EmptyState,

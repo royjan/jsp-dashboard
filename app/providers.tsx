@@ -8,6 +8,7 @@ import { LocaleProvider } from '@/lib/locale-context'
 import { JanUIProvider } from '@/lib/jan-ui/provider'
 import { formatNumber } from '@/lib/format'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
+import { isDeclineHidden } from '@/lib/privacy'
 import { ErrorState, EmptyState } from '@/components/ui/feedback-state'
 import { useState, useEffect } from 'react'
 
@@ -42,6 +43,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
             <JanUIProvider
               formatNumber={formatNumber}
               useMoneyHidden={useMoneyHidden}
+              // Demo mode hides bad news, not all news — StatTile asks before
+              // drawing a delta. Injected rather than reimplemented in the
+              // library, which has no business knowing this app has a demo mode.
+              isDeclineHidden={isDeclineHidden}
               ErrorState={ErrorState}
               EmptyState={EmptyState}
               locale="he"

@@ -17,6 +17,9 @@
   --jan-callout-soft:color-mix(in srgb, var(--primary) 13%, transparent);
   --jan-verdigris:#2FB086;
   --jan-oxide:var(--destructive);
+  /* The fifth tone — StatTile `info`. Steel: it signals nothing on its own,
+     which is the point of an informational tile. */
+  --jan-info:var(--info, #2F6F9E);
 
   --jan-ease:cubic-bezier(.25,.46,.45,.94);
   --jan-fast:.15s; --jan-base:.3s; --jan-slow:.4s;
