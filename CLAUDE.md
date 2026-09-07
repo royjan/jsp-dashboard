@@ -137,6 +137,31 @@ Credentials from AWS Secrets Manager (`FINANSIT_API_CREDENTIALS`).
 - **`dashboard.daily_sales` is the shared revenue source** for both `/report` and `/brief`, gross of VAT (`grand_total`), format 11 only. Closed years come from the deduped archive (`/api/sync?mode=backfill-docs`, which is bounded to `doc_date < DATE_TRUNC('year', CURRENT_DATE)`); **the active year comes from FINAPI** and must never be restated from the archive. Writes go through `lib/services/daily-sales-sync.ts` — always fetch a DATE RANGE, never "the newest N invoices": the upsert REPLACES a day's total, so a count-bounded window rewrites its oldest days with a fraction of themselves. That is what recorded July 2026 as 316 invoices / ₪196,028 against a real ~1,700 / ₪1.2M, and made the morning brief report the year down 14% when it was down 2%.
 - **Two snapshot tables exist**: `dashboard.item_snapshots` (2.6k rows, the synced one) and `dashboard.item_snapshot` (singular, **0 rows** — an empty SQLite-era leftover whose columns `qty`/`retail_price`/`ordered_qty` several old queries still reference). Neither is complete; `getItems()` (live FINAPI + Redis) is the authoritative item source.
 
+### The portal shares this database
+
+`jan-portal` (the customer-facing portal, `~/WebstormProjects/jan-portal`) writes to
+`public.portal_*` in **this same Neon instance** — same `DATABASE_URL`, different schema. A
+route here can therefore join portal data directly, with no sync and no API between them;
+`app/api/items/[code]/image` and `app/api/competitors/fakes` both do.
+
+Worth knowing about, with row counts as of 2026-09-06:
+
+- **`portal_item_costs` (4310 codes)** — cached ERP cost **with a `cost_date`**. Cheaper than
+  `fetchBatchCost()` (FINAPI price code 06) and it is the only place the AGE of a cost is
+  available. **2755 of the 4310 are dated more than 18 months back**, so any margin or
+  price-vs-cost claim built on it must carry that age, not hide it — see the stale-cost split
+  in `lib/fake-scan.ts`.
+- `portal_item_flags` — staff-uploaded product photos and the counterfeit flag.
+- `portal_competitor_prices` (1413) — the portal's PSA feed plus its admin `fake_status`
+  verdict. **The portal owns that column and the customer-facing stamp behind it: read, never
+  write.**
+- `portal_item_stats` (4657) — stock / sold / list-price mirror.
+- `portal_search_events` (276), `portal_ui_events` (254 banner beacons), `portal_orders` (7) —
+  real, but still far too small to build a screen on.
+
+**Dev and prod share this database.** The portal's rule applies to anything run from here too:
+no mutations, migrations or test-data writes to `portal_*` without explicit authorisation.
+
 ### ⚠️ YEAR-END ACTION — archive the closing fiscal year (do this every January)
 
 **Run the document sync for the whole closing year before Btrieve rolls over.** Once Finansit
@@ -176,7 +201,20 @@ npm run db:studio      # Open Drizzle Studio
 npm run dev          # Next.js dev server
 npm run build        # Production build
 npm run lint         # ESLint
+
+# Screenshot routes at phone widths and FAIL on horizontal overflow. Catches the
+# one bug class tsc/eslint/review cannot see. playwright is NOT a dependency —
+# the script borrows an installed playwright-core + chromium from the shared
+# cache and says so when it cannot find them.
+node scripts/mobile-sweep.mjs /stock /competitors     # widths 360,390,430
+WIDTHS=390 OUT=/tmp/shots node scripts/mobile-sweep.mjs /
 ```
+
+**This app has no test runner.** jan-portal has 127 `*.test.*` files (vitest +
+jsdom + supertest); here there are none, so the sweep above and `npm run build`
+are the only automated gates. New pure helpers are written to be testable
+(`lib/fake-scan.ts`, `lib/paste-prices.ts`, `lib/downscale-image.ts` are all
+side-effect free) for whenever that changes.
 
 ## Environment Variables
 
@@ -242,7 +280,7 @@ authoritative list is `lib/navigation.ts`, which every nav surface derives from.
 | Overview | `/` `/brief` `/seasonal` `/report` (smart search is ⌘K, not a route) |
 | Inventory | `/stock` `/stock/demand` `/stock-forecast` `/gap` `/gap/catalog` `/scrap` `/returns` `/reorder` `/catalog-links` |
 | Sales | `/customers` (+`/[code]`, `/health-score`) `/receivables` `/margin` `/pricing` `/ebay` `/ebay-reco` `/sales-rep/*` |
-| Operations | `/suppliers/*` `/price-lists` `/inquiries` `/invoices` `/credits` `/competitors` `/shipments` `/deliveries` `/vehicle-intelligence` `/alerts` |
+| Operations | `/suppliers/*` `/price-lists` `/inquiries` `/invoices` `/credits` `/competitors` (+`/fakes`) `/shipments` `/deliveries` `/vehicle-intelligence` `/alerts` |
 | Bookkeeping | `/bookkeeping` + accounts, trial-balance, journal, vat, cash, purchasing, years |
 | Chat admin | `/chat/*` (flow-decisions, observatory, word-mappings, parts-analytics, diego, feedback, simulator) + `/chat-insights` |
 
