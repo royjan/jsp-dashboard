@@ -8,10 +8,13 @@ import { itemChainCodes } from '@/lib/services/analytics-service'
 
 // Drill-down for an item card: the documents an item appears in, by type.
 // invoices=11 (tax invoice), quotes=31 (price quote), purchases=58 (supplier invoice).
-const TYPE_FORMAT: Record<string, string> = {
-  invoices: String(DOC_FORMATS.TAX_INVOICE),
-  quotes: String(DOC_FORMATS.QUOTE),
-  purchases: '58',
+// `purchases` is TWO formats. 58 is the FOREIGN supplier invoice; 51 is the
+// DOMESTIC one, and asking for 58 alone silently dropped most of Jan's buying —
+// see finapi/constants.py, DOMESTIC_SUPPLIER_INVOICE = "51".
+const TYPE_FORMAT: Record<string, string[]> = {
+  invoices: [String(DOC_FORMATS.TAX_INVOICE)],
+  quotes: [String(DOC_FORMATS.QUOTE)],
+  purchases: ['51', '58'],
 }
 
 export async function GET(req: Request, { params }: { params: Promise<{ code: string }> }) {
@@ -20,7 +23,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ code: st
     const { code } = await params
     const { searchParams } = new URL(req.url)
     const type = searchParams.get('type') || 'invoices'
-    const doc_format = TYPE_FORMAT[type] || TYPE_FORMAT.invoices
+    const doc_formats = TYPE_FORMAT[type] || TYPE_FORMAT.invoices
 
     // Ask for EVERY code in the supersession chain, not just the one in the URL.
     // Documents are filed against whatever code was current on the day, so the
@@ -31,8 +34,11 @@ export async function GET(req: Request, { params }: { params: Promise<{ code: st
     const codes = await itemChainCodes(requested)
     const unavailable: string[] = []
 
+    // Every (code, format) pair: the chain is asked under each code, and
+    // purchases carry two formats.
+    const pairs = codes.flatMap((c) => doc_formats.map((f) => [c, f] as const))
     const perCode = await Promise.all(
-      codes.map((c) =>
+      pairs.map(([c, doc_format]) =>
         // NO FAILOVER, deliberately — finansit-client.ts already records why for
         // this endpoint: "the fallback box answers this endpoint with 503, so
         // failing over just converts a slow answer into an error." Here it did
@@ -45,10 +51,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ code: st
         fetchDocumentLinesSlow({ item_code: c, doc_format, limit: 50 })
           .then((raw) => {
             const l: any[] = Array.isArray(raw) ? raw : (raw?.lines || raw?.documents || raw?.data || [])
-            return l.map((line) => ({ line, source_code: c }))
+            return l.map((line) => ({ line, source_code: c, fmt: doc_format }))
           })
           // One dead alias must not blank the whole tab.
-          .catch((e) => {
+          .catch((e: any) => {
             // "No data source available for document lines" is FINAPI saying the
             // BULK tier is down, not that the item has no such documents. The two
             // read identically once they both become an empty array, and the panel
@@ -56,7 +62,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ code: st
             // false. Live on 2026-09-09: every supplier-invoice (58) lookup answers
             // exactly that, while the item record still carries a purchase date.
             if (/no data source/i.test(String(e?.message ?? e))) unavailable.push(c)
-            return [] as { line: any; source_code: string }[]
+            return [] as { line: any; source_code: string; fmt: string }[]
           }),
       ),
     )
@@ -64,14 +70,14 @@ export async function GET(req: Request, { params }: { params: Promise<{ code: st
     const seen = new Set<string>()
     const rows = perCode
       .flat()
-      .map(({ line: l, source_code }) => ({
+      .map(({ line: l, source_code, fmt }) => ({
         // FINAPI CALLS IT `doc_num`. None of the three names tried here existed on
         // the payload, so this was `null` on every row: the מסמך column read "-"
         // for every line, and the de-dup below — which keys on it — had nothing
         // to key on. Verified against the live endpoint 2026-09-09:
         // {"doc_format":"31","doc_num":"332358","doc_date":"2026-09-06",...}.
         doc_number: l.doc_num ?? l.doc_number ?? l.document_number ?? l.number ?? null,
-        doc_format,
+        doc_format: l.doc_format ?? fmt,
         date: l.doc_date ?? l.date ?? '',
         party: l.customer_name ?? l.supplier_name ?? l.customer_code ?? '',
         qty: Number(l.quantity ?? l.qty ?? 0) || 0,
@@ -121,7 +127,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ code: st
 
     // Only when the source failed for EVERY code and produced nothing: a partial
     // answer is an answer, and should not be flagged as an outage.
-    const source_unavailable = merged.length === 0 && unavailable.length === codes.length
+    const source_unavailable = merged.length === 0 && unavailable.length === pairs.length
     return NextResponse.json({
       type, count: merged.length, rows: merged, chain_codes: codes, source_unavailable,
     })
