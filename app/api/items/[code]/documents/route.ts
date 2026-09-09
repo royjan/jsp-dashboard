@@ -46,7 +46,12 @@ export async function GET(req: Request, { params }: { params: Promise<{ code: st
     const rows = perCode
       .flat()
       .map(({ line: l, source_code }) => ({
-        doc_number: l.doc_number ?? l.document_number ?? l.number ?? null,
+        // FINAPI CALLS IT `doc_num`. None of the three names tried here existed on
+        // the payload, so this was `null` on every row: the מסמך column read "-"
+        // for every line, and the de-dup below — which keys on it — had nothing
+        // to key on. Verified against the live endpoint 2026-09-09:
+        // {"doc_format":"31","doc_num":"332358","doc_date":"2026-09-06",...}.
+        doc_number: l.doc_num ?? l.doc_number ?? l.document_number ?? l.number ?? null,
         doc_format,
         date: l.doc_date ?? l.date ?? '',
         party: l.customer_name ?? l.supplier_name ?? l.customer_code ?? '',
@@ -57,9 +62,15 @@ export async function GET(req: Request, { params }: { params: Promise<{ code: st
         // when it differs from the code being viewed.
         item_code: source_code,
       }))
-      // The same document can come back from two codes when it listed both.
+      // The same document can come back from two codes when it listed both —
+      // and it comes back from EVERY code in the chain, because FINAPI's item
+      // index answers an alias with the whole chain's lines. `item_code` here is
+      // the code we ASKED under, so including it in the key made the de-dup a
+      // no-op: one document became three rows on a three-code chain, which is
+      // exactly what 1920LL → 9819938480 → 1675941280 showed. Key on the
+      // DOCUMENT, not on which alias fetched it.
       .filter((r) => {
-        const k = `${r.doc_number}|${r.item_code}|${r.qty}|${r.total}`
+        const k = `${r.doc_format}|${r.doc_number}|${r.date}|${r.qty}|${r.total}`
         if (seen.has(k)) return false
         seen.add(k)
         return true

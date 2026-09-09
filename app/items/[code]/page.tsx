@@ -1,6 +1,6 @@
 'use client'
 
-import { use, useEffect, useState } from 'react'
+import { use, useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { useRouter } from 'next/navigation'
 import { useItemDetail, useItemDocuments, useItemLinks, useItemMedia, HttpError } from '@/hooks/use-analytics'
@@ -51,7 +51,21 @@ function ItemDocsPanel({ code, type, isHe, onClose }: { code: string; type: DocT
   const { data, isLoading } = useItemDocuments(code, type)
   const rows: MovementRow[] = data?.rows ?? []
   const label = DOC_LABELS[type]
+
+  // IT OPENS ABOVE THE THING YOU CLICKED. This panel mounts straight after the
+  // media card, while two of its three triggers (`קניה אחרונה` and `פניות`) sit
+  // in the details list further down — so opening it pushed the page down and
+  // drew the panel off the top of the viewport. Reported as "clicking does
+  // nothing", and from the operator's seat that is exactly what it looked like:
+  // the row you clicked moves away and no new card appears where you are
+  // looking. Bringing it into view is the whole fix; the data was always there.
+  const panelRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    panelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [type])
+
   return (
+    <div ref={panelRef}>
     <Card>
       <CardHeader className="pb-3 flex flex-row items-center justify-between">
         <CardTitle className="text-base flex items-center gap-2">
@@ -136,6 +150,7 @@ function ItemDocsPanel({ code, type, isHe, onClose }: { code: string; type: DocT
         )}
       </CardContent>
     </Card>
+    </div>
   )
 }
 
@@ -768,6 +783,8 @@ export default function ItemDetailPage({ params }: { params: Promise<{ code: str
         <motion.div custom={2} variants={cardVariants} initial="hidden" animate="visible">
           <Card
             onClick={() => toggleDocs('invoices')}
+            title={isHe ? 'הצג את החשבוניות שהפריט מופיע בהן' : 'Show the invoices this item appears in'}
+            aria-expanded={openDocs === 'invoices'}
             className={`cursor-pointer transition-colors hover:border-primary/50 ${openDocs === 'invoices' ? 'border-primary' : ''}`}
           >
             <CardContent className="p-4">
@@ -883,7 +900,9 @@ export default function ItemDetailPage({ params }: { params: Promise<{ code: str
               <dd>
                 <button
                   onClick={() => toggleDocs('purchases')}
-                  className={`inline-flex items-center gap-1 hover:text-primary transition-colors ${openDocs === 'purchases' ? 'text-primary' : ''}`}
+                  title={isHe ? 'הצג את מסמכי הרכש של הפריט' : 'Show this item\'s purchase documents'}
+                  aria-expanded={openDocs === 'purchases'}
+                  className={`inline-flex items-center gap-1 cursor-pointer rounded px-1 -mx-1 underline decoration-dotted underline-offset-4 decoration-muted-foreground/60 hover:text-primary hover:decoration-primary hover:bg-primary/5 transition-colors ${openDocs === 'purchases' ? 'text-primary decoration-primary bg-primary/5' : ''}`}
                 >
                   {formatErpDate(data.purchase_date)}
                   <FileText className="h-3 w-3 opacity-60" />
@@ -895,7 +914,9 @@ export default function ItemDetailPage({ params }: { params: Promise<{ code: str
               <dd>
                 <button
                   onClick={() => toggleDocs('quotes')}
-                  className={`inline-flex items-center gap-1 hover:text-primary transition-colors ${openDocs === 'quotes' ? 'text-primary' : ''}`}
+                  title={isHe ? 'הצג את הצעות המחיר שהפריט מופיע בהן' : 'Show the quotes this item appears in'}
+                  aria-expanded={openDocs === 'quotes'}
+                  className={`inline-flex items-center gap-1 cursor-pointer rounded px-1 -mx-1 underline decoration-dotted underline-offset-4 decoration-muted-foreground/60 hover:text-primary hover:decoration-primary hover:bg-primary/5 transition-colors ${openDocs === 'quotes' ? 'text-primary decoration-primary bg-primary/5' : ''}`}
                 >
                   {data.inquiry_count || 0}
                   <FileText className="h-3 w-3 opacity-60" />
