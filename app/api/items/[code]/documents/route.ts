@@ -2,7 +2,7 @@ export const maxDuration = 30
 
 import { NextResponse } from 'next/server'
 import { initializeSecrets } from '@/lib/aws-secrets'
-import { fetchDocumentLines } from '@/lib/finansit-client'
+import { fetchDocumentLinesSlow } from '@/lib/finansit-client'
 import { DOC_FORMATS } from '@/lib/constants'
 import { itemChainCodes } from '@/lib/services/analytics-service'
 
@@ -33,7 +33,16 @@ export async function GET(req: Request, { params }: { params: Promise<{ code: st
 
     const perCode = await Promise.all(
       codes.map((c) =>
-        fetchDocumentLines({ item_code: c, doc_format, limit: 50 })
+        // NO FAILOVER, deliberately — finansit-client.ts already records why for
+        // this endpoint: "the fallback box answers this endpoint with 503, so
+        // failing over just converts a slow answer into an error." Here it did
+        // something worse than an error. On supplier invoices (58) the primary
+        // .111 answers 503 "No data source available", the shared client fails
+        // over to .109, and .109 returns an empty envelope — so the 503 was
+        // swallowed and the panel said ⁧לא נמצאו מסמכים⁩ about an item whose own
+        // record shows a purchase on 3.3.2026. The 503 has to reach the catch
+        // below to be told apart from a genuine absence.
+        fetchDocumentLinesSlow({ item_code: c, doc_format, limit: 50 })
           .then((raw) => {
             const l: any[] = Array.isArray(raw) ? raw : (raw?.lines || raw?.documents || raw?.data || [])
             return l.map((line) => ({ line, source_code: c }))
