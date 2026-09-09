@@ -69,7 +69,20 @@ export function createClient(config: FinapiClientConfig) {
   const timeout = config.timeout ?? 15000
   const semaphore = config.concurrency ? new Semaphore(config.concurrency) : null
   const authHeaderByBase = new Map<string, string>() // per-base (boxes can differ)
+  // Sticky, but NOT forever. Staying on the box that worked avoids a failed
+  // request per call during an outage; never coming back means a 30-second
+  // restart of the primary pins this process to the fallback for its whole life.
+  // Live on 2026-09-09: two FINAPI restarts moved the dashboard to .109, and it
+  // stayed there — the item card then showed a last-purchase date of 26.10.2017
+  // while .111 (and the ERP) said 3.3.2026, because .109 carries older data.
+  // Nothing in the logs said so afterwards; the failover line scrolls past once
+  // and the wrong answers look like data.
   let activeIdx = 0 // sticky: stay on the last base URL that worked
+  let movedOffPrimaryAt = 0
+  // One re-probe of the primary per minute is a cheap price for not serving a
+  // stale box indefinitely: during a real outage it costs one failed request a
+  // minute, and it heals on its own the moment the primary answers.
+  const STICKY_MS = 60_000
 
   async function getAuthHeader(base: string): Promise<string> {
     const cached = authHeaderByBase.get(base)
@@ -112,6 +125,7 @@ export function createClient(config: FinapiClientConfig) {
   async function withFailover<T>(attempt: (base: string, signal: AbortSignal) => Promise<T>, retryOn500 = false): Promise<T> {
     if (semaphore) await semaphore.acquire()
     try {
+      if (activeIdx !== 0 && Date.now() - movedOffPrimaryAt > STICKY_MS) activeIdx = 0
       const order = [activeIdx, ...baseUrls.map((_, i) => i).filter((i) => i !== activeIdx)]
       let lastErr: any
       for (let n = 0; n < order.length; n++) {
@@ -120,7 +134,8 @@ export function createClient(config: FinapiClientConfig) {
         const timer = setTimeout(() => controller.abort(), timeout)
         try {
           const out = await attempt(baseUrls[idx], controller.signal)
-          activeIdx = idx // stick to the box that worked
+          if (idx !== 0 && activeIdx === 0) movedOffPrimaryAt = Date.now()
+          activeIdx = idx // stick to the box that worked, for STICKY_MS
           return out
         } catch (e: any) {
           lastErr = e
