@@ -29,6 +29,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ code: st
     // quotes and hid the 21 filed under 1920LL and 9819938480.
     const requested = decodeURIComponent(code)
     const codes = await itemChainCodes(requested)
+    const unavailable: string[] = []
 
     const perCode = await Promise.all(
       codes.map((c) =>
@@ -38,7 +39,16 @@ export async function GET(req: Request, { params }: { params: Promise<{ code: st
             return l.map((line) => ({ line, source_code: c }))
           })
           // One dead alias must not blank the whole tab.
-          .catch(() => [] as { line: any; source_code: string }[]),
+          .catch((e) => {
+            // "No data source available for document lines" is FINAPI saying the
+            // BULK tier is down, not that the item has no such documents. The two
+            // read identically once they both become an empty array, and the panel
+            // then says ⁧לא נמצאו מסמכים⁩ — which is a claim about the item, and
+            // false. Live on 2026-09-09: every supplier-invoice (58) lookup answers
+            // exactly that, while the item record still carries a purchase date.
+            if (/no data source/i.test(String(e?.message ?? e))) unavailable.push(c)
+            return [] as { line: any; source_code: string }[]
+          }),
       ),
     )
 
@@ -100,7 +110,12 @@ export async function GET(req: Request, { params }: { params: Promise<{ code: st
       .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')))
       .slice(0, 50)
 
-    return NextResponse.json({ type, count: merged.length, rows: merged, chain_codes: codes })
+    // Only when the source failed for EVERY code and produced nothing: a partial
+    // answer is an answer, and should not be flagged as an outage.
+    const source_unavailable = merged.length === 0 && unavailable.length === codes.length
+    return NextResponse.json({
+      type, count: merged.length, rows: merged, chain_codes: codes, source_unavailable,
+    })
   } catch (error) {
     console.error('[items/:code/documents] Error:', error)
     return NextResponse.json({ rows: [], error: error instanceof Error ? error.message : 'Failed' })

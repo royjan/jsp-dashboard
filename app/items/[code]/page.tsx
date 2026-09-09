@@ -83,6 +83,16 @@ function ItemDocsPanel({ code, type, isHe, onClose }: { code: string; type: DocT
       <CardContent>
         {isLoading ? (
           <div className="space-y-2">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-8 w-full" />)}</div>
+        ) : data?.source_unavailable ? (
+          // NOT the same sentence as "none found". FINAPI answers supplier
+          // invoices (58) with "No data source available for document lines"
+          // while the item record still shows a purchase date — so ⁧לא נמצאו
+          // מסמכים⁩ was a claim about the item, and a false one.
+          <p className="text-sm text-amber-500/90 py-2">
+            {isHe
+              ? 'מקור המסמכים אינו זמין כרגע — זו תקלה בשליפה, לא היעדר מסמכים'
+              : 'The document source is unavailable right now — this is a fetch failure, not an absence of documents'}
+          </p>
         ) : rows.length === 0 ? (
           <p className="text-sm text-muted-foreground py-2">{isHe ? 'לא נמצאו מסמכים' : 'No documents found'}</p>
         ) : (
@@ -924,7 +934,7 @@ export default function ItemDetailPage({ params }: { params: Promise<{ code: str
               )}
               <dt className="text-muted-foreground">{isHe ? 'מכירה אחרונה' : 'Last Sale'}</dt>
               <dd>{formatErpDate(data.sale_date)}</dd>
-              <dt className="text-muted-foreground">{isHe ? 'קניה אחרונה' : 'Last Purchase'}</dt>
+              <dt className="text-muted-foreground">{isHe ? 'קניה אחרונה מספק' : 'Last Supplier Purchase'}</dt>
               <dd>
                 <button
                   onClick={() => toggleDocs('purchases')}
@@ -938,7 +948,14 @@ export default function ItemDetailPage({ params }: { params: Promise<{ code: str
               </dd>
               <dt className="text-muted-foreground">{isHe ? 'ספירה אחרונה' : 'Last Count'}</dt>
               <dd>{formatErpDate(data.count_date)}</dd>
-              <dt className="text-muted-foreground">{isHe ? 'פניות' : 'Inquiries'}</dt>
+              {/* IT WAS NOT INQUIRIES, AND NOT THE COUNT OF WHAT IT OPENS.
+                  `inquiry_count` is ERP field ItmMaxQty — analytics-service.ts
+                  says so where it drops the field as deprecated — so the row
+                  read ⁧פניות 3⁩ while the list it opens held 42 quotes, and
+                  FINAPI's own record says 146. Three numbers, one label, none
+                  of them inquiries. The row now names what it opens and lets
+                  the panel's own header carry the count. */}
+              <dt className="text-muted-foreground">{isHe ? 'הצעות מחיר' : 'Quotes'}</dt>
               <dd>
                 <button
                   onClick={() => toggleDocs('quotes')}
@@ -946,7 +963,7 @@ export default function ItemDetailPage({ params }: { params: Promise<{ code: str
                   aria-expanded={openDocs === 'quotes'}
                   className={`inline-flex items-center gap-1 cursor-pointer rounded px-1 -mx-1 underline decoration-dotted underline-offset-4 decoration-muted-foreground/60 hover:text-primary hover:decoration-primary hover:bg-primary/5 transition-colors ${openDocs === 'quotes' ? 'text-primary decoration-primary bg-primary/5' : ''}`}
                 >
-                  {data.inquiry_count || 0}
+                  {isHe ? 'הצג' : 'Show'}
                   <FileText className="h-3 w-3 opacity-60" />
                 </button>
               </dd>
