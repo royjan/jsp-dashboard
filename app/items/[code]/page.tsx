@@ -38,9 +38,12 @@ const DOC_LABELS: Record<DocType, { he: string; en: string }> = {
 interface MovementRow {
   date: string | null
   doc_number: string | null
+  doc_format?: string | null
   party: string | null
   qty: number
   total: number | null
+  /** How many lines of this document quoted this part. >1 means the figures are a sum. */
+  lines?: number
 }
 
 function ItemDocsPanel({ code, type, isHe, onClose }: { code: string; type: DocType; isHe: boolean; onClose: () => void }) {
@@ -101,7 +104,32 @@ function ItemDocsPanel({ code, type, isHe, onClose }: { code: string; type: DocT
                   key: 'doc_number',
                   header: isHe ? 'מסמך' : 'Doc',
                   sortable: true,
-                  cell: r => <span className="font-mono">{r.doc_number ?? '-'}</span>,
+                  // The number is the document, so let it BE the document. The
+                  // detail page already exists and carries the PDF button; the
+                  // column was rendering a dead string next to a live route.
+                  cell: r =>
+                    r.doc_number && r.doc_format ? (
+                      <a
+                        href={`/documents/${encodeURIComponent(r.doc_format)}/${encodeURIComponent(r.doc_number)}`}
+                        className="font-mono text-primary hover:underline"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {r.doc_number}
+                        {r.lines && r.lines > 1 ? (
+                          // Two lines of one document, summed above. Say so, or the
+                          // total reads as a single line at a price nobody quoted.
+                          <span
+                            className="ms-1 text-[10px] font-sans text-muted-foreground"
+                            title={isHe ? `${r.lines} שורות במסמך זה, הסכומים מסוכמים`
+                                        : `${r.lines} lines in this document, amounts summed`}
+                          >
+                            ×{r.lines}
+                          </span>
+                        ) : null}
+                      </a>
+                    ) : (
+                      <span className="font-mono">{r.doc_number ?? '-'}</span>
+                    ),
                   exportValue: r => r.doc_number ?? '',
                 },
                 {

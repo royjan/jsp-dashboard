@@ -62,23 +62,45 @@ export async function GET(req: Request, { params }: { params: Promise<{ code: st
         // when it differs from the code being viewed.
         item_code: source_code,
       }))
-      // The same document can come back from two codes when it listed both —
-      // and it comes back from EVERY code in the chain, because FINAPI's item
-      // index answers an alias with the whole chain's lines. `item_code` here is
-      // the code we ASKED under, so including it in the key made the de-dup a
-      // no-op: one document became three rows on a three-code chain, which is
-      // exactly what 1920LL → 9819938480 → 1675941280 showed. Key on the
-      // DOCUMENT, not on which alias fetched it.
+      // STEP 1 — drop the alias copies. FINAPI's item index answers ANY code in a
+      // chain with the whole chain's lines, so asking under three codes returns
+      // each line three times. `item_code` here is the code we ASKED under, not
+      // the item on the line, so keying on it made this a no-op and one document
+      // became three rows (live on 1920LL → 9819938480 → 1675941280).
       .filter((r) => {
         const k = `${r.doc_format}|${r.doc_number}|${r.date}|${r.qty}|${r.total}`
         if (seen.has(k)) return false
         seen.add(k)
         return true
       })
+
+    // STEP 2 — one row per DOCUMENT, which is what the column claims to be.
+    // A document really can carry this part on more than one line: of 42 quotes
+    // on 1675941280, eight do — 331318 holds 4,195.65 and 2,200; 319478 holds a
+    // zeroed line and 3,400. Showing them as separate rows read as duplicated
+    // documents, because the only visible difference was a masked amount. So
+    // sum the money and the quantity, and say how many lines it came from —
+    // hiding the second line would understate what the document is worth.
+    const byDoc = new Map<string, (typeof rows)[number] & { lines: number }>()
+    for (const r of rows) {
+      // A document with no number cannot be merged on one, so keep it distinct
+      // by date and party rather than collapsing unrelated rows together.
+      const k = `${r.doc_format}|${r.doc_number ?? `~${r.date}|${r.party}`}`
+      const cur = byDoc.get(k)
+      if (!cur) {
+        byDoc.set(k, { ...r, lines: 1 })
+      } else {
+        cur.qty += r.qty
+        cur.total += r.total
+        cur.lines += 1
+      }
+    }
+
+    const merged = [...byDoc.values()]
       .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')))
       .slice(0, 50)
 
-    return NextResponse.json({ type, count: rows.length, rows, chain_codes: codes })
+    return NextResponse.json({ type, count: merged.length, rows: merged, chain_codes: codes })
   } catch (error) {
     console.error('[items/:code/documents] Error:', error)
     return NextResponse.json({ rows: [], error: error instanceof Error ? error.message : 'Failed' })
