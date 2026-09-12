@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { client, fetchItemHistory } from '@/lib/finansit-client'
 import { initializeSecrets } from '@/lib/aws-secrets'
 import { query } from '@/lib/db'
-import { partlyCandidates, partlyMatchForms, catalogChainAfter, erpCodeViaSupersession } from '@/lib/partly-codes'
+import { partlyCandidates, partlyMatchForms, catalogChainAfter, catalogChainBefore, erpCodeViaSupersession } from '@/lib/partly-codes'
 
 /** The shape of FINAPI's item-history response that this route actually reads. */
 interface ItemHistory { canonical_code?: string | null; item_id_history?: unknown[] }
@@ -300,6 +300,11 @@ export async function GET(
       const catalogTail = await catalogChainAfter(
         erpChain.length ? erpChain : [c.item_number],
       ).catch(() => [])
+      // What this code REPLACED. Without it a page reached BY the redirect —
+      // i.e. the newest code, the commonest way to land here — shows no chain.
+      const catalogPrev = await catalogChainBefore(
+        erpChain.length ? erpChain : [c.item_number],
+      ).catch(() => [])
       const erpSellCode = erpChain.length ? erpChain[erpChain.length - 1] : erpCode
       const erpItem = erpSellCode ? await client.items.get(erpSellCode).catch(() => null) : null
 
@@ -320,6 +325,7 @@ export async function GET(
         // Oldest -> newest, ERP codes first, exactly like the ERP-backed card.
         item_id_history: erpChain.length ? erpChain : undefined,
         catalog_history: catalogTail.map((t) => ({ ...t, source: 'psa_catalog' })),
+        catalog_prev: catalogPrev.map((t) => ({ ...t, source: 'psa_catalog' })),
         erp_latest: erpChain.length ? erpChain[erpChain.length - 1] : null,
         erp_latest_source: erpChain.length
           ? await erpLatestSource(erpChain[erpChain.length - 1]).catch(() => 'erp')
@@ -404,6 +410,7 @@ export async function GET(
       (effectiveHistory?.item_id_history || item.item_id_history || [item.code]) as unknown[]
     ).map((h) => String(h))
     const catalogTail = await catalogChainAfter(erpChain).catch(() => [])
+    const catalogPrev = await catalogChainBefore(erpChain).catch(() => [])
 
     return NextResponse.json({
       ...item,
@@ -412,6 +419,7 @@ export async function GET(
       canonical_name: effectiveHistory?.canonical_name || item.name,
       item_id_history: effectiveHistory?.item_id_history || item.item_id_history,
       catalog_history: catalogTail.map((t) => ({ ...t, source: 'psa_catalog' })),
+      catalog_prev: catalogPrev.map((t) => ({ ...t, source: 'psa_catalog' })),
       // The newest number the manufacturer prints, which is NOT necessarily one
       // we can price. Kept apart from canonical_code for that reason.
       catalog_canonical_code: catalogTail.length ? catalogTail[catalogTail.length - 1].code : null,

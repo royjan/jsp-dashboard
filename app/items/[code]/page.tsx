@@ -281,6 +281,7 @@ function CodeChainCard({
   code,
   history,
   catalogHistory,
+  catalogPrev,
   erpLatest,
   erpLatestSource,
   isHe,
@@ -289,12 +290,24 @@ function CodeChainCard({
   code?: string
   history?: string[]
   catalogHistory?: Array<{ code: string; name: string | null }>
+  /** Codes this one REPLACED, oldest first. */
+  catalogPrev?: Array<{ code: string; name: string | null }>
   erpLatest?: string | null
   erpLatestSource?: 'lubinski' | 'erp' | null
   isHe: boolean
 }) {
   const erp = history ?? []
   const catalog = catalogHistory ?? []
+  /*
+   * What came BEFORE. The page redirects every code in a chain onto the one it
+   * is sold as today, so the usual way to see a chain is to arrive at its END —
+   * where looking forward finds nothing and the card hid itself. Reading
+   * "9813091880 → 9848964480" then landing on a 9848964480 page with no chain
+   * on it says "there is no chain", which is the opposite of the truth.
+   */
+  const before = (catalogPrev ?? []).filter(
+    (p) => p.code !== code && !erp.includes(p.code) && !catalog.some((c) => c.code === p.code),
+  )
   /*
    * The code you are looking at is only implicitly in this chain: when the ERP
    * knows the part, `item_id_history` already starts with it. When the ERP has
@@ -315,6 +328,7 @@ function CodeChainCard({
     ? [{ code, name: null as string | null }]
     : []
   const chain = [
+    ...before,
     ...seed,
     ...erp.map((code) => ({ code, name: null as string | null })),
     ...catalog,
@@ -339,7 +353,9 @@ function CodeChainCard({
    * quote.
    */
   const currentSource: 'catalog' | 'lubinski' | 'erp' =
-    catalog.length > 0 ? 'catalog' : erpLatestSource === 'lubinski' ? 'lubinski' : 'erp'
+    catalog.length > 0 ? 'catalog'
+      : before.length > 0 && erp.length <= 1 ? 'catalog'
+      : erpLatestSource === 'lubinski' ? 'lubinski' : 'erp'
   const CURRENT_LABEL = {
     catalog: isHe ? 'עדכני · לפי הקטלוג' : 'current · catalog',
     lubinski: isHe ? 'עדכני · לפי לובינסקי' : 'current · Lubinski',
@@ -744,6 +760,7 @@ export default function ItemDetailPage({ params }: { params: Promise<{ code: str
           code={data.code || decodedCode}
           history={data.item_id_history}
           catalogHistory={data.catalog_history}
+          catalogPrev={data.catalog_prev}
           erpLatest={data.erp_latest}
           erpLatestSource={data.erp_latest_source}
           isHe={isHe}
@@ -1083,6 +1100,7 @@ export default function ItemDetailPage({ params }: { params: Promise<{ code: str
         code={data.code || decodedCode}
         history={data.item_id_history}
         catalogHistory={data.catalog_history}
+        catalogPrev={data.catalog_prev}
         erpLatest={data.erp_latest}
         erpLatestSource={data.erp_latest_source}
         isHe={isHe}

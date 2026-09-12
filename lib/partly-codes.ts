@@ -81,6 +81,63 @@ const MAX_CHAIN_HOPS = 5
  * that only looked forward from the tail would find nothing. The successors are
  * still appended AFTER the tail, which is where they belong in time.
  */
+/**
+ * The codes the catalog says THIS one replaced — the walk backwards.
+ *
+ * `catalogChainAfter` only ever looks forward, which is right until the page
+ * you are on IS the newest code. The item page redirects every code in a chain
+ * onto the one it is sold as today, so the commonest way to see a chain is to
+ * arrive at its END — and there, the whole chain is behind you and forward
+ * finds nothing. /items/9813091880 redirects to /items/9848964480 and the
+ * destination rendered no chain at all, which reads as "there is no chain"
+ * rather than "you are standing at the end of it".
+ *
+ * Returned OLDEST FIRST, so it prepends straight onto the displayed chain.
+ */
+export async function catalogChainBefore(known: string[]): Promise<Array<{ code: string; name: string | null }>> {
+  const seen = new Set(known.map((c) => String(c ?? '').trim().toUpperCase()).filter(Boolean))
+  if (seen.size === 0) return []
+
+  const hops: string[][] = []
+  let frontier = [...seen]
+
+  for (let hop = 0; hop < MAX_CHAIN_HOPS && frontier.length > 0; hop++) {
+    const res = await query(
+      `SELECT DISTINCT old_item_number FROM partly.part_supersessions
+        WHERE new_item_number = ANY($1::text[])`,
+      [frontier],
+    ).catch(() => null)
+
+    const next: string[] = []
+    for (const r of res?.rows ?? []) {
+      const c = String((r as { old_item_number: string }).old_item_number ?? '').trim()
+      if (!c || seen.has(c.toUpperCase())) continue
+      seen.add(c.toUpperCase())
+      next.push(c)
+    }
+    if (next.length === 0) break
+    hops.push(next)
+    frontier = next
+  }
+  // hops[0] is one step back, hops[1] two steps back — so the oldest is last.
+  const out = hops.reverse().flat()
+  if (out.length === 0) return []
+
+  const named = await query(
+    `SELECT item_number,
+            CASE WHEN hebrew_description IS NOT NULL AND hebrew_description <> '-'
+                 THEN hebrew_description ELSE description END AS name
+       FROM partly.global_parts WHERE item_number = ANY($1::text[])`,
+    [out],
+  ).catch(() => null)
+  const nameByCode = new Map<string, string>()
+  for (const r of named?.rows ?? []) {
+    const row = r as { item_number: string; name: string | null }
+    if (row.name) nameByCode.set(row.item_number, row.name)
+  }
+  return out.map((code) => ({ code, name: nameByCode.get(code) ?? null }))
+}
+
 export async function catalogChainAfter(known: string[]): Promise<Array<{ code: string; name: string | null }>> {
   const seen = new Set(known.map((c) => String(c ?? '').trim().toUpperCase()).filter(Boolean))
   if (seen.size === 0) return []
