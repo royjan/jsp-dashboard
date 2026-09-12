@@ -282,6 +282,7 @@ function CodeChainCard({
   history,
   catalogHistory,
   catalogPrev,
+  chainMissingErp,
   erpLatest,
   erpLatestSource,
   isHe,
@@ -292,6 +293,8 @@ function CodeChainCard({
   catalogHistory?: Array<{ code: string; name: string | null }>
   /** Codes this one REPLACED, oldest first. */
   catalogPrev?: Array<{ code: string; name: string | null }>
+  /** Chain codes the ERP has no card for. */
+  chainMissingErp?: string[]
   erpLatest?: string | null
   erpLatestSource?: 'lubinski' | 'erp' | null
   isHe: boolean
@@ -356,11 +359,41 @@ function CodeChainCard({
     catalog.length > 0 ? 'catalog'
       : before.length > 0 && erp.length <= 1 ? 'catalog'
       : erpLatestSource === 'lubinski' ? 'lubinski' : 'erp'
+  const missingErp = new Set(chainMissingErp ?? [])
+  /*
+   * Where the two lineages disagree, in words.
+   *
+   * The badges say WHAT the chain is; these say what is odd about it. Both
+   * cases are ones a counter hand has to act on rather than read past: a code
+   * with no ERP card cannot be quoted at all, and a catalog that has moved
+   * past our own latest means the number we are still selling under is behind
+   * the manufacturer.
+   */
   const CURRENT_LABEL = {
     catalog: isHe ? 'עדכני · לפי הקטלוג' : 'current · catalog',
     lubinski: isHe ? 'עדכני · לפי לובינסקי' : 'current · Lubinski',
     erp: isHe ? 'עדכני · לפי ה־ERP' : 'current · ERP',
   } as const
+
+  const current = chain[chain.length - 1]?.code
+  const notes: string[] = []
+  if (missingErp.size > 0) {
+    const list = chain.map((c) => c.code).filter((c) => missingErp.has(c))
+    if (list.length) {
+      notes.push(
+        isHe
+          ? `${list.length === 1 ? 'מק\u201dט' : list.length + ' מק\u201dטים'} בשרשרת לא קיימים כפריט ב\u2011ERP: ${list.join(', ')}. אי אפשר לתמחר או לספור אותם אצלנו.`
+          : `${list.length} code(s) in this chain have no ERP item card: ${list.join(', ')}. They cannot be priced or counted here.`,
+      )
+    }
+  }
+  if (catalog.length > 0 && erpLatest && current && current !== erpLatest) {
+    notes.push(
+      isHe
+        ? `הקטלוג של היצרן כבר עבר ל\u2011${current}, בעוד שאצלנו המספר האחרון הוא ${erpLatest}. שווה לבדוק אם צריך לפתוח את החדש.`
+        : `The manufacturer's catalog has moved on to ${current}, while our own latest is ${erpLatest}.`,
+    )
+  }
 
   return (
     <Card>
@@ -421,6 +454,19 @@ function CodeChainCard({
                     stops. Labelling only the newest code left the older one
                     looking like a mistake rather than the number we actually
                     trade under. */}
+                {/* A code the ERP has no card for looks identical to one we
+                    trade, which is how a number you cannot sell, price or count
+                    reads as one you can. Say it on the code itself. */}
+                {missingErp.has(entry.code) && (
+                  <span
+                    className="rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 whitespace-nowrap dark:text-amber-400"
+                    title={isHe
+                      ? 'המק\u201dט הזה לא קיים כפריט ב\u2011ERP — אין לו מלאי, מחיר או היסטוריה אצלנו'
+                      : 'No ERP item card for this code — no stock, price or history here'}
+                  >
+                    {isHe ? 'לא ב\u05beERP' : 'not in ERP'}
+                  </span>
+                )}
                 {isCurrent && (
                   <span className="text-[10px] text-muted-foreground whitespace-nowrap">
                     {CURRENT_LABEL[currentSource]}
@@ -437,6 +483,16 @@ function CodeChainCard({
             )
           })}
         </div>
+        {notes.length > 0 && (
+          <ul className="mt-3 space-y-1 border-t pt-3 text-xs text-muted-foreground">
+            {notes.map((n, i) => (
+              <li key={i} className="flex gap-2">
+                <span className="text-amber-500">•</span>
+                <span>{n}</span>
+              </li>
+            ))}
+          </ul>
+        )}
       </CardContent>
     </Card>
   )
@@ -761,6 +817,7 @@ export default function ItemDetailPage({ params }: { params: Promise<{ code: str
           history={data.item_id_history}
           catalogHistory={data.catalog_history}
           catalogPrev={data.catalog_prev}
+          chainMissingErp={data.chain_missing_erp}
           erpLatest={data.erp_latest}
           erpLatestSource={data.erp_latest_source}
           isHe={isHe}
@@ -1101,6 +1158,7 @@ export default function ItemDetailPage({ params }: { params: Promise<{ code: str
         history={data.item_id_history}
         catalogHistory={data.catalog_history}
         catalogPrev={data.catalog_prev}
+        chainMissingErp={data.chain_missing_erp}
         erpLatest={data.erp_latest}
         erpLatestSource={data.erp_latest_source}
         isHe={isHe}

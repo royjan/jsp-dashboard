@@ -103,6 +103,28 @@ async function erpLatestSource(code: string): Promise<'lubinski' | 'erp'> {
   return (r?.rows?.length ?? 0) > 0 ? 'lubinski' : 'erp'
 }
 
+/**
+ * Which of these codes the ERP has no card for.
+ *
+ * A chain drawn from the manufacturer's catalog routinely contains numbers
+ * Finansit has never been opened for — 1,514 of them at last count. On the page
+ * they looked exactly like the ones we trade, so a code you cannot sell, price
+ * or count read as one you can. This is what lets the card say so.
+ */
+async function codesMissingFromErp(codes: string[]): Promise<string[]> {
+  const want = [...new Set(codes.map((c) => String(c ?? '').trim()).filter(Boolean))]
+  if (want.length === 0) return []
+  const r = await query(
+    `SELECT code FROM erp.items WHERE code = ANY($1::text[])`,
+    [want],
+  ).catch(() => null)
+  // A FAILED lookup must not paint every code as missing — that would invent a
+  // problem on every row the moment the ERP mirror hiccups.
+  if (!r) return []
+  const have = new Set((r.rows ?? []).map((x: any) => String(x.code)))
+  return want.filter((c) => !have.has(c))
+}
+
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ code: string }> }
@@ -326,6 +348,10 @@ export async function GET(
         item_id_history: erpChain.length ? erpChain : undefined,
         catalog_history: catalogTail.map((t) => ({ ...t, source: 'psa_catalog' })),
         catalog_prev: catalogPrev.map((t) => ({ ...t, source: 'psa_catalog' })),
+        chain_missing_erp: await codesMissingFromErp([
+          c.item_number, ...erpChain,
+          ...catalogPrev.map((t) => t.code), ...catalogTail.map((t) => t.code),
+        ]).catch(() => []),
         erp_latest: erpChain.length ? erpChain[erpChain.length - 1] : null,
         erp_latest_source: erpChain.length
           ? await erpLatestSource(erpChain[erpChain.length - 1]).catch(() => 'erp')
@@ -420,6 +446,10 @@ export async function GET(
       item_id_history: effectiveHistory?.item_id_history || item.item_id_history,
       catalog_history: catalogTail.map((t) => ({ ...t, source: 'psa_catalog' })),
       catalog_prev: catalogPrev.map((t) => ({ ...t, source: 'psa_catalog' })),
+      chain_missing_erp: await codesMissingFromErp([
+        ...erpChain,
+        ...catalogPrev.map((t) => t.code), ...catalogTail.map((t) => t.code),
+      ]).catch(() => []),
       // The newest number the manufacturer prints, which is NOT necessarily one
       // we can price. Kept apart from canonical_code for that reason.
       catalog_canonical_code: catalogTail.length ? catalogTail[catalogTail.length - 1].code : null,
