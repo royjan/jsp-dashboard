@@ -248,6 +248,35 @@ const VEHICLE_PREVIEW = 5      // vehicles shown before "show all"
  * catalog code cannot be priced, its own item page says so and links to the
  * code we sell it under — that is the right place for the caveat, not here.
  */
+/**
+ * The ERP's cross-reference field, with its codes made openable.
+ *
+ * It is a FREE-TEXT remarks field, not a code list — Finansit users put codes,
+ * separators and the occasional word in it — so this links only the tokens that
+ * look like a part number and leaves everything else as plain text. A token
+ * qualifies on the same shape the rest of the app trusts: at least four
+ * characters, letters/digits/dash only, and at least one digit (so "OEM", "ראה"
+ * or a lone "-" never become dead links to an item that does not exist).
+ *
+ * Rendered LTR per token: these are Latin codes sitting in an RTL page, and a
+ * bare one picks up the paragraph's direction and reorders around its dash.
+ */
+function CrossRefs({ value }: { value: string }) {
+  const parts = value.split(/([A-Za-z0-9-]+)/g)
+  const isCode = (t: string) => /^[A-Za-z0-9-]{4,}$/.test(t) && /\d/.test(t)
+  return (
+    <span className="inline-flex flex-wrap items-center gap-x-1">
+      {parts.map((t, i) =>
+        isCode(t) ? (
+          <ItemLink key={`${t}-${i}`} code={t} showCode copyable={false} dir="ltr" />
+        ) : (
+          t.trim() ? <span key={`t-${i}`}>{t}</span> : null
+        ),
+      )}
+    </span>
+  )
+}
+
 function CodeChainCard({
   code,
   history,
@@ -297,6 +326,25 @@ function CodeChainCard({
   // list already carries the newest number there is one "latest" and saying it
   // twice is noise.
   const split = catalog.length > 0 && !!erpLatest
+  /*
+   * Where the NEWEST code came from, always said out loud.
+   *
+   * `catalog` is appended last, so when it has anything the final badge is the
+   * manufacturer's number (scraped into partly); otherwise the chain ends on
+   * the ERP's own lineage. This label used to appear only when the two lineages
+   * BOTH had a latest and disagreed — so on an ERP-only part, and on a
+   * catalog-only one, the newest code was marked "עדכני" with no hint of which
+   * system said so. Those are the two commonest shapes, and "current according
+   * to whom" is the whole question when a counter hand is deciding what to
+   * quote.
+   */
+  const currentSource: 'catalog' | 'lubinski' | 'erp' =
+    catalog.length > 0 ? 'catalog' : erpLatestSource === 'lubinski' ? 'lubinski' : 'erp'
+  const CURRENT_LABEL = {
+    catalog: isHe ? 'עדכני · לפי הקטלוג' : 'current · catalog',
+    lubinski: isHe ? 'עדכני · לפי לובינסקי' : 'current · Lubinski',
+    erp: isHe ? 'עדכני · לפי ה־ERP' : 'current · ERP',
+  } as const
 
   return (
     <Card>
@@ -359,9 +407,7 @@ function CodeChainCard({
                     trade under. */}
                 {isCurrent && (
                   <span className="text-[10px] text-muted-foreground whitespace-nowrap">
-                    {split
-                      ? (isHe ? 'עדכני · לפי הקטלוג' : 'current · catalog')
-                      : (isHe ? 'עדכני' : 'current')}
+                    {CURRENT_LABEL[currentSource]}
                   </span>
                 )}
                 {split && !isCurrent && entry.code === erpLatest && (
@@ -953,7 +999,7 @@ export default function ItemDetailPage({ params }: { params: Promise<{ code: str
               {data.cross_references_remarks && (
                 <>
                   <dt className="text-muted-foreground">{isHe ? 'קודים חלופיים' : 'Cross Ref'}</dt>
-                  <dd className="font-mono">{data.cross_references_remarks}</dd>
+                  <dd className="font-mono"><CrossRefs value={data.cross_references_remarks} /></dd>
                 </>
               )}
               <dt className="text-muted-foreground">{isHe ? 'מכירה אחרונה' : 'Last Sale'}</dt>
