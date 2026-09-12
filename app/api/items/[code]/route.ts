@@ -125,6 +125,72 @@ async function codesMissingFromErp(codes: string[]): Promise<string[]> {
   return want.filter((c) => !have.has(c))
 }
 
+/**
+ * Other codes that branch off this chain — a FORK, not a further step.
+ *
+ * 6325H4 was replaced by two different things: 1688409680, a mirror lamp
+ * supplied without a bulb, and 6216E0, the bulb. The ERP records both as its
+ * successors. A linear chain can only show one of them, so opening either part
+ * gave no sign the other existed — and the page redirects one onto the other,
+ * which sends someone asking for a bulb to a lamp.
+ *
+ * Reported separately from the chain and never merged into it: these are
+ * siblings, and drawing them in the old → new line would claim a succession
+ * that does not exist.
+ */
+async function chainForks(chain: string[]): Promise<Array<{ from: string; code: string; name: string | null }>> {
+  const known = [...new Set(chain.map((c) => String(c ?? '').trim()).filter(Boolean))]
+  if (known.length === 0) return []
+
+  const [erpRes, catRes] = await Promise.all([
+    query(
+      `SELECT code, old_item_id AS from_code, name
+         FROM erp.items
+        WHERE old_item_id = ANY($1::text[]) AND NOT (code = ANY($1::text[]))`,
+      [known],
+    ).catch(() => null),
+    query(
+      `SELECT s.new_item_number AS code, s.old_item_number AS from_code,
+              CASE WHEN gp.hebrew_description IS NOT NULL AND gp.hebrew_description <> '-'
+                   THEN gp.hebrew_description ELSE gp.description END AS name
+         FROM partly.part_supersessions s
+         LEFT JOIN partly.global_parts gp ON gp.item_number = s.new_item_number
+        WHERE s.old_item_number = ANY($1::text[]) AND NOT (s.new_item_number = ANY($1::text[]))`,
+      [known],
+    ).catch(() => null),
+  ])
+
+  const byCode = new Map<string, { from: string; code: string; name: string | null }>()
+  for (const r of [...(erpRes?.rows ?? []), ...(catRes?.rows ?? [])]) {
+    const row = r as { code: string; from_code: string; name: string | null }
+    const code = String(row.code ?? '').trim()
+    if (!code) continue
+    const name = (row.name ?? '').trim() || null
+    const prev = byCode.get(code)
+    // First writer wins on `from`, but a REAL name beats an empty one: the ERP
+    // row is listed first and its `name` is often blank, which would otherwise
+    // hide the catalog's description ("BULB") — the one word that tells you
+    // this branch is a different part.
+    if (prev) { if (!prev.name && name) prev.name = name; continue }
+    byCode.set(code, { from: String(row.from_code ?? '').trim(), code, name })
+  }
+
+  const out = [...byCode.values()].slice(0, 12)
+  const unnamed = out.filter((f) => !f.name).map((f) => f.code)
+  if (unnamed.length) {
+    const named = await query(
+      `SELECT item_number,
+              CASE WHEN hebrew_description IS NOT NULL AND hebrew_description <> '-'
+                   THEN hebrew_description ELSE description END AS name
+         FROM partly.global_parts WHERE item_number = ANY($1::text[])`,
+      [unnamed],
+    ).catch(() => null)
+    const map = new Map((named?.rows ?? []).map((r: any) => [String(r.item_number), (r.name ?? '').trim()]))
+    for (const f of out) if (!f.name) f.name = map.get(f.code) || null
+  }
+  return out
+}
+
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ code: string }> }
@@ -352,6 +418,10 @@ export async function GET(
           c.item_number, ...erpChain,
           ...catalogPrev.map((t) => t.code), ...catalogTail.map((t) => t.code),
         ]).catch(() => []),
+        chain_forks: await chainForks([
+          c.item_number, ...erpChain,
+          ...catalogPrev.map((t) => t.code), ...catalogTail.map((t) => t.code),
+        ]).catch(() => []),
         erp_latest: erpChain.length ? erpChain[erpChain.length - 1] : null,
         erp_latest_source: erpChain.length
           ? await erpLatestSource(erpChain[erpChain.length - 1]).catch(() => 'erp')
@@ -447,6 +517,10 @@ export async function GET(
       catalog_history: catalogTail.map((t) => ({ ...t, source: 'psa_catalog' })),
       catalog_prev: catalogPrev.map((t) => ({ ...t, source: 'psa_catalog' })),
       chain_missing_erp: await codesMissingFromErp([
+        ...erpChain,
+        ...catalogPrev.map((t) => t.code), ...catalogTail.map((t) => t.code),
+      ]).catch(() => []),
+      chain_forks: await chainForks([
         ...erpChain,
         ...catalogPrev.map((t) => t.code), ...catalogTail.map((t) => t.code),
       ]).catch(() => []),

@@ -283,6 +283,7 @@ function CodeChainCard({
   catalogHistory,
   catalogPrev,
   chainMissingErp,
+  chainForks,
   erpLatest,
   erpLatestSource,
   isHe,
@@ -295,6 +296,8 @@ function CodeChainCard({
   catalogPrev?: Array<{ code: string; name: string | null }>
   /** Chain codes the ERP has no card for. */
   chainMissingErp?: string[]
+  /** Siblings: other codes the same old number was replaced by. */
+  chainForks?: Array<{ from: string; code: string; name: string | null }>
   erpLatest?: string | null
   erpLatestSource?: 'lubinski' | 'erp' | null
   isHe: boolean
@@ -376,7 +379,18 @@ function CodeChainCard({
   } as const
 
   const current = chain[chain.length - 1]?.code
+  /* Siblings, kept OUT of the chain line: drawing them in the old → new
+     sequence would claim a succession that does not exist. */
+  const chainCodes = new Set(chain.map((c) => c.code))
+  const forks = (chainForks ?? []).filter((f) => !chainCodes.has(f.code))
   const notes: string[] = []
+  if (forks.length) {
+    notes.push(
+      isHe
+        ? `אותו מספר ישן הוחלף ביותר ממק\u201dט אחד — ${forks.map((f) => f.code).join(', ')} אינם המשך של השרשרת הזו אלא ענף אחר ממנה, ולרוב חלק אחר לגמרי.`
+        : `The same old number was replaced by more than one code — ${forks.map((f) => f.code).join(', ')} are a separate branch, not a further step, and usually a different part.`,
+    )
+  }
   if (missingErp.size > 0) {
     const list = chain.map((c) => c.code).filter((c) => missingErp.has(c))
     if (list.length) {
@@ -483,6 +497,26 @@ function CodeChainCard({
             )
           })}
         </div>
+        {!!forks.length && (
+          <div className="mt-3 border-t pt-3">
+            <div className="mb-1.5 text-[11px] font-medium text-muted-foreground">
+              {isHe ? 'מתפצל גם ל' : 'Also branches to'}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {forks.map((f) => (
+                <span key={f.code} className="inline-flex items-center gap-1.5">
+                  <Badge variant="outline" className="font-mono text-xs">
+                    <ItemLink code={f.code} showCode copyable={false} />
+                  </Badge>
+                  <span className="text-[10px] text-muted-foreground">
+                    {isHe ? `מ\u2011${f.from}` : `from ${f.from}`}
+                    {f.name ? ` · ${f.name}` : ''}
+                  </span>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
         {notes.length > 0 && (
           <ul className="mt-3 space-y-1 border-t pt-3 text-xs text-muted-foreground">
             {notes.map((n, i) => (
@@ -818,6 +852,7 @@ export default function ItemDetailPage({ params }: { params: Promise<{ code: str
           catalogHistory={data.catalog_history}
           catalogPrev={data.catalog_prev}
           chainMissingErp={data.chain_missing_erp}
+          chainForks={data.chain_forks}
           erpLatest={data.erp_latest}
           erpLatestSource={data.erp_latest_source}
           isHe={isHe}
@@ -1159,6 +1194,7 @@ export default function ItemDetailPage({ params }: { params: Promise<{ code: str
         catalogHistory={data.catalog_history}
         catalogPrev={data.catalog_prev}
         chainMissingErp={data.chain_missing_erp}
+        chainForks={data.chain_forks}
         erpLatest={data.erp_latest}
         erpLatestSource={data.erp_latest_source}
         isHe={isHe}
