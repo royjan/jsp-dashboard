@@ -382,6 +382,8 @@ function CodeChainCard({
   /* Siblings, kept OUT of the chain line: drawing them in the old → new
      sequence would claim a succession that does not exist. */
   const chainCodes = new Set(chain.map((c) => c.code))
+  /* Which column a code occupies, so a branch lands under the code it forked FROM. */
+  const chainIndex = new Map(chain.map((c, i) => [c.code, i]))
   const forks = (chainForks ?? []).filter((f) => !chainCodes.has(f.code))
   const notes: string[] = []
   if (forks.length) {
@@ -421,13 +423,20 @@ function CodeChainCard({
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="flex flex-wrap items-center gap-2">
+        {/* One column per code in the chain, so a branch can be placed under the
+            code it came from. Grid honours `direction`: in RTL column 1 is the
+            oldest code and sits on the right, exactly where the flex row put it. */}
+        <div
+          className="grid items-center gap-x-2 gap-y-1.5 overflow-x-auto"
+          style={{ gridTemplateColumns: `repeat(${chain.length}, max-content)` }}
+        >
           {chain.map((entry, i) => {
             const isCurrent = i === chain.length - 1
             return (
               <motion.span
                 key={entry.code}
                 className="flex items-center gap-2"
+                style={{ gridColumn: i + 1, gridRow: 1 }}
                 initial={{ opacity: 0, x: isHe ? 10 : -10 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: i * 0.12, duration: 0.3, ease: 'easeOut' }}
@@ -496,27 +505,40 @@ function CodeChainCard({
               </motion.span>
             )
           })}
+          {/* The branches. Each hangs under the code it forked from and carries no
+              arrow, because an arrow here reads "and then" and a branch is not a
+              further step — it is a different part that replaced the same old
+              number. The elbow is drawn with logical borders so it turns the
+              right way round in both directions. */}
+          {forks.map((f, k) => (
+            <motion.span
+              key={`fork-${f.code}`}
+              className="flex items-center gap-1.5"
+              style={{ gridColumn: `${(chainIndex.get(f.from) ?? 0) + 1} / -1`, gridRow: k + 2 }}
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: (chain.length + k) * 0.12, duration: 0.3, ease: 'easeOut' }}
+            >
+              {/* The elbow. It is pulled UP by its own height so its vertical side
+                  starts inside the row above — touching the badge it forked from
+                  instead of floating under it — and `border-s` keeps that side
+                  inline-start, so the corner turns the right way in both
+                  directions without a second rule. */}
+              <span
+                aria-hidden
+                className="-mt-5 inline-block h-7 w-7 shrink-0 self-start border-b border-s border-muted-foreground/50"
+                style={{ borderEndStartRadius: '1.25rem' }}
+              />
+              <Badge variant="outline" className="font-mono text-xs" title={f.name ?? undefined}>
+                <ItemLink code={f.code} showCode copyable={false} />
+              </Badge>
+              <span className="text-[10px] text-muted-foreground">
+                {isHe ? 'ענף' : 'branch'}
+                {f.name ? ` · ${f.name}` : ''}
+              </span>
+            </motion.span>
+          ))}
         </div>
-        {!!forks.length && (
-          <div className="mt-3 border-t pt-3">
-            <div className="mb-1.5 text-[11px] font-medium text-muted-foreground">
-              {isHe ? 'מתפצל גם ל' : 'Also branches to'}
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {forks.map((f) => (
-                <span key={f.code} className="inline-flex items-center gap-1.5">
-                  <Badge variant="outline" className="font-mono text-xs">
-                    <ItemLink code={f.code} showCode copyable={false} />
-                  </Badge>
-                  <span className="text-[10px] text-muted-foreground">
-                    {isHe ? `מ\u2011${f.from}` : `from ${f.from}`}
-                    {f.name ? ` · ${f.name}` : ''}
-                  </span>
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
         {notes.length > 0 && (
           <ul className="mt-3 space-y-1 border-t pt-3 text-xs text-muted-foreground">
             {notes.map((n, i) => (
