@@ -249,12 +249,15 @@ const VEHICLE_PREVIEW = 5      // vehicles shown before "show all"
  * code we sell it under — that is the right place for the caveat, not here.
  */
 function CodeChainCard({
+  code,
   history,
   catalogHistory,
   erpLatest,
   erpLatestSource,
   isHe,
 }: {
+  /** The code whose page this is — the chain's first link when the ERP has none. */
+  code?: string
   history?: string[]
   catalogHistory?: Array<{ code: string; name: string | null }>
   erpLatest?: string | null
@@ -263,7 +266,27 @@ function CodeChainCard({
 }) {
   const erp = history ?? []
   const catalog = catalogHistory ?? []
+  /*
+   * The code you are looking at is only implicitly in this chain: when the ERP
+   * knows the part, `item_id_history` already starts with it. When the ERP has
+   * never heard of it, that list is empty — and the card was then left holding
+   * the catalog successors ALONE, one entry, which the guard below hid. So a
+   * catalog-only part showed no chain at all even though we knew exactly what
+   * replaced it: /items/1606915080 held 1606915080 → 735532803 in
+   * partly.part_supersessions and rendered nothing.
+   *
+   * That is the case where the chain matters MOST — a number nobody has opened
+   * an ERP card for is exactly the number a counter hand cannot resolve alone.
+   *
+   * Seeded here rather than in `item_id_history`, deliberately: that field is
+   * FINAPI's ERP truth and stock, price and the analytics chain all fold
+   * through it, so a code the ERP has never heard of must not enter it.
+   */
+  const seed = !erp.length && code && catalog.length && catalog[0].code !== code
+    ? [{ code, name: null as string | null }]
+    : []
   const chain = [
+    ...seed,
     ...erp.map((code) => ({ code, name: null as string | null })),
     ...catalog,
   ]
@@ -672,6 +695,7 @@ export default function ItemDetailPage({ params }: { params: Promise<{ code: str
         </Card>
 
         <CodeChainCard
+          code={data.code || decodedCode}
           history={data.item_id_history}
           catalogHistory={data.catalog_history}
           erpLatest={data.erp_latest}
@@ -1010,6 +1034,7 @@ export default function ItemDetailPage({ params }: { params: Promise<{ code: str
       <PartLinksCard code={decodedCode} links={partLinks} isHe={isHe} />
 
       <CodeChainCard
+        code={data.code || decodedCode}
         history={data.item_id_history}
         catalogHistory={data.catalog_history}
         erpLatest={data.erp_latest}
