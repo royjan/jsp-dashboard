@@ -138,12 +138,50 @@ export async function catalogChainBefore(known: string[]): Promise<Array<{ code:
   return out.map((code) => ({ code, name: nameByCode.get(code) ?? null }))
 }
 
-export async function catalogChainAfter(known: string[]): Promise<Array<{ code: string; name: string | null }>> {
+export async function catalogChainAfter(
+  known: string[],
+  opts: { current?: string } = {},
+): Promise<Array<{ code: string; name: string | null }>> {
   const seen = new Set(known.map((c) => String(c ?? '').trim().toUpperCase()).filter(Boolean))
   if (seen.size === 0) return []
 
   const out: string[] = []
-  let frontier = [...seen]
+  /*
+   * DO NOT CARRY A CATALOG EDGE ACROSS A BRANCH POINT.
+   *
+   * Seeding the walk with the whole ERP chain is what makes the 208 headlamp
+   * work: the catalog drew that diagram with the chain HEAD (1608206680 →
+   * 1685352480), so a walk from the tail alone finds nothing. But the same
+   * seeding says that any catalog edge off ANY ancestor is this code's own
+   * successor — and that is false the moment an ancestor was replaced by more
+   * than one thing.
+   *
+   * 6325H4 is the case: the ERP records TWO successors for it, 1688409680 (a
+   * mirror lamp supplied without a bulb) and 6216E0 (the bulb). The catalog
+   * edge 6325H4 → 1688409680 was therefore read as 6216E0's successor, and the
+   * item page redirected anyone asking for the bulb to the lamp.
+   *
+   * The ERP itself is what tells the two apart, and cleanly: a branch point has
+   * >1 row in erp.items with that code as `old_item_id` (6325H4 has 2), while
+   * the headlamp's ancestor has exactly 1. So ancestors that are branch points
+   * are dropped from the seed. The code being looked at is never dropped — its
+   * own edges are its own, however many there are.
+   */
+  const current = String(opts.current ?? '').trim().toUpperCase()
+  const ancestors = [...seen].filter((c) => c !== current)
+  let blocked = new Set<string>()
+  if (ancestors.length > 0) {
+    const forks = await query(
+      `SELECT old_item_id FROM erp.items
+        WHERE old_item_id = ANY($1::text[])
+        GROUP BY old_item_id HAVING count(*) > 1`,
+      [ancestors],
+    ).catch(() => null)
+    blocked = new Set((forks?.rows ?? []).map((r: any) => String(r.old_item_id ?? '').trim().toUpperCase()))
+  }
+
+  let frontier = [...seen].filter((c) => !blocked.has(c))
+  if (frontier.length === 0) return []
 
   for (let hop = 0; hop < MAX_CHAIN_HOPS && frontier.length > 0; hop++) {
     const res = await query(

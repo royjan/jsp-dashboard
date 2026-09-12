@@ -387,6 +387,7 @@ export async function GET(
         : []
       const catalogTail = await catalogChainAfter(
         erpChain.length ? erpChain : [c.item_number],
+        { current: c.item_number },
       ).catch(() => [])
       // What this code REPLACED. Without it a page reached BY the redirect —
       // i.e. the newest code, the commonest way to land here — shows no chain.
@@ -505,7 +506,7 @@ export async function GET(
     const erpChain = (
       (effectiveHistory?.item_id_history || item.item_id_history || [item.code]) as unknown[]
     ).map((h) => String(h))
-    const catalogTail = await catalogChainAfter(erpChain).catch(() => [])
+    const catalogTail = await catalogChainAfter(erpChain, { current: item.code }).catch(() => [])
     const catalogPrev = await catalogChainBefore(erpChain).catch(() => [])
 
     return NextResponse.json({
