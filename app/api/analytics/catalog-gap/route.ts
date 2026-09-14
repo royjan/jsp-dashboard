@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import type { Provenance } from '@/lib/provenance'
 import { query } from '@/lib/db'
+import { notDemoProject } from '@/lib/partly-demo'
 import { initializeSecrets } from '@/lib/aws-secrets'
 
 /**
@@ -127,7 +128,8 @@ export async function GET(req: Request) {
              count(DISTINCT pp.project_id)::int AS vehicle_count
       FROM partly.global_parts gp
       JOIN partly.project_parts pp ON pp.global_part_id = gp.id AND pp.deleted_at IS NULL
-      WHERE ${conds.join(' AND ')}
+      JOIN partly.projects pr_gap ON pr_gap.id = pp.project_id
+      WHERE ${conds.join(' AND ')}${notDemoProject('pr_gap')}
       GROUP BY gp.id
       ORDER BY vehicle_count DESC, gp.item_number
       LIMIT ${p(limit)} OFFSET ${p(offset)}

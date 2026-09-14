@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { query } from '@/lib/db'
+import { notDemoProject } from '@/lib/partly-demo'
 import { initializeSecrets } from '@/lib/aws-secrets'
 
 /**
@@ -27,7 +28,7 @@ export async function GET() {
              count(*)::int AS part_count
       FROM partly.project_parts pp
       JOIN partly.projects pr ON pr.id = pp.project_id
-      WHERE pp.deleted_at IS NULL
+      WHERE pp.deleted_at IS NULL${notDemoProject('pr')}
       GROUP BY pr.id
       ORDER BY part_count DESC
     `)
