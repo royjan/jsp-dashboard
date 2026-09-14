@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { query } from '@/lib/db'
+import { partNotOnlyOnDemoVehicles } from '@/lib/partly-demo'
 import { initializeSecrets } from '@/lib/aws-secrets'
 
 // Normalize a noisy project `make` value to a canonical brand (regions/languages
@@ -12,6 +13,8 @@ const brandCanon = (col: string) => `CASE
   WHEN ${col} ILIKE '%DS%' OR ${col} LIKE '%די אס%' THEN 'DS'
   ELSE NULLIF(TRIM(${col}), '')
 END`
+
+const DEMO_COND = partNotOnlyOnDemoVehicles('gp').replace(/^\s*AND\s*/, '') || '1=1'
 
 export async function GET(req: Request) {
   try {
@@ -50,7 +53,12 @@ export async function GET(req: Request) {
     const buildWhere = ({ withStatus, withBrand }: { withStatus: boolean; withBrand: boolean }) => {
       const params: any[] = []
       const pf = (v: any) => { params.push(v); return `$${params.length}` }
-      const conds = ['1=1']
+      // Every query in this route — rows, the total, and the per-status and
+      // per-brand facets — is built from this list, so the demo exclusion goes
+      // in once here. Without it the trial vehicles' 80k+ parts land almost
+      // entirely in "unmatched", which is the number someone reads as "how much
+      // of the catalogue do we not sell".
+      const conds = ['1=1', DEMO_COND]
       if (search) {
         const sp = pf(`%${search}%`)
         conds.push(`(gp.item_number ILIKE ${sp} OR gp.hebrew_description ILIKE ${sp} OR gp.description ILIKE ${sp})`)
