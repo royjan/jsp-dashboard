@@ -362,7 +362,7 @@ export async function GET(
          LEFT JOIN partly.schemas s ON s.id = pp.schema_id
          LEFT JOIN partly.subcategories sub ON sub.id = s.subcategory_id
          LEFT JOIN partly.categories c ON c.id = sub.category_id
-         WHERE pp.global_part_id = $1 AND pp.deleted_at IS NULL
+         WHERE pp.global_part_id = $1 AND pp.deleted_at IS NULL${notDemoProject('p')}
          ORDER BY p.id, p.year DESC NULLS LAST
          LIMIT 30`,
         [c.id]
