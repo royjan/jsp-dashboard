@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { partNotOnlyOnDemoVehicles } from '@/lib/partly-demo'
 import { initializeSecrets } from '@/lib/aws-secrets'
 import { query } from '@/lib/db'
 
@@ -49,7 +50,7 @@ export async function GET(request: NextRequest) {
                       WHERE e.code = gp.item_number OR e.code = 'MG' || gp.item_number) AS in_erp
        FROM partly.global_parts gp
        WHERE (gp.item_number LIKE $1 OR gp.description ILIKE $2 OR gp.hebrew_description ILIKE $2)
-         AND ($3 = '' OR gp.item_number <> $3)
+         AND ($3 = '' OR gp.item_number <> $3)${partNotOnlyOnDemoVehicles('gp')}
        ORDER BY (gp.item_number = $4) DESC,          -- exact code first
                 (gp.item_number LIKE $1) DESC,       -- then code prefix
                 length(coalesce(gp.description, '')),

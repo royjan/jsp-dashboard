@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { partNotOnlyOnDemoVehicles } from '@/lib/partly-demo'
 import { initializeSecrets } from '@/lib/aws-secrets'
 import { client } from '@/lib/finansit-client'
 import { query } from '@/lib/db'
@@ -29,7 +30,7 @@ async function searchPartlyCatalog(q: string): Promise<CatalogHit[]> {
      FROM partly.global_parts gp
      WHERE gp.item_number LIKE $1
        AND NOT EXISTS (SELECT 1 FROM erp.items e WHERE e.code = gp.item_number)
-       AND NOT EXISTS (SELECT 1 FROM erp.items e WHERE e.code = 'MG' || gp.item_number)
+       AND NOT EXISTS (SELECT 1 FROM erp.items e WHERE e.code = 'MG' || gp.item_number)${partNotOnlyOnDemoVehicles('gp')}
      ORDER BY gp.item_number
      LIMIT 6`,
     [like]

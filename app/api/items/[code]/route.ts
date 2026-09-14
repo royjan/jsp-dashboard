@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { client, fetchItemHistory } from '@/lib/finansit-client'
 import { initializeSecrets } from '@/lib/aws-secrets'
 import { query } from '@/lib/db'
+import { notDemoProject } from '@/lib/partly-demo'
 import { partlyCandidates, partlyMatchForms, catalogChainAfter, catalogChainBefore, erpCodeViaSupersession } from '@/lib/partly-codes'
 
 /** The shape of FINAPI's item-history response that this route actually reads. */
@@ -69,7 +70,7 @@ async function vehiclesFor(itemCode: string, knownHistory?: ItemHistory | null) 
        LEFT JOIN partly.categories c ON c.id = sub.category_id
       -- BYTE-IDENTICAL to partly.global_parts_item_number_norm_idx. Reword this
       -- expression and the index stops matching: 1,641ms instead of 83ms.
-      WHERE upper(regexp_replace(gp.item_number, '[^A-Za-z0-9]', '', 'g')) = ANY($1)
+      WHERE upper(regexp_replace(gp.item_number, '[^A-Za-z0-9]', '', 'g')) = ANY($1)${notDemoProject('p')}
       ORDER BY p.id, p.year DESC NULLS LAST
       LIMIT 30`,
     [forms],
