@@ -5,9 +5,10 @@ import { motion } from 'framer-motion'
 import { useRouter } from 'next/navigation'
 import { useItemDetail, useItemDocuments, useItemLinks, useItemMedia, HttpError } from '@/hooks/use-analytics'
 import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
-import { deriveBrand, brandChipClasses } from '@/lib/brand'
+import { deriveBrand, brandChipClasses, familyChipClasses } from '@/lib/brand'
 import { ItemLink } from '@/components/shared/ItemLink'
 import { PartLinksCard } from '@/components/items/PartLinksCard'
+import { CrossBrandCard } from '@/components/items/CrossBrandCard'
 import { PartMediaCard } from '@/components/items/PartMediaCard'
 import { SupplierPricesCard } from '@/components/xpart/SupplierPricesCard'
 import { ItemAliasesCard } from '@/components/xpart/ItemAliasesCard'
@@ -707,16 +708,18 @@ function LoadFailed({ isHe, status }: { isHe: boolean; status?: number }) {
 }
 
 
-export default function ItemDetailPage({ params }: { params: Promise<{ code: string }> }) {
+export default function ItemDetailPage({ params }: { params: Promise<{ code: string; brand?: string }> }) {
   // Subscribe to the demo-mode eye: formatCurrency() masks from a module
   // store, so without this the amounts here would not re-render on toggle.
   useMoneyHidden()
 
-  const { code } = use(params)
+  // `brand` is only set under /items/[brand]/[code]: the number as another
+  // manufacturer's part, rendered through the catalog-only branch below.
+  const { code, brand: brandSlug } = use(params)
   const decodedCode = decodeURIComponent(code)
   const { t, locale } = useLocale()
   const router = useRouter()
-  const { data, isLoading, error } = useItemDetail(decodedCode)
+  const { data, isLoading, error } = useItemDetail(decodedCode, brandSlug ?? null)
   const { data: linksData } = useItemLinks(decodedCode)
   // Started HERE, not inside PartMediaCard, because everything below the
   // `isLoading` early return is unmounted while the detail query is in flight —
@@ -799,13 +802,49 @@ export default function ItemDetailPage({ params }: { params: Promise<{ code: str
             <h1 className="text-lg sm:text-xl font-bold flex items-center gap-2">
               <Package className="h-5 w-5 text-primary" />
               <span className="font-mono">{data.code}</span>
-              <span className={`rounded px-1.5 py-0.5 text-[11px] font-medium leading-none ${brandChipClasses(data.brand || deriveBrand(data.code))}`}>
-                {data.brand || deriveBrand(data.code)}
+              <span className={`rounded px-1.5 py-0.5 text-[11px] font-medium leading-none ${familyChipClasses(data.brand || deriveBrand(data.code))}`}>
+                {data.brand_label || data.brand || deriveBrand(data.code)}
               </span>
             </h1>
             {data.name && <p className="text-muted-foreground text-sm mt-0.5" dir="auto">{data.name}</p>}
           </div>
         </div>
+
+        {/* The number as ANOTHER brand's part. The ERP's row for it (if any)
+            belongs to a different manufacturer, so nothing here is priced, and
+            the other catalog's wording is offered as context, not as the name. */}
+        {data.foreign_brand && (
+          <Card className="border-amber-200 dark:border-amber-500/30">
+            <CardContent className="p-4 space-y-2 text-sm">
+              <p>
+                {isHe
+                  ? `המק״ט ${data.code} כפי שהוא מופיע בקטלוג ${data.brand_label}. `
+                  : `Item number ${data.code} as it appears in the ${data.brand_label} catalog. `}
+                {data.shared_numbering
+                  ? (isHe ? 'מספור משותף — לרוב אותו חלק.' : 'Shared numbering — usually the same part.')
+                  : (isHe ? 'לא בהכרח אותו חלק, ואין לו מחיר או מלאי אצלנו.' : 'Not necessarily the same part; no price or stock of ours applies.')}
+              </p>
+              {!data.name && (
+                <p className="text-muted-foreground">
+                  {isHe
+                    ? `הסריקה של ${data.brand_label} לא שמרה תיאור למק״ט הזה — ייבוא מחדש של הרכב ימלא אותו.`
+                    : `The ${data.brand_label} scan kept no wording for this number — re-importing the vehicle fills it.`}
+                </p>
+              )}
+              {data.stored_wording && (
+                <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <span className="text-muted-foreground">
+                    {isHe ? `בקטלוג ${data.stored_wording.label} המספר הזה הוא:` : `In the ${data.stored_wording.label} catalog this number is:`}
+                  </span>
+                  <span dir="auto">{data.stored_wording.hebrew || data.stored_wording.description || '—'}</span>
+                  <a href={data.stored_wording.href} className="text-primary hover:underline">
+                    {isHe ? `פתח כחלק ${data.stored_wording.label}` : `Open as ${data.stored_wording.label} part`}
+                  </a>
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         <Card>
           <CardContent className="p-4 space-y-3">
@@ -883,6 +922,9 @@ export default function ItemDetailPage({ params }: { params: Promise<{ code: str
         <PartMediaCard code={decodedCode} isHe={isHe} />
 
         <FitsCard fits={data.fits} isHe={isHe} open={vehiclesOpen} setOpen={setVehiclesOpen} />
+
+        {/* Other manufacturers printing this same number — not equivalents. */}
+        <CrossBrandCard brands={data.other_brands} isHe={isHe} />
 
         {data.equivalents?.length > 0 && (
           <Card>
@@ -1198,6 +1240,10 @@ export default function ItemDetailPage({ params }: { params: Promise<{ code: str
       {/* Which scanned vehicles carry this part — same card the catalog-only
           view shows, previously missing here entirely. */}
       <FitsCard fits={data.fits} isHe={isHe} open={vehiclesOpen} setOpen={setVehiclesOpen} />
+
+      {/* Other manufacturers printing this same number — not equivalents; the
+          equivalents (same part, different number) are PartLinksCard below. */}
+      <CrossBrandCard brands={data.other_brands} isHe={isHe} />
 
       {/* What each supplier charges for this part (Xpart price lists) — the buy
           side of the card, next to our own cost and the shelf price above. */}

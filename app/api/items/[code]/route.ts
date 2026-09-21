@@ -4,6 +4,10 @@ import { initializeSecrets } from '@/lib/aws-secrets'
 import { query } from '@/lib/db'
 import { notDemoProject } from '@/lib/partly-demo'
 import { partlyCandidates, partlyMatchForms, catalogChainAfter, catalogChainBefore, erpCodeViaSupersession } from '@/lib/partly-codes'
+import {
+  deriveBrand, ERP_FAMILIES, FAMILY_LABEL_HE, familyFromSlug, familyOf, familySlug, sharesNumbering,
+  type BrandFamily,
+} from '@/lib/brand'
 
 /** The shape of FINAPI's item-history response that this route actually reads. */
 interface ItemHistory { canonical_code?: string | null; item_id_history?: unknown[] }
@@ -15,6 +19,221 @@ const slug = (t: string) => t.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_-]/g, ''
 // should be the address staff already have open — https://192.168.0.112/vehicle/… .
 // PARTLY_URL still overrides for a different host.
 const partlyBase = (process.env.PARTLY_URL || 'https://192.168.0.112').replace(/\/$/, '')
+
+/** Vehicles the fitment card lists for the page's own brand. */
+const VEHICLE_LIMIT = 30
+/**
+ * Rows fetched before the split by brand family. The card caps its OWN brand at
+ * VEHICLE_LIMIT; a foreign brand's cars must still be seen behind our own, so
+ * the fetch reaches past every scanned vehicle (~750 projects on 2026-09-21).
+ * DISTINCT ON orders by project id, so any cap short of the whole set drops
+ * whichever brand's cars sort last: at 200 a Ducato's bulb showed no Fiat.
+ */
+const FETCH_LIMIT = 2000
+/** Vehicles listed per foreign brand on the cross-brand card. */
+const OTHER_BRAND_PREVIEW = 6
+
+/** One scanned vehicle a part appears on, deep-linked to its diagram. */
+interface Fit { label: string; vin: string; url: string; schema: string | null; brand: BrandFamily }
+
+/**
+ * Another manufacturer that prints this item number — on ITS cars, in ITS
+ * catalog. Not an equivalence: `part_links` says "same part, different number";
+ * this says "same number, and here is what the other catalog calls it", which
+ * for Volvo vs PSA is usually a different part altogether.
+ */
+interface OtherBrand {
+  brand: BrandFamily
+  label: string
+  /** That brand's own catalog wording, when a scan of it has been kept (partly.global_part_brands). */
+  description: string | null
+  hebrew: string | null
+  /** True for pairs that share a numbering scheme (Fiat/PSA, MG/Opel): usually the same part. */
+  shared_numbering: boolean
+  fits: Fit[]
+  total: number
+  /** Where to open this number AS that brand's part. */
+  href: string
+}
+
+interface VehicleRow {
+  project_id: string; vin: string; make: string | null; model: string | null; year: string | null
+  category: string | null; subcategory: string | null; schema_name: string | null
+}
+const rowToFit = (r: VehicleRow): Fit => ({
+  label: [r.make, r.model, r.year].filter(Boolean).join(' '),
+  vin: r.vin,
+  url: r.category && r.subcategory && r.schema_name
+    ? `${partlyBase}/vehicle/${r.project_id}/${encodeURIComponent(slug(r.category))}/${encodeURIComponent(slug(r.subcategory))}/${encodeURIComponent(slug(r.schema_name))}`
+    : `${partlyBase}/vehicle/${r.project_id}`,
+  schema: r.schema_name || null,
+  brand: familyOf(r.make),
+})
+
+/** Every scanned vehicle carrying any of `forms` (partly-normalised spellings), up to FETCH_LIMIT. */
+async function vehiclesForForms(forms: string[]): Promise<{ fits: Fit[]; truncated: boolean }> {
+  if (forms.length === 0) return { fits: [], truncated: false }
+  const res = await query(
+    `SELECT DISTINCT ON (p.id)
+            p.id AS project_id, p.vin, p.make, p.model, p.year,
+            c.name AS category, sub.name AS subcategory, s.name AS schema_name
+       FROM partly.global_parts gp
+       JOIN partly.project_parts pp ON pp.global_part_id = gp.id AND pp.deleted_at IS NULL
+       JOIN partly.projects p ON p.id = pp.project_id
+       LEFT JOIN partly.schemas s ON s.id = pp.schema_id
+       LEFT JOIN partly.subcategories sub ON sub.id = s.subcategory_id
+       LEFT JOIN partly.categories c ON c.id = sub.category_id
+      -- BYTE-IDENTICAL to partly.global_parts_item_number_norm_idx. Reword this
+      -- expression and the index stops matching: 1,641ms instead of 83ms.
+      WHERE upper(regexp_replace(gp.item_number, '[^A-Za-z0-9]', '', 'g')) = ANY($1)${notDemoProject('p')}
+      ORDER BY p.id, p.year DESC NULLS LAST
+      LIMIT ${FETCH_LIMIT + 1}`,
+    [forms],
+  ).catch(() => null)
+  const rows = res?.rows ?? []
+  return { fits: (rows as VehicleRow[]).slice(0, FETCH_LIMIT).map(rowToFit), truncated: rows.length > FETCH_LIMIT }
+}
+
+/**
+ * The vehicles of the brand whose page this is, and everyone else's, apart.
+ *
+ * A Citroën C6 and a Volvo XC60 both carry 450315 — a nut on one, a sound
+ * system on the other. Listing the Volvo under "fits these vehicles" on the
+ * PSA page is the wrong-part display this split exists to end: the page's own
+ * brand keeps the fitment card, every other family goes to the cross-brand
+ * card with its own drawings.
+ */
+function splitByFamily(all: Fit[], own: BrandFamily, truncated: boolean) {
+  const mine = all.filter((f) => f.brand === own)
+  const others = new Map<BrandFamily, Fit[]>()
+  for (const f of all) {
+    if (f.brand === own) continue
+    const list = others.get(f.brand) ?? []
+    list.push(f)
+    others.set(f.brand, list)
+  }
+  return {
+    fits: mine.slice(0, VEHICLE_LIMIT),
+    truncated: truncated || mine.length > VEHICLE_LIMIT,
+    others,
+  }
+}
+
+/** What each brand's catalog calls this number: the row's own brand, plus the foreign-brand rows beside it. */
+async function brandWording(forms: string[]) {
+  const stored = await query(
+    `SELECT gp.id, gp.item_number, gp.brand, gp.description, gp.hebrew_description
+       FROM partly.global_parts gp
+      WHERE upper(regexp_replace(gp.item_number, '[^A-Za-z0-9]', '', 'g')) = ANY($1)
+      LIMIT 1`,
+    [forms],
+  ).catch(() => null)
+  const row = stored?.rows?.[0] as
+    | { id: string; item_number: string; brand: string; description: string; hebrew_description: string | null }
+    | undefined
+  const wording = new Map<BrandFamily, { description: string | null; hebrew: string | null }>()
+  if (!row) return { row: null, wording }
+  const clean = (h: string | null) => (h && h !== '-' ? h : null)
+  wording.set(familyOf(row.brand), { description: row.description || null, hebrew: clean(row.hebrew_description) })
+  // The table arrives with partly's feat/brand-descriptions; until it exists
+  // this fails soft and the foreign brands simply carry no wording.
+  const foreign = await query(
+    `SELECT brand, description, hebrew_description
+       FROM partly.global_part_brands WHERE global_part_id = $1`,
+    [row.id],
+  ).catch(() => null)
+  for (const r of (foreign?.rows ?? []) as { brand: string; description: string; hebrew_description: string | null }[]) {
+    const fam = familyOf(r.brand)
+    if (!wording.has(fam)) wording.set(fam, { description: r.description || null, hebrew: clean(r.hebrew_description) })
+  }
+  return { row, wording }
+}
+
+/** The item number as partly spells it: the ERP's MG prefix is not part of the catalogue number. */
+const bare = (code: string) => code.toUpperCase().replace(/^MG/, '')
+
+/**
+ * The cross-brand card's rows: one per foreign family that carries this
+ * number, with that family's wording, a few of its cars, and where to open the
+ * number as THAT brand's part. Brands the ERP stocks under their own prefix
+ * (MG…) link to their own item page when it exists; every other brand opens
+ * the catalogue view at /items/{brand}/{code}.
+ */
+async function otherBrandsFor(
+  bareCode: string,
+  own: BrandFamily,
+  others: Map<BrandFamily, Fit[]>,
+  wording: Map<BrandFamily, { description: string | null; hebrew: string | null }>,
+): Promise<OtherBrand[]> {
+  const out: OtherBrand[] = []
+  for (const [brand, fits] of others) {
+    if (brand === 'OTHER') continue
+    let href = `/items/${familySlug(brand)}/${encodeURIComponent(bareCode)}`
+    if (ERP_FAMILIES.has(brand)) {
+      const erpCode = brand === 'MG' ? 'MG' + bareCode : bareCode
+      const inErp = await client.items.get(erpCode).then(() => true).catch(() => false)
+      if (inErp) href = `/items/${encodeURIComponent(erpCode)}`
+    }
+    const w = wording.get(brand)
+    out.push({
+      brand,
+      label: FAMILY_LABEL_HE[brand],
+      description: w?.description ?? null,
+      hebrew: w?.hebrew ?? null,
+      shared_numbering: sharesNumbering(own, brand),
+      fits: fits.slice(0, OTHER_BRAND_PREVIEW),
+      total: fits.length,
+      href,
+    })
+  }
+  return out.sort((a, b) => b.total - a.total)
+}
+
+/**
+ * /items/{brand}/{code} — this number as ANOTHER brand's part.
+ *
+ * The ERP row for 401165 is a Berlingo steering cylinder; the Volvo XC60 that
+ * also lists 401165 has something else there. Opened as Volvo, the page shows
+ * Volvo's own wording when a scan kept it, the Volvo cars and drawings, and
+ * nothing from the ERP — the price on the PSA row is not this part's price.
+ */
+async function foreignBrandView(code: string, family: BrandFamily) {
+  const forms = partlyMatchForms([bare(code)])
+  const [{ row, wording }, { fits: all, truncated }] = await Promise.all([
+    brandWording(forms),
+    vehiclesForForms(forms),
+  ])
+  if (!row) return NextResponse.json({ error: 'Item not found' }, { status: 404 })
+  const { fits, truncated: fitsTruncated, others } = splitByFamily(all, family, truncated)
+  const storedFamily = familyOf(row.brand)
+  const own = wording.get(family) ?? null
+  const stored = wording.get(storedFamily) ?? null
+  const otherBrands = await otherBrandsFor(row.item_number, family, others, wording)
+  return NextResponse.json({
+    catalog_only: true,
+    foreign_brand: true,
+    code: row.item_number,
+    brand: family,
+    brand_label: FAMILY_LABEL_HE[family],
+    // Only this brand's own wording may headline the page. The stored row's
+    // words belong to another manufacturer and are offered as context below.
+    name: own?.hebrew || own?.description || null,
+    description: own?.description ?? null,
+    description_source: own ? 'brand' : 'none',
+    stored_wording: storedFamily === family ? null : {
+      brand: storedFamily, label: FAMILY_LABEL_HE[storedFamily],
+      description: stored?.description ?? null, hebrew: stored?.hebrew ?? null,
+      href: ERP_FAMILIES.has(storedFamily)
+        ? `/items/${encodeURIComponent(storedFamily === 'MG' ? 'MG' + row.item_number : row.item_number)}`
+        : `/items/${familySlug(storedFamily)}/${encodeURIComponent(row.item_number)}`,
+    },
+    shared_numbering: sharesNumbering(family, storedFamily),
+    equivalents: [],
+    fits,
+    fits_truncated: fitsTruncated,
+    other_brands: otherBrands,
+  })
+}
 
 /**
  * The scanned vehicles a part appears on, deep-linked to the exact diagram.
@@ -56,34 +275,8 @@ async function vehiclesFor(itemCode: string, knownHistory?: ItemHistory | null) 
     await Promise.all(chain.map((c) => partlyCandidates(c).catch(() => [c])))
   ).flat()
   const forms = partlyMatchForms(candidates.length > 0 ? candidates : [itemCode])
-  if (forms.length === 0) return []
-
-  const res = await query(
-    `SELECT DISTINCT ON (p.id)
-            p.id AS project_id, p.vin, p.make, p.model, p.year,
-            c.name AS category, sub.name AS subcategory, s.name AS schema_name
-       FROM partly.global_parts gp
-       JOIN partly.project_parts pp ON pp.global_part_id = gp.id AND pp.deleted_at IS NULL
-       JOIN partly.projects p ON p.id = pp.project_id
-       LEFT JOIN partly.schemas s ON s.id = pp.schema_id
-       LEFT JOIN partly.subcategories sub ON sub.id = s.subcategory_id
-       LEFT JOIN partly.categories c ON c.id = sub.category_id
-      -- BYTE-IDENTICAL to partly.global_parts_item_number_norm_idx. Reword this
-      -- expression and the index stops matching: 1,641ms instead of 83ms.
-      WHERE upper(regexp_replace(gp.item_number, '[^A-Za-z0-9]', '', 'g')) = ANY($1)${notDemoProject('p')}
-      ORDER BY p.id, p.year DESC NULLS LAST
-      LIMIT 30`,
-    [forms],
-  ).catch(() => null)
-
-  return (res?.rows ?? []).map((r: any) => ({
-    label: [r.make, r.model, r.year].filter(Boolean).join(' '),
-    vin: r.vin,
-    url: r.category && r.subcategory && r.schema_name
-      ? `${partlyBase}/vehicle/${r.project_id}/${encodeURIComponent(slug(r.category))}/${encodeURIComponent(slug(r.subcategory))}/${encodeURIComponent(slug(r.schema_name))}`
-      : `${partlyBase}/vehicle/${r.project_id}`,
-    schema: r.schema_name || null,
-  }))
+  const all = await vehiclesForForms(forms)
+  return { forms, ...all }
 }
 
 /**
@@ -193,7 +386,7 @@ async function chainForks(chain: string[]): Promise<Array<{ from: string; code: 
 }
 
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ code: string }> }
 ) {
   const { code } = await params
@@ -202,6 +395,14 @@ export async function GET(
   try {
     await initializeSecrets()
     const upper = code.toUpperCase()
+
+    // ?brand=volvo: the number as another manufacturer's part (see foreignBrandView).
+    // The three ERP brands have pages of their own under their own prefixes, so
+    // a request for one of them is the ordinary page.
+    const requested = familyFromSlug(new URL(req.url).searchParams.get('brand'))
+    if (requested && !ERP_FAMILIES.has(requested)) {
+      return await foreignBrandView(upper, requested)
+    }
 
     // Try direct fetch and history in parallel; if the direct fetch fails (e.g.
     // the code is a historical/superseded alias), fall back to the canonical code.
@@ -353,20 +554,19 @@ export async function GET(
       // Deep-link each vehicle into partly, at the exact diagram the part sits on when
       // we know it — "מתאים ל: <8 names>" as flat text is a dead end; every one of these
       // is a real scanned vehicle the user may want to open.
-      const veh = await query(
-        `SELECT DISTINCT ON (p.id)
-                p.id AS project_id, p.vin, p.make, p.model, p.year,
-                c.name AS category, sub.name AS subcategory, s.name AS schema_name
-         FROM partly.project_parts pp
-         JOIN partly.projects p ON p.id = pp.project_id
-         LEFT JOIN partly.schemas s ON s.id = pp.schema_id
-         LEFT JOIN partly.subcategories sub ON sub.id = s.subcategory_id
-         LEFT JOIN partly.categories c ON c.id = sub.category_id
-         WHERE pp.global_part_id = $1 AND pp.deleted_at IS NULL${notDemoProject('p')}
-         ORDER BY p.id, p.year DESC NULLS LAST
-         LIMIT 30`,
-        [c.id]
-      ).catch(() => null)
+      // This row's vehicles, split by brand family: the catalog brand keeps the
+      // fitment card, any other family that prints this number goes to the
+      // cross-brand card with its own wording and drawings.
+      const catalogForms = partlyMatchForms([c.item_number])
+      const catalogAll = await vehiclesForForms(catalogForms)
+      const catalogFamily = familyOf(c.brand)
+      const { fits: catalogFits, truncated: catalogFitsTruncated, others: catalogOthers } =
+        splitByFamily(catalogAll.fits, catalogFamily, catalogAll.truncated)
+      const catalogOtherBrands = catalogOthers.size
+        ? await otherBrandsFor(
+            c.item_number, catalogFamily, catalogOthers, (await brandWording(catalogForms)).wording,
+          ).catch(() => [] as OtherBrand[])
+        : []
       // The ERP has never heard of this code, but the manufacturer's catalog
       // says which code it replaced — and we may well stock THAT one. Walk back
       // into the ERP and hand over its chain, so the page shows
@@ -449,14 +649,9 @@ export async function GET(
           code: r.item_number, brand: r.brand, erpCode: r.erp_code,
           name: (r.hebrew_description && r.hebrew_description !== '-') ? r.hebrew_description : r.description,
         })),
-        fits: (veh?.rows ?? []).map((r: any) => ({
-          label: [r.make, r.model, r.year].filter(Boolean).join(' '),
-          vin: r.vin,
-          url: r.category && r.subcategory && r.schema_name
-            ? `${partlyBase}/vehicle/${r.project_id}/${encodeURIComponent(slug(r.category))}/${encodeURIComponent(slug(r.subcategory))}/${encodeURIComponent(slug(r.schema_name))}`
-            : `${partlyBase}/vehicle/${r.project_id}`,
-          schema: r.schema_name || null,
-        })),
+        fits: catalogFits,
+        fits_truncated: catalogFitsTruncated,
+        other_brands: catalogOtherBrands,
       })
     }
 
@@ -466,7 +661,16 @@ export async function GET(
     /* Stocked parts want this just as much as unstocked ones — it used to be
        computed only on the catalog-only fallback, so an item we sell showed
        no vehicles at all. */
-    const fits = await vehiclesFor(item.code, effectiveHistory).catch(() => [])
+    const allFits = await vehiclesFor(item.code, effectiveHistory)
+      .catch(() => ({ forms: [] as string[], fits: [] as Fit[], truncated: false }))
+    // The ERP's own three-way split IS the family here: an MG-prefixed code is
+    // MG's part, everything unprefixed is PSA's (Opel included).
+    const ownFamily = familyOf(deriveBrand(item.code))
+    const { fits, truncated: fitsTruncated, others } = splitByFamily(allFits.fits, ownFamily, allFits.truncated)
+    const otherBrands = others.size
+      ? await otherBrandsFor(bare(item.code), ownFamily, others, (await brandWording(allFits.forms)).wording)
+          .catch(() => [] as OtherBrand[])
+      : []
 
     /* The catalog fallback above is gated on the item being ABSENT from the ERP,
        which misses the commoner case: the ERP has the part but never got a name
@@ -488,6 +692,7 @@ export async function GET(
       const fb = await query(
         `SELECT coalesce(nullif(gp.hebrew_description, '-'), '') AS heb,
                 gp.description AS eng,
+                gp.brand,
                 l.description AS lubinski
            FROM partly.global_parts gp
            LEFT JOIN xpart.lubinski_price_list l ON l.item_id = gp.item_number
@@ -495,8 +700,14 @@ export async function GET(
           LIMIT 1`,
         [item.code]
       ).catch(() => null)
-      const f = fb?.rows?.[0] as any
-      if (f) item = { ...item, name: f.heb || f.lubinski || f.eng || item.name }
+      const f = fb?.rows?.[0] as { heb: string; eng: string | null; brand: string; lubinski: string | null } | undefined
+      // The partly row is one manufacturer's wording for the NUMBER, not
+      // necessarily this part's: 450315 is a PSA nut in the ERP, and partly's
+      // row for it — written by a Volvo scan — says "exterior sound system".
+      // Only a row of the item's own brand family may name it; Lubinski's list
+      // is PSA-only and stays usable either way.
+      const sameBrand = f ? familyOf(f.brand) === familyOf(deriveBrand(item.code)) : false
+      if (f) item = { ...item, name: (sameBrand && f.heb) || f.lubinski || (sameBrand && f.eng) || item.name }
     }
 
     // The catalog reaches one step further than Finansit does: it names the
@@ -513,6 +724,8 @@ export async function GET(
     return NextResponse.json({
       ...item,
       fits,
+      fits_truncated: fitsTruncated,
+      other_brands: otherBrands,
       canonical_code: effectiveHistory?.canonical_code || item.code,
       canonical_name: effectiveHistory?.canonical_name || item.name,
       item_id_history: effectiveHistory?.item_id_history || item.item_id_history,

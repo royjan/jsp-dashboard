@@ -518,11 +518,13 @@ export class HttpError extends Error {
   }
 }
 
-export function useItemDetail(code: string | null) {
+/** `brand` (a URL slug such as 'volvo') asks for the number as that brand's part — see /items/[brand]/[code]. */
+export function useItemDetail(code: string | null, brand?: string | null) {
   return useQuery({
-    queryKey: ['item-detail', code],
+    queryKey: ['item-detail', code, brand ?? null],
     queryFn: async () => {
-      const res = await fetch(`/api/items/${encodeURIComponent(code!)}`)
+      const qs = brand ? `?brand=${encodeURIComponent(brand)}` : ''
+      const res = await fetch(`/api/items/${encodeURIComponent(code!)}${qs}`)
       if (!res.ok) throw new HttpError(res.status)
       return res.json()
     },
