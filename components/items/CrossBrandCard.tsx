@@ -7,7 +7,7 @@ import { familyChipClasses, type BrandFamily } from '@/lib/brand'
 import { ArrowLeft, ArrowRight, ExternalLink, Shuffle } from 'lucide-react'
 
 /** One scanned vehicle of a foreign brand, deep-linked into partly at its diagram. */
-export interface OtherBrandFit { label: string; vin?: string; url: string; schema?: string | null }
+export interface OtherBrandFit { label: string; vin?: string; url: string; schema?: string | null; demo?: boolean }
 
 /** Mirrors `OtherBrand` in app/api/items/[code]/route.ts. */
 export interface OtherBrand {
@@ -91,6 +91,7 @@ export function CrossBrandCard({ brands, isHe }: { brands?: OtherBrand[]; isHe: 
                         <ExternalLink className="h-3 w-3" />
                       </a>
                       {f.schema && <span className="text-muted-foreground truncate max-w-[16rem]" dir="auto">· {f.schema}</span>}
+                      {f.demo && <span className="text-muted-foreground">({isHe ? 'סריקת ניסיון' : 'trial scan'})</span>}
                     </li>
                   ))}
                   {b.total > b.fits.length && (

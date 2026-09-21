@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { client, fetchItemHistory } from '@/lib/finansit-client'
 import { initializeSecrets } from '@/lib/aws-secrets'
 import { query } from '@/lib/db'
-import { notDemoProject } from '@/lib/partly-demo'
+import { SHOW_DEMO } from '@/lib/partly-demo'
 import { partlyCandidates, partlyMatchForms, catalogChainAfter, catalogChainBefore, erpCodeViaSupersession } from '@/lib/partly-codes'
 import {
   deriveBrand, ERP_FAMILIES, FAMILY_LABEL_HE, familyFromSlug, familyOf, familySlug, sharesNumbering,
@@ -34,7 +34,7 @@ const FETCH_LIMIT = 2000
 const OTHER_BRAND_PREVIEW = 6
 
 /** One scanned vehicle a part appears on, deep-linked to its diagram. */
-interface Fit { label: string; vin: string; url: string; schema: string | null; brand: BrandFamily }
+interface Fit { label: string; vin: string; url: string; schema: string | null; brand: BrandFamily; demo: boolean }
 
 /**
  * Another manufacturer that prints this item number — on ITS cars, in ITS
@@ -58,7 +58,7 @@ interface OtherBrand {
 
 interface VehicleRow {
   project_id: string; vin: string; make: string | null; model: string | null; year: string | null
-  category: string | null; subcategory: string | null; schema_name: string | null
+  category: string | null; subcategory: string | null; schema_name: string | null; demo: boolean
 }
 const rowToFit = (r: VehicleRow): Fit => ({
   label: [r.make, r.model, r.year].filter(Boolean).join(' '),
@@ -68,15 +68,22 @@ const rowToFit = (r: VehicleRow): Fit => ({
     : `${partlyBase}/vehicle/${r.project_id}`,
   schema: r.schema_name || null,
   brand: familyOf(r.make),
+  demo: Boolean(r.demo),
 })
 
-/** Every scanned vehicle carrying any of `forms` (partly-normalised spellings), up to FETCH_LIMIT. */
+/**
+ * Every scanned vehicle carrying any of `forms` (partly-normalised spellings),
+ * up to FETCH_LIMIT — demo cars INCLUDED, each flagged. The fitment card drops
+ * them (splitByFamily); the cross-brand card keeps them, because a demo scan
+ * of a Volvo is still Volvo's catalog printing this number.
+ */
 async function vehiclesForForms(forms: string[]): Promise<{ fits: Fit[]; truncated: boolean }> {
   if (forms.length === 0) return { fits: [], truncated: false }
   const res = await query(
     `SELECT DISTINCT ON (p.id)
             p.id AS project_id, p.vin, p.make, p.model, p.year,
-            c.name AS category, sub.name AS subcategory, s.name AS schema_name
+            c.name AS category, sub.name AS subcategory, s.name AS schema_name,
+            coalesce(p.keywords->>'demo', '') = 'true' AS demo
        FROM partly.global_parts gp
        JOIN partly.project_parts pp ON pp.global_part_id = gp.id AND pp.deleted_at IS NULL
        JOIN partly.projects p ON p.id = pp.project_id
@@ -85,7 +92,7 @@ async function vehiclesForForms(forms: string[]): Promise<{ fits: Fit[]; truncat
        LEFT JOIN partly.categories c ON c.id = sub.category_id
       -- BYTE-IDENTICAL to partly.global_parts_item_number_norm_idx. Reword this
       -- expression and the index stops matching: 1,641ms instead of 83ms.
-      WHERE upper(regexp_replace(gp.item_number, '[^A-Za-z0-9]', '', 'g')) = ANY($1)${notDemoProject('p')}
+      WHERE upper(regexp_replace(gp.item_number, '[^A-Za-z0-9]', '', 'g')) = ANY($1)
       ORDER BY p.id, p.year DESC NULLS LAST
       LIMIT ${FETCH_LIMIT + 1}`,
     [forms],
@@ -103,8 +110,13 @@ async function vehiclesForForms(forms: string[]): Promise<{ fits: Fit[]; truncat
  * brand keeps the fitment card, every other family goes to the cross-brand
  * card with its own drawings.
  */
-function splitByFamily(all: Fit[], own: BrandFamily, truncated: boolean) {
-  const mine = all.filter((f) => f.brand === own)
+/**
+ * `keepDemo`: whether the page's OWN brand may list demo cars. The ERP pages
+ * never do (demo vehicles must not leak into the dashboard); the brand-scoped
+ * view does, since a foreign brand's only scan may well be a trial one.
+ */
+function splitByFamily(all: Fit[], own: BrandFamily, truncated: boolean, keepDemo = SHOW_DEMO) {
+  const mine = all.filter((f) => f.brand === own && (keepDemo || !f.demo))
   const others = new Map<BrandFamily, Fit[]>()
   for (const f of all) {
     if (f.brand === own) continue
@@ -204,7 +216,7 @@ async function foreignBrandView(code: string, family: BrandFamily) {
     vehiclesForForms(forms),
   ])
   if (!row) return NextResponse.json({ error: 'Item not found' }, { status: 404 })
-  const { fits, truncated: fitsTruncated, others } = splitByFamily(all, family, truncated)
+  const { fits, truncated: fitsTruncated, others } = splitByFamily(all, family, truncated, true)
   const storedFamily = familyOf(row.brand)
   const own = wording.get(family) ?? null
   const stored = wording.get(storedFamily) ?? null
