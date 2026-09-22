@@ -22,12 +22,23 @@ import { CrossBrandGraph, FamilyChip, type GLink, type GNode } from '@/component
  */
 
 interface CodeRel { code: string; brand: BrandFamily; heb: string | null; fams: Record<string, number>; shared_numbering: boolean; in_erp: boolean; stock: number }
-interface MatchRel { a: string; aBrand: BrandFamily; aHeb: string | null; aInErp: boolean; aStock: number; b: string; bBrand: BrandFamily; bHeb: string | null; bInErp: boolean; bStock: number; source: string }
+interface MatchRel { a: string; aBrand: BrandFamily; aHeb: string | null; aInErp: boolean; aStock: number; aCars: number; b: string; bBrand: BrandFamily; bHeb: string | null; bInErp: boolean; bStock: number; bCars: number; source: string }
+
+/** Catalog names run to "קסוות מיסב ראשי | דיזל DW10FDCU/UE63 2 ל' | …"; the graph shows the first segment. */
+const shortName = (s: string | null | undefined) => {
+  const first = (s ?? '').split(' | ')[0].trim()
+  return first.length > 28 ? first.slice(0, 27) + '…' : first
+}
 interface RootPayload {
   codes: CodeRel[]; matches: MatchRel[]
   totals: { codes: number; matches: number; unique_codes: number; in_erp: number; in_stock: number }
+  brandTotals: Record<string, { parts: number; cross: number }>
   truncated: boolean; computedAt: string
 }
+
+/** The brand a bare code most likely belongs to, for opening a code typed into the search box. */
+const guessBrand = (code: string): BrandFamily =>
+  code.startsWith('SU0') ? 'TOYOTA' : /^MG\d/.test(code) ? 'MG' : 'PSA'
 
 type Kind = 'all' | 'collisions' | 'shared' | 'matches'
 type ErpFilter = 'all' | 'in' | 'out' | 'stock'
@@ -53,7 +64,10 @@ export default function CrossBrandPage() {
 
   const [kind, setKind] = useState<Kind>('all')
   const [family, setFamily] = useState<BrandFamily | ''>('')
-  const [limit, setLimit] = useState(60)
+  // `detail` is how many codes show at normal zoom; zooming in reveals the rest
+  // of the 600 the page loads, busiest first.
+  const [detail, setDetail] = useState(100)
+  const limit = 600
   const [erp, setErp] = useState<ErpFilter>('all')
   const [q, setQ] = useState('')
   const [search, setSearch] = useState('')
@@ -103,22 +117,32 @@ export default function CrossBrandPage() {
       const nodes: GNode[] = []
       const links: GLink[] = []
       const fams = new Set<string>()
+      // rank = how many scanned cars carry the code; the graph reveals nodes in this order on zoom
       for (const c of d.codes) {
-        nodes.push({ id: c.code, kind: 'code', brand: c.brand, label: nodeLabel(c.code, c.brand), sub: c.heb, clickable: true })
+        const cars = Object.values(c.fams).reduce((s, n) => s + n, 0)
+        nodes.push({ id: c.code, kind: 'code', brand: c.brand, label: nodeLabel(c.code, c.brand), sub: shortName(c.heb), clickable: true, rank: cars })
         for (const [f, n] of Object.entries(c.fams)) { fams.add(f); links.push({ source: c.code, target: 'fam:' + f, kind: 'cars', weight: n }) }
       }
       const seen = new Set(d.codes.map((c) => c.code))
       for (const m of d.matches) {
-        for (const [code, brand, heb] of [[m.a, m.aBrand, m.aHeb], [m.b, m.bBrand, m.bHeb]] as const) {
+        for (const [code, brand, heb, cars] of [[m.a, m.aBrand, m.aHeb, m.aCars], [m.b, m.bBrand, m.bHeb, m.bCars]] as const) {
           if (!seen.has(code)) {
             seen.add(code); fams.add(brand)
-            nodes.push({ id: code, kind: 'code', brand, label: nodeLabel(code, brand), sub: heb, clickable: true })
-            links.push({ source: code, target: 'fam:' + brand, kind: 'cars', weight: 0 })
+            nodes.push({ id: code, kind: 'code', brand, label: nodeLabel(code, brand), sub: shortName(heb), clickable: true, rank: cars })
+            links.push({ source: code, target: 'fam:' + brand, kind: 'cars', weight: cars })
           }
         }
-        links.push({ source: m.a, target: m.b, kind: 'equiv' })
+        links.push({ source: m.a, target: m.b, kind: 'equiv', weight: Math.min(m.aCars, m.bCars) })
       }
-      for (const f of fams) nodes.push({ id: 'fam:' + f, kind: 'fam', brand: f, label: f })
+      // every brand the catalog holds gets a disc, so the rest of the parts are on the map as a number
+      for (const f of Object.keys(d.brandTotals ?? {})) if (f !== 'OTHER') fams.add(f)
+      for (const f of fams) {
+        const t = d.brandTotals?.[f]
+        nodes.push({
+          id: 'fam:' + f, kind: 'fam', brand: f, label: f,
+          sub: t ? `${t.parts.toLocaleString()} ${isHe ? 'חלקים' : 'parts'} · ${t.cross.toLocaleString()} ${isHe ? 'בין-יצרניים' : 'cross-brand'}` : null,
+        })
+      }
       return { nodes, links }
     }
     const v = view
@@ -129,7 +153,7 @@ export default function CrossBrandPage() {
       if (nodes.some((n) => n.id === id)) return
       nodes.push({ id, kind: 'code', brand, label: nodeLabel(id, brand), sub: sub ?? null, clickable: id !== v.code, ...extra })
     }
-    add(v.code, v.brand, item?.name ?? null, { root: true, href: itemHref(v.code, v.brand), clickable: false })
+    add(v.code, v.brand, shortName(item?.name), { root: true, href: itemHref(v.code, v.brand), clickable: false })
     // ERP chain (dashed arrows), oldest -> newest
     const erpChain: string[] = (item?.item_id_history ?? []).map((c: unknown) => String(c))
     for (let i = 0; i < erpChain.length; i++) {
@@ -191,7 +215,20 @@ export default function CrossBrandPage() {
           <Chip active={erp === 'stock'} onClick={() => setErp('stock')}>{isHe ? 'במלאי' : 'In stock'}</Chip>
           <div className="relative ms-auto w-full sm:w-56">
             <Search className="absolute start-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-            <Input id="cross-brand-search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={isHe ? 'מק״ט או שם' : 'code or name'} className="h-8 ps-7 text-sm" />
+            <Input
+              id="cross-brand-search"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              onKeyDown={(e) => {
+                // Enter on a code opens it, cross-brand or not: the lineage view
+                // works for any part the item API knows.
+                if (e.key !== 'Enter') return
+                const code = q.trim().toUpperCase()
+                if (/^[A-Z0-9-]{4,}$/.test(code)) { e.preventDefault(); go(code, guessBrand(code)) }
+              }}
+              placeholder={isHe ? 'מק״ט או שם · Enter פותח כל מק״ט' : 'code or name · Enter opens any code'}
+              className="h-8 ps-7 text-sm"
+            />
           </div>
         </div>
       ) : (
@@ -219,7 +256,7 @@ export default function CrossBrandPage() {
       {(view === 'root' ? root.isLoading : lineage.isLoading) ? (
         <div className="h-[720px] animate-pulse rounded-md bg-muted/40" />
       ) : (
-        <CrossBrandGraph nodes={graph.nodes} links={graph.links} onNodeClick={onNodeClick} mode={view === 'root' ? 'root' : 'lineage'} />
+        <CrossBrandGraph nodes={graph.nodes} links={graph.links} onNodeClick={onNodeClick} mode={view === 'root' ? 'root' : 'lineage'} detail={view === 'root' ? detail : undefined} />
       )}
 
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
@@ -252,12 +289,12 @@ export default function CrossBrandPage() {
           <Badge variant="secondary">{root.data.totals.in_stock}</Badge>
           <span>{isHe ? 'במלאי' : 'in stock'}</span>
           <span className="mx-1">·</span>
-          <span>{isHe ? 'מוצגים' : 'showing'}</span>
-          {[60, 150, 300].map((n) => (
-            <Chip key={n} active={limit === n} onClick={() => setLimit(n)}>{n}</Chip>
+          <span>{isHe ? 'בזום רגיל' : 'at normal zoom'}</span>
+          {[50, 100, 300].map((n) => (
+            <Chip key={n} active={detail === n} onClick={() => setDetail(n)}>{n}</Chip>
           ))}
-          {root.data.truncated && <span>{isHe ? '· העמוסים ביותר קודם; סננו לפי יצרן או חפשו כדי להגיע לשאר' : '· busiest first; filter by brand or search to reach the rest'}</span>}
-          {limit > 45 && <span>{isHe ? '· גללו כדי להתקרב ולראות שמות, או רחפו על מק״ט' : '· zoom in to read labels, or hover a code'}</span>}
+          <span>{isHe ? `· ${Math.min(limit, root.data.codes.length + root.data.matches.length * 2)} טעונים; זום פנימה חושף את השאר, העמוסים קודם` : `· ${Math.min(limit, root.data.codes.length + root.data.matches.length * 2)} loaded; zoom in to reveal the rest, busiest first`}</span>
+          {root.data.truncated && <span>{isHe ? '· סננו לפי יצרן או חפשו כדי להגיע מעבר לכך' : '· filter by brand or search to reach beyond that'}</span>}
         </div>
       )}
       {view !== 'root' && lineage.data && !lineage.data.item && (
