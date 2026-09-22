@@ -34,6 +34,8 @@ export const translations = {
     supplierInquiries: 'פניות לספקים',
     supplierInvoices: 'חשבוניות ספקים',
     catalogLinks: 'חיבורי קטלוג',
+    crossBrand: 'קשרים בין יצרנים',
+    settings: 'הגדרות',
 
     // Chat admin
     chatFlowDecisions: 'החלטות זרימה',
@@ -818,6 +820,8 @@ export const translations = {
     supplierInquiries: 'Supplier Inquiries',
     supplierInvoices: 'Supplier Invoices',
     catalogLinks: 'Catalog Links',
+    crossBrand: 'Cross-brand relations',
+    settings: 'Settings',
 
     // Chat admin
     chatFlowDecisions: 'Flow Decisions',

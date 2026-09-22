@@ -1,37 +1,48 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
+import { select } from 'd3-selection'
+import { zoom, zoomIdentity } from 'd3-zoom'
+import { drag as d3drag } from 'd3-drag'
+import {
+  forceSimulation, forceLink, forceManyBody, forceCenter, forceCollide, forceX, forceY,
+  type SimulationNodeDatum, type SimulationLinkDatum,
+} from 'd3-force'
 import { familyChipClasses, type BrandFamily } from '@/lib/brand'
 
 /**
- * A small force-directed graph with pan, zoom and drag — no library.
+ * The cross-brand graph: a d3 force layout with pan, zoom and drag.
  *
- * Two node kinds: `fam` anchors (brand families, drawn as large discs) and
- * `code` nodes (item numbers, small discs with a label above and a Hebrew
- * name below). Links are either `cars` (a brand prints the number; width by
- * scanned cars), `equiv` (same part, different number; dotted), `chain`
- * (supersession; arrow, dashed for the ERP's own chain).
+ * The same setup as the preview page this came from — brands pulled to the
+ * right, codes to the left, a live simulation that settles while you watch
+ * and reheats when you drag. d3 draws straight into the svg through a ref;
+ * React owns the container and the data, nothing else, so a 150-node tick
+ * never re-renders the tree.
  *
- * Why no d3: the dashboard does not ship d3-force, and a spring-electric
- * layout for a few hundred nodes is forty lines. Families are pulled to the
- * right, codes to the left, so the picture reads as a bipartite map even
- * before it settles.
+ * Node kinds: `fam` anchors (brand families, large discs) and `code` nodes
+ * (item numbers, small discs with a label above and a Hebrew name below).
+ * Links: `cars` (a brand prints the number; width by scanned cars), `equiv`
+ * (same part, different number; dotted), `chain` (supersession; arrow) and
+ * `erp` (the ERP's own chain; dashed arrow).
+ *
+ * `mode` picks the forces: 'root' is the wide bipartite map, 'lineage' the
+ * tighter one-part view. Past `labelLimit` codes, labels wait for zoom or
+ * hover so the picture stays readable when the set grows.
  */
-export interface GNode {
+export interface GNode extends SimulationNodeDatum {
   id: string
   kind: 'fam' | 'code'
   brand: BrandFamily | string
   label: string
   sub?: string | null
-  /** true when the node is the current subject of the view */
   root?: boolean
   fork?: boolean
   clickable?: boolean
   /** Opens in a new tab when the label is clicked. */
   href?: string
-  x?: number; y?: number; vx?: number; vy?: number; fx?: number | null; fy?: number | null
 }
 export interface GLink { source: string; target: string; kind: 'cars' | 'equiv' | 'chain' | 'erp'; weight?: number }
+type SimLink = SimulationLinkDatum<GNode> & { kind: GLink['kind']; weight?: number }
 
 const COLORS: Record<string, string> = {
   PSA: '#2f6fdb', MG: '#1f9d6a', TOYOTA: '#d9486f', VOLVO: '#2a9fd8', FIAT: '#e07a1f',
@@ -39,176 +50,186 @@ const COLORS: Record<string, string> = {
 }
 export const famColor = (f: string) => COLORS[f] ?? COLORS.OTHER
 
-export function CrossBrandGraph({
-  nodes: inputNodes, links: inputLinks, onNodeClick, height = 560,
-}: {
-  nodes: GNode[]; links: GLink[]; onNodeClick?: (n: GNode) => void; height?: number
-}) {
-  const W = 1040, H = height
-  const svgRef = useRef<SVGSVGElement>(null)
-  const [, force] = useState(0)
-  const [view, setView] = useState({ x: 0, y: 0, k: 1 })
-  const drag = useRef<{ node?: GNode; panning?: boolean; sx: number; sy: number; ox: number; oy: number } | null>(null)
+const W = 1040
 
-  // Positions live on the node objects; a new node set restarts the layout.
-  const sim = useMemo(() => {
-    const byId = new Map(inputNodes.map((n) => [n.id, n]))
-    const nodes = inputNodes
-    const links = inputLinks
-      .map((l) => ({ ...l, s: byId.get(l.source)!, t: byId.get(l.target)! }))
-      .filter((l) => l.s && l.t)
-    nodes.forEach((n, i) => {
-      if (n.x == null) {
-        const col = n.kind === 'fam' ? W * 0.74 : W * 0.3
-        n.x = col + (Math.random() - 0.5) * 120
-        n.y = H / 2 + (i - nodes.length / 2) * (H / Math.max(6, nodes.length)) + (Math.random() - 0.5) * 40
-      }
-      n.vx = 0; n.vy = 0
-    })
-    return { nodes, links, alpha: 1 }
-  }, [inputNodes, inputLinks, H])
+export function CrossBrandGraph({
+  nodes, links, onNodeClick, height = 720, mode = 'root', labelLimit = 45,
+}: {
+  nodes: GNode[]; links: GLink[]; onNodeClick?: (n: GNode) => void
+  height?: number; mode?: 'root' | 'lineage'; labelLimit?: number
+}) {
+  const svgRef = useRef<SVGSVGElement>(null)
+  const clickRef = useRef(onNodeClick)
+  useEffect(() => { clickRef.current = onNodeClick }, [onNodeClick])
 
   useEffect(() => {
+    const svgEl = svgRef.current
+    if (!svgEl) return
+    const H = height
+    const svg = select(svgEl)
+    svg.selectAll('*').remove()
     const reduce = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches
-    let raf = 0
-    const tick = () => {
-      const { nodes, links } = sim
-      const a = sim.alpha
-      // repulsion
-      for (let i = 0; i < nodes.length; i++) for (let j = i + 1; j < nodes.length; j++) {
-        const p = nodes[i], q = nodes[j]
-        let dx = q.x! - p.x!, dy = q.y! - p.y!
-        let d2 = dx * dx + dy * dy; if (d2 < 1) { dx = 1; dy = 0; d2 = 1 }
-        const min = (p.kind === 'fam' ? 30 : 22) + (q.kind === 'fam' ? 30 : 22)
-        const f = (-900 * a) / d2 + (d2 < min * min ? (min - Math.sqrt(d2)) * 0.15 : 0) / Math.sqrt(d2)
-        p.vx! -= dx * f; p.vy! -= dy * f; q.vx! += dx * f; q.vy! += dy * f
-      }
-      // springs
-      for (const l of links) {
-        const rest = l.kind === 'equiv' ? 80 : l.kind === 'cars' ? 140 : 105
-        const dx = l.t.x! - l.s.x!, dy = l.t.y! - l.s.y!
-        const d = Math.max(1, Math.hypot(dx, dy))
-        const f = ((d - rest) / d) * 0.05 * a
-        l.s.vx! += dx * f; l.s.vy! += dy * f; l.t.vx! -= dx * f; l.t.vy! -= dy * f
-      }
-      // anchors: families right, codes left, everyone toward the middle height
-      for (const n of nodes) {
-        const tx = n.kind === 'fam' ? W * 0.74 : W * 0.3
-        n.vx! += (tx - n.x!) * 0.02 * a
-        n.vy! += (H / 2 - n.y!) * 0.006 * a
-        if (n.fx != null) { n.x = n.fx; n.y = n.fy!; n.vx = 0; n.vy = 0; continue }
-        n.vx! *= 0.6; n.vy! *= 0.6
-        n.x! += n.vx!; n.y! += n.vy!
-      }
-      sim.alpha = Math.max(0.02, a * 0.985)
-      force((v) => v + 1)
-      if (sim.alpha > 0.021 || drag.current?.node) raf = requestAnimationFrame(tick)
-    }
-    if (reduce) { for (let i = 0; i < 260; i++) tick(); cancelAnimationFrame(raf) } else raf = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(raf)
-  }, [sim, H])
 
-  // pointer handling: node drag, background pan, wheel zoom
-  const toLocal = (e: React.PointerEvent | React.WheelEvent) => {
-    const r = svgRef.current!.getBoundingClientRect()
-    const sx = ((e.clientX - r.left) / r.width) * W, sy = ((e.clientY - r.top) / r.height) * H
-    return { sx, sy, x: (sx - view.x) / view.k, y: (sy - view.y) / view.k }
-  }
-  const onPointerDown = (e: React.PointerEvent, node?: GNode) => {
-    const p = toLocal(e)
-    ;(e.currentTarget as Element).setPointerCapture?.(e.pointerId)
-    drag.current = node
-      ? { node, sx: p.sx, sy: p.sy, ox: node.x!, oy: node.y! }
-      : { panning: true, sx: p.sx, sy: p.sy, ox: view.x, oy: view.y }
-    if (node) { node.fx = node.x; node.fy = node.y; sim.alpha = Math.max(sim.alpha, 0.3) }
-  }
-  const onPointerMove = (e: React.PointerEvent) => {
-    const d = drag.current; if (!d) return
-    const p = toLocal(e)
-    if (d.node) { d.node.fx = d.ox + (p.sx - d.sx) / view.k; d.node.fy = d.oy + (p.sy - d.sy) / view.k; d.node.x = d.node.fx; d.node.y = d.node.fy; force((v) => v + 1) }
-    else setView((v) => ({ ...v, x: d.ox + (p.sx - d.sx), y: d.oy + (p.sy - d.sy) }))
-  }
-  const onPointerUp = (e: React.PointerEvent) => {
-    const d = drag.current; if (!d) return
-    const p = toLocal(e)
-    const moved = Math.hypot(p.sx - d.sx, p.sy - d.sy) > 4
-    if (d.node) { d.node.fx = null; d.node.fy = null; if (!moved && d.node.clickable && onNodeClick) onNodeClick(d.node) }
-    drag.current = null
-  }
-  const onWheel = (e: React.WheelEvent) => {
-    e.preventDefault()
-    const p = toLocal(e)
-    const k = Math.min(5, Math.max(0.35, view.k * (e.deltaY < 0 ? 1.12 : 1 / 1.12)))
-    setView({ k, x: p.sx - (p.sx - view.x) * (k / view.k), y: p.sy - (p.sy - view.y) * (k / view.k) })
-  }
+    // fresh objects per run: d3 mutates x/y/vx/vy on them
+    const simNodes: GNode[] = nodes.map((n) => ({ ...n }))
+    const byId = new Map(simNodes.map((n) => [n.id, n]))
+    const simLinks: SimLink[] = links
+      .filter((l) => byId.has(l.source) && byId.has(l.target))
+      .map((l) => ({ source: l.source, target: l.target, kind: l.kind, weight: l.weight }))
+    const codeCount = simNodes.filter((n) => n.kind === 'code').length
+    const manyCodes = codeCount > labelLimit
+
+    // ── zoom layer ──
+    const layer = svg.append('g')
+    let k = 1
+    const z = zoom<SVGSVGElement, unknown>().scaleExtent([0.35, 6]).on('zoom', (e) => {
+      layer.attr('transform', e.transform.toString())
+      const nk = e.transform.k
+      if (manyCodes && (nk >= 1.6) !== (k >= 1.6)) { k = nk; refreshLabels() } else k = nk
+    })
+    svg.call(z).on('dblclick.zoom', () => svg.transition().duration(reduce ? 0 : 350).call(z.transform, zoomIdentity))
+
+    svg.append('defs').append('marker')
+      .attr('id', 'xb-arrow').attr('viewBox', '0 -4 8 8').attr('refX', 18)
+      .attr('markerWidth', 7).attr('markerHeight', 7).attr('orient', 'auto')
+      .append('path').attr('d', 'M0,-4L8,0L0,4').attr('fill', 'currentColor').attr('opacity', 0.6)
+
+    // ── forces ──
+    // Root: brands are pinned on a ring around the canvas and every code is
+    // drawn toward the middle of the brands it touches — a code shared by PSA
+    // and MG settles between them, a Volvo collision between Volvo and PSA —
+    // so the whole canvas is used and the picture reads as a map. Lineage:
+    // the preview's tighter layout, brands right, codes left.
+    const root = mode === 'root'
+    const fams = simNodes.filter((n) => n.kind === 'fam')
+    const target = new Map<string, { x: number; y: number }>()
+    if (root) {
+      const R = Math.min(W, H) * 0.4
+      fams.forEach((f, i) => {
+        const a = -Math.PI / 2 + (i / Math.max(1, fams.length)) * Math.PI * 2
+        f.fx = fams.length === 1 ? W / 2 : W / 2 + Math.cos(a) * R
+        f.fy = fams.length === 1 ? H / 2 : H / 2 + Math.sin(a) * R
+      })
+      const famsOf = new Map<string, GNode[]>()
+      for (const l of simLinks) {
+        if (l.kind !== 'cars') continue
+        const c = byId.get(String(l.source))!, f = byId.get(String(l.target))!
+        const list = famsOf.get(c.id) ?? []; list.push(f); famsOf.set(c.id, list)
+      }
+      for (const n of simNodes) {
+        if (n.kind !== 'code') continue
+        const fs = famsOf.get(n.id) ?? []
+        const mx = fs.length ? fs.reduce((s, f) => s + f.fx!, 0) / fs.length : W / 2
+        const my = fs.length ? fs.reduce((s, f) => s + f.fy!, 0) / fs.length : H / 2
+        // between the centre and its brands; a one-brand code sits closer to the brand
+        const pull = fs.length > 1 ? 0.75 : 0.62
+        target.set(n.id, { x: W / 2 + (mx - W / 2) * pull, y: H / 2 + (my - H / 2) * pull })
+        n.x = target.get(n.id)!.x + (Math.random() - 0.5) * 80
+        n.y = target.get(n.id)!.y + (Math.random() - 0.5) * 80
+      }
+    }
+    const sim = forceSimulation<GNode>(simNodes)
+      .force('link', forceLink<GNode, SimLink>(simLinks).id((d) => d.id)
+        .distance((d) => d.kind === 'equiv' ? (root ? 60 : 140) : d.kind === 'cars' ? (root ? 160 : 90) : 105)
+        .strength((d) => d.kind === 'equiv' ? 0.6 : root ? 0.05 : 0.5))
+      .force('charge', forceManyBody().strength(root ? (manyCodes ? -140 : -220) : -520))
+      .force('collide', forceCollide<GNode>((d) => d.kind === 'fam' ? 40 : root ? (manyCodes ? 15 : 24) : 46).strength(0.9))
+    if (root) {
+      sim.force('x', forceX<GNode>((d) => target.get(d.id)?.x ?? W / 2).strength(0.14))
+         .force('y', forceY<GNode>((d) => target.get(d.id)?.y ?? H / 2).strength(0.14))
+    } else {
+      sim.force('center', forceCenter(W / 2, H / 2))
+         .force('y', forceY(H / 2).strength(0.06))
+    }
+
+    // ── links ──
+    const link = layer.append('g').selectAll('line').data(simLinks).join('line')
+      .attr('stroke', (d) => d.kind === 'cars' ? famColor(String((d.target as GNode).brand)) : d.kind === 'equiv' ? 'currentColor' : d.kind === 'erp' ? '#8a94a6' : '#2f6fdb')
+      .attr('stroke-opacity', (d) => d.kind === 'cars' ? (manyCodes ? 0.35 : 0.55) : 0.9)
+      .attr('stroke-width', (d) => d.kind === 'cars' ? Math.min(manyCodes ? 5 : 10, 1 + Math.log2((d.weight ?? 0) + 1) * (manyCodes ? 1 : 2)) : d.kind === 'equiv' ? 2.2 : 1.8)
+      .attr('stroke-dasharray', (d) => d.kind === 'erp' ? '6 4' : d.kind === 'equiv' ? '2 4' : null)
+      .attr('marker-end', (d) => d.kind === 'chain' || d.kind === 'erp' ? 'url(#xb-arrow)' : null)
+
+    // ── nodes ──
+    const node = layer.append('g').selectAll<SVGGElement, GNode>('g').data(simNodes).join('g')
+      .style('cursor', (d) => d.clickable ? 'pointer' : 'grab')
+      .call(d3drag<SVGGElement, GNode>()
+        .on('start', (e, d) => { if (!e.active) sim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y })
+        .on('drag', (e, d) => { d.fx = e.x; d.fy = e.y })
+        // pinned brands stay where they are dropped; codes go back to the forces
+        .on('end', (e, d) => { if (!e.active) sim.alphaTarget(0); if (!(root && d.kind === 'fam')) { d.fx = null; d.fy = null } }))
+      .on('click', (e, d) => { if (e.defaultPrevented) return; if (d.clickable) clickRef.current?.(d) })
+
+    const fam = node.filter((d) => d.kind === 'fam')
+    fam.append('circle').attr('r', 22).attr('fill', (d) => famColor(String(d.brand))).attr('stroke', 'var(--background, #fff)').attr('stroke-width', 2)
+    fam.append('text').attr('dy', 4).attr('text-anchor', 'middle').attr('font-size', 11).attr('font-weight', 600).style('fill', '#fff').attr('class', 'font-mono').text((d) => d.label)
+    fam.filter((d) => !!d.sub).append('text').attr('dy', 36).attr('text-anchor', 'middle').attr('font-size', 10).attr('class', 'font-mono fill-muted-foreground').text((d) => d.sub!)
+
+    const code = node.filter((d) => d.kind === 'code')
+    code.append('circle')
+      .attr('r', (d) => d.root ? 12 : manyCodes ? 7 : 9)
+      .attr('fill', (d) => d.fork ? '#d94141' : famColor(String(d.brand)))
+      .attr('stroke', (d) => d.root ? 'currentColor' : 'var(--background, #fff)')
+      .attr('stroke-width', (d) => d.root ? 3 : 2)
+    const halo = { 'paint-order': 'stroke', stroke: 'var(--background, #fff)', 'stroke-width': 3, 'stroke-linejoin': 'round' } as const
+    const titled = code.filter((d) => !d.href)
+    const titleText = titled.append('text').attr('dy', -14).attr('text-anchor', 'middle').attr('font-size', 11)
+      .attr('font-weight', (d) => d.root ? 600 : 400).attr('class', 'font-mono fill-foreground').text((d) => d.label)
+    Object.entries(halo).forEach(([a, v]) => titleText.attr(a, v as string))
+    const linked = code.filter((d) => !!d.href).append('a')
+      .attr('href', (d) => d.href!).attr('target', '_blank').attr('rel', 'noopener noreferrer')
+      .on('pointerdown', (e) => e.stopPropagation()).on('click', (e) => e.stopPropagation())
+    const linkText = linked.append('text').attr('dy', -16).attr('text-anchor', 'middle').attr('font-size', 11).attr('font-weight', 600)
+      .attr('class', 'font-mono fill-primary').attr('text-decoration', 'underline').text((d) => `${d.label} ↗`)
+    Object.entries(halo).forEach(([a, v]) => linkText.attr(a, v as string))
+    const subText = code.filter((d) => !!d.sub).append('text').attr('dy', 26).attr('text-anchor', 'middle').attr('font-size', 10)
+      .attr('direction', 'rtl').attr('class', 'fill-muted-foreground').text((d) => d.sub!)
+    Object.entries(halo).forEach(([a, v]) => subText.attr(a, v as string))
+    node.append('title').text((d) => `${d.label}${d.sub ? `\n${d.sub}` : ''}${d.clickable ? '\nclick to open' : ''}`)
+
+    // ── labels: always for a small set; on zoom or hover for a large one ──
+    let hovered: string | null = null
+    const neighbours = (id: string) => {
+      const s = new Set([id])
+      for (const l of simLinks) { const a = (l.source as GNode).id, b = (l.target as GNode).id; if (a === id) s.add(b); if (b === id) s.add(a) }
+      return s
+    }
+    function refreshLabels() {
+      const near = hovered ? neighbours(hovered) : null
+      const show = (d: GNode) => d.kind === 'fam' || !!d.root || !manyCodes || k >= 1.6 || (near?.has(d.id) ?? false)
+      code.selectAll<SVGTextElement, GNode>('text').style('display', function () {
+        const d = select<SVGGElement, GNode>(this.closest('g') as SVGGElement).datum()
+        return show(d) ? null : 'none'
+      })
+      node.attr('opacity', (d) => near && !near.has(d.id) ? 0.25 : 1)
+      link.attr('stroke-opacity', (d) => {
+        if (!near) return d.kind === 'cars' ? (manyCodes ? 0.35 : 0.55) : 0.9
+        const a = (d.source as GNode).id, b = (d.target as GNode).id
+        return a === hovered || b === hovered ? 0.95 : 0.06
+      })
+    }
+    node.on('pointerenter', (e, d) => { hovered = d.id; refreshLabels() })
+        .on('pointerleave', (e, d) => { if (hovered === d.id) { hovered = null; refreshLabels() } })
+    refreshLabels()
+
+    sim.on('tick', () => {
+      link.attr('x1', (d) => (d.source as GNode).x!).attr('y1', (d) => (d.source as GNode).y!)
+          .attr('x2', (d) => (d.target as GNode).x!).attr('y2', (d) => (d.target as GNode).y!)
+      node.attr('transform', (d) => `translate(${d.x},${d.y})`)
+    })
+    if (reduce) { sim.stop(); for (let i = 0; i < 300; i++) sim.tick(); sim.on('tick')?.call(sim) }
+
+    return () => { sim.stop() }
+  }, [nodes, links, height, mode, labelLimit])
 
   return (
     <svg
       ref={svgRef}
-      viewBox={`0 0 ${W} ${H}`}
+      viewBox={`0 0 ${W} ${height}`}
       className="w-full h-auto rounded-md bg-muted/40 touch-none select-none"
-      onPointerDown={(e) => onPointerDown(e)}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
-      onPointerCancel={onPointerUp}
-      onWheel={onWheel}
-      onDoubleClick={() => setView({ x: 0, y: 0, k: 1 })}
       role="img"
       aria-label="cross-brand relations graph"
-    >
-      <defs>
-        <marker id="xb-arrow" viewBox="0 -4 8 8" refX="18" markerWidth="7" markerHeight="7" orient="auto">
-          <path d="M0,-4L8,0L0,4" className="fill-muted-foreground" />
-        </marker>
-      </defs>
-      <g transform={`translate(${view.x},${view.y}) scale(${view.k})`}>
-        {sim.links.map((l, i) => (
-          <line
-            key={i}
-            x1={l.s.x} y1={l.s.y} x2={l.t.x} y2={l.t.y}
-            stroke={l.kind === 'cars' ? famColor(String(l.t.brand)) : l.kind === 'equiv' ? 'currentColor' : l.kind === 'erp' ? '#8a94a6' : '#2f6fdb'}
-            strokeOpacity={l.kind === 'cars' ? 0.5 : 0.9}
-            strokeWidth={l.kind === 'cars' ? Math.min(10, 1 + Math.log2((l.weight ?? 0) + 1) * 2) : 1.8}
-            strokeDasharray={l.kind === 'equiv' ? '2 4' : l.kind === 'erp' ? '6 4' : undefined}
-            markerEnd={l.kind === 'chain' || l.kind === 'erp' ? 'url(#xb-arrow)' : undefined}
-          />
-        ))}
-        {sim.nodes.map((n) => (
-          <g
-            key={n.id}
-            transform={`translate(${n.x},${n.y})`}
-            onPointerDown={(e) => { e.stopPropagation(); onPointerDown(e, n) }}
-            style={{ cursor: n.clickable ? 'pointer' : 'grab' }}
-          >
-            {n.kind === 'fam' ? (
-              <>
-                <circle r={22} fill={famColor(String(n.brand))} fillOpacity={n.root ? 1 : 0.9} />
-                <text dy={4} textAnchor="middle" fontSize={11} fontWeight={600} fill="#fff" className="font-mono">{n.label}</text>
-                {n.sub && <text dy={36} textAnchor="middle" fontSize={10} className="fill-muted-foreground font-mono">{n.sub}</text>}
-              </>
-            ) : (
-              <>
-                <circle
-                  r={n.root ? 12 : 9}
-                  fill={n.fork ? '#d94141' : famColor(String(n.brand))}
-                  stroke={n.root ? 'currentColor' : 'var(--background, #fff)'}
-                  strokeWidth={n.root ? 3 : 2}
-                />
-                {n.href ? (
-                  <a href={n.href} target="_blank" rel="noopener noreferrer" onPointerDown={(e) => e.stopPropagation()}>
-                    <text dy={-16} textAnchor="middle" fontSize={11} fontWeight={600} className="font-mono fill-primary underline">{n.label} ↗</text>
-                  </a>
-                ) : (
-                  <text dy={-16} textAnchor="middle" fontSize={11} fontWeight={n.root ? 600 : 400} className="font-mono fill-foreground">{n.label}</text>
-                )}
-                {n.sub && <text dy={26} textAnchor="middle" fontSize={11} direction="rtl" className="fill-muted-foreground">{n.sub}</text>}
-              </>
-            )}
-            <title>{`${n.label}${n.sub ? `\n${n.sub}` : ''}${n.clickable ? '\nclick to open' : ''}`}</title>
-          </g>
-        ))}
-      </g>
-    </svg>
+    />
   )
 }
 

@@ -43,6 +43,8 @@ const EXACT: Record<string, RouteTitle> = {
   '/scrap': { key: 'page.scrap', he: 'מלאי מת' },
   '/returns': { key: 'page.returns', he: 'החזרות' },
   '/catalog-links': { he: 'חיבורי קטלוג' },
+  '/catalog/cross-brand': { he: 'קשרים בין יצרנים' },
+  '/settings': { he: 'הגדרות' },
   '/reorder': { key: 'page.reorder', he: 'ניהול הזמנות מחדש' },
   '/alerts': { he: 'התראות מלאי' },
 

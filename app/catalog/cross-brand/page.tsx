@@ -21,11 +21,16 @@ import { CrossBrandGraph, FamilyChip, type GLink, type GNode } from '@/component
  * with the title linking to the item page. Back walks the stack.
  */
 
-interface CodeRel { code: string; brand: BrandFamily; heb: string | null; fams: Record<string, number>; shared_numbering: boolean }
-interface MatchRel { a: string; aBrand: BrandFamily; aHeb: string | null; b: string; bBrand: BrandFamily; bHeb: string | null; source: string }
-interface RootPayload { codes: CodeRel[]; matches: MatchRel[]; totals: { codes: number; matches: number }; truncated: boolean; computedAt: string }
+interface CodeRel { code: string; brand: BrandFamily; heb: string | null; fams: Record<string, number>; shared_numbering: boolean; in_erp: boolean; stock: number }
+interface MatchRel { a: string; aBrand: BrandFamily; aHeb: string | null; aInErp: boolean; aStock: number; b: string; bBrand: BrandFamily; bHeb: string | null; bInErp: boolean; bStock: number; source: string }
+interface RootPayload {
+  codes: CodeRel[]; matches: MatchRel[]
+  totals: { codes: number; matches: number; unique_codes: number; in_erp: number; in_stock: number }
+  truncated: boolean; computedAt: string
+}
 
 type Kind = 'all' | 'collisions' | 'shared' | 'matches'
+type ErpFilter = 'all' | 'in' | 'out' | 'stock'
 const FAMILIES: BrandFamily[] = ['PSA', 'MG', 'TOYOTA', 'FIAT', 'VOLVO', 'VAG', 'BMW', 'MITSUBISHI']
 
 /** The dashboard code for a number as a brand's part: MG behind its prefix, catalogue-only brands on their own page. */
@@ -48,14 +53,16 @@ export default function CrossBrandPage() {
 
   const [kind, setKind] = useState<Kind>('all')
   const [family, setFamily] = useState<BrandFamily | ''>('')
+  const [limit, setLimit] = useState(60)
+  const [erp, setErp] = useState<ErpFilter>('all')
   const [q, setQ] = useState('')
   const [search, setSearch] = useState('')
   useEffect(() => { const t = setTimeout(() => setSearch(q.trim()), 300); return () => clearTimeout(t) }, [q])
 
   const root = useQuery<RootPayload>({
-    queryKey: ['cross-brand', kind, family, search],
+    queryKey: ['cross-brand', kind, family, search, limit, erp],
     queryFn: async () => {
-      const p = new URLSearchParams({ kind, limit: '200' })
+      const p = new URLSearchParams({ kind, limit: String(limit), erp })
       if (family) p.set('family', family)
       if (search) p.set('q', search)
       const res = await fetch(`/api/catalog/cross-brand?${p}`)
@@ -177,6 +184,11 @@ export default function CrossBrandPage() {
           <span className="mx-1 text-muted-foreground">·</span>
           <Chip active={family === ''} onClick={() => setFamily('')}>{isHe ? 'כל היצרנים' : 'All brands'}</Chip>
           {FAMILIES.map((f) => <Chip key={f} active={family === f} onClick={() => setFamily(f)}>{isHe ? FAMILY_LABEL_HE[f] : f}</Chip>)}
+          <span className="mx-1 text-muted-foreground">·</span>
+          <Chip active={erp === 'all'} onClick={() => setErp('all')}>{isHe ? 'עם ובלי ERP' : 'ERP: any'}</Chip>
+          <Chip active={erp === 'in'} onClick={() => setErp('in')}>{isHe ? 'קיים ב-ERP' : 'Exists in ERP'}</Chip>
+          <Chip active={erp === 'out'} onClick={() => setErp('out')}>{isHe ? 'לא ב-ERP' : 'Not in ERP'}</Chip>
+          <Chip active={erp === 'stock'} onClick={() => setErp('stock')}>{isHe ? 'במלאי' : 'In stock'}</Chip>
           <div className="relative ms-auto w-full sm:w-56">
             <Search className="absolute start-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
             <Input id="cross-brand-search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={isHe ? 'מק״ט או שם' : 'code or name'} className="h-8 ps-7 text-sm" />
@@ -205,9 +217,9 @@ export default function CrossBrandPage() {
       )}
 
       {(view === 'root' ? root.isLoading : lineage.isLoading) ? (
-        <div className="h-[560px] animate-pulse rounded-md bg-muted/40" />
+        <div className="h-[720px] animate-pulse rounded-md bg-muted/40" />
       ) : (
-        <CrossBrandGraph nodes={graph.nodes} links={graph.links} onNodeClick={onNodeClick} />
+        <CrossBrandGraph nodes={graph.nodes} links={graph.links} onNodeClick={onNodeClick} mode={view === 'root' ? 'root' : 'lineage'} />
       )}
 
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
@@ -228,17 +240,50 @@ export default function CrossBrandPage() {
       </div>
 
       {view === 'root' && root.data && (
-        <p className="text-sm text-muted-foreground">
-          <Badge variant="secondary" className="me-2">{root.data.totals.codes}</Badge>
-          {isHe ? 'מק״טים אצל יותר מיצרן אחד' : 'codes under more than one brand'}
-          <Badge variant="secondary" className="mx-2">{root.data.totals.matches}</Badge>
-          {isHe ? 'זוגות מקבילים' : 'matched pairs'}
-          {root.data.truncated && (isHe ? ' · מוצגים הראשונים, סננו לפי יצרן או חפשו כדי לראות את השאר' : ' · showing the busiest first, filter by brand or search to reach the rest')}
-        </p>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+          <Badge variant="secondary">{root.data.totals.codes}</Badge>
+          <span>{isHe ? 'מק״טים אצל יותר מיצרן אחד' : 'codes under more than one brand'}</span>
+          <Badge variant="secondary">{root.data.totals.matches}</Badge>
+          <span>{isHe ? 'זוגות מקבילים' : 'matched pairs'}</span>
+          <Badge variant="secondary">{root.data.totals.unique_codes}</Badge>
+          <span>{isHe ? 'מק״טים ייחודיים בסך הכל' : 'unique codes in total'}</span>
+          <Badge variant="secondary">{root.data.totals.in_erp}</Badge>
+          <span>{isHe ? 'קיימים ב-ERP' : 'exist in the ERP'}</span>
+          <Badge variant="secondary">{root.data.totals.in_stock}</Badge>
+          <span>{isHe ? 'במלאי' : 'in stock'}</span>
+          <span className="mx-1">·</span>
+          <span>{isHe ? 'מוצגים' : 'showing'}</span>
+          {[60, 150, 300].map((n) => (
+            <Chip key={n} active={limit === n} onClick={() => setLimit(n)}>{n}</Chip>
+          ))}
+          {root.data.truncated && <span>{isHe ? '· העמוסים ביותר קודם; סננו לפי יצרן או חפשו כדי להגיע לשאר' : '· busiest first; filter by brand or search to reach the rest'}</span>}
+          {limit > 45 && <span>{isHe ? '· גללו כדי להתקרב ולראות שמות, או רחפו על מק״ט' : '· zoom in to read labels, or hover a code'}</span>}
+        </div>
       )}
       {view !== 'root' && lineage.data && !lineage.data.item && (
         <p className="text-sm text-muted-foreground">{isHe ? 'לא נמצא מידע על המק״ט הזה.' : 'Nothing is known about this code.'}</p>
       )}
+      {view !== 'root' && lineage.data?.item && (() => {
+        const codeNodes = graph.nodes.filter((n) => n.kind === 'code')
+        const chain = codeNodes.filter((n) => n.brand === view.brand).length
+        const uniq = new Set(codeNodes.map((n) => bare(n.id))).size
+        const equiv = graph.links.filter((l) => l.kind === 'equiv').length
+        const brands = graph.nodes.filter((n) => n.kind === 'fam').length
+        return (
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+            <Badge variant="secondary">{codeNodes.length}</Badge>
+            <span>{isHe ? 'מק״טים בגרף' : 'codes in the graph'}</span>
+            <Badge variant="secondary">{chain}</Badge>
+            <span>{isHe ? 'בשרשרת של היצרן הזה (ERP + קטלוג)' : 'in this brand’s chain (ERP + catalog)'}</span>
+            <Badge variant="secondary">{uniq}</Badge>
+            <span>{isHe ? 'ייחודיים' : 'unique'}</span>
+            <Badge variant="secondary">{equiv}</Badge>
+            <span>{isHe ? 'מקבילים אצל יצרנים אחרים' : 'equivalents in other brands'}</span>
+            <Badge variant="secondary">{brands}</Badge>
+            <span>{isHe ? 'יצרנים שמדפיסים את המספר' : 'brands printing the number'}</span>
+          </div>
+        )
+      })()}
     </div>
   )
 }

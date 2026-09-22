@@ -30,15 +30,17 @@ interface CodeRel {
   heb: string | null
   fams: Record<string, number>       // family -> scanned cars
   shared_numbering: boolean          // every pair of its families shares a scheme
+  in_erp: boolean                    // the ERP has an item for it (bare, or MG-prefixed)
+  stock: number                      // on-hand quantity in the ERP mirror, 0 when none
 }
 interface MatchRel {
-  a: string; aBrand: BrandFamily; aHeb: string | null
-  b: string; bBrand: BrandFamily; bHeb: string | null
+  a: string; aBrand: BrandFamily; aHeb: string | null; aInErp: boolean; aStock: number
+  b: string; bBrand: BrandFamily; bHeb: string | null; bInErp: boolean; bStock: number
   source: string
 }
 interface Payload { codes: CodeRel[]; matches: MatchRel[]; computedAt: string }
 
-const CACHE_KEY = 'catalog:cross-brand:v1'
+const CACHE_KEY = 'catalog:cross-brand:v2'
 const CACHE_TTL = 30 * 60
 
 /** The make -> family fold, as SQL, so the grouping happens in Postgres. */
@@ -78,7 +80,7 @@ async function compute(): Promise<Payload> {
     for (let i = 0; i < families.length; i++)
       for (let j = i + 1; j < families.length; j++)
         if (!sharesNumbering(families[i], families[j])) shared = false
-    return { code: r.code, brand: familyOf(r.brand), heb: r.heb, fams, shared_numbering: shared }
+    return { code: r.code, brand: familyOf(r.brand), heb: r.heb, fams, shared_numbering: shared, in_erp: false, stock: 0 }
   })
 
   const matchRes = await query(
@@ -93,12 +95,42 @@ async function compute(): Promise<Payload> {
   )
   const matches: MatchRel[] = ((matchRes?.rows ?? []) as Array<{ a: string; ab: string; ah: string | null; b: string; bb: string; bh: string | null; source: string }>)
     .map((r) => ({
-      a: r.a, aBrand: familyOf(r.ab), aHeb: r.ah,
-      b: r.b, bBrand: familyOf(r.bb), bHeb: r.bh,
+      a: r.a, aBrand: familyOf(r.ab), aHeb: r.ah, aInErp: false, aStock: 0,
+      b: r.b, bBrand: familyOf(r.bb), bHeb: r.bh, bInErp: false, bStock: 0,
       source: r.source,
     }))
     // same family on both sides (Skoda–Audi) is not cross-brand for our purposes
     .filter((m: MatchRel) => m.aBrand !== m.bBrand)
+
+  // ── ERP presence and stock, from the nightly mirror ──
+  // Partly stores MG numbers bare and the ERP files them with the MG prefix,
+  // so both spellings are asked for and either counts.
+  const wanted = new Set<string>()
+  for (const c of codes) { wanted.add(c.code); wanted.add('MG' + c.code) }
+  for (const m of matches) { wanted.add(m.a); wanted.add('MG' + m.a); wanted.add(m.b); wanted.add('MG' + m.b) }
+  const erp = new Map<string, number>()   // erp code -> stock qty (0 when listed with none)
+  const all = [...wanted]
+  for (let i = 0; i < all.length; i += 2000) {
+    const chunk = all.slice(i, i + 2000)
+    const res = await query(
+      `SELECT i.code, coalesce(sum(s.qty), 0)::float AS qty
+         FROM erp.items i
+         LEFT JOIN erp.stock s ON s.item_code = i.code
+        WHERE i.code = ANY($1)
+        GROUP BY i.code`,
+      [chunk],
+    ).catch(() => null)
+    for (const r of (res?.rows ?? []) as Array<{ code: string; qty: number }>) erp.set(r.code, Number(r.qty) || 0)
+  }
+  const look = (code: string) => {
+    const bare = erp.get(code), mg = erp.get('MG' + code)
+    return { in_erp: bare !== undefined || mg !== undefined, stock: Math.max(bare ?? 0, mg ?? 0) }
+  }
+  for (const c of codes) Object.assign(c, look(c.code))
+  for (const m of matches) {
+    const a = look(m.a), b = look(m.b)
+    m.aInErp = a.in_erp; m.aStock = a.stock; m.bInErp = b.in_erp; m.bStock = b.stock
+  }
 
   return { codes, matches, computedAt: new Date().toISOString() }
 }
@@ -109,6 +141,8 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url)
     const kind = searchParams.get('kind') || 'all'
     const family = (searchParams.get('family') || '').toUpperCase()
+    // erp=in: the ERP has the item; erp=out: it does not; erp=stock: on the shelf now
+    const erpFilter = searchParams.get('erp') || 'all'
     const q = (searchParams.get('q') || '').trim().toUpperCase()
     const limit = Math.min(600, Math.max(20, parseInt(searchParams.get('limit') || '200', 10) || 200))
     const fresh = searchParams.get('fresh') === '1'
@@ -127,6 +161,9 @@ export async function GET(req: Request) {
     else if (kind === 'shared') codes = codes.filter((c) => c.shared_numbering)
     else if (kind === 'matches') codes = []
     if (family) codes = codes.filter((c) => family in c.fams)
+    if (erpFilter === 'in') codes = codes.filter((c) => c.in_erp)
+    else if (erpFilter === 'out') codes = codes.filter((c) => !c.in_erp)
+    else if (erpFilter === 'stock') codes = codes.filter((c) => c.stock > 0)
     if (q) codes = codes.filter((c) => hit(c.code, c.heb))
     // the busiest numbers first, so a cap keeps what is most worth seeing
     codes = [...codes].sort((x, y) =>
@@ -135,12 +172,31 @@ export async function GET(req: Request) {
     let matches = data.matches
     if (kind === 'collisions' || kind === 'shared') matches = []
     if (family) matches = matches.filter((m) => m.aBrand === family || m.bBrand === family)
+    // a matched pair "exists in the ERP" when either side does — that is the point of a match
+    if (erpFilter === 'in') matches = matches.filter((m) => m.aInErp || m.bInErp)
+    else if (erpFilter === 'out') matches = matches.filter((m) => !m.aInErp && !m.bInErp)
+    else if (erpFilter === 'stock') matches = matches.filter((m) => m.aStock > 0 || m.bStock > 0)
     if (q) matches = matches.filter((m) => hit(m.a, m.aHeb) || hit(m.b, m.bHeb))
 
-    const totals = { codes: codes.length, matches: matches.length }
-    // one budget for the whole graph: codes first, then matched pairs
-    const codesOut = codes.slice(0, limit)
-    const matchesOut = matches.slice(0, Math.max(0, Math.floor((limit - codesOut.length) / 2)))
+    const uniqueCodes = new Set<string>()
+    for (const c of codes) uniqueCodes.add(c.code)
+    for (const m of matches) { uniqueCodes.add(m.a); uniqueCodes.add(m.b) }
+    const totals = {
+      codes: codes.length,
+      matches: matches.length,
+      unique_codes: uniqueCodes.size,
+      in_erp: codes.filter((c) => c.in_erp).length + matches.filter((m) => m.aInErp || m.bInErp).length,
+      in_stock: codes.filter((c) => c.stock > 0).length + matches.filter((m) => m.aStock > 0 || m.bStock > 0).length,
+    }
+    // One node budget for the whole graph, shared: matched pairs get up to a
+    // third of it (two nodes each) so a brand that only appears through
+    // matches — Toyota — is never crowded out by the same-number codes.
+    // ERP-backed pairs first: those are the ones worth a look.
+    const pairBudget = Math.floor(limit / 3 / 2)
+    const rankedMatches = [...matches].sort((x, y) =>
+      Number(y.aInErp || y.bInErp) - Number(x.aInErp || x.bInErp) || Number(y.source === 'manual') - Number(x.source === 'manual'))
+    const matchesOut = rankedMatches.slice(0, Math.min(pairBudget, rankedMatches.length))
+    const codesOut = codes.slice(0, Math.max(0, limit - matchesOut.length * 2))
 
     return NextResponse.json({
       codes: codesOut, matches: matchesOut, totals,

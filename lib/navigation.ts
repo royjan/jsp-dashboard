@@ -27,7 +27,7 @@ import type { LucideIcon } from 'lucide-react'
 import {
   Activity, Bell, BookOpen, Bot, BotMessageSquare, Briefcase, Calendar,
   CalendarRange, CarFront, ClipboardList, Container, DollarSign, FileBarChart,
-  FileSearch, FileText, FlaskConical, GitBranch, HeartPulse, Landmark,
+  FileSearch, FileText, FlaskConical, GitBranch, HeartPulse, Landmark, Settings, Shuffle,
   Languages, LayoutDashboard, Link2, ListRestart, MessageSquare,
   NotebookPen, Package, PackageCheck, PackageSearch, PackageX, Percent, Radar, Receipt,
   ReceiptText, RotateCcw, Scale, SearchX, ShoppingBag, ShoppingCart, Sparkles,
@@ -200,6 +200,8 @@ export const NAV_SECTIONS: NavSection[] = [
       // the stock it alerts about.
       { href: '/alerts', labelKey: 'alerts', icon: Bell },
       { href: '/catalog-links', labelKey: 'catalogLinks', icon: Link2, surfaces: ['palette'] },
+      // One graph of every cross-brand relation: shared numbers, collisions, matched parts.
+      { href: '/catalog/cross-brand', labelKey: 'crossBrand', icon: Shuffle },
     ],
   },
   {
@@ -295,6 +297,8 @@ export const NAV_SECTIONS: NavSection[] = [
         ],
       },
       { href: '/chat/feedback', labelKey: 'chatFeedback', icon: ThumbsUp },
+      // The app configuration: anyone signed in can view, the settings password edits.
+      { href: '/settings', labelKey: 'settings', icon: Settings },
 
       { href: '/chat-insights', labelKey: 'chatInsights', icon: MessageSquare },
       { href: '/chat/simulator', labelKey: 'chatSimulator', icon: FlaskConical },

@@ -93,6 +93,16 @@ export function getSecret(key: string, fallback: string = ''): string {
   return process.env[key] || fallback
 }
 
+/**
+ * Drop a key from both in-process caches so the next read goes back to
+ * Secrets Manager. Called after /settings writes a value: without this a
+ * changed key would keep serving the old value until the container restarts.
+ */
+export function forgetSecret(key: string): void {
+  delete cachedSecrets[key]
+  delete onDemandSecrets[key]
+}
+
 let secretsInitPromise: Promise<AppSecrets> | null = null
 
 export async function initializeSecrets(): Promise<AppSecrets> {
