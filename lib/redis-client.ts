@@ -32,7 +32,12 @@ function getRedis(): Redis | null {
     redis = new Redis(url, {
       // Fail fast to the in-memory fallback instead of hanging if Redis is down.
       maxRetriesPerRequest: 2,
-      enableOfflineQueue: false,
+      // Queue commands issued before the socket is up rather than failing them:
+      // with the queue off, the first command a fresh container ran — the
+      // nightly cross-brand write, 17 s after start — failed with "Stream isn't
+      // writeable", and the page kept serving the previous night's entry. The
+      // connect timeout below still bounds how long a queued command can wait.
+      enableOfflineQueue: true,
       connectTimeout: 5000,
     })
     redis.on('error', (e: Error) =>
