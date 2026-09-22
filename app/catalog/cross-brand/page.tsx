@@ -1,6 +1,7 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
 import { Shuffle, ArrowLeft, ArrowRight, ExternalLink, Search } from 'lucide-react'
 import { PageHeader } from '@/components/shared/PageHeader'
@@ -57,10 +58,28 @@ function Chip({ active, onClick, children }: { active: boolean; onClick: () => v
   )
 }
 
+// useSearchParams needs a Suspense boundary above it or the build refuses to
+// prerender the page; the fallback is the same skeleton the graph shows.
 export default function CrossBrandPage() {
+  return (
+    <Suspense fallback={<div className="h-[720px] animate-pulse rounded-md bg-muted/40" />}>
+      <CrossBrandPageInner />
+    </Suspense>
+  )
+}
+
+function CrossBrandPageInner() {
   const { locale } = useLocale()
   const isHe = locale === 'he'
   const Arrow = isHe ? ArrowLeft : ArrowRight
+
+  // Deep links: ?q= prefills the search, ?code= (optionally &brand=) opens a
+  // part's lineage straight away, and navigating keeps the URL in step so a
+  // view can be copied into a chat.
+  const params = useSearchParams()
+  const router = useRouter()
+  const initialCode = (params.get('code') || '').trim().toUpperCase()
+  const initialBrand = (params.get('brand') || '').toUpperCase() as BrandFamily | ''
 
   const [kind, setKind] = useState<Kind>('all')
   // one brand filters to everything that touches it; a second one narrows to
@@ -78,8 +97,8 @@ export default function CrossBrandPage() {
   const [detail, setDetail] = useState(100)
   const limit = 600
   const [erp, setErp] = useState<ErpFilter>('all')
-  const [q, setQ] = useState('')
-  const [search, setSearch] = useState('')
+  const [q, setQ] = useState(() => params.get('q') || '')
+  const [search, setSearch] = useState(() => (params.get('q') || '').trim())
   useEffect(() => { const t = setTimeout(() => setSearch(q.trim()), 300); return () => clearTimeout(t) }, [q])
 
   const root = useQuery<RootPayload>({
@@ -97,10 +116,18 @@ export default function CrossBrandPage() {
   })
 
   // navigation stack: 'root' or a {code, brand}
-  const [stack, setStack] = useState<Array<{ code: string; brand: BrandFamily } | 'root'>>(['root'])
+  const [stack, setStack] = useState<Array<{ code: string; brand: BrandFamily } | 'root'>>(() =>
+    initialCode ? ['root', { code: initialCode, brand: initialBrand || guessBrand(initialCode) }] : ['root'])
   const view = stack[stack.length - 1]
   const go = useCallback((code: string, brand: BrandFamily) => setStack((s) => [...s, { code, brand }]), [])
   const back = () => setStack((s) => (s.length > 1 ? s.slice(0, -1) : s))
+  useEffect(() => {
+    const p = new URLSearchParams()
+    if (view === 'root') { if (search) p.set('q', search) }
+    else { p.set('code', view.code); p.set('brand', view.brand.toLowerCase()) }
+    const qs = p.toString()
+    router.replace(`/catalog/cross-brand${qs ? `?${qs}` : ''}`, { scroll: false })
+  }, [view, search, router])
 
   // lineage data for the current part, from the item API the item page already uses
   const lineage = useQuery({
@@ -288,6 +315,18 @@ export default function CrossBrandPage() {
         )}
       </div>
 
+      {view === 'root' && root.data && search && root.data.totals.codes + root.data.totals.matches === 0 && /^[A-Z0-9-]{4,}$/i.test(search) && (
+        <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm dark:border-amber-500/30 dark:bg-amber-500/10">
+          <span>
+            {isHe
+              ? `${search.toUpperCase()} לא מופיע אצל יותר מיצרן אחד ואין לו מקבילים — הגרף הזה מציג רק קשרים בין יצרנים.`
+              : `${search.toUpperCase()} is not printed by more than one brand and has no matched equivalent — this graph shows only cross-brand relations.`}
+          </span>
+          <Button type="button" size="sm" className="h-7 text-xs" onClick={() => go(search.toUpperCase(), guessBrand(search.toUpperCase()))}>
+            {isHe ? `פתח את השרשרת של ${search.toUpperCase()}` : `Open ${search.toUpperCase()}'s lineage`}
+          </Button>
+        </div>
+      )}
       {view === 'root' && root.data && (
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
           <Badge variant="secondary">{root.data.totals.codes}</Badge>
