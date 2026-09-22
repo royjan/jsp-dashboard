@@ -63,7 +63,16 @@ export default function CrossBrandPage() {
   const Arrow = isHe ? ArrowLeft : ArrowRight
 
   const [kind, setKind] = useState<Kind>('all')
+  // one brand filters to everything that touches it; a second one narrows to
+  // the relations between exactly those two brands
   const [family, setFamily] = useState<BrandFamily | ''>('')
+  const [family2, setFamily2] = useState<BrandFamily | ''>('')
+  const pickFamily = (f: BrandFamily | '') => {
+    if (f === '') { setFamily(''); setFamily2(''); return }
+    if (f === family) { setFamily(family2); setFamily2(''); return }
+    if (f === family2) { setFamily2(''); return }
+    if (!family) setFamily(f); else setFamily2(f)
+  }
   // `detail` is how many codes show at normal zoom; zooming in reveals the rest
   // of the 600 the page loads, busiest first.
   const [detail, setDetail] = useState(100)
@@ -74,10 +83,11 @@ export default function CrossBrandPage() {
   useEffect(() => { const t = setTimeout(() => setSearch(q.trim()), 300); return () => clearTimeout(t) }, [q])
 
   const root = useQuery<RootPayload>({
-    queryKey: ['cross-brand', kind, family, search, limit, erp],
+    queryKey: ['cross-brand', kind, family, family2, search, limit, erp],
     queryFn: async () => {
       const p = new URLSearchParams({ kind, limit: String(limit), erp })
       if (family) p.set('family', family)
+      if (family2) p.set('family2', family2)
       if (search) p.set('q', search)
       const res = await fetch(`/api/catalog/cross-brand?${p}`)
       if (!res.ok) throw new Error(String(res.status))
@@ -206,8 +216,10 @@ export default function CrossBrandPage() {
           <Chip active={kind === 'shared'} onClick={() => setKind('shared')}>{isHe ? 'מספור משותף' : 'Shared numbering'}</Chip>
           <Chip active={kind === 'matches'} onClick={() => setKind('matches')}>{isHe ? 'חלקים מקבילים' : 'Matched parts'}</Chip>
           <span className="mx-1 text-muted-foreground">·</span>
-          <Chip active={family === ''} onClick={() => setFamily('')}>{isHe ? 'כל היצרנים' : 'All brands'}</Chip>
-          {FAMILIES.map((f) => <Chip key={f} active={family === f} onClick={() => setFamily(f)}>{isHe ? FAMILY_LABEL_HE[f] : f}</Chip>)}
+          <Chip active={family === ''} onClick={() => pickFamily('')}>{isHe ? 'כל היצרנים' : 'All brands'}</Chip>
+          {FAMILIES.map((f) => <Chip key={f} active={family === f || family2 === f} onClick={() => pickFamily(f)}>{isHe ? FAMILY_LABEL_HE[f] : f}</Chip>)}
+          {family && !family2 && <span className="text-xs text-muted-foreground">{isHe ? 'בחרו יצרן שני כדי לראות רק את הקשרים בין השניים' : 'pick a second brand to see only the relations between the two'}</span>}
+          {family && family2 && <Badge variant="outline" className="font-mono">{family} ↔ {family2}</Badge>}
           <span className="mx-1 text-muted-foreground">·</span>
           <Chip active={erp === 'all'} onClick={() => setErp('all')}>{isHe ? 'עם ובלי ERP' : 'ERP: any'}</Chip>
           <Chip active={erp === 'in'} onClick={() => setErp('in')}>{isHe ? 'קיים ב-ERP' : 'Exists in ERP'}</Chip>
