@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { useLocale } from '@/lib/locale-context'
-import { ERP_FAMILIES, FAMILY_LABEL_HE, familySlug, type BrandFamily } from '@/lib/brand'
+import { ERP_FAMILIES, FAMILY_LABEL_HE, familyFromSlug, familySlug, type BrandFamily } from '@/lib/brand'
 import { CrossBrandGraph, FamilyChip, type GLink, type GNode } from '@/components/catalog/CrossBrandGraph'
 
 /**
@@ -73,19 +73,21 @@ function CrossBrandPageInner() {
   const isHe = locale === 'he'
   const Arrow = isHe ? ArrowLeft : ArrowRight
 
-  // Deep links: ?q= prefills the search, ?code= (optionally &brand=) opens a
-  // part's lineage straight away, and navigating keeps the URL in step so a
-  // view can be copied into a chat.
+  // Deep links: ?q= prefills the search; ?brand= (and &brand2=) preselect the
+  // brand chips; ?code= (optionally &brand=) opens a part's lineage straight
+  // away; and navigating keeps the URL in step so a view can be copied into a
+  // chat. ?kind= and ?erp= mirror the other two chip rows.
   const params = useSearchParams()
   const router = useRouter()
   const initialCode = (params.get('code') || '').trim().toUpperCase()
-  const initialBrand = (params.get('brand') || '').toUpperCase() as BrandFamily | ''
+  const initialBrand = (familyFromSlug(params.get('brand')) ?? '') as BrandFamily | ''
+  const initialBrand2 = (familyFromSlug(params.get('brand2')) ?? '') as BrandFamily | ''
 
-  const [kind, setKind] = useState<Kind>('all')
+  const [kind, setKind] = useState<Kind>(() => (['all', 'collisions', 'shared', 'matches'].includes(params.get('kind') || '') ? params.get('kind') as Kind : 'all'))
   // one brand filters to everything that touches it; a second one narrows to
   // the relations between exactly those two brands
-  const [family, setFamily] = useState<BrandFamily | ''>('')
-  const [family2, setFamily2] = useState<BrandFamily | ''>('')
+  const [family, setFamily] = useState<BrandFamily | ''>(initialCode ? '' : initialBrand)
+  const [family2, setFamily2] = useState<BrandFamily | ''>(initialCode ? '' : initialBrand2)
   const pickFamily = (f: BrandFamily | '') => {
     if (f === '') { setFamily(''); setFamily2(''); return }
     if (f === family) { setFamily(family2); setFamily2(''); return }
@@ -96,7 +98,7 @@ function CrossBrandPageInner() {
   // of the 600 the page loads, busiest first.
   const [detail, setDetail] = useState(100)
   const limit = 600
-  const [erp, setErp] = useState<ErpFilter>('all')
+  const [erp, setErp] = useState<ErpFilter>(() => (['all', 'in', 'out', 'stock'].includes(params.get('erp') || '') ? params.get('erp') as ErpFilter : 'all'))
   const [q, setQ] = useState(() => params.get('q') || '')
   const [search, setSearch] = useState(() => (params.get('q') || '').trim())
   useEffect(() => { const t = setTimeout(() => setSearch(q.trim()), 300); return () => clearTimeout(t) }, [q])
@@ -123,11 +125,16 @@ function CrossBrandPageInner() {
   const back = () => setStack((s) => (s.length > 1 ? s.slice(0, -1) : s))
   useEffect(() => {
     const p = new URLSearchParams()
-    if (view === 'root') { if (search) p.set('q', search) }
-    else { p.set('code', view.code); p.set('brand', view.brand.toLowerCase()) }
+    if (view === 'root') {
+      if (search) p.set('q', search)
+      if (kind !== 'all') p.set('kind', kind)
+      if (family) p.set('brand', family.toLowerCase())
+      if (family2) p.set('brand2', family2.toLowerCase())
+      if (erp !== 'all') p.set('erp', erp)
+    } else { p.set('code', view.code); p.set('brand', view.brand.toLowerCase()) }
     const qs = p.toString()
     router.replace(`/catalog/cross-brand${qs ? `?${qs}` : ''}`, { scroll: false })
-  }, [view, search, router])
+  }, [view, search, kind, family, family2, erp, router])
 
   // lineage data for the current part, from the item API the item page already uses
   const lineage = useQuery({
@@ -162,11 +169,17 @@ function CrossBrandPageInner() {
       }
       const seen = new Set(d.codes.map((c) => c.code))
       for (const m of d.matches) {
+        // Both sides of a pair share one rank, or the reveal-on-zoom shows the
+        // PSA side (on hundreds of cars) and hides its Toyota partner (on a dozen).
+        const pairRank = m.aCars + m.bCars
         for (const [code, brand, heb, cars] of [[m.a, m.aBrand, m.aHeb, m.aCars], [m.b, m.bBrand, m.bHeb, m.bCars]] as const) {
           if (!seen.has(code)) {
             seen.add(code); fams.add(brand)
-            nodes.push({ id: code, kind: 'code', brand, label: nodeLabel(code, brand), sub: shortName(heb), clickable: true, rank: cars })
+            nodes.push({ id: code, kind: 'code', brand, label: nodeLabel(code, brand), sub: shortName(heb), clickable: true, rank: pairRank })
             links.push({ source: code, target: 'fam:' + brand, kind: 'cars', weight: cars })
+          } else {
+            const n = nodes.find((x) => x.id === code)
+            if (n && (n.rank ?? 0) < pairRank) n.rank = pairRank
           }
         }
         links.push({ source: m.a, target: m.b, kind: 'equiv', weight: Math.min(m.aCars, m.bCars) })
