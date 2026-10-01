@@ -58,7 +58,7 @@ const apps: AppItem[] = [
     id: 'partly',
     name: 'מיון חלקים',
     description: 'סריקת קטלוג וסיווג חלפים',
-    url: 'https://partly.jan.parts',
+    url: 'http://192.168.0.112:3001',
     icon: Wrench,
     color: '#f97316',
   },
