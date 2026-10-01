@@ -35,6 +35,7 @@ export const translations = {
     supplierInvoices: 'חשבוניות ספקים',
     catalogLinks: 'חיבורי קטלוג',
     crossBrand: 'קשרים בין יצרנים',
+    vehicleTwins: 'רכבים תאומים',
     settings: 'הגדרות',
 
     // Chat admin
@@ -821,6 +822,7 @@ export const translations = {
     supplierInvoices: 'Supplier Invoices',
     catalogLinks: 'Catalog Links',
     crossBrand: 'Cross-brand relations',
+    vehicleTwins: 'Vehicle twins',
     settings: 'Settings',
 
     // Chat admin

@@ -26,7 +26,7 @@
 import type { LucideIcon } from 'lucide-react'
 import {
   Activity, Bell, BookOpen, Bot, BotMessageSquare, Briefcase, Calendar,
-  CalendarRange, CarFront, ClipboardList, Container, DollarSign, FileBarChart,
+  CalendarRange, Car, CarFront, ClipboardList, Container, DollarSign, FileBarChart,
   FileSearch, FileText, FlaskConical, GitBranch, HeartPulse, Landmark, Settings, Shuffle,
   Languages, LayoutDashboard, Link2, ListRestart, MessageSquare,
   NotebookPen, Package, PackageCheck, PackageSearch, PackageX, Percent, Radar, Receipt,
@@ -202,6 +202,8 @@ export const NAV_SECTIONS: NavSection[] = [
       { href: '/catalog-links', labelKey: 'catalogLinks', icon: Link2, surfaces: ['palette'] },
       // One graph of every cross-brand relation: shared numbers, collisions, matched parts.
       { href: '/catalog/cross-brand', labelKey: 'crossBrand', icon: Shuffle },
+      // Which catalogue answers an Israeli car (rebadge / shared platform) — edits reach Diego within a minute.
+      { href: '/vehicle-twins', labelKey: 'vehicleTwins', icon: Car },
     ],
   },
   {
