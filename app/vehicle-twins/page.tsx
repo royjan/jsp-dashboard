@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Car, History, Loader2, Pencil, Plus, Ruler, ScanSearch, Search, Trash2, TriangleAlert, X,
+  ArrowLeft, Car, History, Loader2, Pencil, Plus, Ruler, ScanSearch, Search, Trash2, TriangleAlert, X,
 } from 'lucide-react'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
@@ -23,14 +23,27 @@ import {
 const SELECT_CLS =
   'h-9 pointer-coarse:h-11 rounded-md border border-input bg-background px-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring'
 
-function fmtDate(iso: string | null | undefined): string {
+const pad2 = (n: number) => String(n).padStart(2, '0')
+
+// Built by hand rather than toLocaleString('he-IL'): that puts the time after a
+// comma ("20:07 ,01.10.26"), which the bidi algorithm scrambles in an RTL cell.
+function fmtDate(iso: string | null | undefined, withTime = true): string {
   if (!iso) return ''
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return iso
-  return d.toLocaleString('he-IL', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })
+  const date = `${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.${String(d.getFullYear()).slice(2)}`
+  return withTime ? `${date} ${pad2(d.getHours())}:${pad2(d.getMinutes())}` : date
 }
 
-const shortUser = (e: string | null | undefined) => (e ? e.replace(/@jan\.co\.il$/i, '') : '')
+// Humans are emails; seeds and scripts write "script:measure-vehicle-twins.ts" — keep the file stem.
+const shortUser = (e: string | null | undefined) =>
+  e ? e.replace(/@jan\.co\.il$/i, '').replace(/^\w+:(?:.*\/)?([^/]+?)(?:\.\w+)?$/, '$1') : ''
+
+/** Ids are UUIDs — the first block is enough to tell rows apart on screen. */
+const shortId = (id: VehicleTwin['id']) => String(id).split('-')[0]
+
+/** Source is free text; drop directory paths inside it so the file names fit ("a/b/plan.json" → "plan.json"). */
+const sourceLabel = (s: string | null | undefined) => (s ? s.replace(/(^|[\s(:])(?:[\w.-]+\/)+(?=[\w-]+\.\w+)/g, '$1') : '')
 
 function RelationBadge({ relation }: { relation: Relation }) {
   return (
@@ -62,14 +75,58 @@ function ConfidenceBadge({ value }: { value: Confidence | null }) {
   )
 }
 
-function Overlap({ v }: { v: VehicleTwin['overlap_pct'] }) {
+function Overlap({ v, bar }: { v: VehicleTwin['overlap_pct']; bar?: boolean }) {
   const pct = overlapPercent(v)
-  if (pct == null) return <span className="text-muted-foreground">—</span>
-  return (
-    <span className={cn('tabular-nums', pct >= 80 ? 'text-success' : pct >= 50 ? 'text-warning' : 'text-destructive')}>
+  if (pct == null) {
+    return <span className={cn('text-muted-foreground', bar && 'inline-block w-[7.5rem] text-center')}>—</span>
+  }
+  const tone = pct >= 80 ? 'success' : pct >= 50 ? 'warning' : 'destructive'
+  const text = (
+    <span dir="ltr" className={cn('tabular-nums', tone === 'success' ? 'text-success' : tone === 'warning' ? 'text-warning' : 'text-destructive')}>
       {pct}%
     </span>
   )
+  if (!bar) return text
+  return (
+    <div className="flex items-center gap-2">
+      <span className="w-12 text-end text-sm font-medium">{text}</span>
+      <div className="h-1.5 w-16 overflow-hidden rounded-full bg-muted" aria-hidden>
+        <div
+          className={cn('h-full rounded-full', tone === 'success' ? 'bg-success' : tone === 'warning' ? 'bg-warning' : 'bg-destructive')}
+          style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
+        />
+      </div>
+    </div>
+  )
+}
+
+/**
+ * The measure compares normalised part numbers. When the two makers number parts
+ * differently (Toyota vs PSA, Fiat vs Citroen) it finds ~0% even on the very same
+ * car, so a low % there says nothing — show it as "not comparable", not as red.
+ */
+function isCrossNumbered(t: Pick<VehicleTwin, 'overlap_detail'>): boolean {
+  const d = t.overlap_detail
+  return !!d && typeof d === 'object' && (d as Record<string, unknown>).cross_numbering === true
+}
+
+function OverlapCell({ t }: { t: VehicleTwin }) {
+  const pct = overlapPercent(t.overlap_pct)
+  if (pct == null || !isCrossNumbered(t)) return <Overlap v={t.overlap_pct} bar />
+  return (
+    <div
+      className="flex items-center gap-2"
+      title="מספור חלקים שונה בין היצרנים — המדידה לפי מספר קטלוגי לא יכולה לזהות את אותו חלק. החפיפה כאן לא מעידה על הקשר; הוא נקבע לפי VIN, מפעל ומקור."
+    >
+      <span dir="ltr" className="w-12 text-end text-sm tabular-nums text-muted-foreground">{pct}%</span>
+      <span className="inline-flex w-16 justify-center rounded bg-muted px-1 py-px text-[10px] text-muted-foreground">מספור שונה</span>
+    </div>
+  )
+}
+
+function Years({ from, to }: { from: number | null | undefined; to: number | null | undefined }) {
+  const y = formatYears(from, to)
+  return y ? <span dir="ltr" className="tabular-nums">{y}</span> : null
 }
 
 function ErrorList({ error }: { error: unknown }) {
@@ -133,7 +190,7 @@ function VinCheck() {
               <RelationBadge relation={r.twin.relation} />
               {r.twin.twin_catalogue_ref && <span dir="ltr" className="font-mono text-xs">{r.twin.twin_catalogue_ref}</span>}
               <span className="text-muted-foreground">
-                (רשומה #{r.twin.id}: {r.twin.brand} {r.twin.model} {formatYears(r.twin.year_from, r.twin.year_to)})
+                (רשומה #{shortId(r.twin.id)}: {r.twin.brand} {r.twin.model} {formatYears(r.twin.year_from, r.twin.year_to)})
               </span>
               {r.matched_by && <span className="text-xs text-muted-foreground">התאמה לפי: {r.matched_by}</span>}
             </div>
@@ -159,7 +216,7 @@ function VinCheck() {
           )}
           {r.alternatives?.length > 0 && (
             <div className="text-xs text-muted-foreground">
-              חלופות: {r.alternatives.map(a => `#${a.id} ${a.twin_brand} ${a.twin_model}`).join(' · ')}
+              חלופות: {r.alternatives.map(a => `#${shortId(a.id)} ${a.twin_brand} ${a.twin_model}`).join(' · ')}
             </div>
           )}
         </div>
@@ -209,7 +266,7 @@ function TwinEditor({ twin, onClose }: { twin: VehicleTwin | 'new'; onClose: () 
     <Dialog open onOpenChange={o => { if (!o) onClose() }}>
       <DialogContent className="max-w-2xl" dir="rtl">
         <DialogHeader className="text-start sm:text-start">
-          <DialogTitle>{isNew ? 'תאום חדש' : `עריכת תאום #${twin.id}`}</DialogTitle>
+          <DialogTitle>{isNew ? 'תאום חדש' : `עריכת תאום #${shortId(twin.id)}`}</DialogTitle>
           <DialogDescription>שינויים כאן משפיעים מיד על התשובות של דיאגו (עד דקה)</DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="space-y-4">
@@ -288,7 +345,7 @@ function DeleteConfirm({ twin, onClose }: { twin: VehicleTwin; onClose: () => vo
     <Dialog open onOpenChange={o => { if (!o) onClose() }}>
       <DialogContent dir="rtl">
         <DialogHeader className="text-start sm:text-start">
-          <DialogTitle>למחוק את התאום #{twin.id}?</DialogTitle>
+          <DialogTitle>למחוק את התאום #{shortId(twin.id)}?</DialogTitle>
           <DialogDescription>
             {twin.brand} {twin.model} {formatYears(twin.year_from, twin.year_to)} ← {twin.twin_brand} {twin.twin_model}.
             {' '}דיאגו יפסיק להשתמש בו תוך דקה.
@@ -323,7 +380,7 @@ function MeasureDialog({ twin, onClose }: { twin: VehicleTwin; onClose: () => vo
     <Dialog open onOpenChange={o => { if (!o) onClose() }}>
       <DialogContent dir="rtl" className="max-w-xl">
         <DialogHeader className="text-start sm:text-start">
-          <DialogTitle>מדידת חפיפה — #{twin.id}</DialogTitle>
+          <DialogTitle>מדידת חפיפה — #{shortId(twin.id)}</DialogTitle>
           <DialogDescription>{twin.brand} {twin.model} מול {twin.twin_brand} {twin.twin_model}</DialogDescription>
         </DialogHeader>
         {measure.isPending && (
@@ -371,7 +428,7 @@ function HistoryDialog({ twin, onClose }: { twin: VehicleTwin; onClose: () => vo
     <Dialog open onOpenChange={o => { if (!o) onClose() }}>
       <DialogContent dir="rtl" className="max-w-2xl">
         <DialogHeader className="text-start sm:text-start">
-          <DialogTitle>היסטוריה — #{twin.id}</DialogTitle>
+          <DialogTitle>היסטוריה — #{shortId(twin.id)}</DialogTitle>
           <DialogDescription>{twin.brand} {twin.model} ← {twin.twin_brand} {twin.twin_model}</DialogDescription>
         </DialogHeader>
         {q.isLoading && <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> טוען…</div>}
@@ -430,20 +487,21 @@ export default function VehicleTwinsPage() {
   )
   const filtered = q || brand || relation || confidence
 
+  const iconBtn = 'h-8 w-8 text-muted-foreground hover:text-foreground'
   const actions = (t: VehicleTwin) => (
     <div className="flex items-center justify-end gap-0.5">
-      <Button variant="ghost" size="icon" className="h-7 w-7" title="היסטוריה" aria-label="היסטוריה" onClick={() => setModal({ kind: 'history', twin: t })}>
+      <Button variant="ghost" size="icon" className={iconBtn} title="היסטוריה" aria-label="היסטוריה" onClick={() => setModal({ kind: 'history', twin: t })}>
         <History />
       </Button>
       {canEdit && (
         <>
-          <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" title="מדוד חפיפה" onClick={() => setModal({ kind: 'measure', twin: t })}>
-            <Ruler /> מדוד חפיפה
+          <Button variant="ghost" size="icon" className={iconBtn} title="מדוד חפיפה" aria-label="מדוד חפיפה" onClick={() => setModal({ kind: 'measure', twin: t })}>
+            <Ruler />
           </Button>
-          <Button variant="ghost" size="icon" className="h-7 w-7" title="עריכה" aria-label="עריכה" onClick={() => setModal({ kind: 'edit', twin: t })}>
+          <Button variant="ghost" size="icon" className={iconBtn} title="עריכה" aria-label="עריכה" onClick={() => setModal({ kind: 'edit', twin: t })}>
             <Pencil />
           </Button>
-          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" title="מחיקה" aria-label="מחיקה" onClick={() => setModal({ kind: 'delete', twin: t })}>
+          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-destructive/10 hover:text-destructive" title="מחיקה" aria-label="מחיקה" onClick={() => setModal({ kind: 'delete', twin: t })}>
             <Trash2 />
           </Button>
         </>
@@ -451,44 +509,97 @@ export default function VehicleTwinsPage() {
     </div>
   )
 
-  const vehicle = (t: VehicleTwin) => (
-    <div className="min-w-0">
-      <div className="font-medium">{t.brand} {t.model}</div>
-      {listOf(t.vin_prefixes).length > 0 && (
-        <div dir="ltr" className="truncate text-start font-mono text-[11px] text-muted-foreground">{listOf(t.vin_prefixes).join(' ')}</div>
-      )}
-    </div>
-  )
+  // Israeli car: name on top; years, powertrain and VIN prefixes as one quiet meta line.
+  const vehicle = (t: VehicleTwin) => {
+    const vins = listOf(t.vin_prefixes)
+    const pt = t.powertrain ? POWERTRAIN_LABEL[t.powertrain as keyof typeof POWERTRAIN_LABEL] ?? t.powertrain : null
+    return (
+      <div className="min-w-0">
+        <div className="font-medium">{t.brand} {t.model}</div>
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+          <Years from={t.year_from} to={t.year_to} />
+          {pt && <span className="rounded bg-muted px-1.5 py-px text-[11px]">{pt}</span>}
+          {vins.length > 0 && (
+            <span dir="ltr" className="font-mono text-[11px] text-muted-foreground/80" title={vins.join(' ')}>
+              {vins.slice(0, 3).join(' ')}{vins.length > 3 && ` +${vins.length - 3}`}
+            </span>
+          )}
+        </div>
+      </div>
+    )
+  }
   const twinCell = (t: VehicleTwin) => (
     <div className="min-w-0">
       <div className="font-medium">{t.twin_brand} {t.twin_model}</div>
       {(t.twin_catalogue || t.twin_catalogue_ref) && (
-        <div dir="ltr" className="truncate text-start font-mono text-[11px] text-muted-foreground">
-          {[t.twin_catalogue, t.twin_catalogue_ref].filter(Boolean).join(' · ')}
+        <div className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground">
+          <span dir="ltr">{[t.twin_catalogue, t.twin_catalogue_ref].filter(Boolean).join(' · ')}</span>
         </div>
       )}
     </div>
   )
+  const source = (t: VehicleTwin) => (
+    <span dir="ltr" className="block truncate text-start text-xs text-muted-foreground">{sourceLabel(t.source)}</span>
+  )
   const updated = (t: VehicleTwin) => (
-    <div className="text-xs leading-tight">
-      <div>{shortUser(t.updated_by ?? t.created_by)}</div>
-      <div className="tabular-nums text-muted-foreground">{fmtDate(t.updated_at ?? t.created_at)}</div>
+    <div className="text-xs leading-snug">
+      <div dir="auto" className="max-w-[150px] truncate text-start" title={t.updated_by ?? t.created_by ?? undefined}>{shortUser(t.updated_by ?? t.created_by)}</div>
+      <div dir="ltr" className="text-start tabular-nums text-muted-foreground" title={fmtDate(t.updated_at ?? t.created_at)}>
+        {fmtDate(t.updated_at ?? t.created_at, false)}
+      </div>
     </div>
   )
 
+  // No # column: ids are UUIDs and filled four lines of every row. They stay in
+  // the dialogs (short form).
   const columns: DataTableColumn<VehicleTwin>[] = [
-    { key: 'id', header: '#', cell: t => <span className="tabular-nums text-muted-foreground">{t.id}</span>, sortable: true, exportValue: t => Number(t.id) || String(t.id) },
-    { key: 'brand', header: 'רכב בישראל', cell: vehicle, sortable: true, sortValue: t => `${t.brand} ${t.model}`, exportValue: t => `${t.brand} ${t.model}` },
-    { key: 'year_from', header: 'שנים', cell: t => <span className="whitespace-nowrap tabular-nums">{formatYears(t.year_from, t.year_to) || '—'}</span>, sortable: true, exportValue: t => formatYears(t.year_from, t.year_to) },
-    { key: 'powertrain', header: 'הנעה', cell: t => (t.powertrain ? POWERTRAIN_LABEL[t.powertrain as keyof typeof POWERTRAIN_LABEL] ?? t.powertrain : '—'), sortable: true, exportValue: t => t.powertrain ?? '' },
-    { key: 'twin_brand', header: 'תאום', cell: twinCell, sortable: true, sortValue: t => `${t.twin_brand} ${t.twin_model}`, exportValue: t => `${t.twin_brand} ${t.twin_model} ${t.twin_catalogue_ref ?? ''}`.trim() },
-    { key: 'relation', header: 'קשר', cell: t => <RelationBadge relation={t.relation} />, sortable: true, exportValue: t => RELATION_LABEL[t.relation] ?? t.relation },
-    { key: 'overlap_pct', header: 'חפיפה', align: 'end', cell: t => <Overlap v={t.overlap_pct} />, sortable: true, sortValue: t => overlapPercent(t.overlap_pct), exportValue: t => overlapPercent(t.overlap_pct) },
-    { key: 'confidence', header: 'ביטחון', cell: t => <ConfidenceBadge value={t.confidence} />, sortable: true, sortValue: t => (t.confidence ? CONFIDENCES.indexOf(t.confidence) : 9), exportValue: t => t.confidence ?? '' },
-    { key: 'source', header: 'מקור', cell: t => t.source, truncate: 'max-w-[140px]', title: t => [t.source, t.notes].filter(Boolean).join(' — '), sortable: true },
-    { key: 'updated_at', header: 'עודכן', cell: updated, sortable: true, sortValue: t => t.updated_at ?? t.created_at, exportValue: t => `${t.updated_by ?? ''} ${t.updated_at ?? ''}`.trim() },
-    { key: 'actions', header: '', cell: actions, exportValue: null, cellClassName: 'w-px whitespace-nowrap' },
+    { key: 'brand', header: 'רכב בישראל', cell: vehicle, sortable: true, sortValue: t => `${t.brand} ${t.model}`, exportValue: t => `${t.brand} ${t.model}`, cellClassName: 'min-w-[200px]' },
+    { key: 'arrow', header: '', cell: () => <ArrowLeft className="h-4 w-4 text-muted-foreground/50" aria-label="נענה מ" />, exportValue: null, cellClassName: 'w-px px-1', headerClassName: 'w-px px-1' },
+    { key: 'twin_brand', header: 'נענה מ־', cell: twinCell, sortable: true, sortValue: t => `${t.twin_brand} ${t.twin_model}`, exportValue: t => `${t.twin_brand} ${t.twin_model} ${t.twin_catalogue_ref ?? ''}`.trim(), cellClassName: 'min-w-[180px]' },
+    { key: 'relation', header: 'קשר', cell: t => <RelationBadge relation={t.relation} />, sortable: true, exportValue: t => RELATION_LABEL[t.relation] ?? t.relation, cellClassName: 'w-px whitespace-nowrap ps-6', headerClassName: 'ps-6' },
+    { key: 'overlap_pct', header: 'חפיפה', cell: t => <OverlapCell t={t} />, sortable: true, sortValue: t => overlapPercent(t.overlap_pct), exportValue: t => overlapPercent(t.overlap_pct), cellClassName: 'w-px whitespace-nowrap ps-6', headerClassName: 'ps-6' },
+    { key: 'confidence', header: 'ביטחון', cell: t => <ConfidenceBadge value={t.confidence} />, sortable: true, sortValue: t => (t.confidence ? CONFIDENCES.indexOf(t.confidence) : 9), exportValue: t => t.confidence ?? '', cellClassName: 'w-px whitespace-nowrap ps-6', headerClassName: 'ps-6' },
+    { key: 'source', header: 'מקור', cell: source, title: t => [t.source, t.notes].filter(Boolean).join(' — '), sortable: true, exportValue: t => t.source, cellClassName: 'max-w-[240px] ps-6', headerClassName: 'ps-6' },
+    { key: 'updated_at', header: 'עודכן', cell: updated, sortable: true, sortValue: t => t.updated_at ?? t.created_at, exportValue: t => `${t.updated_by ?? ''} ${t.updated_at ?? ''}`.trim(), cellClassName: 'w-px whitespace-nowrap ps-6', headerClassName: 'ps-6' },
+    // The actions column carries the id in the export, since there is no on-screen # column.
+    { key: 'actions', header: '', cell: actions, exportHeader: 'מזהה', exportValue: t => String(t.id), cellClassName: 'w-px whitespace-nowrap' },
   ]
+
+  const filterBar = (
+    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-2">
+      <div className="relative w-full sm:w-72">
+        <Search className="pointer-events-none absolute start-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Input value={q} onChange={e => setQ(e.target.value)} placeholder="חיפוש יצרן, דגם, קטלוג, VIN…" className="ps-8" aria-label="חיפוש" />
+        {q && (
+          <button type="button" onClick={() => setQ('')} aria-label="נקה" className="absolute end-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+            <X className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+      <label className="flex items-center gap-1.5">
+        <span className="text-[11px] text-muted-foreground">יצרן</span>
+        <select className={SELECT_CLS} value={brand} onChange={e => setBrand(e.target.value)}>
+          <option value="">הכל</option>
+          {brands.map(b => <option key={b} value={b}>{b}</option>)}
+        </select>
+      </label>
+      <Segmented
+        label="קשר"
+        value={relation}
+        onChange={setRelation}
+        options={[{ value: null, label: 'הכל' }, ...RELATIONS.map(r => ({ value: r, label: RELATION_LABEL[r] }))]}
+      />
+      <Segmented
+        label="ביטחון"
+        value={confidence}
+        onChange={setConfidence}
+        options={[{ value: null, label: 'הכל' }, ...CONFIDENCES.map(c => ({ value: c, label: CONFIDENCE_LABEL[c] }))]}
+      />
+      <span className="ms-auto text-xs tabular-nums text-muted-foreground">
+        {filtered ? `${rows.length} מתוך ${all.length}` : `${all.length} רשומות`}
+      </span>
+    </div>
+  )
 
   return (
     <div className="space-y-4">
@@ -516,40 +627,6 @@ export default function VehicleTwinsPage() {
 
       <VinCheck />
 
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <div className="relative w-full sm:w-64">
-          <Search className="pointer-events-none absolute start-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input value={q} onChange={e => setQ(e.target.value)} placeholder="חיפוש יצרן, דגם, קטלוג, VIN…" className="ps-8" aria-label="חיפוש" />
-          {q && (
-            <button type="button" onClick={() => setQ('')} aria-label="נקה" className="absolute end-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-              <X className="h-4 w-4" />
-            </button>
-          )}
-        </div>
-        <label className="flex items-center gap-1.5">
-          <span className="text-[11px] text-muted-foreground">יצרן</span>
-          <select className={SELECT_CLS} value={brand} onChange={e => setBrand(e.target.value)}>
-            <option value="">הכל</option>
-            {brands.map(b => <option key={b} value={b}>{b}</option>)}
-          </select>
-        </label>
-        <Segmented
-          label="קשר"
-          value={relation}
-          onChange={setRelation}
-          options={[{ value: null, label: 'הכל' }, ...RELATIONS.map(r => ({ value: r, label: RELATION_LABEL[r] }))]}
-        />
-        <Segmented
-          label="ביטחון"
-          value={confidence}
-          onChange={setConfidence}
-          options={[{ value: null, label: 'הכל' }, ...CONFIDENCES.map(c => ({ value: c, label: CONFIDENCE_LABEL[c] }))]}
-        />
-        <span className="text-xs tabular-nums text-muted-foreground">
-          {filtered ? `${rows.length} מתוך ${all.length}` : `${all.length} רשומות`}
-        </span>
-      </div>
-
       <DataTable
         columns={columns}
         rows={rows}
@@ -558,17 +635,19 @@ export default function VehicleTwinsPage() {
         error={list.error}
         onRetry={() => list.refetch()}
         defaultSort={{ field: 'brand', dir: 'asc' }}
-        minWidth="min-w-[1100px]"
+        minWidth="min-w-[980px]"
+        maxHeight="calc(100dvh - 12rem)"
+        toolbar={filterBar}
         pageSize={50}
         exportFileName="vehicle-twins"
         mobileCard={{
-          title: t => `${t.brand} ${t.model} ${formatYears(t.year_from, t.year_to)}`.trim(),
+          title: t => <>{t.brand} {t.model} <span className="text-muted-foreground"><Years from={t.year_from} to={t.year_to} /></span></>,
           subtitle: t => <span>← {t.twin_brand} {t.twin_model}{t.twin_catalogue_ref ? ` · ${t.twin_catalogue_ref}` : ''}</span>,
           accent: t => <Overlap v={t.overlap_pct} />,
           fields: [
             { label: 'קשר', value: t => <RelationBadge relation={t.relation} /> },
             { label: 'ביטחון', value: t => <ConfidenceBadge value={t.confidence} /> },
-            { label: 'מקור', value: t => t.source },
+            { label: 'מקור', value: t => sourceLabel(t.source) },
             { label: 'עודכן', value: t => `${shortUser(t.updated_by ?? t.created_by)} ${fmtDate(t.updated_at ?? t.created_at)}` },
             { label: 'פעולות', value: actions },
           ],
