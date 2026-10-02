@@ -25,7 +25,7 @@
  */
 import type { LucideIcon } from 'lucide-react'
 import {
-  Activity, Bell, BookOpen, Bot, BotMessageSquare, Briefcase, Calendar,
+  Activity, Ban, Bell, BookOpen, Bot, BotMessageSquare, Briefcase, Calendar,
   CalendarRange, Car, CarFront, ClipboardList, Container, DollarSign, FileBarChart,
   FileSearch, FileText, FlaskConical, GitBranch, HeartPulse, Landmark, Settings, Shuffle,
   Languages, LayoutDashboard, Link2, ListRestart, MessageSquare,
@@ -204,6 +204,8 @@ export const NAV_SECTIONS: NavSection[] = [
       { href: '/catalog/cross-brand', labelKey: 'crossBrand', icon: Shuffle },
       // Which catalogue answers an Israeli car (rebadge / shared platform) — edits reach Diego within a minute.
       { href: '/vehicle-twins', labelKey: 'vehicleTwins', icon: Car },
+      // VIN prefixes Partly refuses to scan or import, per provider (IM Motors, …) — enforced within a minute.
+      { href: '/vehicle-blocklist', labelKey: 'vehicleBlocklist', icon: Ban },
     ],
   },
   {

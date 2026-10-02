@@ -36,6 +36,7 @@ export const translations = {
     catalogLinks: 'חיבורי קטלוג',
     crossBrand: 'קשרים בין יצרנים',
     vehicleTwins: 'רכבים תאומים',
+    vehicleBlocklist: 'רשימה שחורה',
     settings: 'הגדרות',
 
     // Chat admin
@@ -823,6 +824,7 @@ export const translations = {
     catalogLinks: 'Catalog Links',
     crossBrand: 'Cross-brand relations',
     vehicleTwins: 'Vehicle twins',
+    vehicleBlocklist: 'Vehicle blocklist',
     settings: 'Settings',
 
     // Chat admin
