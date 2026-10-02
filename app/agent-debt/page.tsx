@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { formatCurrency, formatNumber } from '@/lib/format'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
+import { isMoneyHidden, MONEY_MASK } from '@/lib/privacy'
 
 const AREAS = ['השרון', 'צפון', 'דרום', 'ירושלים', 'מרכז', 'אילת והסביבה', 'רשות פלסטינאית', 'לא משויך']
 const SELECT_CLS =
@@ -31,6 +32,13 @@ interface Report {
   error?: string
 }
 interface FlatRow extends DebtRow { area: string }
+
+/** A month amount. Money, so the demo-mode eye masks it like formatCurrency() does — the row
+ *  total alone being masked was no privacy at all, the months add up to it. */
+function monthAmount(v: number | undefined): string {
+  if (!v) return '—'
+  return isMoneyHidden() ? MONEY_MASK : formatNumber(Math.round(v))
+}
 
 async function fetchReport(params: URLSearchParams): Promise<Report> {
   const r = await fetch(`/api/agent-debt?${params}`)
@@ -74,7 +82,7 @@ export default function AgentDebtPage() {
   const columns: DataTableColumn<FlatRow>[] = useMemo(() => {
     const months = (rep?.columns ?? []).map<DataTableColumn<FlatRow>>((c) => ({
       key: `m_${c.key}`, header: c.label, align: 'end', sortable: true,
-      cell: (r) => (r.buckets?.[c.key] ? formatNumber(Math.round(r.buckets[c.key])) : <span className="text-muted-foreground">—</span>),
+      cell: (r) => (r.buckets?.[c.key] ? monthAmount(r.buckets[c.key]) : <span className="text-muted-foreground">—</span>),
       sortValue: (r) => r.buckets?.[c.key] ?? 0,
       exportValue: (r) => r.buckets?.[c.key] ?? 0,
     }))
@@ -178,7 +186,7 @@ export default function AgentDebtPage() {
           title: (r) => r.name,
           subtitle: (r) => <span>{r.area} · {r.city}</span>,
           accent: (r) => formatCurrency(r.total),
-          fields: (rep?.columns ?? []).map((c) => ({ label: c.label, value: (r: FlatRow) => formatNumber(Math.round(r.buckets?.[c.key] ?? 0)) })),
+          fields: (rep?.columns ?? []).map((c) => ({ label: c.label, value: (r: FlatRow) => monthAmount(r.buckets?.[c.key]) })),
         }}
         labels={{ empty: 'אין חובות פתוחים באזור הזה' }}
       />
