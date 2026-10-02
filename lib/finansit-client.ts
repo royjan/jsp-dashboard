@@ -97,6 +97,30 @@ const fallbackClient = createClient({
   timeout: 15000,
 })
 
+// Agent debt report (דוח חובות לסוכן) — scans the same 7UPD/7ACC receivables files that are
+// broken on .111, so it is pinned to .109 exactly like balance/aging above. A fresh scan is
+// ~20 s (FINAPI caches it 15 min), which the 15 s default would abort: own client, long timeout.
+const arReportClient = createClient({
+  baseUrl: fallbackBase,
+  baseUrls: [fallbackBase],
+  credentials: async () => {
+    await initializeSecrets()
+    return getSecret('FINANSIT_API_CREDENTIALS', '')
+  },
+  credentialsByUrl: async () => {
+    await initializeSecrets()
+    return getSecret('FINANSIT_API_CREDENTIALS_FALLBACK', '') || undefined
+  },
+  concurrency: 2,
+  timeout: 120000,
+})
+
+export async function fetchAgentDebtReport(params: {
+  area?: string; months?: number; include_zero?: boolean; refresh?: boolean
+}): Promise<unknown> {
+  return arReportClient.get('/api/export/agent-debt', { ...params, format: 'json' })
+}
+
 export async function fetchCustomerBalanceFallback(code: string): Promise<any> {
   return fallbackClient.customers.getBalance(code)
 }

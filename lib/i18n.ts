@@ -36,6 +36,7 @@ export const translations = {
     catalogLinks: 'חיבורי קטלוג',
     crossBrand: 'קשרים בין יצרנים',
     vehicleTwins: 'רכבים תאומים',
+    agentDebt: 'חובות לפי אזור',
     vehicleBlocklist: 'רשימה שחורה',
     settings: 'הגדרות',
 
@@ -824,6 +825,7 @@ export const translations = {
     catalogLinks: 'Catalog Links',
     crossBrand: 'Cross-brand relations',
     vehicleTwins: 'Vehicle twins',
+    agentDebt: 'Debt by area',
     vehicleBlocklist: 'Vehicle blocklist',
     settings: 'Settings',
 

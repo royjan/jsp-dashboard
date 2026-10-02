@@ -28,7 +28,7 @@ import {
   Activity, Ban, Bell, BookOpen, Bot, BotMessageSquare, Briefcase, Calendar,
   CalendarRange, Car, CarFront, ClipboardList, Container, DollarSign, FileBarChart,
   FileSearch, FileText, FlaskConical, GitBranch, HeartPulse, Landmark, Settings, Shuffle,
-  Languages, LayoutDashboard, Link2, ListRestart, MessageSquare,
+  Languages, LayoutDashboard, Link2, ListRestart, MapPin, MessageSquare,
   NotebookPen, Package, PackageCheck, PackageSearch, PackageX, Percent, Radar, Receipt,
   ReceiptText, RotateCcw, Scale, SearchX, ShoppingBag, ShoppingCart, Sparkles,
   ShieldAlert, Sun, Sunrise, Swords, Target, ThumbsUp, Trash2, TrendingDown, Truck, Undo2,
@@ -213,7 +213,10 @@ export const NAV_SECTIONS: NavSection[] = [
       {
         mobilePrimary: true, href: '/customers', labelKey: 'customers', icon: Users,
         // Health score is a tab of /customers and had no nav entry anywhere.
-        children: [{ href: '/customers/health-score', labelKey: 'customerHealth', icon: HeartPulse }],
+        children: [
+          { href: '/customers/health-score', labelKey: 'customerHealth', icon: HeartPulse },
+          { href: '/agent-debt', labelKey: 'agentDebt', icon: MapPin },
+        ],
       },
       { href: '/receivables', labelKey: 'receivables', icon: Receipt },
       { href: '/margin', labelKey: 'margin', icon: Percent },

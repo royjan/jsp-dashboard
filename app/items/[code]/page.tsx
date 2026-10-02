@@ -10,6 +10,7 @@ import { ItemLink } from '@/components/shared/ItemLink'
 import { PartLinksCard } from '@/components/items/PartLinksCard'
 import { CrossBrandCard } from '@/components/items/CrossBrandCard'
 import { PartMediaCard } from '@/components/items/PartMediaCard'
+import { ChainBreakdownCard } from '@/components/items/ChainBreakdownCard'
 import { SupplierPricesCard } from '@/components/xpart/SupplierPricesCard'
 import { ItemAliasesCard } from '@/components/xpart/ItemAliasesCard'
 import { useLocale } from '@/lib/locale-context'
@@ -983,6 +984,14 @@ export default function ItemDetailPage({ params }: { params: Promise<{ code: str
           {data.name && (
             <p className="text-muted-foreground text-sm mt-0.5" dir="rtl">{data.name}</p>
           )}
+          {/* A freshly re-coded part is a bare ERP record; FINAPI fills its name from the
+              older code (filled_from). Say so, so the name is not mistaken for this code's own. */}
+          {data.filled_from?.name && (
+            <p className="text-[11px] text-muted-foreground/80 mt-0.5">
+              {isHe ? 'השם נלקח מהקוד הקודם ' : 'Name taken from the previous code '}
+              <span className="font-mono" dir="ltr">{data.filled_from.name}</span>
+            </p>
+          )}
         </div>
       </div>
 
@@ -1094,6 +1103,8 @@ export default function ItemDetailPage({ params }: { params: Promise<{ code: str
           </Card>
         </motion.div>
       </div>
+
+      <ChainBreakdownCard rows={data.stock_breakdown} current={displayedCode} place={data.place} isHe={isHe} />
 
       {/* What the part LOOKS like: the photo staff uploaded in the portal and
           the exploded diagram it is called out on. Renders nothing when the

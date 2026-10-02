@@ -53,7 +53,10 @@ export async function GET(request: Request) {
     const totalOrdered = item.ordered_qty ?? stock?.ordered_qty ?? 0
 
     // Price
-    const retailPrice = price?.price_list_price ?? price?.price ?? item.price_list_price ?? item.price ?? null
+    // FINAPI's item price is the NEWEST chain code's (owner rule, 2026-10-02); prices.lookup(code)
+    // is the price of the code that was ASKED, so an old code quoted its superseded price
+    // (1681371180: 719.48 where the item page, Diego and FINAPI say 732.33). Item first.
+    const retailPrice = item.price ?? item.price_list_price ?? price?.price_list_price ?? price?.price ?? null
 
     // History chain
     const historyChain: string[] = history?.item_id_history || item.item_id_history || []
