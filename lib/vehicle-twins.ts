@@ -99,6 +99,8 @@ export interface TwinLogEntry {
 export interface TwinDetailResponse { twin: VehicleTwin; log: TwinLogEntry[] }
 
 export interface MeasureResponse {
+  /** Partly's explanation, e.g. for decision 'same_source' (the Israeli scan was built from this catalogue). */
+  message?: string
   twin: VehicleTwin
   overlap: Record<string, unknown> | null
   decision: unknown

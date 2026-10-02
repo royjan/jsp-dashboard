@@ -110,7 +110,23 @@ function isCrossNumbered(t: Pick<VehicleTwin, 'overlap_detail'>): boolean {
   return !!d && typeof d === 'object' && (d as Record<string, unknown>).cross_numbering === true
 }
 
+/**
+ * A 17vin row whose Israeli scan was BUILT from that very catalogue (Arrizo 8 PHEV ← 风云A8,
+ * FX ← 欧萌达): there is no second scan to compare, so there's no percentage to show.
+ */
+function isSameSource(t: Pick<VehicleTwin, 'overlap_detail'>): boolean {
+  const d = t.overlap_detail
+  return !!d && typeof d === 'object' && (d as Record<string, unknown>).same_source === true
+}
+
 function OverlapCell({ t }: { t: VehicleTwin }) {
+  if (isSameSource(t)) {
+    return (
+      <div className="flex items-center gap-2" title="הסריקה של הרכב הישראלי נבנתה מהקטלוג הזה עצמו — אין סריקה שנייה להשוות, ולכן אין אחוז חפיפה. הקשר נקבע לפי הקטלוג.">
+        <span className="inline-flex justify-center rounded bg-muted px-2 py-px text-[11px] text-muted-foreground">מאותו מקור</span>
+      </div>
+    )
+  }
   const pct = overlapPercent(t.overlap_pct)
   if (pct == null || !isCrossNumbered(t)) return <Overlap v={t.overlap_pct} bar />
   return (
@@ -396,7 +412,8 @@ function MeasureDialog({ twin, onClose }: { twin: VehicleTwin; onClose: () => vo
               <span className="text-2xl font-bold"><Overlap v={pct} /></span>
               {d.twin?.confidence && <ConfidenceBadge value={d.twin.confidence} />}
             </div>
-            {d.decision != null && (
+            {d.message && <div className="rounded-md border bg-muted/40 p-2">{d.message}</div>}
+            {d.decision != null && d.decision !== 'same_source' && (
               <div>
                 <div className="mb-1 text-xs font-medium text-muted-foreground">החלטה</div>
                 {typeof d.decision === 'string' ? <div>{d.decision}</div> : <Json value={d.decision} />}
