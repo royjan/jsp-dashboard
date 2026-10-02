@@ -9,6 +9,7 @@ import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { formatCurrency, formatNumber } from '@/lib/format'
+import { useMoneyHidden } from '@/lib/use-money-hidden'
 
 const AREAS = ['השרון', 'צפון', 'דרום', 'ירושלים', 'מרכז', 'אילת והסביבה', 'רשות פלסטינאית', 'לא משויך']
 const SELECT_CLS =
@@ -44,6 +45,9 @@ async function fetchReport(params: URLSearchParams): Promise<Report> {
  * City → area rules and customer pins are edited on FINAPI's own /customers/areas page.
  */
 export default function AgentDebtPage() {
+  // Subscribe to the demo-mode eye: formatCurrency() masks from a module store, so without
+  // this the area cards kept their dots after the eye was switched off.
+  useMoneyHidden()
   const [area, setArea] = useState('')
   const [months, setMonths] = useState(3)
   const [refreshTick, setRefreshTick] = useState(0)

@@ -4,6 +4,7 @@ import { GitBranch } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ItemLink } from '@/components/shared/ItemLink'
 import { formatCurrency, formatNumber } from '@/lib/format'
+import { useMoneyHidden } from '@/lib/use-money-hidden'
 
 export interface ChainBreakdownRow {
   item_code: string
@@ -26,6 +27,7 @@ export function ChainBreakdownCard({ rows, current, place, isHe }: {
   place?: string | null
   isHe: boolean
 }) {
+  useMoneyHidden()   // re-render the prices when the demo-mode eye toggles
   const list = (rows ?? []).filter((r) => r && r.item_code)
   if (list.length < 2) return null
   const total = list.reduce((s, r) => s + (Number(r.qty) || 0), 0)
