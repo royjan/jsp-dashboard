@@ -171,7 +171,7 @@ export default function BotPage({ params }: { params: Promise<{ id: string }> })
         </TabsContent>
 
         <TabsContent value="settings" className="space-y-4">
-          {b && <TelegramCard id={id} tg={b.telegram} he={he} />}
+          {b && <TelegramCard key={`${b.policy.telegram_auth}|${b.policy.access_code}`} id={id} tg={b.telegram} policy={b.policy} he={he} />}
           {b && <PolicyForm key={JSON.stringify(b.policy)} id={id} policy={b.policy} he={he} />}
           {b && <BrandsForm key={JSON.stringify(b.brands)} id={id} brands={b.brands} he={he} />}
         </TabsContent>
@@ -298,10 +298,13 @@ function BrandsForm({ id, brands, he }: { id: string; brands: BotBrands; he: boo
   )
 }
 
-function TelegramCard({ id, tg, he }: { id: string; tg: BotTelegram; he: boolean }) {
+function TelegramCard({ id, tg, policy, he }: { id: string; tg: BotTelegram; policy: BotPolicy; he: boolean }) {
   const tr = (h: string, e: string) => (he ? h : e)
   const save = useSaveBotTelegram(id)
+  const savePolicy = useSaveBotPolicy(id)
   const [token, setToken] = useState('')
+  const [auth, setAuth] = useState(policy.telegram_auth ?? 'none')
+  const [code, setCode] = useState(policy.access_code ?? '')
   const link = tg.username ? `https://t.me/${tg.username}` : ''
   return (
     <Card>
@@ -342,6 +345,29 @@ function TelegramCard({ id, tg, he }: { id: string; tg: BotTelegram; he: boolean
           )}
         </div>
         {save.isPending && <p className="text-xs text-muted-foreground">{tr('הפעלה ראשונה בונה את השירות — עד כמה דקות', 'The first start builds the service — up to a few minutes')}</p>}
+        <div className="space-y-2 border-t pt-3">
+          <div className="text-sm font-medium">{tr('כניסה לבוט', 'Who can log in')}</div>
+          <select className="w-full max-w-md rounded-md border bg-background px-3 py-2 text-sm" value={auth}
+                  onChange={(e) => setAuth(e.target.value as NonNullable<BotPolicy['telegram_auth']>)}>
+            <option value="none">{tr('פתוח לכולם', 'Open to everyone')}</option>
+            <option value="phone">{tr('טלפון מאומת (מספרים מהרשימה למטה)', 'Verified phone (numbers from the list below)')}</option>
+            <option value="code">{tr('קוד גישה', 'Access code')}</option>
+            <option value="phone_or_code">{tr('טלפון מאומת או קוד גישה', 'Verified phone or access code')}</option>
+          </select>
+          {(auth === 'code' || auth === 'phone_or_code') && (
+            <Input dir="ltr" className="max-w-md" value={code} onChange={(e) => setCode(e.target.value)}
+                   placeholder={tr('קוד גישה (המשתמש שולח: /login הקוד)', 'Access code (the user sends: /login CODE)')} />
+          )}
+          <p className="text-xs text-muted-foreground">
+            {tr('שינוי הקוד או הסרת טלפון מהרשימה מנתקים את המשתמשים האלה מיד.', 'Changing the code or removing a phone logs those users out immediately.')}
+          </p>
+          <div className="flex items-center gap-3">
+            <Button variant="outline" disabled={savePolicy.isPending || ((auth === 'code' || auth === 'phone_or_code') && !code.trim())}
+                    onClick={() => savePolicy.mutate({ telegram_auth: auth, access_code: code.trim() })}>{tr('שמור כניסה', 'Save login')}</Button>
+            {savePolicy.isSuccess && <span className="text-sm text-emerald-600">{tr('נשמר', 'Saved')}</span>}
+            {savePolicy.error && <span className="text-sm text-destructive">{(savePolicy.error as Error).message}</span>}
+          </div>
+        </div>
         {save.error && <p className="text-sm text-destructive">{(save.error as Error).message}</p>}
       </CardContent>
     </Card>

@@ -10,6 +10,8 @@ export interface BotPolicy {
   allow_reply?: string
   show_prices?: boolean
   exempt_channels?: string[]
+  telegram_auth?: 'none' | 'phone' | 'code' | 'phone_or_code'
+  access_code?: string
 }
 
 export interface BotBrands {
