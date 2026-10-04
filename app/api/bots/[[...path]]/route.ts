@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic'
  * configured — reads too, since the turn log holds customers' questions and phone numbers.
  */
 const BOT_ADMIN_URL = process.env.BOT_ADMIN_URL || 'http://192.168.0.231:8899'
-const ALLOWED = /^bots(\/[a-z0-9-]+(\/(stats|turns|policy|brands|telegram|usage|usage\/reset|start|stop|restart))?)?$/
+const ALLOWED = /^bots(\/[a-z0-9-]+(\/(stats|turns|policy|brands|telegram|usage|usage\/reset|conversations|conversations\/hide|start|stop|restart))?)?$/
 
 async function authed(req: NextRequest): Promise<boolean> {
   const configured = !!(process.env.JAN_AUTH_JWT_SECRET || process.env.JWT_SECRET || process.env.AUTH_SECRET)

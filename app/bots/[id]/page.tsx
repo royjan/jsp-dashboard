@@ -17,7 +17,7 @@ import { useLocale } from '@/lib/locale-context'
 import { formatNumber } from '@/lib/constants'
 import {
   useBot, useBotStats, useBotTurns, useSaveBotPolicy, useSaveBotBrands, useBotAction, useSaveBotTelegram,
-  useBotUsage, useResetUsage,
+  useBotUsage, useResetUsage, type GroupRule,
   type BotPolicy, type BotBrands, type BotTelegram,
 } from '@/lib/bots-admin'
 
@@ -134,7 +134,8 @@ export default function BotPage({ params }: { params: Promise<{ id: string }> })
           })()}
         </TabsContent>
 
-        <TabsContent value="turns">
+        <TabsContent value="turns" className="space-y-3">
+          <Button asChild size="sm"><Link href={`/bots/${id}/conversations`}>{tr('כל השיחות — חיפוש, סינון והסרה', 'All conversations — search, filter, remove')}</Link></Button>
           <Card>
             <CardContent className="overflow-x-auto p-0">
               <table className="w-full text-sm">
@@ -173,7 +174,8 @@ export default function BotPage({ params }: { params: Promise<{ id: string }> })
 
         <TabsContent value="settings" className="space-y-4">
           {b && <UsageCard id={id} he={he} />}
-          {b && <TelegramCard key={`${b.policy.telegram_auth}|${b.policy.access_code}|${(b.policy.telegram_groups ?? []).join(',')}`} id={id} tg={b.telegram} policy={b.policy} he={he} />}
+          {b && <GroupsCard key={JSON.stringify([b.policy.telegram_groups, b.policy.group_limits])} id={id} policy={b.policy} he={he} />}
+          {b && <TelegramCard key={`${b.policy.telegram_auth}|${b.policy.access_code}`} id={id} tg={b.telegram} policy={b.policy} he={he} />}
           {b && <PolicyForm key={JSON.stringify(b.policy)} id={id} policy={b.policy} he={he} />}
           {b && <BrandsForm key={JSON.stringify(b.brands)} id={id} brands={b.brands} he={he} />}
         </TabsContent>
@@ -312,7 +314,6 @@ function TelegramCard({ id, tg, policy, he }: { id: string; tg: BotTelegram; pol
   const [token, setToken] = useState('')
   const [auth, setAuth] = useState(policy.telegram_auth ?? 'none')
   const [code, setCode] = useState(policy.access_code ?? '')
-  const [groups, setGroups] = useState((policy.telegram_groups ?? []).join('\n'))
   const link = tg.username ? `https://t.me/${tg.username}` : ''
   return (
     <Card>
@@ -375,18 +376,9 @@ function TelegramCard({ id, tg, policy, he }: { id: string; tg: BotTelegram; pol
           <p className="text-xs text-muted-foreground">
             {tr('שינוי הקוד או הסרת טלפון מהרשימה מנתקים את המשתמשים האלה מיד.', 'Changing the code or removing a phone logs those users out immediately.')}
           </p>
-          <div className="space-y-1">
-            <div className="text-sm font-medium">{tr('קבוצות שהבוט עונה בהן (שורה לכל מזהה קבוצה, למשל ‎-5352661582)', 'Groups the bot answers in (one group id per line, e.g. -5352661582)')}</div>
-            <textarea className="w-full max-w-md rounded-md border bg-background px-3 py-2 text-sm" rows={2} dir="ltr"
-                      value={groups} onChange={(e) => setGroups(e.target.value)} />
-            <p className="text-xs text-muted-foreground">
-              {tr('כל מי שבקבוצה מקבל תשובות (המכסה היומית נספרת לכל אדם). כדי שהבוט יראה כל הודעה בקבוצה: ב־@BotFather → ‎/setprivacy → Disable, או להפוך אותו למנהל בקבוצה.',
-                  'Everyone in the group is answered (the daily limit counts per person). For the bot to see every group message: @BotFather → /setprivacy → Disable, or make it a group admin.')}
-            </p>
-          </div>
           <div className="flex items-center gap-3">
             <Button variant="outline" disabled={savePolicy.isPending || ((auth === 'code' || auth === 'phone_or_code') && !code.trim())}
-                    onClick={() => savePolicy.mutate({ telegram_auth: auth, access_code: code.trim(), telegram_groups: groups.split('\n').map((x) => x.trim().replace(/^#/, '')).filter(Boolean) })}>{tr('שמור כניסה', 'Save login')}</Button>
+                    onClick={() => savePolicy.mutate({ telegram_auth: auth, access_code: code.trim() })}>{tr('שמור כניסה', 'Save login')}</Button>
             {savePolicy.isSuccess && <span className="text-sm text-emerald-600">{tr('נשמר', 'Saved')}</span>}
             {savePolicy.error && <span className="text-sm text-destructive">{(savePolicy.error as Error).message}</span>}
           </div>
@@ -430,6 +422,82 @@ function UsageCard({ id, he }: { id: string; he: boolean }) {
             </span>
           </div>
         ))}
+      </CardContent>
+    </Card>
+  )
+}
+
+function GroupsCard({ id, policy, he }: { id: string; policy: BotPolicy; he: boolean }) {
+  const tr = (h: string, e: string) => (he ? h : e)
+  const save = useSaveBotPolicy(id)
+  const usage = useBotUsage(id)
+  const reset = useResetUsage(id)
+  const [ids, setIds] = useState<string[]>((policy.telegram_groups ?? []).map((x) => x.replace(/^#/, '').trim()).filter(Boolean))
+  const [rules, setRules] = useState<Record<string, GroupRule>>(policy.group_limits ?? {})
+  const [adding, setAdding] = useState('')
+  const set = (gid: string, k: keyof GroupRule, v: string) =>
+    setRules((r) => ({ ...r, [gid]: { ...(r[gid] ?? {}), [k]: k === 'limit_reply' ? v : (v === '' ? '' : Math.max(0, Number(v) || 0)) } }))
+  const info = (gid: string) => usage.data?.groups.find((g) => g.id === gid)
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base">{tr('קבוצות טלגרם', 'Telegram groups')}</CardTitle>
+        <p className="text-xs text-muted-foreground">
+          {tr('כל מי שבקבוצה מקבל תשובות. לכל קבוצה: מכסה לאדם (ריק = ברירת המחדל של הבוט), מכסה לכל הקבוצה ביום והודעה משלה. כדי שהבוט יראה כל הודעה: ב־@BotFather → ‎/setprivacy → Disable.',
+              "Everyone in a group is answered. Per group: a per-person limit (blank = the bot's default), a daily cap for the whole group, and its own message. For the bot to see every message: @BotFather → /setprivacy → Disable.")}
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {ids.length === 0 && <p className="text-sm text-muted-foreground">{tr('אין קבוצות', 'No groups')}</p>}
+        {ids.map((gid) => {
+          const r = rules[gid] ?? {}
+          const g = info(gid)
+          const cap = Number(r.daily_limit_group || 0)
+          return (
+            <div key={gid} className="space-y-2 rounded-md border p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="text-sm">
+                  <span className="font-medium">{g?.title || tr('קבוצה', 'Group')}</span>{' '}
+                  <span className="text-xs text-muted-foreground" dir="ltr">{gid}</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <span className={`tabular-nums ${cap && (g?.count ?? 0) >= cap ? 'font-semibold text-destructive' : 'text-muted-foreground'}`}>
+                    {tr('היום', 'Today')} {g?.count ?? 0}{cap ? `/${cap}` : ''}
+                  </span>
+                  <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" disabled={reset.isPending} onClick={() => reset.mutate(`group:${gid}`)}>
+                    {tr('איפוס', 'Reset')}
+                  </Button>
+                  <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-destructive"
+                          onClick={() => setIds((x) => x.filter((y) => y !== gid))}>{tr('הסר', 'Remove')}</Button>
+                </div>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-3">
+                <label className="space-y-1 text-xs text-muted-foreground">{tr('שאלות לאדם ביום (ריק = של הבוט)', 'Per person per day (blank = bot default)')}
+                  <Input type="number" min={0} value={r.daily_limit_per_user ?? ''} onChange={(e) => set(gid, 'daily_limit_per_user', e.target.value)} />
+                </label>
+                <label className="space-y-1 text-xs text-muted-foreground">{tr('שאלות לכל הקבוצה ביום (0 = ללא)', 'Whole group per day (0 = none)')}
+                  <Input type="number" min={0} value={r.daily_limit_group ?? ''} onChange={(e) => set(gid, 'daily_limit_group', e.target.value)} />
+                </label>
+                <label className="space-y-1 text-xs text-muted-foreground">{tr('הודעה כשנגמרת המכסה (ריק = של הבוט)', "Message at the limit (blank = bot's)")}
+                  <Input value={r.limit_reply ?? ''} onChange={(e) => set(gid, 'limit_reply', e.target.value)} />
+                </label>
+              </div>
+            </div>
+          )
+        })}
+        <div className="flex flex-wrap gap-2">
+          <Input dir="ltr" className="max-w-56" value={adding} onChange={(e) => setAdding(e.target.value)} placeholder="-5352661582" />
+          <Button variant="outline" disabled={!adding.trim()} onClick={() => {
+            const gid = adding.trim().replace(/^#/, '')
+            if (gid && !ids.includes(gid)) setIds((x) => [...x, gid])
+            setAdding('')
+          }}>{tr('הוסף קבוצה', 'Add group')}</Button>
+          <Button disabled={save.isPending} onClick={() => save.mutate({
+            telegram_groups: ids, group_limits: Object.fromEntries(ids.map((gid) => [gid, rules[gid] ?? {}])),
+          })}>{tr('שמור קבוצות', 'Save groups')}</Button>
+          {save.isSuccess && <span className="self-center text-sm text-emerald-600">{tr('נשמר', 'Saved')}</span>}
+          {save.error && <span className="self-center text-sm text-destructive">{(save.error as Error).message}</span>}
+        </div>
       </CardContent>
     </Card>
   )

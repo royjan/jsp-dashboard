@@ -14,12 +14,51 @@ export interface BotPolicy {
   access_code?: string
   telegram_groups?: string[]
   show_counter?: boolean
+  group_limits?: Record<string, GroupRule>
+}
+
+export interface GroupRule {
+  daily_limit_per_user?: number | ''
+  daily_limit_group?: number | ''
+  limit_reply?: string
+}
+
+export interface BotUsageGroup {
+  id: string
+  title: string
+  count: number
+  limit_group: number
+  limit_per_user: number | null | undefined
+  limit_reply: string
+}
+
+export interface Conversation {
+  key: string
+  ts: number
+  channel: string
+  sender: string
+  question: string
+  answer: string
+  ok: boolean
+  elapsed_s: string | number | null
+  error: string
+  chat: string
+}
+
+export interface ConversationPage {
+  total: number
+  offset: number
+  limit: number
+  items: Conversation[]
+  senders: string[]
+  channels: string[]
 }
 
 export interface BotUsage {
   day: string
   limit: number
   users: { who: string; count: number }[]
+  groups: BotUsageGroup[]
 }
 
 export interface BotBrands {
@@ -134,6 +173,23 @@ export function useResetUsage(id: string) {
   return useMutation({
     mutationFn: (who: string) => call<BotUsage>(`bots/${id}/usage/reset`, { method: 'POST', body: JSON.stringify({ who }) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['bots', id, 'usage'] }),
+  })
+}
+
+export function useConversations(id: string, params: Record<string, string>) {
+  const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '')).toString()
+  return useQuery({
+    queryKey: ['bots', id, 'conversations', qs],
+    queryFn: () => call<ConversationPage>(`bots/${id}/conversations?${qs}`),
+    placeholderData: (prev) => prev,
+  })
+}
+
+export function useHideConversations(id: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (keys: string[]) => call<{ hidden: number }>(`bots/${id}/conversations/hide`, { method: 'POST', body: JSON.stringify({ keys }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['bots', id] }),
   })
 }
 
