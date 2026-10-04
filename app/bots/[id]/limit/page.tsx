@@ -19,7 +19,7 @@ export default function LimitPage({ params }: { params: Promise<{ id: string }> 
       <PolicyForm key={JSON.stringify(b.policy)} id={id} policy={b.policy} he={he} />
       <GroupsCard key={JSON.stringify([b.policy.telegram_groups, b.policy.group_limits])} id={id} policy={b.policy} he={he} />
       <TelegramCard key={`${b.policy.telegram_auth}|${b.policy.access_code}`} id={id} tg={b.telegram} policy={b.policy} he={he} />
-      <BrandsForm key={JSON.stringify(b.brands)} id={id} brands={b.brands} he={he} />
+      <BrandsForm key={JSON.stringify(b.brands)} id={id} brands={b.brands} options={b.brand_options ?? []} he={he} />
     </div>
   )
 }

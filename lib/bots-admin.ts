@@ -86,6 +86,7 @@ export interface BotOverview {
   containers: { name: string; state: string; status: string }[]
   memory_mb: number | null
   brands: BotBrands
+  brand_options: string[]
   policy: BotPolicy
   telegram: BotTelegram
   today: { questions: number; ok: number }

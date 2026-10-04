@@ -101,7 +101,62 @@ export function PolicyForm({ id, policy, he }: { id: string; policy: BotPolicy; 
   )
 }
 
-export function BrandsForm({ id, brands, he }: { id: string; brands: BotBrands; he: boolean }) {
+const BRAND_LABELS: Record<string, string> = {
+  byd: 'BYD', toyota: 'טויוטה ולקסוס', kia: 'קיה', hyundai: 'יונדאי', jaecoo: "ג'אקו / צ'רי / אומודה",
+  geely: "ג'ילי", zeekr: 'זיקר', mg: "אמ־ג'י", psa: "פיג'ו / סיטרואן / אופל",
+}
+
+/** Brands as chips with suggestions from what THIS bot recognises; a typed name is still accepted. */
+function BrandChips({ value, onChange, options, he }: { value: string; onChange: (v: string) => void; options: string[]; he: boolean }) {
+  const [typed, setTyped] = useState('')
+  const [open, setOpen] = useState(false)
+  const chosen = value.split(',').map((x) => x.trim().toLowerCase()).filter(Boolean)
+  const label = (b: string) => (he ? BRAND_LABELS[b] ?? b : b)
+  const add = (b: string) => {
+    const v = b.trim().toLowerCase()
+    if (v && !chosen.includes(v)) onChange([...chosen, v].join(','))
+    setTyped('')
+  }
+  const remove = (b: string) => onChange(chosen.filter((x) => x !== b).join(','))
+  const q = typed.trim().toLowerCase()
+  const suggestions = options.filter((o) => !chosen.includes(o) && (!q || o.includes(q) || label(o).toLowerCase().includes(q)))
+  return (
+    <div className="relative">
+      <div className="flex min-h-10 flex-wrap items-center gap-1.5 rounded-md border bg-background px-2 py-1.5">
+        {chosen.map((b) => (
+          <Badge key={b} variant="secondary" className="gap-1 text-xs">
+            {label(b)}{BRAND_LABELS[b] && he ? <span className="text-muted-foreground" dir="ltr">({b})</span> : null}
+            <button type="button" className="ms-0.5 opacity-60 hover:opacity-100" aria-label={`remove ${b}`} onClick={() => remove(b)}>×</button>
+          </Badge>
+        ))}
+        <input
+          className="min-w-32 flex-1 bg-transparent text-sm outline-none"
+          value={typed}
+          placeholder={chosen.length ? '' : (he ? 'הקלידו או בחרו מותג…' : 'Type or pick a brand…')}
+          onChange={(e) => { setTyped(e.target.value); setOpen(true) }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setTimeout(() => setOpen(false), 150)}
+          onKeyDown={(e) => {
+            if ((e.key === 'Enter' || e.key === ',') && typed.trim()) { e.preventDefault(); add(suggestions[0] && q && !options.includes(q) ? suggestions[0] : typed) }
+            if (e.key === 'Backspace' && !typed && chosen.length) remove(chosen[chosen.length - 1])
+          }}
+        />
+      </div>
+      {open && suggestions.length > 0 && (
+        <div className="absolute z-20 mt-1 max-h-56 w-full overflow-auto rounded-md border bg-popover p-1 shadow-md">
+          {suggestions.map((o) => (
+            <button key={o} type="button" className="flex w-full items-center justify-between rounded px-2 py-1.5 text-sm hover:bg-accent"
+                    onMouseDown={(e) => { e.preventDefault(); add(o) }}>
+              <span>{label(o)}</span><span className="text-xs text-muted-foreground" dir="ltr">{o}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+export function BrandsForm({ id, brands, options, he }: { id: string; brands: BotBrands; options: string[]; he: boolean }) {
   const tr = (h: string, e: string) => (he ? h : e)
   const save = useSaveBotBrands(id)
   const [only, setOnly] = useState(brands.CATALOG_ONLY_BRANDS)
@@ -115,8 +170,8 @@ export function BrandsForm({ id, brands, he }: { id: string; brands: BotBrands; 
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="space-y-1">
-          <div className="text-sm font-medium">{tr('מותגים שהבוט עונה עליהם (מופרד בפסיקים, למשל byd,geely)', 'Brands it answers (comma-separated, e.g. byd,geely)')}</div>
-          <Input dir="ltr" value={only} onChange={(e) => setOnly(e.target.value)} />
+          <div className="text-sm font-medium">{tr('מותגים שהבוט עונה עליהם (ריק = כל המותגים)', 'Brands it answers (empty = every brand)')}</div>
+          <BrandChips value={only} onChange={setOnly} options={options} he={he} />
         </div>
         <div className="space-y-1">
           <div className="text-sm font-medium">{tr('תשובה לרכב ממותג אחר', 'Reply for a car of another brand')}</div>
@@ -124,7 +179,8 @@ export function BrandsForm({ id, brands, he }: { id: string; brands: BotBrands; 
         </div>
         <div className="space-y-1">
           <div className="text-sm font-medium">{tr('מותגים שעונים רק לפי מק״ט, לא לפי רכב', 'Brands answered by part number only, not by car')}</div>
-          <Input dir="ltr" value={refuseCars} onChange={(e) => setRefuseCars(e.target.value)} />
+          <p className="text-xs text-muted-foreground">{tr('כששולחים רכב (מספר רישוי / שלדה) של מותג כזה, הבוט לא מחפש בקטלוג אלא מבקש את מק״ט החלק. מק״ט שנשלח נענה עם תיאור ומחיר.', 'For a car (plate / VIN) of such a brand the bot does not search the catalogue; it asks for the part number, and answers a part number with its description and price.')}</p>
+          <BrandChips value={refuseCars} onChange={setRefuseCars} options={options} he={he} />
         </div>
         <div className="flex items-center gap-3">
           <Button disabled={save.isPending}
