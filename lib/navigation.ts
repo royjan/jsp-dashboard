@@ -308,6 +308,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { href: '/settings', labelKey: 'settings', icon: Settings },
 
       { href: '/chat-insights', labelKey: 'chatInsights', icon: MessageSquare },
+      { href: '/bots', labelKey: 'bots', icon: Bot },
       { href: '/chat/simulator', labelKey: 'chatSimulator', icon: FlaskConical },
     ],
   },
