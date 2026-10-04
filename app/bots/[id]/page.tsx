@@ -17,6 +17,7 @@ import { useLocale } from '@/lib/locale-context'
 import { formatNumber } from '@/lib/constants'
 import {
   useBot, useBotStats, useBotTurns, useSaveBotPolicy, useSaveBotBrands, useBotAction, useSaveBotTelegram,
+  useBotUsage, useResetUsage,
   type BotPolicy, type BotBrands, type BotTelegram,
 } from '@/lib/bots-admin'
 
@@ -171,6 +172,7 @@ export default function BotPage({ params }: { params: Promise<{ id: string }> })
         </TabsContent>
 
         <TabsContent value="settings" className="space-y-4">
+          {b && <UsageCard id={id} he={he} />}
           {b && <TelegramCard key={`${b.policy.telegram_auth}|${b.policy.access_code}|${(b.policy.telegram_groups ?? []).join(',')}`} id={id} tg={b.telegram} policy={b.policy} he={he} />}
           {b && <PolicyForm key={JSON.stringify(b.policy)} id={id} policy={b.policy} he={he} />}
           {b && <BrandsForm key={JSON.stringify(b.brands)} id={id} brands={b.brands} he={he} />}
@@ -216,6 +218,7 @@ function PolicyForm({ id, policy, he }: { id: string; policy: BotPolicy; he: boo
   const [allowReply, setAllowReply] = useState(policy.allow_reply ?? '')
   const [prices, setPrices] = useState(policy.show_prices !== false)
   const [exemptUi, setExemptUi] = useState((policy.exempt_channels ?? ['ui']).includes('ui'))
+  const [counter, setCounter] = useState(!!policy.show_counter)
 
   return (
     <Card>
@@ -243,6 +246,10 @@ function PolicyForm({ id, policy, he }: { id: string; policy: BotPolicy; he: boo
           </div>
         </div>
         <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={counter} onChange={(e) => setCounter(e.target.checked)} className="h-4 w-4" />
+          {tr('להציג מונה בתשובות — "(שאלה 3/50 היום)"', 'Show the counter in answers — "(question 3/50 today)"')}
+        </label>
+        <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={exemptUi} onChange={(e) => setExemptUi(e.target.checked)} className="h-4 w-4" />
           {tr('הקונסולה של הצוות לא כפופה להגבלות', 'Staff console is exempt from the limits')}
         </label>
@@ -250,7 +257,7 @@ function PolicyForm({ id, policy, he }: { id: string; policy: BotPolicy; he: boo
           <Button disabled={save.isPending} onClick={() => save.mutate({
             daily_limit_per_user: Math.max(0, parseInt(limit || '0', 10) || 0), limit_reply: limitReply,
             allow_list: allow.split('\n').map((x) => x.trim()).filter(Boolean), allow_reply: allowReply,
-            show_prices: prices, exempt_channels: exemptUi ? ['ui'] : [],
+            show_prices: prices, exempt_channels: exemptUi ? ['ui'] : [], show_counter: counter,
           })}>{tr('שמור', 'Save')}</Button>
           {save.isSuccess && <span className="text-sm text-emerald-600">{tr('נשמר', 'Saved')}</span>}
           {save.error && <span className="text-sm text-destructive">{(save.error as Error).message}</span>}
@@ -385,6 +392,44 @@ function TelegramCard({ id, tg, policy, he }: { id: string; tg: BotTelegram; pol
           </div>
         </div>
         {save.error && <p className="text-sm text-destructive">{(save.error as Error).message}</p>}
+      </CardContent>
+    </Card>
+  )
+}
+
+function UsageCard({ id, he }: { id: string; he: boolean }) {
+  const tr = (h: string, e: string) => (he ? h : e)
+  const { data } = useBotUsage(id)
+  const reset = useResetUsage(id)
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+        <div>
+          <CardTitle className="text-base">{tr('שימוש היום', 'Usage today')}</CardTitle>
+          <p className="text-xs text-muted-foreground">{tr('מתאפס לבד בחצות (שעון ישראל)', 'Resets by itself at midnight (Israel time)')}</p>
+        </div>
+        {!!data?.users.length && (
+          <Button size="sm" variant="outline" disabled={reset.isPending}
+                  onClick={() => window.confirm(tr('לאפס את המונה של כולם להיום?', "Reset everyone's count for today?")) && reset.mutate('')}>
+            {tr('איפוס לכולם', 'Reset all')}
+          </Button>
+        )}
+      </CardHeader>
+      <CardContent className="space-y-1 text-sm">
+        {!data?.users.length && <p className="text-muted-foreground">{tr('אין עדיין שאלות היום', 'No questions yet today')}</p>}
+        {data?.users.map((u) => (
+          <div key={u.who} className="flex items-center justify-between gap-2 border-b py-1 last:border-0">
+            <span className="truncate" dir="auto">{u.who}</span>
+            <span className="flex items-center gap-2">
+              <span className={`tabular-nums ${data.limit && u.count >= data.limit ? 'font-semibold text-destructive' : 'text-muted-foreground'}`}>
+                {data.limit ? `${u.count}/${data.limit}` : u.count}
+              </span>
+              <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" disabled={reset.isPending} onClick={() => reset.mutate(u.who)}>
+                {tr('איפוס', 'Reset')}
+              </Button>
+            </span>
+          </div>
+        ))}
       </CardContent>
     </Card>
   )

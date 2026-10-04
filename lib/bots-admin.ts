@@ -13,6 +13,13 @@ export interface BotPolicy {
   telegram_auth?: 'none' | 'phone' | 'code' | 'phone_or_code'
   access_code?: string
   telegram_groups?: string[]
+  show_counter?: boolean
+}
+
+export interface BotUsage {
+  day: string
+  limit: number
+  users: { who: string; count: number }[]
 }
 
 export interface BotBrands {
@@ -115,6 +122,18 @@ export function useSaveBotTelegram(id: string) {
     mutationFn: (t: { token?: string; enabled?: boolean }) =>
       call<BotTelegram>(`bots/${id}/telegram`, { method: 'PUT', body: JSON.stringify(t) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['bots'] }),
+  })
+}
+
+export function useBotUsage(id: string) {
+  return useQuery({ queryKey: ['bots', id, 'usage'], queryFn: () => call<BotUsage>(`bots/${id}/usage`), refetchInterval: 15_000 })
+}
+
+export function useResetUsage(id: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (who: string) => call<BotUsage>(`bots/${id}/usage/reset`, { method: 'POST', body: JSON.stringify({ who }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['bots', id, 'usage'] }),
   })
 }
 
