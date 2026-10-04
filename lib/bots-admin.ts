@@ -15,6 +15,7 @@ export interface BotPolicy {
   telegram_groups?: string[]
   show_counter?: boolean
   group_limits?: Record<string, GroupRule>
+  user_limits?: Record<string, number>
 }
 
 export interface GroupRule {
@@ -57,7 +58,7 @@ export interface ConversationPage {
 export interface BotUsage {
   day: string
   limit: number
-  users: { who: string; count: number }[]
+  users: { who: string; count: number; own_limit?: number | null }[]
   groups: BotUsageGroup[]
 }
 
