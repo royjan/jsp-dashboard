@@ -358,6 +358,12 @@ function TelegramCard({ id, tg, policy, he }: { id: string; tg: BotTelegram; pol
             <Input dir="ltr" className="max-w-md" value={code} onChange={(e) => setCode(e.target.value)}
                    placeholder={tr('קוד גישה (המשתמש שולח: /login הקוד)', 'Access code (the user sends: /login CODE)')} />
           )}
+          {(auth === 'phone' || auth === 'phone_or_code') && !(policy.allow_list ?? []).some((x) => x.replace(/\D/g, '').length >= 9) && (
+            <p className="text-sm text-destructive">
+              {tr('אין אף מספר טלפון ברשימת "מי מורשה" למטה — באימות טלפון אף אחד לא יוכל להיכנס.',
+                  'No phone number on the "Who may use it" list below — with phone login nobody can get in.')}
+            </p>
+          )}
           <p className="text-xs text-muted-foreground">
             {tr('שינוי הקוד או הסרת טלפון מהרשימה מנתקים את המשתמשים האלה מיד.', 'Changing the code or removing a phone logs those users out immediately.')}
           </p>
