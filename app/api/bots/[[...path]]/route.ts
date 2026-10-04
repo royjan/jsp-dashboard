@@ -44,7 +44,9 @@ async function proxy(req: NextRequest, path: string[], method: 'GET' | 'PUT' | '
   }
 }
 
-type Ctx = { params: Promise<{ path: string[] }> }
-export async function GET(req: NextRequest, { params }: Ctx) { return proxy(req, (await params).path, 'GET') }
-export async function PUT(req: NextRequest, { params }: Ctx) { return proxy(req, (await params).path, 'PUT') }
-export async function POST(req: NextRequest, { params }: Ctx) { return proxy(req, (await params).path, 'POST') }
+// OPTIONAL catch-all ([[...path]]): the list itself is /api/bots with no segment, which a plain [...path]
+// does not match - the page got a 404 for its bot list on the first deploy (2026-10-04).
+type Ctx = { params: Promise<{ path?: string[] }> }
+export async function GET(req: NextRequest, { params }: Ctx) { return proxy(req, (await params).path ?? [], 'GET') }
+export async function PUT(req: NextRequest, { params }: Ctx) { return proxy(req, (await params).path ?? [], 'PUT') }
+export async function POST(req: NextRequest, { params }: Ctx) { return proxy(req, (await params).path ?? [], 'POST') }
