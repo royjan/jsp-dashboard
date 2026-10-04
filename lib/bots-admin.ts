@@ -12,6 +12,7 @@ export interface BotPolicy {
   exempt_channels?: string[]
   telegram_auth?: 'none' | 'phone' | 'code' | 'phone_or_code'
   access_code?: string
+  telegram_groups?: string[]
 }
 
 export interface BotBrands {

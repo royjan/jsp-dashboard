@@ -171,7 +171,7 @@ export default function BotPage({ params }: { params: Promise<{ id: string }> })
         </TabsContent>
 
         <TabsContent value="settings" className="space-y-4">
-          {b && <TelegramCard key={`${b.policy.telegram_auth}|${b.policy.access_code}`} id={id} tg={b.telegram} policy={b.policy} he={he} />}
+          {b && <TelegramCard key={`${b.policy.telegram_auth}|${b.policy.access_code}|${(b.policy.telegram_groups ?? []).join(',')}`} id={id} tg={b.telegram} policy={b.policy} he={he} />}
           {b && <PolicyForm key={JSON.stringify(b.policy)} id={id} policy={b.policy} he={he} />}
           {b && <BrandsForm key={JSON.stringify(b.brands)} id={id} brands={b.brands} he={he} />}
         </TabsContent>
@@ -305,6 +305,7 @@ function TelegramCard({ id, tg, policy, he }: { id: string; tg: BotTelegram; pol
   const [token, setToken] = useState('')
   const [auth, setAuth] = useState(policy.telegram_auth ?? 'none')
   const [code, setCode] = useState(policy.access_code ?? '')
+  const [groups, setGroups] = useState((policy.telegram_groups ?? []).join('\n'))
   const link = tg.username ? `https://t.me/${tg.username}` : ''
   return (
     <Card>
@@ -367,9 +368,18 @@ function TelegramCard({ id, tg, policy, he }: { id: string; tg: BotTelegram; pol
           <p className="text-xs text-muted-foreground">
             {tr('שינוי הקוד או הסרת טלפון מהרשימה מנתקים את המשתמשים האלה מיד.', 'Changing the code or removing a phone logs those users out immediately.')}
           </p>
+          <div className="space-y-1">
+            <div className="text-sm font-medium">{tr('קבוצות שהבוט עונה בהן (שורה לכל מזהה קבוצה, למשל ‎-5352661582)', 'Groups the bot answers in (one group id per line, e.g. -5352661582)')}</div>
+            <textarea className="w-full max-w-md rounded-md border bg-background px-3 py-2 text-sm" rows={2} dir="ltr"
+                      value={groups} onChange={(e) => setGroups(e.target.value)} />
+            <p className="text-xs text-muted-foreground">
+              {tr('כל מי שבקבוצה מקבל תשובות (המכסה היומית נספרת לכל אדם). כדי שהבוט יראה כל הודעה בקבוצה: ב־@BotFather → ‎/setprivacy → Disable, או להפוך אותו למנהל בקבוצה.',
+                  'Everyone in the group is answered (the daily limit counts per person). For the bot to see every group message: @BotFather → /setprivacy → Disable, or make it a group admin.')}
+            </p>
+          </div>
           <div className="flex items-center gap-3">
             <Button variant="outline" disabled={savePolicy.isPending || ((auth === 'code' || auth === 'phone_or_code') && !code.trim())}
-                    onClick={() => savePolicy.mutate({ telegram_auth: auth, access_code: code.trim() })}>{tr('שמור כניסה', 'Save login')}</Button>
+                    onClick={() => savePolicy.mutate({ telegram_auth: auth, access_code: code.trim(), telegram_groups: groups.split('\n').map((x) => x.trim().replace(/^#/, '')).filter(Boolean) })}>{tr('שמור כניסה', 'Save login')}</Button>
             {savePolicy.isSuccess && <span className="text-sm text-emerald-600">{tr('נשמר', 'Saved')}</span>}
             {savePolicy.error && <span className="text-sm text-destructive">{(savePolicy.error as Error).message}</span>}
           </div>
