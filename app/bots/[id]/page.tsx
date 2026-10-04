@@ -16,8 +16,8 @@ import { seriesColor } from '@/lib/chart-colors'
 import { useLocale } from '@/lib/locale-context'
 import { formatNumber } from '@/lib/constants'
 import {
-  useBot, useBotStats, useBotTurns, useSaveBotPolicy, useSaveBotBrands, useBotAction,
-  type BotPolicy, type BotBrands,
+  useBot, useBotStats, useBotTurns, useSaveBotPolicy, useSaveBotBrands, useBotAction, useSaveBotTelegram,
+  type BotPolicy, type BotBrands, type BotTelegram,
 } from '@/lib/bots-admin'
 
 const CHANNEL_HE: Record<string, string> = { ui: 'קונסולה', telegram: 'טלגרם', whatsapp: 'וואטסאפ' }
@@ -171,6 +171,7 @@ export default function BotPage({ params }: { params: Promise<{ id: string }> })
         </TabsContent>
 
         <TabsContent value="settings" className="space-y-4">
+          {b && <TelegramCard id={id} tg={b.telegram} he={he} />}
           {b && <PolicyForm key={JSON.stringify(b.policy)} id={id} policy={b.policy} he={he} />}
           {b && <BrandsForm key={JSON.stringify(b.brands)} id={id} brands={b.brands} he={he} />}
         </TabsContent>
@@ -292,6 +293,56 @@ function BrandsForm({ id, brands, he }: { id: string; brands: BotBrands; he: boo
           {save.isSuccess && <span className="text-sm text-emerald-600">{save.data?.restart_ok ? tr('נשמר והופעל מחדש', 'Saved and restarted') : tr('נשמר, ההפעלה מחדש נכשלה', 'Saved; restart failed')}</span>}
           {save.error && <span className="text-sm text-destructive">{(save.error as Error).message}</span>}
         </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+function TelegramCard({ id, tg, he }: { id: string; tg: BotTelegram; he: boolean }) {
+  const tr = (h: string, e: string) => (he ? h : e)
+  const save = useSaveBotTelegram(id)
+  const [token, setToken] = useState('')
+  const link = tg.username ? `https://t.me/${tg.username}` : ''
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base">{tr('בוט טלגרם', 'Telegram bot')}</CardTitle>
+        <p className="text-xs text-muted-foreground">
+          {tr('בוט נפרד לכל בוט — יוצרים ב־@BotFather ומדביקים כאן את הטוקן. עונה בצ׳אטים פרטיים; ההגבלות למעלה חלות גם עליו.',
+              'One bot per bot — create it in @BotFather and paste its token here. Answers private chats; the limits apply to it too.')}
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          {tg.token_set ? (
+            <>
+              <Badge className={tg.running ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400' : 'bg-muted text-muted-foreground'}>
+                {tg.running ? tr('פעיל', 'Running') : tr('כבוי', 'Off')}
+              </Badge>
+              {link && <a href={link} target="_blank" rel="noreferrer" className="font-medium text-primary hover:underline" dir="ltr">@{tg.username}</a>}
+              {tg.error && <span className="text-destructive">{tg.error}</span>}
+              {tg.conflicts > 0 && <span className="text-destructive">{tr('הטוקן משמש בוט אחר — לא יופעל', 'Token used by another bot — will not start')}</span>}
+            </>
+          ) : (
+            <span className="text-muted-foreground">{tr('אין עדיין טוקן', 'No token yet')}</span>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Input type="password" dir="ltr" className="max-w-md" value={token} onChange={(e) => setToken(e.target.value)}
+                 placeholder={tg.token_set ? tr('טוקן חדש (להחלפה)', 'New token (to replace)') : '123456:ABC…'} autoComplete="off" />
+          <Button variant="outline" disabled={!token.trim() || save.isPending}
+                  onClick={() => save.mutate({ token: token.trim() }, { onSuccess: () => setToken('') })}>
+            {tr('שמור טוקן', 'Save token')}
+          </Button>
+          {tg.token_set && (
+            <Button disabled={save.isPending || tg.conflicts > 0} variant={tg.running ? 'outline' : 'default'}
+                    onClick={() => save.mutate({ enabled: !tg.running })}>
+              {save.isPending ? tr('מבצע…', 'Working…') : tg.running ? tr('כבה טלגרם', 'Turn off') : tr('הפעל טלגרם', 'Turn on')}
+            </Button>
+          )}
+        </div>
+        {save.isPending && <p className="text-xs text-muted-foreground">{tr('הפעלה ראשונה בונה את השירות — עד כמה דקות', 'The first start builds the service — up to a few minutes')}</p>}
+        {save.error && <p className="text-sm text-destructive">{(save.error as Error).message}</p>}
       </CardContent>
     </Card>
   )

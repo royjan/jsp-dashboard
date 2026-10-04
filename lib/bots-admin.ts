@@ -18,6 +18,15 @@ export interface BotBrands {
   CATALOG_CAR_REFUSE_BRANDS: string
 }
 
+export interface BotTelegram {
+  token_set: boolean
+  running: boolean
+  conflicts: number
+  username?: string
+  name?: string
+  error?: string
+}
+
 export interface BotOverview {
   id: string
   name: string
@@ -28,6 +37,7 @@ export interface BotOverview {
   memory_mb: number | null
   brands: BotBrands
   policy: BotPolicy
+  telegram: BotTelegram
   today: { questions: number; ok: number }
   week: { questions: number; ok: number; median_s: number | null }
 }
@@ -92,6 +102,15 @@ export function useSaveBotBrands(id: string) {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (b: BotBrands) => call<{ restart_ok: boolean }>(`bots/${id}/brands`, { method: 'PUT', body: JSON.stringify(b) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['bots'] }),
+  })
+}
+
+export function useSaveBotTelegram(id: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (t: { token?: string; enabled?: boolean }) =>
+      call<BotTelegram>(`bots/${id}/telegram`, { method: 'PUT', body: JSON.stringify(t) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['bots'] }),
   })
 }

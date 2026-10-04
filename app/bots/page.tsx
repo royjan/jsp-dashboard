@@ -59,6 +59,7 @@ export default function BotsPage() {
                     ) : null}
                     {b.policy.allow_list?.length ? <span>{he ? 'רשימה סגורה' : 'Allow-list'}</span> : null}
                     {b.policy.show_prices === false && <span>{he ? 'ללא מחירים' : 'No prices'}</span>}
+                    {b.telegram?.running && b.telegram.username && <span dir="ltr">✈ @{b.telegram.username}</span>}
                     {b.web_url && (
                       <a href={b.web_url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}
                          className="inline-flex items-center gap-1 hover:text-primary">
