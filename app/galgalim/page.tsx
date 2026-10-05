@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
-import { useGalgalim, type GgRequest } from '@/lib/galgalim'
+import { useGalgalim, useRunGalgalim, useSetGalgalimInterval, type GgRequest } from '@/lib/galgalim'
 
 const FLOOR = 'https://halafim.galgalim.co.il/%D7%9E%D7%95%D7%9B%D7%A8/%D7%96%D7%99%D7%A8%D7%AA%D7%94%D7%9E%D7%A1%D7%97%D7%A8.aspx'
 const OUTCOME: Record<GgRequest['outcome'], { he: string; cls: string }> = {
@@ -22,6 +22,12 @@ const OUTCOME: Record<GgRequest['outcome'], { he: string; cls: string }> = {
 const SOURCE: Record<string, string> = { 'כן': 'במלאי', 'לובינסקי': 'לובינסקי' }
 const select = 'rounded-md border bg-background px-3 py-2 text-sm'
 const ago = (t: number | null) => (t ? `${Math.max(0, Math.round((Date.now() / 1000 - t) / 60))} דק׳` : '—')
+const inMin = (t?: number | null) => {
+  if (!t) return '—'
+  const m = Math.max(0, Math.round((t - Date.now() / 1000) / 60))
+  return m >= 90 ? `${Math.round(m / 60)} שע׳` : `${m} דק׳`
+}
+const INTERVALS: [number, string][] = [[900, 'כל 15 דקות'], [3600, 'כל שעה'], [14400, 'כל 4 שעות'], [43200, 'כל 12 שעות'], [86400, 'פעם ביום']]
 /** "05/10/2026 08:22" -> sortable number */
 const when = (s: string) => {
   const m = /^(\d\d)\/(\d\d)\/(\d{4}) (\d\d):(\d\d)/.exec(s || '')
@@ -97,6 +103,8 @@ function Galgalim() {
   const pages = Math.max(1, Math.ceil(filtered.length / size))
   const shown = filtered.slice(page * size, page * size + size)
   const st = data?.status
+  const setInterval_ = useSetGalgalimInterval()
+  const runNow = useRunGalgalim()
   const sortHead = (key: string, label: string) => (
     <button type="button" className="inline-flex items-center gap-1 hover:text-foreground"
             onClick={() => setParams({ sort_by: key, order: sortBy === key && order === 'desc' ? 'asc' : 'desc' })}>
@@ -117,10 +125,20 @@ function Galgalim() {
             {OUTCOME[k].he} · {counts[k] ?? 0}
           </button>
         ))}
-        <span className="ms-auto text-xs text-muted-foreground">
-          {st ? <>בדיקה אחרונה לפני {ago(st.last_ok ?? st.last_run)} · כל {Math.round(st.every_s / 60)} דק׳ · כרטיסים {st.send ? 'פעילים' : 'מושהים'}
-            {st.last_error ? <span className="text-destructive"> · שגיאה: {st.last_error}</span> : null}</> : null}
-        </span>
+        <div className="ms-auto flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          <span>בדיקת גלגלים:</span>
+          <select className="rounded-md border bg-background px-2 py-1 text-sm text-foreground" value={st?.every_s ?? ''}
+                  disabled={!st || setInterval_.isPending} onChange={(e) => setInterval_.mutate(Number(e.target.value))}>
+            {st && !INTERVALS.some(([v]) => v === st.every_s) && <option value={st.every_s}>כל {Math.round(st.every_s / 60)} דק׳</option>}
+            {INTERVALS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          </select>
+          <Button size="sm" variant="outline" disabled={runNow.isPending} onClick={() => runNow.mutate()}>
+            {runNow.isPending ? 'בודק…' : 'בדוק עכשיו'}
+          </Button>
+          {st ? <span>אחרונה לפני {ago(st.last_ok ?? st.last_run)} · הבאה בעוד {inMin(st.next_run)} · כרטיסים {st.send ? 'פעילים' : 'מושהים'}
+            {st.last_error ? <span className="text-destructive"> · שגיאה: {st.last_error}</span> : null}</span> : null}
+          {(setInterval_.error || runNow.error) && <span className="text-destructive">{((setInterval_.error || runNow.error) as Error).message}</span>}
+        </div>
       </div>
 
       <Card>
