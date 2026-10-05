@@ -35,7 +35,7 @@ const when = (s: string) => {
 }
 const price = (r: GgRequest) => Number(String(r.suggestion?.['מחיר'] ?? '').replace(/[^\d.]/g, '')) || 0
 
-type Key = 'q' | 'outcome' | 'make' | 'ctype' | 'days' | 'sort_by' | 'order' | 'page' | 'size'
+type Key = 'q' | 'outcome' | 'make' | 'ctype' | 'cond' | 'days' | 'sort_by' | 'order' | 'page' | 'size'
 const SORTS: Record<string, (r: GgRequest) => string | number> = {
   time: (r) => when(r.date),
   customer: (r) => `${r.ctype} ${r.location}`,
@@ -59,7 +59,7 @@ function Galgalim() {
   const sp = useSearchParams()
   const router = useRouter()
   const get = (k: Key) => sp.get(k) ?? ''
-  const q = get('q'), outcome = get('outcome'), make = get('make'), ctype = get('ctype')
+  const q = get('q'), outcome = get('outcome'), make = get('make'), ctype = get('ctype'), cond = get('cond')
   const days = [7, 14, 30, 90].includes(Number(get('days'))) ? Number(get('days')) : 7
   const sortBy = SORTS[get('sort_by')] ? get('sort_by') : 'time'
   const order = get('order') === 'asc' ? 'asc' : 'desc'
@@ -81,12 +81,15 @@ function Galgalim() {
   const all = useMemo(() => (data?.items ?? []).filter((r) => r.outcome !== 'backlog'), [data])
   const makes = useMemo(() => [...new Set(all.map((r) => r.make).filter(Boolean))].sort(), [all])
   const ctypes = useMemo(() => [...new Set(all.map((r) => r.ctype).filter(Boolean))].sort(), [all])
+  const conds = useMemo(() => [...new Set(all.flatMap((r) => r.condition ?? []).filter(Boolean))].sort(), [all])
   const filtered = useMemo(() => {
     const needle = q.toLowerCase()
     const rows = all
       .filter((r) => !outcome || r.outcome === outcome)
       .filter((r) => !make || r.make === make)
       .filter((r) => !ctype || r.ctype === ctype)
+      // a request accepts several conditions ("משומש / חדש תחליפי"): it matches when the chosen one is among them
+      .filter((r) => !cond || (r.condition ?? []).includes(cond))
       .filter((r) => !needle || JSON.stringify(r).toLowerCase().includes(needle))
     const key = SORTS[sortBy]
     return [...rows].sort((a, b) => {
@@ -94,7 +97,7 @@ function Galgalim() {
       const c = typeof x === 'number' && typeof y === 'number' ? x - y : String(x).localeCompare(String(y), 'he')
       return order === 'asc' ? c : -c
     })
-  }, [all, q, outcome, make, ctype, sortBy, order])
+  }, [all, q, outcome, make, ctype, cond, sortBy, order])
   const counts = useMemo(() => {
     const c: Record<string, number> = {}
     for (const r of all) c[r.outcome] = (c[r.outcome] ?? 0) + 1
@@ -112,7 +115,7 @@ function Galgalim() {
       {sortBy !== key ? <ArrowUpDown className="h-3 w-3 opacity-50" /> : order === 'desc' ? <ArrowDown className="h-3 w-3" /> : <ArrowUp className="h-3 w-3" />}
     </button>
   )
-  const anyFilter = q || outcome || make || ctype
+  const anyFilter = q || outcome || make || ctype || cond
 
   return (
     <div className="space-y-4" dir="rtl">
@@ -161,11 +164,15 @@ function Galgalim() {
             <option value="">כל סוגי הלקוחות</option>
             {ctypes.map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
+          <select className={select} value={cond} onChange={(e) => setParams({ cond: e.target.value })}>
+            <option value="">כל המצבים (משומש / חדש)</option>
+            {conds.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
           <select className={select} value={days} onChange={(e) => setParams({ days: e.target.value })}>
             {[7, 14, 30, 90].map((d) => <option key={d} value={d}>{d} ימים אחרונים</option>)}
           </select>
           {anyFilter && (
-            <Button size="sm" variant="ghost" onClick={() => { setTyped(''); setParams({ q: '', outcome: '', make: '', ctype: '' }) }}>נקה סינון</Button>
+            <Button size="sm" variant="ghost" onClick={() => { setTyped(''); setParams({ q: '', outcome: '', make: '', ctype: '', cond: '' }) }}>נקה סינון</Button>
           )}
         </CardContent>
       </Card>
