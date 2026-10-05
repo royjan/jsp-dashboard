@@ -20,6 +20,8 @@ const OUTCOME: Record<GgRequest['outcome'], { he: string; cls: string }> = {
   backlog: { he: 'ישן', cls: 'bg-muted text-muted-foreground' },
 }
 const SOURCE: Record<string, string> = { 'כן': 'במלאי', 'לובינסקי': 'לובינסקי' }
+/** The floor scrolled to this request: a text fragment on its VIN or plate (the site has no per-request URL). */
+const floorLink = (r: GgRequest) => (r.vin || r.plate ? `${FLOOR}#:~:text=${encodeURIComponent(r.vin || r.plate)}` : FLOOR)
 const select = 'rounded-md border bg-background px-3 py-2 text-sm'
 const ago = (t: number | null) => (t ? `${Math.max(0, Math.round((Date.now() / 1000 - t) / 60))} דק׳` : '—')
 const inMin = (t?: number | null) => {
@@ -233,7 +235,7 @@ function Galgalim() {
                         <Badge variant="secondary" className={OUTCOME[r.outcome]?.cls}>{OUTCOME[r.outcome]?.he ?? r.outcome}</Badge>
                         {r.card_message_id ? <div className="mt-1 text-xs text-muted-foreground">כרטיס נשלח</div> : null}
                       </td>
-                      <td className="p-2"><a href={FLOOR} target="_blank" rel="noreferrer" className="text-muted-foreground hover:text-foreground" title="פתח בגלגלים"><ExternalLink className="h-4 w-4" /></a></td>
+                      <td className="p-2"><a href={floorLink(r)} target="_blank" rel="noreferrer" className="text-muted-foreground hover:text-foreground" title="פתח בגלגלים"><ExternalLink className="h-4 w-4" /></a></td>
                     </tr>
                   )
                 })}
