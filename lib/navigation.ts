@@ -25,7 +25,7 @@
  */
 import type { LucideIcon } from 'lucide-react'
 import {
-  Activity, Ban, Bell, BookOpen, Bot, BotMessageSquare, Briefcase, Calendar,
+  Activity, Ban, Bell, BookOpen, Bot, BotMessageSquare, Briefcase, Calendar, Store,
   CalendarRange, Car, CarFront, ClipboardList, Container, DollarSign, FileBarChart,
   FileSearch, FileText, FlaskConical, GitBranch, HeartPulse, Landmark, Settings, Shuffle,
   Languages, LayoutDashboard, Link2, ListRestart, MapPin, MessageSquare,
@@ -309,6 +309,7 @@ export const NAV_SECTIONS: NavSection[] = [
 
       { href: '/chat-insights', labelKey: 'chatInsights', icon: MessageSquare },
       { href: '/bots', labelKey: 'bots', icon: Bot },
+      { href: '/galgalim', labelKey: 'galgalim', icon: Store },
       { href: '/chat/simulator', labelKey: 'chatSimulator', icon: FlaskConical },
     ],
   },

@@ -415,7 +415,9 @@ export const translations = {
     chatInsights: 'תובנות צ׳אט',
     'page.chatInsights': 'תובנות צ׳אט',
     bots: 'בוטים',
+    galgalim: 'גלגלים',
     'page.bots': 'בוטים',
+    'page.galgalim': 'גלגלים',
 
     // VIN Catalog
     vinCatalog: 'קטלוג VIN',
@@ -1197,7 +1199,9 @@ export const translations = {
     chatInsights: 'Chat Insights',
     'page.chatInsights': 'Chat Insights',
     bots: 'Bots',
+    galgalim: 'Galgalim',
     'page.bots': 'Bots',
+    'page.galgalim': 'Galgalim',
 
     // VIN Catalog
     vinCatalog: 'VIN Catalog',
