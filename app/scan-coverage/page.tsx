@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts'
 import { ScanSearch, RefreshCw, Download } from 'lucide-react'
@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { seriesColor } from '@/lib/chart-colors'
 import type { CoveragePayload } from '@/lib/scan-coverage'
+import { useUrlParams } from '@/hooks/use-url-params'
 
 /**
  * Scan coverage — "what share of Israel's active cars can we answer with a scanned
@@ -47,10 +48,32 @@ interface Agg {
   sources: string[]; importers: string[]
 }
 
+/**
+ * Every filter lives in the URL, so a view can be linked: /scan-coverage?sort_by=unscanned&group_by=tradeName.
+ * Defaults are left out of the URL. Sort keys have readable aliases; the raw Agg keys work too.
+ */
+const SORT_ALIAS: Record<string, keyof Agg> = {
+  name: 'key', cars: 'cars', share: 'share', scanned: 'covered', coverage: 'pct', unscanned: 'gap',
+  models: 'models', scanned_models: 'scannedModels', priced: 'pricedPct', sources: 'sources', importers: 'importers',
+}
+const SORT_NAME = Object.fromEntries(Object.entries(SORT_ALIAS).map(([k, v]) => [v, k])) as Record<keyof Agg, string>
+const STATUS_ALIAS: Record<string, 'all' | Status | 's' | 'n'> = { scanned: 's', unscanned: 'n' }
+const TYPE_ALIAS: Record<string, 'all' | '1' | '0'> = { all: 'all', private: '1', commercial: '0', '1': '1', '0': '0' }
+const TYPE_NAME = { all: 'all', '1': null, '0': 'commercial' } as const
+const DRILL_SEP = '|'
+const isGroup = (g: string): g is GroupBy => g in GROUP_LABEL
+const isStatus = (v: string): v is 'all' | Status | 's' | 'n' => ['all', 's', 'n', 'sp', 'sn', 'np', 'nn'].includes(v)
+const intOr = (v: string | null, d: number) => (v !== null && v !== '' && Number.isFinite(+v) ? Math.trunc(+v) : d)
+
 const fmt = (n: number) => n.toLocaleString('he-IL')
 const pctOf = (a: number, b: number) => (b ? (100 * a) / b : 0)
 
+// useSearchParams needs a Suspense boundary above it or the build refuses to prerender.
 export default function ScanCoveragePage() {
+  return <Suspense fallback={<LoadingState />}><ScanCoverage /></Suspense>
+}
+
+function ScanCoverage() {
   const qc = useQueryClient()
   const { data, isLoading, error, isFetching } = useQuery<CoveragePayload>({
     queryKey: ['scan-coverage'],
@@ -99,17 +122,43 @@ function LoadingState() {
 }
 
 function Coverage({ data }: { data: CoveragePayload }) {
-  const [q, setQ] = useState('')
-  const [groupBy, setGroupBy] = useState<GroupBy>('brand')
-  const [vehicleType, setVehicleType] = useState<'all' | '1' | '0'>('1')
-  const [yearFrom, setYearFrom] = useState(2010)
-  const [yearTo, setYearTo] = useState(2027)
-  const [status, setStatus] = useState<'all' | Status | 's' | 'n'>('all')
-  const [source, setSource] = useState('all')
-  const [minCars, setMinCars] = useState(0)
-  const [sortKey, setSortKey] = useState<keyof Agg>('cars')
-  const [sortAsc, setSortAsc] = useState(false)
-  const [drill, setDrill] = useState<Array<[GroupBy, string]>>([])
+  // Read once from the URL, then written back on every change (replace, no history entry).
+  const url = useUrlParams()
+  const [q, setQ] = useState(() => url.get('q') ?? '')
+  const [groupBy, setGroupBy] = useState<GroupBy>(() => { const g = url.get('group_by') ?? ''; return isGroup(g) ? g : 'brand' })
+  const [vehicleType, setVehicleType] = useState<'all' | '1' | '0'>(() => TYPE_ALIAS[url.get('type') ?? ''] ?? '1')
+  const [yearFrom, setYearFrom] = useState(() => intOr(url.get('year_from'), 2010))
+  const [yearTo, setYearTo] = useState(() => intOr(url.get('year_to'), 2027))
+  const [status, setStatus] = useState<'all' | Status | 's' | 'n'>(() => {
+    const v = url.get('status') ?? ''; return STATUS_ALIAS[v] ?? (isStatus(v) ? v : 'all')
+  })
+  const [source, setSource] = useState(() => url.get('source') || 'all')
+  const [minCars, setMinCars] = useState(() => intOr(url.get('min_cars'), 0))
+  const [sortKey, setSortKey] = useState<keyof Agg>(() => SORT_ALIAS[url.get('sort_by') ?? ''] ?? 'cars')
+  const [sortAsc, setSortAsc] = useState(() => {
+    const o = url.get('order'); return o ? o === 'asc' : (SORT_ALIAS[url.get('sort_by') ?? ''] === 'key')
+  })
+  const [drill, setDrill] = useState<Array<[GroupBy, string]>>(() =>
+    (url.get('drill') ?? '').split(DRILL_SEP).map(x => { const i = x.indexOf(':'); return [x.slice(0, i), x.slice(i + 1)] as [string, string] })
+      .filter((x): x is [GroupBy, string] => isGroup(x[0]) && !!x[1]))
+
+  const { setMany } = url
+  useEffect(() => {
+    const defaultAsc = sortKey === 'key'
+    setMany({
+      q: q.trim() || null,
+      group_by: groupBy === 'brand' ? null : groupBy,
+      type: TYPE_NAME[vehicleType],
+      year_from: yearFrom === 2010 ? null : String(yearFrom),
+      year_to: yearTo === 2027 ? null : String(yearTo),
+      status: status === 'all' ? null : status === 's' ? 'scanned' : status === 'n' ? 'unscanned' : status,
+      source: source === 'all' ? null : source,
+      min_cars: minCars ? String(minCars) : null,
+      sort_by: sortKey === 'cars' ? null : SORT_NAME[sortKey],
+      order: sortAsc === defaultAsc ? null : sortAsc ? 'asc' : 'desc',
+      drill: drill.length ? drill.map(([g, v]) => `${g}:${v}`).join(DRILL_SEP) : null,
+    })
+  }, [setMany, q, groupBy, vehicleType, yearFrom, yearTo, status, source, minCars, sortKey, sortAsc, drill])
 
   const sourceOf = (r: Row) => data.priceSource[data.brands[r[2]]] || ''
   const statusOf = (r: Row): Status => ((r[8] > 0 ? 's' : 'n') + (sourceOf(r) ? 'p' : 'n')) as Status
