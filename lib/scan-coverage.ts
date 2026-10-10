@@ -69,10 +69,14 @@ const quote = (s: string) => (s || '').replace(/׳/g, "'").trim()
 export const modelKey = (manufacturer: string, degem: string) =>
   `${quote(manufacturer).split(/[\s-]+/)[0]}|${(degem || '').trim()}`
 
+/** Importers never shown by name; their cars still count, under "לא ידוע". */
+const HIDDEN_IMPORTERS = new Set(['אמיל אלימלך'])
+
 /** "כלמוביל יונדאי" / "כלמוביל בע"מ" -> "כלמוביל"; strips company suffixes. */
 export function normImporter(raw: string | null | undefined): string {
   let s = (raw || 'לא ידוע').replace(/''/g, '"').replace(/\s+/g, ' ').trim()
   s = s.replace(/\s*(בע"מ|בע"|בעמ)\s*$/, '').replace(/^[\s.-]+|[\s.-]+$/g, '')
+  if (HIDDEN_IMPORTERS.has(s)) return 'לא ידוע'
   const groups: Array<[string, string]> = [
     ['כלמוביל', 'כלמוביל'], ["צ'מפיון", "צ'מפיון מוטורס"], ['יוניון מוטורס', 'יוניון מוטורס'],
     ['יוניברסל', 'יוניברסל מוטורס'], ['מאיר', 'מאיר'], ['דלק מוטורס', 'דלק מוטורס'],
