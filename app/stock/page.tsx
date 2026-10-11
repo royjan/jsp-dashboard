@@ -356,10 +356,16 @@ function ABCInsights({ data }: { data: any }) {
     return () => clearInterval(id)
   }, [])
 
+  // Leaving /stock mid-stream must end the request: the streaming counter is
+  // global, so an orphaned stream kept the loading card ticking on whatever
+  // page came next ("request 1 · 124s" over a fully loaded /scan-coverage).
+  useEffect(() => () => cancelRef.current?.(), [])
+
   const runInsights = (force: boolean) => {
     cancelRef.current?.()
     let cancelled = false
-    cancelRef.current = () => { cancelled = true }
+    const ctrl = new AbortController()
+    cancelRef.current = () => { cancelled = true; ctrl.abort() }
 
     const itemStockMap = new Map((data.items || []).map((i: any) => [i.code, i.stock_qty]))
     const aAtRiskEnriched = (data.a_items_at_risk || []).slice(0, 8).map((i: any) => ({
@@ -376,6 +382,7 @@ function ABCInsights({ data }: { data: any }) {
       try {
         const res = await fetch('/api/ai/abc-insights', {
           method: 'POST',
+          signal: ctrl.signal,
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             summary: data.summary, capital_by_class: data.capital_by_class,
