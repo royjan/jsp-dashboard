@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useEffect, useMemo, useState } from 'react'
+import { Suspense, useEffect, useId, useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts'
 import { ScanSearch, RefreshCw, Download } from 'lucide-react'
@@ -11,6 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { seriesColor } from '@/lib/chart-colors'
 import type { CoveragePayload } from '@/lib/scan-coverage'
 import { useUrlParams } from '@/hooks/use-url-params'
+import { BRAND_EN, brandHay, fold, makeMatcher } from '@/lib/vehicle-search'
 
 /**
  * Scan coverage — "what share of Israel's active cars can we answer with a scanned
@@ -177,23 +178,28 @@ function Coverage({ data }: { data: CoveragePayload }) {
 
   const sources = useMemo(() => [...new Set(Object.values(data.priceSource).filter(Boolean))].sort(), [data])
 
+  // Folded once per payload: the dictionaries are small, so folding them and
+  // joining per row is cheap next to folding ~100k joined strings.
+  const rowHay = useMemo(() => {
+    const f = (xs: string[], g: (x: string) => string = x => x) => xs.map(x => fold(g(x)))
+    const imp = f(data.importers), br = f(data.brands, brandHay), man = f(data.manufacturers, m => `${m} ${BRAND_EN[m.split(' ')[0]] ?? ''}`), tn = f(data.tradeNames)
+    return data.rows.map(r => `${br[r[2]]} ${tn[r[4]]} ${imp[r[1]]} ${man[r[3]]} ${fold(r[5])}`)
+  }, [data])
+
   const rows = useMemo(() => {
-    const needle = q.trim().toLowerCase()
-    return data.rows.filter(r => {
+    const match = makeMatcher(q)
+    return data.rows.filter((r, i) => {
       if (vehicleType !== 'all' && String(r[0]) !== vehicleType) return false
       if (r[6] < yearFrom || r[6] > yearTo) return false
       const st = statusOf(r)
       if (status !== 'all' && !(status === st || (status.length === 1 && st[0] === status))) return false
       if (source !== 'all') { const s = sourceOf(r); if (source === '__none' ? s : s !== source) return false }
       for (const [g, v] of drill) if (keyOf(r, g) !== v) return false
-      if (needle) {
-        const hay = `${data.importers[r[1]]} ${data.brands[r[2]]} ${data.manufacturers[r[3]]} ${data.tradeNames[r[4]]} ${r[5]}`.toLowerCase()
-        if (!hay.includes(needle)) return false
-      }
+      if (match && !match(rowHay[i])) return false
       return true
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, q, vehicleType, yearFrom, yearTo, status, source, drill])
+  }, [data, rowHay, q, vehicleType, yearFrom, yearTo, status, source, drill])
 
   const summary = useMemo(() => {
     let total = 0, covered = 0, pricedW = 0, pricedN = 0
@@ -284,7 +290,7 @@ function Coverage({ data }: { data: CoveragePayload }) {
 
       <Card>
         <CardContent className="p-4 flex flex-wrap gap-3 items-end text-sm">
-          <Field label="חיפוש"><input className="h-9 rounded-md border bg-background px-2 w-56" value={q} onChange={e => setQ(e.target.value)} placeholder="מותג, דגם, יבואן, קוד דגם…" /></Field>
+          <Field label="חיפוש"><SearchBox data={data} value={q} onChange={setQ} /></Field>
           <Field label="קיבוץ לפי">
             <select className="h-9 rounded-md border bg-background px-2" value={groupBy} onChange={e => setGroupBy(e.target.value as GroupBy)}>
               {(Object.keys(GROUP_LABEL) as GroupBy[]).map(g => <option key={g} value={g}>{GROUP_LABEL[g]}</option>)}
@@ -400,6 +406,91 @@ function Answer({ q, a, d }: { q: string; a: string; d: string }) {
       <div className="text-sm text-muted-foreground">{q}</div>
       <div className="text-3xl font-bold tabular-nums mt-1">{a}</div>
       <div className="text-xs text-muted-foreground mt-1 leading-5">{d}</div>
+    </div>
+  )
+}
+
+interface Suggestion { value: string; label: string; sub: string; cars: number; hay: string }
+
+/**
+ * Search input with suggestions: brands (with their English name), models and
+ * importers, ranked by active cars. Same matcher as the table, so a suggestion
+ * never leads to an empty result.
+ */
+function SearchBox({ data, value, onChange }: { data: CoveragePayload; value: string; onChange: (v: string) => void }) {
+  const [open, setOpen] = useState(false)
+  const [active, setActive] = useState(0)
+  const listId = useId()
+
+  const candidates = useMemo(() => {
+    const m = new Map<string, Suggestion>()
+    const add = (key: string, mk: () => Omit<Suggestion, 'cars'>, cars: number) => {
+      const s = m.get(key)
+      if (s) s.cars += cars
+      else m.set(key, { ...mk(), cars })
+    }
+    for (const r of data.rows) {
+      const brand = data.brands[r[2]], tn = data.tradeNames[r[4]], imp = data.importers[r[1]]
+      add(`b|${brand}`, () => ({ value: brand, label: brand, sub: BRAND_EN[brand] ?? 'מותג', hay: fold(brandHay(brand)) }), r[7])
+      if (tn) add(`t|${brand}|${tn}`, () => ({ value: `${brand} ${tn}`, label: `${brand} ${tn}`, sub: 'דגם', hay: fold(`${brandHay(brand)} ${tn}`) }), r[7])
+      if (imp && imp !== 'לא ידוע') add(`i|${imp}`, () => ({ value: imp, label: imp, sub: 'יבואן', hay: fold(imp) }), r[7])
+    }
+    return [...m.values()].sort((a, b) => b.cars - a.cars)
+  }, [data])
+
+  const shown = useMemo(() => {
+    const match = makeMatcher(value)
+    if (!match) return []
+    const out: Suggestion[] = []
+    for (const c of candidates) {
+      if (match(c.hay)) out.push(c)
+      if (out.length === 8) break
+    }
+    // Already exactly what is typed: nothing left to suggest.
+    return out.length === 1 && out[0].value === value.trim() ? [] : out
+  }, [candidates, value])
+
+  const pick = (s: Suggestion) => { onChange(s.value); setOpen(false) }
+
+  return (
+    <div className="relative">
+      <input
+        className="h-9 rounded-md border bg-background px-2 w-56"
+        value={value}
+        placeholder="מותג, דגם, יבואן — גם באנגלית…"
+        role="combobox"
+        aria-controls={listId}
+        aria-expanded={open && shown.length > 0}
+        aria-autocomplete="list"
+        onChange={e => { onChange(e.target.value); setOpen(true); setActive(0) }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setOpen(false)}
+        onKeyDown={e => {
+          if (!open || !shown.length) return
+          if (e.key === 'ArrowDown') { e.preventDefault(); setActive(a => (a + 1) % shown.length) }
+          else if (e.key === 'ArrowUp') { e.preventDefault(); setActive(a => (a - 1 + shown.length) % shown.length) }
+          else if (e.key === 'Enter') { e.preventDefault(); pick(shown[active]) }
+          else if (e.key === 'Escape') setOpen(false)
+        }}
+      />
+      {open && shown.length > 0 && (
+        <ul id={listId} role="listbox" className="absolute z-50 mt-1 w-72 max-w-[calc(100vw-2rem)] rounded-md border bg-popover text-popover-foreground shadow-md py-1">
+          {shown.map((s, i) => (
+            <li
+              key={s.label + s.sub}
+              role="option"
+              aria-selected={i === active}
+              // mousedown, not click: the input's blur would close the list first.
+              onMouseDown={e => { e.preventDefault(); pick(s) }}
+              onMouseEnter={() => setActive(i)}
+              className={`flex items-center justify-between gap-3 px-3 py-1.5 cursor-pointer text-sm ${i === active ? 'bg-accent text-accent-foreground' : ''}`}
+            >
+              <span className="truncate text-foreground">{s.label}</span>
+              <span className="shrink-0 text-xs text-muted-foreground">{s.sub} · {fmt(s.cars)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   )
 }
