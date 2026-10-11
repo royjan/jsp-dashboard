@@ -394,6 +394,17 @@ async function runWarmCache(mode: string, from?: number, to?: number) {
       // The overview page's Vehicle Market tile reads this cache WITHOUT
       // computing it, so if this step stops running that tile silently shows 0.
       ['icsStats', () => getIcsStats(true)],
+      // Scan coverage: two gov.il downloads plus a ~20s pass over 6.9M
+      // project_parts rows (spills ~500MB to disk). Rebuilt every run with
+      // fresh=1 rather than read: its 12h key would otherwise expire up to one
+      // warm interval before the next run, and a user would wait the build.
+      ['scanCoverage', () =>
+        fetch(`http://127.0.0.1:${process.env.PORT || '3000'}/api/analytics/scan-coverage?fresh=1`)
+          .then(async r => {
+            if (!r.ok) throw new Error(`scan-coverage -> HTTP ${r.status}`)
+            const { rows, asOf } = (await r.json()) as { rows: unknown[]; asOf: string }
+            return { rows: rows.length, asOf }
+          })],
     ]
 
     for (const [label, fn] of warmSteps) {
