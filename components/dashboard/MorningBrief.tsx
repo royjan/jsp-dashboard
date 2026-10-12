@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -66,10 +66,16 @@ export function MorningBrief() {
     try { localStorage.setItem(STORAGE_KEY, String(next)) } catch {}
   }
 
+  // The route grew `?refresh=1` so the "רענון" button could bypass its 4h cache,
+  // but the button still called a plain refetch() — same URL, same cached brief,
+  // "(מטמון)" every time. The button now asks for a fresh one; page loads don't.
+  const forceRef = useRef(false)
   const { data, isLoading, isError, refetch, isFetching } = useQuery<MorningBriefData>({
     queryKey: ['morning-brief'],
     queryFn: async () => {
-      const res = await fetch('/api/ai/morning-brief')
+      const force = forceRef.current
+      forceRef.current = false
+      const res = await fetch(force ? '/api/ai/morning-brief?refresh=1' : '/api/ai/morning-brief')
       if (!res.ok) throw new Error('Failed to fetch morning brief')
       return res.json()
     },
@@ -105,7 +111,7 @@ export function MorningBrief() {
           <div className="flex items-center gap-1">
             {!isLoading && (
               <button
-                onClick={(e) => { e.stopPropagation(); refetch() }}
+                onClick={(e) => { e.stopPropagation(); forceRef.current = true; refetch() }}
                 disabled={isFetching}
                 className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors disabled:opacity-50"
                 title="רענון"
