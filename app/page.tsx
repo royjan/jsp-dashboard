@@ -147,7 +147,17 @@ function HomePageContent() {
   }, [period, customDateFrom, customDateTo, useCustomRange, customMode, setMany])
 
   const prevRange = useMemo(() => getPreviousPeriodRange(period), [period])
-  const { data: prevData } = useSalesRange(prevRange.dateFrom, prevRange.dateTo, !useCustomRange)
+  // Fetched a week wider on both sides: aligning to Sunday moves the previous
+  // window by up to 6 days, and the days it moves in must be there to count.
+  const prevFetch = useMemo(() => {
+    const widen = (s: string, days: number) => {
+      const d = new Date(s + 'T00:00:00')
+      d.setDate(d.getDate() + days)
+      return formatDate(d, 'iso')
+    }
+    return { dateFrom: widen(prevRange.dateFrom, -7), dateTo: widen(prevRange.dateTo, 7) }
+  }, [prevRange])
+  const { data: prevData } = useSalesRange(prevFetch.dateFrom, prevFetch.dateTo, !useCustomRange)
 
   const salesData: SalesDataPoint[] = data?.data || []
   const prevSalesData: SalesDataPoint[] = useCustomRange ? [] : (prevData?.data || [])
@@ -167,26 +177,33 @@ function HomePageContent() {
     }
     if (!prevSalesData.length) return []
     const prevByShiftedDate = new Map<string, { revenue: number; originalDate: string }>()
-
-    if (alignByWeekday) {
+    const offsetDays = alignByWeekday ? sundayAlignOffset(effectiveDateFrom, prevRange.dateFrom) : 0
+    const shifted = (date: string) => {
+      if (!alignByWeekday) return shiftDateToCurrent(date, period)
       // Align previous period's week-start Sunday to match current period's week-start Sunday
-      const offsetDays = sundayAlignOffset(effectiveDateFrom, prevRange.dateFrom)
-      for (const p of prevSalesData) {
-        const d = new Date(p.date + 'T00:00:00')
-        d.setDate(d.getDate() + offsetDays)
-        prevByShiftedDate.set(formatDate(d, 'iso'), { revenue: p.revenue, originalDate: p.date })
-      }
-    } else {
-      for (const p of prevSalesData) {
-        prevByShiftedDate.set(shiftDateToCurrent(p.date, period), { revenue: p.revenue, originalDate: p.date })
-      }
+      const d = new Date(date + 'T00:00:00')
+      d.setDate(d.getDate() + offsetDays)
+      return formatDate(d, 'iso')
+    }
+    for (const p of prevSalesData) {
+      const at = shifted(p.date)
+      // Only what lands inside the current window is compared (the fetch is a week wider).
+      if (at < effectiveDateFrom || at > effectiveDateTo) continue
+      const had = prevByShiftedDate.get(at)   // Feb 29 + 1 year lands on Mar 1: add, don't overwrite
+      prevByShiftedDate.set(at, { revenue: (had?.revenue || 0) + p.revenue, originalDate: had?.originalDate || p.date })
     }
 
-    return salesData.map(d => {
-      const prev = prevByShiftedDate.get(d.date)
-      return { date: d.date, current: d.revenue, previous: prev?.revenue || 0, previousDate: prev?.originalDate || '' }
+    // EVERY previous day counts, not only those that land on a day with current sales.
+    // The series used to be built from the current days alone, so a previous Friday that
+    // moved onto a Saturday (no sales, no row) or onto a holiday vanished from the chart
+    // AND from the previous total: YTD 2026 showed 2025 as 10.43M unaligned vs 10.71M aligned.
+    const currentByDate = new Map(salesData.map(d => [d.date, d.revenue]))
+    const dates = [...new Set([...currentByDate.keys(), ...prevByShiftedDate.keys()])].sort()
+    return dates.map(date => {
+      const prev = prevByShiftedDate.get(date)
+      return { date, current: currentByDate.get(date) || 0, previous: prev?.revenue || 0, previousDate: prev?.originalDate || '' }
     }).filter(d => d.current > 0 || d.previous > 0)
-  }, [salesData, prevSalesData, period, useCustomRange, alignByWeekday, effectiveDateFrom, prevRange.dateFrom])
+  }, [salesData, prevSalesData, period, useCustomRange, alignByWeekday, effectiveDateFrom, effectiveDateTo, prevRange.dateFrom])
 
   const prevCoverage = useMemo(() => {
     if (!comparisonData.length) return 1
