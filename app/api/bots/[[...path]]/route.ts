@@ -13,16 +13,19 @@ export const dynamic = 'force-dynamic'
  * configured — reads too, since the turn log holds customers' questions and phone numbers.
  */
 const BOT_ADMIN_URL = process.env.BOT_ADMIN_URL || 'http://192.168.0.231:8899'
-const ALLOWED = /^bots(\/[a-z0-9-]+(\/(stats|turns|policy|brands|telegram|usage|usage\/reset|conversations|conversations\/hide|start|stop|restart))?)?$/
+const ALLOWED = /^bots(\/[a-z0-9-]+(\/(stats|turns|policy|history|brands|telegram|usage|usage\/reset|conversations|conversations\/hide|start|stop|restart))?)?$/
 
-async function authed(req: NextRequest): Promise<boolean> {
+/** false = refuse; otherwise who is asking ('' while auth is off) - bot-admin writes it into the change history. */
+async function authed(req: NextRequest): Promise<false | string> {
   const configured = !!(process.env.JAN_AUTH_JWT_SECRET || process.env.JWT_SECRET || process.env.AUTH_SECRET)
-  if (!configured) return true // same fail-open rule as middleware.ts: auth is off until its secret is set
-  return !!(await verifyJanSession(req.cookies.get(JAN_SESSION_COOKIE)?.value))
+  if (!configured) return '' // same fail-open rule as middleware.ts: auth is off until its secret is set
+  const claims = await verifyJanSession(req.cookies.get(JAN_SESSION_COOKIE)?.value)
+  return claims ? (claims.email || 'signed-in user') : false // email only: a header must be ASCII
 }
 
 async function proxy(req: NextRequest, path: string[], method: 'GET' | 'PUT' | 'POST') {
-  if (!(await authed(req))) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  const who = await authed(req)
+  if (who === false) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   const sub = ['bots', ...path].join('/')
   if (!ALLOWED.test(sub)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const token = await fetchSecretValue('PARTLY_INTERNAL_API_KEY')
@@ -31,7 +34,7 @@ async function proxy(req: NextRequest, path: string[], method: 'GET' | 'PUT' | '
   try {
     const res = await fetch(url, {
       method,
-      headers: { 'X-Bot-Admin-Token': token, 'Content-Type': 'application/json' },
+      headers: { 'X-Bot-Admin-Token': token, 'Content-Type': 'application/json', ...(who ? { 'X-Bot-Admin-User': who } : {}) },
       body: method === 'GET' ? undefined : await req.text(),
       cache: 'no-store',
       // start/restart run docker compose on the host: give them time

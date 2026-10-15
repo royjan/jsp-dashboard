@@ -32,6 +32,7 @@ export default function BotLayout({ params, children }: { params: Promise<{ id: 
     { href: `/bots/${id}/conversations`, label: tr('שיחות', 'Conversations') },
     { href: `/bots/${id}/limit`, label: tr('הגדרות והגבלות', 'Settings & limits') },
     { href: `/bots/${id}/suppliers`, label: tr('ספקים ומיפוי מק"טים', 'Suppliers & part mapping') },
+    { href: `/bots/${id}/history`, label: tr('היסטוריית שינויים', 'Change history') },
   ]
   return (
     <div dir={dir} className="space-y-6">

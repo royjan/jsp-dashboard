@@ -167,6 +167,23 @@ export function useSaveBotPolicy(id: string) {
   })
 }
 
+/** One change to a bot's settings (bots.history in the fleet DB, written by a trigger - bot-admin /history). */
+export interface BotHistoryItem {
+  id: string
+  kind: 'policy' | 'bot' | 'env'
+  by: string | null
+  at: string
+  created: boolean
+  changes: { key: string; old: unknown; new: unknown }[]
+}
+
+export function useBotHistory(id: string) {
+  return useQuery({
+    queryKey: ['bots', id, 'history'],
+    queryFn: () => call<{ available: boolean; items: BotHistoryItem[] }>(`bots/${id}/history?limit=200`),
+  })
+}
+
 export function useSaveBotBrands(id: string) {
   const qc = useQueryClient()
   return useMutation({
