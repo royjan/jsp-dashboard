@@ -20,7 +20,7 @@ import {
  * Another company's own number for an OEM part, with its price and stock, shown by the bot under the row as one
  * more option ("↳ קומט: ORG… · במלאי · ₪366.40 נטו"). Per supplier: connect / disconnect for THIS bot, which
  * price, stock on/off, the label, how many lines; the mapping itself, searchable; and a sheet upload that replaces
- * the supplier's data in one go. Bots re-read it every 5 minutes - no restart.
+ * the supplier's data in one go. A save reaches the bots within seconds (DB trigger -> NOTIFY) - no restart.
  */
 export default function SuppliersPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -33,8 +33,8 @@ export default function SuppliersPage({ params }: { params: Promise<{ id: string
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        {tr('מק"ט של ספק אחר לאותו חלק OEM, עם המחיר והמלאי שלו. הבוט מציג אותו מתחת לשורה כאפשרות נוספת, ומתעדכן תוך 5 דקות.',
-            "Another supplier's own number for the same OEM part, with its price and stock. The bot shows it under the row; changes apply within 5 minutes.")}
+        {tr('מק"ט של ספק אחר לאותו חלק OEM, עם המחיר והמלאי שלו. הבוט מציג אותו מתחת לשורה כאפשרות נוספת, ושינוי כאן מגיע לבוט תוך שניות.',
+            "Another supplier's own number for the same OEM part, with its price and stock. The bot shows it under the row; changes reach the bot within seconds.")}
       </p>
       {list.error && <p className="text-sm text-destructive">{(list.error as Error).message}</p>}
       {list.isLoading && <Skeleton className="h-40" />}
