@@ -77,7 +77,25 @@ export interface BotTelegram {
   error?: string
 }
 
+/** A read-only bot's own health endpoint, summarised by bot-admin (Diego v2 = portal-pilot). */
+export interface BotHealth {
+  ok: boolean
+  error?: string
+  redis?: boolean
+  psa_logged_in?: boolean
+  psa_relogins?: number
+  psa_last_error?: string | null
+  farm?: Record<string, { size?: number; logins?: number; benched?: number }>
+}
+
 export interface BotOverview {
+  /** 'readonly' = shown, never driven (no actions, no settings). Absent on an older bot-admin = 'bot'. */
+  kind?: 'bot' | 'readonly'
+  health?: BotHealth
+  /** false = limits are stored but the bot has no policy code yet (v5 until it gets peer/policy.py). */
+  policy_enforced?: boolean
+  /** The Telegram token switch is managed outside the dashboard (v5's staff group lives in .env.v4b). */
+  telegram_locked?: boolean
   id: string
   name: string
   description: string

@@ -9,6 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useLocale } from '@/lib/locale-context'
 import { useBots, type BotOverview } from '@/lib/bots-admin'
 import { formatNumber } from '@/lib/constants'
+import { HealthLines } from './[id]/_parts'
 
 const STATUS: Record<BotOverview['status'], { he: string; en: string; cls: string }> = {
   up: { he: 'פעיל', en: 'Up', cls: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400' },
@@ -42,9 +43,14 @@ export default function BotsPage() {
                     <CardTitle className="truncate text-base">{b.name}</CardTitle>
                     {b.description && <p className="mt-0.5 truncate text-xs text-muted-foreground">{b.description}</p>}
                   </div>
-                  <Badge className={s.cls}>{he ? s.he : s.en}</Badge>
+                  <div className="flex shrink-0 gap-1">
+                    {b.kind === 'readonly' && <Badge variant="outline">{he ? 'קריאה בלבד' : 'Read-only'}</Badge>}
+                    <Badge className={s.cls}>{he ? s.he : s.en}</Badge>
+                  </div>
                 </CardHeader>
                 <CardContent className="space-y-3">
+                  {b.kind === 'readonly' ? <HealthLines h={b.health} he={he} /> : (
+                  <>
                   <div className="grid grid-cols-3 gap-2 text-center">
                     <Stat label={he ? 'היום' : 'Today'} value={formatNumber(b.today.questions)} />
                     <Stat label={he ? '7 ימים' : '7 days'} value={formatNumber(b.week.questions)} />
@@ -67,6 +73,8 @@ export default function BotsPage() {
                       </a>
                     )}
                   </div>
+                  </>
+                  )}
                 </CardContent>
               </Card>
             </Link>

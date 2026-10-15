@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input'
 import { formatNumber } from '@/lib/constants'
 import {
   useSaveBotPolicy, useSaveBotBrands, useSaveBotTelegram, useBotUsage, useResetUsage,
-  type BotPolicy, type BotBrands, type BotTelegram, type GroupRule,
+  type BotPolicy, type BotBrands, type BotTelegram, type GroupRule, type BotHealth,
 } from '@/lib/bots-admin'
 
 export const CHANNEL_HE: Record<string, string> = { ui: 'קונסולה', telegram: 'טלגרם', whatsapp: 'וואטסאפ' }
@@ -410,5 +410,24 @@ export function GroupsCard({ id, policy, he }: { id: string; policy: BotPolicy; 
         </div>
       </CardContent>
     </Card>
+  )
+}
+
+/** Diego v2 and any other read-only bot: what its own health endpoint says, in one glance. */
+export function HealthLines({ h, he }: { h?: BotHealth; he: boolean }) {
+  if (!h) return null
+  if (!h.ok) return <p className="text-sm text-destructive">{he ? 'לא זמין' : 'Unreachable'}{h.error ? ` (${h.error})` : ''}</p>
+  return (
+    <div className="space-y-1 text-sm">
+      <div>{he ? 'כניסה ל-PSA' : 'PSA login'}: {h.psa_logged_in ? (he ? 'מחובר ✓' : 'logged in ✓') : (he ? 'לא מחובר ✗' : 'logged out ✗')}
+        {typeof h.psa_relogins === 'number' && <span className="text-muted-foreground"> · {h.psa_relogins} {he ? 'התחברויות מחדש' : 'relogins'}</span>}
+      </div>
+      {h.farm && Object.entries(h.farm).map(([k, f]) => (
+        <div key={k} className="text-muted-foreground" dir="ltr">
+          {k.toUpperCase()}: {f.logins ?? 0}/{f.size ?? 0} {he ? 'עובדים' : 'workers'}{f.benched ? ` · ${f.benched} benched` : ''}
+        </div>
+      ))}
+      {h.psa_last_error && <div className="text-xs text-destructive" dir="ltr">{h.psa_last_error}</div>}
+    </div>
   )
 }

@@ -10,6 +10,8 @@ import { useLocale } from '@/lib/locale-context'
 import { formatNumber } from '@/lib/constants'
 import { cn } from '@/lib/utils'
 import { useBot, useBotAction } from '@/lib/bots-admin'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { HealthLines } from './_parts'
 
 /**
  * One bot: header, actions and the three tabs as ROUTES - /bots/<id>/overview, /conversations, /limit - so a link
@@ -39,7 +41,7 @@ export default function BotLayout({ params, children }: { params: Promise<{ id: 
         icon={Bot}
         title={b?.name ?? id}
         description={b ? `${b.status === 'up' ? tr('פעיל', 'Up') : b.status === 'down' ? tr('כבוי', 'Down') : tr('חלקי', 'Partial')}${b.memory_mb ? ` · ${formatNumber(b.memory_mb)} MB` : ''}` : undefined}
-        actions={b && (
+        actions={b && b.kind !== 'readonly' && (
           <div className="flex flex-wrap gap-2">
             {b.web_url && (
               <Button asChild variant="outline" size="sm">
@@ -67,6 +69,14 @@ export default function BotLayout({ params, children }: { params: Promise<{ id: 
       />
       {action.isPending && <p className="text-sm text-muted-foreground">{tr('מבצע… (עד דקה)', 'Working… (up to a minute)')}</p>}
       {action.error && <p className="text-sm text-destructive">{(action.error as Error).message}</p>}
+      {b?.kind === 'readonly' ? (
+        // A READ-ONLY BOT IS SHOWN, NEVER DRIVEN (owner 2026-10-15: "v2 supposed to be read-only"): no
+        // actions, no tabs - its turns live on another box, so there is nothing here to list or set.
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-sm">{tr('מצב', 'Health')}</CardTitle></CardHeader>
+          <CardContent><HealthLines h={b.health} he={he} /></CardContent>
+        </Card>
+      ) : (<>
       <nav className="inline-flex flex-wrap gap-1 rounded-lg bg-muted p-1">
         {tabs.map((t) => (
           <Link key={t.href} href={t.href}
@@ -77,6 +87,7 @@ export default function BotLayout({ params, children }: { params: Promise<{ id: 
         ))}
       </nav>
       {children}
+      </>)}
     </div>
   )
 }
