@@ -19,7 +19,7 @@ import { authed, normOem, BOT_ID, SUPPLIER_CODE } from '@/lib/bot-suppliers-serv
  *   * the supplier's own number is often a prefix + the OEM number (ORG/DIN/SOE/PEU/TYE), so that OEM is kept too
  *   * an empty stock cell means in stock; "חסר" means out
  *
- * `bot` connects the supplier to that bot as well (shown, net price) when it is not connected yet.
+ * `bot` connects the supplier to that bot as well (part number only: price and stock off) when it is not connected yet.
  */
 const COLS: Record<string, (h: string) => boolean> = {
   part_no: (h) => /^מק["״']?ט$/.test(h),

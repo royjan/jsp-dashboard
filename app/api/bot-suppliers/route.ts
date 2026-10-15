@@ -8,7 +8,8 @@ import { authed, BOT_ID, SUPPLIER_CODE } from '@/lib/bot-suppliers-server'
 /**
  * GET  /api/bot-suppliers?bot=v5  -> every supplier, its size, and how THIS bot shows it (null = not connected)
  * PUT  /api/bot-suppliers         -> {bot, supplier_code, enabled?, show_price?, price_field?, show_stock?, label?,
- *                                    max_alts?} connects / changes / disconnects one supplier for one bot
+ *                                    max_alts?} connects / changes / disconnects one supplier for one bot;
+ *                                    price and stock stay hidden unless sent as true (owner 2026-10-15)
  */
 export async function GET(req: NextRequest) {
   if (!(await authed(req))) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
@@ -62,7 +63,7 @@ export async function PUT(req: NextRequest) {
          enabled = EXCLUDED.enabled, show_price = EXCLUDED.show_price, price_field = EXCLUDED.price_field,
          show_stock = EXCLUDED.show_stock, label = EXCLUDED.label, max_alts = EXCLUDED.max_alts
        RETURNING *`,
-      [b.bot, b.supplier_code, b.enabled !== false, b.show_price !== false, priceField, b.show_stock !== false,
+      [b.bot, b.supplier_code, b.enabled !== false, b.show_price === true, priceField, b.show_stock === true,
        label, maxAlts])
     return NextResponse.json({ ok: true, bot: rows[0] })
   } catch (e) {

@@ -51,7 +51,7 @@ export default function SuppliersPage({ params }: { params: Promise<{ id: string
 function SupplierCard({ bot, s, he, open, onToggle }: { bot: string; s: BotSupplier; he: boolean; open: boolean; onToggle: () => void }) {
   const tr = (h: string, e: string) => (he ? h : e)
   const save = useSaveBotSupplier(bot)
-  const cur: BotSupplierSettings = s.bot ?? { enabled: false, show_price: true, price_field: 'net', show_stock: true, label: null, max_alts: 2 }
+  const cur: BotSupplierSettings = s.bot ?? { enabled: false, show_price: false, price_field: 'net', show_stock: false, label: null, max_alts: 2 }
   const [label, setLabel] = useState(cur.label ?? '')
   const put = (v: Partial<BotSupplierSettings>) => save.mutate({ supplier_code: s.supplier_code, ...cur, label: label || null, ...v })
   const shown = !!s.bot?.enabled
@@ -79,8 +79,8 @@ function SupplierCard({ bot, s, he, open, onToggle }: { bot: string; s: BotSuppl
             <input type="checkbox" checked={cur.show_price} onChange={(e) => put({ show_price: e.target.checked })} />
             {tr('הצג מחיר', 'Show price')}
           </label>
-          <select className="rounded-md border bg-background px-2 py-1 text-sm" value={cur.price_field}
-                  onChange={(e) => put({ price_field: e.target.value as 'net' | 'gross' })}>
+          <select className="rounded-md border bg-background px-2 py-1 text-sm disabled:opacity-50" value={cur.price_field}
+                  disabled={!cur.show_price} onChange={(e) => put({ price_field: e.target.value as 'net' | 'gross' })}>
             <option value="net">{tr('נטו (המחיר שלנו)', 'Net (our cost)')}</option>
             <option value="gross">{tr('ברוטו (מחירון)', 'Gross (list)')}</option>
           </select>
