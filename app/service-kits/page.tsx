@@ -379,13 +379,13 @@ function ProductsCard({ products }: { products: KitProduct[] }) {
     if (it === undefined) return null
     if (it === null) return <span className="text-destructive">לא נמצא ב-ERP</span>
     return (
-      <span>
-        {it.name}
-        <span className={cn('ms-2', it.stock_qty > 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-destructive')}>
-          {it.stock_qty > 0 ? `במלאי ${formatNumber(it.stock_qty)}` : 'אין במלאי'}
+      <span className="inline-flex flex-wrap items-baseline gap-x-2">
+        <bdi>{it.name}</bdi>
+        <span className={it.stock_qty > 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-destructive'}>
+          {it.stock_qty > 0 ? <>במלאי <bdi>{formatNumber(it.stock_qty)}</bdi></> : 'אין במלאי'}
         </span>
-        {it.incoming_qty > 0 && <span className="ms-1 text-muted-foreground">(+{formatNumber(it.incoming_qty)} בדרך)</span>}
-        {it.price != null && <span className="ms-2 tabular-nums">₪{it.price.toLocaleString('he-IL', { maximumFractionDigits: 2 })}</span>}
+        {it.incoming_qty > 0 && <span className="text-muted-foreground">(+<bdi>{formatNumber(it.incoming_qty)}</bdi> בדרך)</span>}
+        {it.price != null && <bdi className="tabular-nums">₪{it.price.toLocaleString('he-IL', { maximumFractionDigits: 2 })}</bdi>}
       </span>
     )
   }
