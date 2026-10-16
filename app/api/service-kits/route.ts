@@ -76,7 +76,7 @@ const fail = (e: unknown) => {
   const msg = e instanceof Error ? e.message : String(e)
   if (e instanceof Bad) return NextResponse.json({ error: msg }, { status: 400 })
   if (/kit_products_fluid_grade_item_code_key/.test(msg))
-    return NextResponse.json({ error: 'this code is already listed for this fluid and grade' }, { status: 409 })
+    return NextResponse.json({ error: 'המק"ט הזה כבר רשום לנוזל ולדרגה האלה' }, { status: 409 })
   return NextResponse.json({ error: msg }, { status: 500 })
 }
 
@@ -108,7 +108,7 @@ export async function POST(req: NextRequest) {
       }
       if (b.entity === 'item') {
         const kitId = await serviceKit(c, b.kit_id)
-        if (!kitId) throw new Bad('unknown service kit')
+        if (!kitId) throw new Bad('ערכת טיפול לא נמצאה')
         const i = itemIn(b)
         if (typeof i === 'string') throw new Bad(i)
         const { rows } = await c.query(
@@ -145,7 +145,7 @@ export async function PUT(req: NextRequest) {
     await tx(async (c) => {
       if (b.entity === 'kit') {
         const id = await serviceKit(c, b.id)
-        if (!id) throw new Bad('unknown service kit')
+        if (!id) throw new Bad('ערכת טיפול לא נמצאה')
         const k = kitIn(b)
         if (typeof k === 'string') throw new Bad(k)
         await c.query(
@@ -157,7 +157,7 @@ export async function PUT(req: NextRequest) {
         const { rows } = await c.query(
           `SELECT i.kit_id::text FROM public.kit_items i JOIN public.kits k ON k.id = i.kit_id
             WHERE i.id = $1 AND k.kind = 'service'`, [Number(b.id) || 0])
-        if (!rows[0]) throw new Bad('unknown item')
+        if (!rows[0]) throw new Bad('הפריט לא נמצא')
         const i = itemIn(b)
         if (typeof i === 'string') throw new Bad(i)
         await c.query(
@@ -177,7 +177,7 @@ export async function PUT(req: NextRequest) {
           `UPDATE public.kit_products SET fluid=$2, grade=$3, pack_l=$4, item_code=$5, makes=$6, sort=$7, note=$8,
                   updated_at = now(), updated_by = $9 WHERE id = $1`,
           [Number(b.id) || 0, p.fluid, p.grade, p.pack_l, p.item_code, p.makes, p.sort, p.note, who || null])
-        if (!r.rowCount) throw new Bad('unknown product')
+        if (!r.rowCount) throw new Bad('המק"ט לא נמצא')
         return
       }
       throw new Bad('entity must be kit, item or product')
@@ -196,7 +196,7 @@ export async function DELETE(req: NextRequest) {
     await tx(async (c) => {
       if (entity === 'kit') {
         const kid = await serviceKit(c, id)
-        if (!kid) throw new Bad('unknown service kit')
+        if (!kid) throw new Bad('ערכת טיפול לא נמצאה')
         await c.query(`DELETE FROM public.kits WHERE id = $1 AND kind = 'service'`, [kid])
         return
       }
@@ -204,13 +204,13 @@ export async function DELETE(req: NextRequest) {
         const { rows } = await c.query(
           `DELETE FROM public.kit_items i USING public.kits k
             WHERE i.id = $1 AND k.id = i.kit_id AND k.kind = 'service' RETURNING i.kit_id::text`, [Number(id) || 0])
-        if (!rows[0]) throw new Bad('unknown item')
+        if (!rows[0]) throw new Bad('הפריט לא נמצא')
         await syncDescriptions(c, rows[0].kit_id)
         return
       }
       if (entity === 'product') {
         const r = await c.query(`DELETE FROM public.kit_products WHERE id = $1`, [Number(id) || 0])
-        if (!r.rowCount) throw new Bad('unknown product')
+        if (!r.rowCount) throw new Bad('המק"ט לא נמצא')
         return
       }
       throw new Bad('entity must be kit, item or product')

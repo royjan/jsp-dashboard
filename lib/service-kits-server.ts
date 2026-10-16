@@ -44,7 +44,7 @@ const oneOf = <T extends string>(v: unknown, of: readonly T[]): T | null => (of.
 export interface KitIn { name: string; fuel_types: string[] | null; makes: string[] | null; priority: number; is_active: boolean }
 export function kitIn(b: Record<string, unknown>): KitIn | string {
   const name = str(b.name, 80)
-  if (!name) return 'name required'
+  if (!name) return 'חסר שם'
   const fuels = list(b.fuel_types).filter((f) => (FUEL_TYPES as readonly string[]).includes(f))
   const makes = list(b.makes).map((m) => m.toUpperCase())
   return { name, fuel_types: fuels.length ? fuels : null, makes: makes.length ? makes : null,
@@ -58,12 +58,12 @@ export interface ItemIn {
 }
 export function itemIn(b: Record<string, unknown>): ItemIn | string {
   const part_he = str(b.part_he, 80), part_en = str(b.part_en, 80)
-  if (!part_he || !part_en) return 'part_he and part_en required'
+  if (!part_he || !part_en) return 'חסר שם החלק בעברית או מונח החיפוש באנגלית'
   const every_km = int(b.every_km, 1000, 600000, null)
-  if (!every_km) return 'every_km must be 1,000-600,000'
+  if (!every_km) return 'מרווח ק"מ חייב להיות בין 1,000 ל-600,000'
   const source = b.source === 'fluid' ? 'fluid' : 'catalog'
   const fluid = source === 'fluid' ? oneOf(b.fluid, FLUIDS) : null
-  if (source === 'fluid' && !fluid) return 'a fluid row needs fluid (engine_oil / brake_fluid / coolant)'
+  if (source === 'fluid' && !fluid) return 'שורת נוזל צריכה סוג נוזל'
   const qty = Number(b.qty)
   const match = list(b.match_he)
   return {
@@ -77,13 +77,13 @@ export function itemIn(b: Record<string, unknown>): ItemIn | string {
 export interface ProductIn { fluid: string; grade: string; pack_l: number; item_code: string; makes: string[] | null; sort: number; note: string | null }
 export function productIn(b: Record<string, unknown>): ProductIn | string {
   const fluid = oneOf(b.fluid, FLUIDS)
-  if (!fluid) return 'fluid required'
+  if (!fluid) return 'חסר סוג נוזל'
   const grade = str(b.grade, 30).toUpperCase().replace(/\s*W\s*-?\s*/, 'W-').replace(/^STANDARD$/, 'standard')
-  if (!grade) return 'grade required'
+  if (!grade) return 'חסרה דרגה'
   const pack = Number(b.pack_l)
-  if (!(pack > 0 && pack <= 220)) return 'pack size (litres) required'
+  if (!(pack > 0 && pack <= 220)) return 'חסר גודל אריזה בליטרים'
   const item_code = str(b.item_code, 40).toUpperCase()
-  if (!item_code) return 'item code required'
+  if (!item_code) return 'חסר מק"ט'
   const makes = list(b.makes).map((m) => m.toUpperCase())
   return { fluid, grade, pack_l: pack, item_code, makes: makes.length ? makes : null, sort: int(b.sort, 0, 10000, 100)!, note: opt(b.note, 200) }
 }
