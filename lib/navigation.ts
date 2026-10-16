@@ -32,7 +32,7 @@ import {
   NotebookPen, Package, PackageCheck, PackageSearch, PackageX, Percent, Radar, Receipt,
   ReceiptText, RotateCcw, Scale, SearchX, ShoppingBag, ShoppingCart, Sparkles,
   ShieldAlert, Sun, Sunrise, Swords, Target, ThumbsUp, Trash2, TrendingDown, Truck, Undo2,
-  Users, Wallet, Warehouse,
+  Users, Wallet, Warehouse, Wrench,
 } from 'lucide-react'
 import type { TranslationKey } from '@/lib/i18n'
 
@@ -311,6 +311,7 @@ export const NAV_SECTIONS: NavSection[] = [
 
       { href: '/chat-insights', labelKey: 'chatInsights', icon: MessageSquare },
       { href: '/bots', labelKey: 'bots', icon: Bot },
+      { href: '/service-kits', labelKey: 'serviceKits', icon: Wrench },
       { href: '/galgalim', labelKey: 'galgalim', icon: Store },
       { href: '/chat/simulator', labelKey: 'chatSimulator', icon: FlaskConical },
     ],

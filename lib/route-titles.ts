@@ -90,6 +90,7 @@ const EXACT: Record<string, RouteTitle> = {
   // chat admin
   '/chat-insights': { key: 'page.chatInsights', he: 'תובנות צ׳אט' },
   '/bots': { key: 'page.bots', he: 'בוטים' },
+  '/service-kits': { key: 'page.serviceKits', he: 'טיפולים תקופתיים' },
   '/galgalim': { key: 'page.galgalim', he: 'גלגלים' },
   '/chat/flow-decisions': { he: 'החלטות זרימה' },
   '/chat/flow-decisions/observatory': { he: 'מצפה החלטות' },
