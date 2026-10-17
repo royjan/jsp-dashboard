@@ -32,6 +32,7 @@ const QTY_FROM_HE: Record<string, string> = {
 }
 const NEEDS_HE: Record<string, string> = {
   timing_belt: 'רק במנוע עם רצועת טיימינג', spark_plugs: 'רק במנוע עם מצתים', fuel_filter: 'רק עם מסנן דלק',
+  lpg: 'רק ברכב גפ"מ', gearbox_oil: 'לפי סוג התיבה (DSG/CVT חובה, אוטומטית רשות, ידנית לא)',
 }
 const km = (n: number) => `${formatNumber(n)} ק"מ`
 const sel = 'h-8 rounded-md border bg-background px-2 text-sm'

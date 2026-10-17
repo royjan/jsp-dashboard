@@ -27,7 +27,7 @@ export async function whoIs(req: NextRequest): Promise<false | string> {
 export const FUEL_TYPES = ['בנזין', 'דיזל', 'חשמל', 'חשמל/בנזין', 'חשמל/דיזל', 'גפמ"'] as const
 export const FLUIDS = ['engine_oil', 'brake_fluid', 'coolant'] as const
 export const QTY_FROM = ['cylinders', 'oil_litres', 'coolant_litres'] as const
-export const NEEDS = ['timing_belt', 'spark_plugs', 'fuel_filter'] as const
+export const NEEDS = ['timing_belt', 'spark_plugs', 'fuel_filter', 'lpg', 'gearbox_oil'] as const
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 const str = (v: unknown, max: number) => (typeof v === 'string' ? v.trim().slice(0, max) : '')
