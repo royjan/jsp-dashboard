@@ -104,7 +104,9 @@ export default function ScannerAccountsPage() {
       } else if (r.applied?.length) {
         toast.success(vars.change
           ? (isHe ? 'נשמר והסורקים רועננו — סריקות חדשות ישתמשו בזה' : 'Saved and scanners refreshed — new scans use it')
-          : (isHe ? 'הסורקים רועננו' : 'Scanners refreshed'))
+          : r.onPrem?.ok
+            ? (isHe ? 'הסורקים רועננו ו-Redis עודכן' : 'Scanners refreshed and Redis updated')
+            : (isHe ? 'הסורקים רועננו' : 'Scanners refreshed'))
       } else if (vars.change) {
         toast.success(isHe ? 'נשמר' : 'Saved')
       }
@@ -233,7 +235,19 @@ function ProviderCard({ provider: p, isHe, unlocked, busy, act, reveal }: {
               </Button>
             </div>
           ) : sync === 'synced' ? (
-            <Badge variant="success"><CheckCircle2 className="me-1 h-3 w-3" />{isHe ? 'הסורק מעודכן' : 'Scanner up to date'}</Badge>
+            <div className="flex items-center gap-2">
+              <Badge variant="success"><CheckCircle2 className="me-1 h-3 w-3" />{isHe ? 'הסורק מעודכן' : 'Scanner up to date'}</Badge>
+              {unlocked && (
+                // Always available: re-sends the accounts to the scanners (and, for PSA, the on-prem Redis)
+                // even when everything looks in step — e.g. after a manual change on a server.
+                <Button type="button" size="sm" variant="outline" className="h-8" disabled={busy} onClick={() => act({ apply: true })}
+                  title={p.hasOnPrem
+                    ? (isHe ? 'שולח את החשבונות מחדש לסורקים ול-Redis של השרתים המקומיים' : 'Re-sends the accounts to the scanners and the on-prem Redis')
+                    : (isHe ? 'מרענן את הסורקים כך שיקראו את החשבונות מחדש' : 'Refreshes the scanners so they re-read the accounts')}>
+                  <RefreshCw className="me-1 h-3.5 w-3.5" />{p.hasOnPrem ? (isHe ? 'עדכן סורקים ו-Redis' : 'Update scanners + Redis') : (isHe ? 'עדכן סורקים' : 'Update scanners')}
+                </Button>
+              )}
+            </div>
           ) : (
             <Badge variant="outline">{isHe ? 'מצב הסורק לא ידוע' : 'Scanner state unknown'}</Badge>
           ))}
