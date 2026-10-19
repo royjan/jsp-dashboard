@@ -1,8 +1,6 @@
 import { NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
-import { timingSafeEqual } from 'node:crypto'
-import { JAN_SESSION_COOKIE, verifyJanSession } from '@/lib/jan-sso'
 import { forgetSecret } from '@/lib/aws-secrets'
+import { checkEditPassword, editingEnabled, sessionEmail } from '@/lib/settings-gate'
 
 /**
  * /api/settings/secrets — the app's Secrets Manager config, from the dashboard.
@@ -25,27 +23,8 @@ import { forgetSecret } from '@/lib/aws-secrets'
 
 const SECRET_ID = process.env.APP_SECRETS_ID || process.env.AWS_SECRETS_ID || 'config'
 const REGION = process.env.AWS_REGION || 'eu-central-1'
-const EDIT_PASSWORD = process.env.SETTINGS_EDIT_PASSWORD || ''
 
-/** Failed password attempts per address; five in ten minutes and the address waits. */
-const attempts = new Map<string, { n: number; until: number }>()
-const MAX_ATTEMPTS = 5
-const WINDOW_MS = 10 * 60 * 1000
-
-async function sessionOk(): Promise<boolean> {
-  // Mirrors middleware.ts: with no signing secret configured, auth is off everywhere.
-  const configured = !!(process.env.JAN_AUTH_JWT_SECRET || process.env.JWT_SECRET || process.env.AUTH_SECRET)
-  if (!configured) return true
-  const token = (await cookies()).get(JAN_SESSION_COOKIE)?.value
-  return !!(await verifyJanSession(token))
-}
-
-function passwordOk(given: string): boolean {
-  if (!EDIT_PASSWORD) return false
-  const a = Buffer.from(String(given ?? ''), 'utf8')
-  const b = Buffer.from(EDIT_PASSWORD, 'utf8')
-  return a.length === b.length && timingSafeEqual(a, b)
-}
+const sessionOk = async () => (await sessionEmail()) !== null
 
 async function client() {
   const { SecretsManagerClient } = await import('@aws-sdk/client-secrets-manager')
@@ -64,7 +43,7 @@ export async function GET() {
   try {
     const { values, versionId, createdDate } = await readSecret()
     const keys = Object.keys(values).sort().map((key) => ({ key, value: String(values[key] ?? '') }))
-    return NextResponse.json({ secretId: SECRET_ID, region: REGION, versionId, createdDate, keys, editable: !!EDIT_PASSWORD })
+    return NextResponse.json({ secretId: SECRET_ID, region: REGION, versionId, createdDate, keys, editable: editingEnabled() })
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'could not read the secret' }, { status: 502 })
   }
@@ -72,24 +51,12 @@ export async function GET() {
 
 export async function PUT(req: Request) {
   if (!(await sessionOk())) return NextResponse.json({ error: 'sign in first' }, { status: 401 })
-  const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'local'
-  const now = Date.now()
-  const a = attempts.get(ip)
-  if (a && a.n >= MAX_ATTEMPTS && a.until > now) {
-    return NextResponse.json({ error: 'too many attempts, try again later' }, { status: 429 })
-  }
-
-  if (!EDIT_PASSWORD) return NextResponse.json({ error: 'editing is off: SETTINGS_EDIT_PASSWORD is not set' }, { status: 403 })
 
   let body: { password?: string; updates?: Record<string, string>; deletes?: string[] }
   try { body = await req.json() } catch { return NextResponse.json({ error: 'bad body' }, { status: 400 }) }
 
-  if (!passwordOk(body.password ?? '')) {
-    const cur = a && a.until > now ? a : { n: 0, until: now + WINDOW_MS }
-    attempts.set(ip, { n: cur.n + 1, until: cur.until })
-    return NextResponse.json({ error: 'wrong password' }, { status: 403 })
-  }
-  attempts.delete(ip)
+  const gate = checkEditPassword(req, body.password)
+  if (!gate.ok) return NextResponse.json({ error: gate.error }, { status: gate.status })
 
   const updates = body.updates ?? {}
   const deletes = body.deletes ?? []

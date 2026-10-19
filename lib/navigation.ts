@@ -32,7 +32,7 @@ import {
   NotebookPen, Package, PackageCheck, PackageSearch, PackageX, Percent, Radar, Receipt,
   ReceiptText, RotateCcw, Scale, SearchX, ShoppingBag, ShoppingCart, Sparkles,
   ShieldAlert, Sun, Sunrise, Swords, Target, ThumbsUp, Trash2, TrendingDown, Truck, Undo2,
-  Users, Wallet, Warehouse, Wrench,
+  Users, Wallet, Warehouse, Wrench, KeyRound
 } from 'lucide-react'
 import type { TranslationKey } from '@/lib/i18n'
 
@@ -308,6 +308,8 @@ export const NAV_SECTIONS: NavSection[] = [
       { href: '/chat/feedback', labelKey: 'chatFeedback', icon: ThumbsUp },
       // The app configuration: anyone signed in can view, the settings password edits.
       { href: '/settings', labelKey: 'settings', icon: Settings },
+      // Portal logins of the scraper Lambdas and their fallback order; same password gate as /settings.
+      { href: '/settings/scanner-accounts', labelKey: 'scannerAccounts', icon: KeyRound },
 
       { href: '/chat-insights', labelKey: 'chatInsights', icon: MessageSquare },
       { href: '/bots', labelKey: 'bots', icon: Bot },

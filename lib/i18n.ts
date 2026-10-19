@@ -40,6 +40,7 @@ export const translations = {
     agentDebt: 'חובות לפי אזור',
     vehicleBlocklist: 'רשימה שחורה',
     settings: 'הגדרות',
+    scannerAccounts: 'חשבונות סורקים',
 
     // Chat admin
     chatFlowDecisions: 'החלטות זרימה',
@@ -836,6 +837,7 @@ export const translations = {
     agentDebt: 'Debt by area',
     vehicleBlocklist: 'Vehicle blocklist',
     settings: 'Settings',
+    scannerAccounts: 'Scanner accounts',
 
     // Chat admin
     chatFlowDecisions: 'Flow Decisions',
