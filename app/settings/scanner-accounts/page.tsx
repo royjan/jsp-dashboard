@@ -222,7 +222,11 @@ function ProviderCard({ provider: p, isHe, unlocked, busy, act, reveal }: {
           </div>
           {!p.readOnly && (sync === 'pending' || p.onPremSynced === false ? (
             <div className="flex items-center gap-2">
-              <Badge variant="warning">{isHe ? 'השינוי עוד לא נקלט בסורק' : 'Change not picked up yet'}</Badge>
+              <Badge variant="warning">
+                {sync === 'pending'
+                  ? (isHe ? 'השינוי עוד לא נקלט בסורק' : 'Change not picked up yet')
+                  : (isHe ? 'העותק בשרתים המקומיים לא מעודכן' : 'On-prem copy out of step')}
+              </Badge>
               <Button type="button" size="sm" className="h-8" disabled={!unlocked || busy} onClick={() => act({ apply: true })}
                 title={unlocked ? undefined : (isHe ? 'פתח לעריכה קודם' : 'Unlock editing first')}>
                 <RefreshCw className="me-1 h-3.5 w-3.5" />{isHe ? 'החל עכשיו' : 'Apply now'}
@@ -305,7 +309,7 @@ function ProviderCard({ provider: p, isHe, unlocked, busy, act, reveal }: {
             {p.onPremSynced === true ? (
               <Badge variant="success" className="text-[10px]">{isHe ? 'Redis מעודכן' : 'Redis in step'}</Badge>
             ) : p.onPremSynced === false ? (
-              <Badge variant="warning" className="text-[10px]">{isHe ? 'Redis לא מעודכן — "החל עכשיו" יכתוב אותו' : 'Redis out of step — "Apply now" rewrites it'}</Badge>
+              <Badge variant="warning" className="text-[10px]">{isHe ? 'לא מעודכן — לחיצה על "החל עכשיו" תעדכן' : 'out of step — "Apply now" updates it'}</Badge>
             ) : (
               <Badge variant="outline" className="text-[10px]">{isHe ? 'לא ידוע' : 'unknown'}</Badge>
             )}

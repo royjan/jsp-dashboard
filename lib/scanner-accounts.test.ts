@@ -114,7 +114,7 @@ describe('changes', () => {
   it('stamps who changed an account, and refuses read-only providers', () => {
     const v = apply(legacy(), { op: 'update', id: 'a1', password: 'p1b' })
     expect(list(v)[0]).toMatchObject({ password: 'p1b', changedAt: NOW.toISOString(), changedBy: 'roy@jan.co.il' })
-    expect(() => apply(legacy(), { op: 'add', username: 'x', password: 'y' }, 'tivtaam')).toThrow(/not editable/)
+    expect(() => apply(legacy(), { op: 'add', username: 'x', password: 'y' }, 'tivtaam')).toThrow(/unknown provider/)
   })
 
   it('records when each provider last changed, deletions included', () => {
@@ -155,7 +155,8 @@ describe('onPremWrites', () => {
     const p = providerById('psa')!
     const v = apply(apply(legacy(), { op: 'delete', id: 'a2' }), { op: 'delete', id: 'a3' })
     const w = onPremWrites(p, readAccounts(v, p).accounts)
-    expect(w['portal-pilot:creds:psa_fallback']).toBeNull()
+    // one dealer left: psa_fallback mirrors the primary (the .179 verifier pool needs the key)
+    expect(JSON.parse(w['portal-pilot:creds:psa_fallback'] as string)).toEqual({ username: 'db31832', password: 'p1' })
     expect(w['portal-pilot:creds:psa_public']).toBeNull()
     expect(onPremWrites(providerById('saic')!, [])).toEqual({})
   })

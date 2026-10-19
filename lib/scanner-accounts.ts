@@ -140,18 +140,6 @@ export const PROVIDERS: ProviderDef[] = [
     lambdas: [{ name: 'vin17-lambda-dev-api', region: 'eu-central-1' }],
     scannerReadsList: false,
   },
-  {
-    id: 'tivtaam',
-    nameHe: 'טיב טעם',
-    nameEn: "Tiv Ta'am",
-    accountsKey: 'TIVTAAM_ACCOUNTS',
-    legacy: { primary: slot('TIVTAAM_EMAIL', 'TIVTAAM_PASSWORD') },
-    portals: ['dealer'],
-    lambdas: [{ name: 'tivtaam-cart-service-dev-api', region: 'il-central-1' }],
-    scannerReadsList: false,
-    readOnlyReasonHe: 'הסורק לא קורא את הסוד — הפרטים נצרבים בזמן הפריסה. שינוי כאן לא ישפיע.',
-    readOnlyReasonEn: 'This scanner does not read the secret — its login is baked in at deploy. A change here would have no effect.',
-  },
 ]
 
 export function providerById(id: string): ProviderDef | undefined {
@@ -452,7 +440,10 @@ export function onPremWrites(p: ProviderDef, accounts: StoredAccount[]): Record<
   if (!p.onPrem) return {}
   const usable = usableAccounts(accounts)
   const dealers = usable.filter((a) => a.portal === 'dealer')
-  const pick = { dealer1: dealers[0], dealer2: dealers[1], public1: usable.find((a) => a.portal === 'public') }
+  // dealer2 falls back to the primary: portal-pilot's verifier pool on .179 (psa_verifier.py
+  // fallback_keeper_factory) needs creds:psa_fallback to exist, and the walkers already skip a
+  // fallback equal to their primary — the same state as before the list existed.
+  const pick = { dealer1: dealers[0], dealer2: dealers[1] ?? dealers[0], public1: usable.find((a) => a.portal === 'public') }
   const out: Record<string, string | null> = {
     [p.onPrem.prefix + p.onPrem.listKey]: onPremList(accounts),
   }
