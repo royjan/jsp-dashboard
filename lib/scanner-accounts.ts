@@ -4,8 +4,8 @@
  * the values here, so everything below is testable without AWS.
  *
  * STORAGE. One key per provider holds an ordered JSON list, e.g. PSA_ACCOUNTS:
- *   [{ id, username, password, enabled, portal, label?, changedAt?, changedBy? }, ...]
- * List order IS login order: the scanner tries the first enabled account, and
+ *   [{ id, username, password, enabled, portal, changedAt?, changedBy? }, ...]
+ * List order IS login order — the first usable account is the primary, there is no flag: the scanner tries the first enabled account, and
  * on a failed login moves to the next (up to MAX_ACCOUNTS: a primary + 5
  * fallbacks). Disabled accounts, and a repeat of an earlier portal+username,
  * are skipped. `portal` is only meaningful for PSA, where "public" accounts log
@@ -164,7 +164,6 @@ export interface StoredAccount {
   password: string
   enabled: boolean
   portal: Portal
-  label?: string
   changedAt?: string
   changedBy?: string
 }
@@ -175,7 +174,6 @@ export interface AccountView {
   hasPassword: boolean
   enabled: boolean
   portal: Portal
-  label?: string
   changedAt?: string
   changedBy?: string
   /** Earlier account with the same portal+username — the scanner skips this one. */
@@ -233,7 +231,6 @@ export function readAccounts(values: Record<string, string>, p: ProviderDef): { 
               password: String(a.password ?? ''),
               enabled: a.enabled !== false,
               portal: a.portal === 'public' && p.portals.includes('public') ? 'public' : 'dealer',
-              ...(nonEmpty(a.label) ? { label: String(a.label) } : {}),
               ...(nonEmpty(a.changedAt) ? { changedAt: String(a.changedAt) } : {}),
               ...(nonEmpty(a.changedBy) ? { changedBy: String(a.changedBy) } : {}),
             }
@@ -322,7 +319,6 @@ export function buildView(values: Record<string, string>): ProviderView[] {
           hasPassword: nonEmpty(a.password),
           enabled: a.enabled,
           portal: a.portal,
-          ...(a.label ? { label: a.label } : {}),
           ...(a.changedAt ? { changedAt: a.changedAt } : {}),
           ...(a.changedBy ? { changedBy: a.changedBy } : {}),
           ...(sameAs ? { sameAs } : {}),
@@ -334,8 +330,8 @@ export function buildView(values: Record<string, string>): ProviderView[] {
 }
 
 export type Change =
-  | { op: 'add'; username: string; password: string; portal?: Portal; label?: string }
-  | { op: 'update'; id: string; username?: string; password?: string; label?: string }
+  | { op: 'add'; username: string; password: string; portal?: Portal }
+  | { op: 'update'; id: string; username?: string; password?: string }
   | { op: 'delete'; id: string }
   | { op: 'toggle'; id: string; enabled: boolean }
   | { op: 'move'; id: string; to: number }
@@ -375,7 +371,6 @@ export function applyChange(
         password: change.password,
         enabled: true,
         portal,
-        ...(nonEmpty(change.label) ? { label: change.label.trim() } : {}),
       }
       if (clash(a)) throw new ChangeError('this account is already in the list')
       stamp(a)
@@ -391,10 +386,6 @@ export function applyChange(
       if (change.password !== undefined) {
         if (!nonEmpty(change.password)) throw new ChangeError('password cannot be empty')
         a.password = change.password
-      }
-      if (change.label !== undefined) {
-        if (nonEmpty(change.label)) a.label = change.label.trim()
-        else delete a.label
       }
       if (clash(a)) throw new ChangeError('another account already uses this username')
       stamp(a)
@@ -474,8 +465,8 @@ export function onPremWrites(p: ProviderDef, accounts: StoredAccount[]): Record<
 
 /** The list as the on-prem copy holds it — no audit fields, so it can be compared with the secret's. */
 export function onPremList(accounts: StoredAccount[]): string {
-  return JSON.stringify(accounts.map(({ id, username, password, enabled, portal, label }) => ({
-    id, username, password, enabled, portal, ...(label ? { label } : {}),
+  return JSON.stringify(accounts.map(({ id, username, password, enabled, portal }) => ({
+    id, username, password, enabled, portal,
   })))
 }
 

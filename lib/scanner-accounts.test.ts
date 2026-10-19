@@ -112,8 +112,8 @@ describe('changes', () => {
   })
 
   it('stamps who changed an account, and refuses read-only providers', () => {
-    const v = apply(legacy(), { op: 'update', id: 'a1', label: 'Main' })
-    expect(list(v)[0]).toMatchObject({ label: 'Main', changedAt: NOW.toISOString(), changedBy: 'roy@jan.co.il' })
+    const v = apply(legacy(), { op: 'update', id: 'a1', password: 'p1b' })
+    expect(list(v)[0]).toMatchObject({ password: 'p1b', changedAt: NOW.toISOString(), changedBy: 'roy@jan.co.il' })
     expect(() => apply(legacy(), { op: 'add', username: 'x', password: 'y' }, 'tivtaam')).toThrow(/not editable/)
   })
 

@@ -383,8 +383,7 @@ function AccountRow({ account: a, step, last, isHe, multiPortal, editable, busy,
         <span className={cn('flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold', status.cls)}>{step}</span>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-sm font-medium">{a.label || portalLabel(a.portal, isHe, multiPortal)}</span>
-            {a.label && multiPortal && <span className="text-[10px] text-muted-foreground">{portalLabel(a.portal, isHe, true)}</span>}
+            <span className="text-sm font-medium">{portalLabel(a.portal, isHe, multiPortal)}</span>
             <span className={cn('rounded px-1.5 py-0.5 text-[10px] font-medium', status.cls)}>{status.text}</span>
           </div>
           <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
@@ -450,16 +449,15 @@ function AccountRow({ account: a, step, last, isHe, multiPortal, editable, busy,
         <AccountForm
           isHe={isHe}
           busy={busy}
-          initial={{ username: a.username, label: a.label ?? '' }}
+          initial={{ username: a.username }}
           passwordOptional
           submitLabel={isHe ? 'שמור' : 'Save'}
           onCancel={() => setEditing(false)}
-          onSubmit={async ({ username, password, label }, apply) => {
+          onSubmit={async ({ username, password }, apply) => {
             const change: Change = { op: 'update', id: a.id }
             if (username !== a.username) change.username = username
             if (password) change.password = password
-            if (label !== (a.label ?? '')) change.label = label
-            if (change.username === undefined && change.password === undefined && change.label === undefined) { setEditing(false); return }
+            if (change.username === undefined && change.password === undefined) { setEditing(false); return }
             await act({ change, apply })
             setEditing(false)
           }}
@@ -496,11 +494,11 @@ function AddAccountForm({ isHe, portals, busy, onAdd, onCancel }: {
       <AccountForm
         isHe={isHe}
         busy={busy}
-        initial={{ username: '', label: '' }}
+        initial={{ username: '' }}
         submitLabel={isHe ? 'הוסף' : 'Add'}
         onCancel={onCancel}
-        onSubmit={({ username, password, label }, apply) =>
-          onAdd({ op: 'add', username, password, portal, ...(label ? { label } : {}) }, apply)}
+        onSubmit={({ username, password }, apply) =>
+          onAdd({ op: 'add', username, password, portal }, apply)}
       />
     </div>
   )
@@ -509,24 +507,23 @@ function AddAccountForm({ isHe, portals, busy, onAdd, onCancel }: {
 function AccountForm({ isHe, busy, initial, passwordOptional, submitLabel, onSubmit, onCancel }: {
   isHe: boolean
   busy: boolean
-  initial: { username: string; label: string }
+  initial: { username: string }
   passwordOptional?: boolean
   submitLabel: string
-  onSubmit: (v: { username: string; password: string; label: string }, apply: boolean) => Promise<void> | void
+  onSubmit: (v: { username: string; password: string }, apply: boolean) => Promise<void> | void
   onCancel: () => void
 }) {
   const [username, setUsername] = useState(initial.username)
   const [password, setPassword] = useState('')
-  const [label, setLabel] = useState(initial.label)
   const [show, setShow] = useState(false)
   const [apply, setApply] = useState(true)
-  const changed = username.trim() !== initial.username || !!password || label.trim() !== initial.label
+  const changed = username.trim() !== initial.username || !!password
   const valid = !!username.trim() && (passwordOptional || !!password) && changed
 
   return (
-    <form className="mt-3 grid gap-2 sm:grid-cols-3" onSubmit={(e) => {
+    <form className="mt-3 grid gap-2 sm:grid-cols-2" onSubmit={(e) => {
       e.preventDefault()
-      if (valid) void onSubmit({ username: username.trim(), password, label: label.trim() }, apply)
+      if (valid) void onSubmit({ username: username.trim(), password }, apply)
     }}>
       <label className="space-y-1 text-xs">
         <span className="text-muted-foreground">{isHe ? 'שם משתמש' : 'Username'}</span>
@@ -545,16 +542,11 @@ function AccountForm({ isHe, busy, initial, passwordOptional, submitLabel, onSub
           </button>
         </div>
       </label>
-      <label className="space-y-1 text-xs">
-        <span className="text-muted-foreground">{isHe ? 'כינוי (לא חובה)' : 'Nickname (optional)'}</span>
-        <Input value={label} onChange={(e) => setLabel(e.target.value)} className="h-8 text-sm" autoComplete="off"
-          placeholder={isHe ? 'למשל: סניף חולון' : 'e.g. Holon branch'} />
-      </label>
-      <label className="flex items-center gap-2 text-xs sm:col-span-3">
+      <label className="flex items-center gap-2 text-xs sm:col-span-2">
         <input type="checkbox" checked={apply} onChange={(e) => setApply(e.target.checked)} className="h-3.5 w-3.5" />
         {isHe ? 'החל על הסורקים מיד (סריקות רצות יסתיימו עם הפרטים הקודמים)' : 'Apply to the scanners now (running scans finish on the old login)'}
       </label>
-      <div className="flex gap-2 sm:col-span-3">
+      <div className="flex gap-2 sm:col-span-2">
         <Button type="submit" size="sm" className="h-8" disabled={busy || !valid}>{submitLabel}</Button>
         <Button type="button" size="sm" variant="outline" className="h-8" onClick={onCancel}>{isHe ? 'ביטול' : 'Cancel'}</Button>
       </div>
