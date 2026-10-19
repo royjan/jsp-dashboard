@@ -28,9 +28,14 @@ import type { AccountView, Change, Portal, ProviderView } from '@/lib/scanner-ac
  */
 
 interface LambdaState { name: string; region: string; refreshedAt: string | null; error?: string }
-type Provider = Omit<ProviderView, 'lambdas'> & { lambdas: LambdaState[] }
+type Provider = Omit<ProviderView, 'lambdas'> & { lambdas: LambdaState[]; onPremSynced?: boolean | null }
 interface Payload { editable: boolean; providers: Provider[] }
-interface PostResult { ok?: boolean; password?: string; applied?: { name: string; ok: boolean; error?: string }[] }
+interface PostResult {
+  ok?: boolean
+  password?: string
+  applied?: { name: string; ok: boolean; error?: string }[]
+  onPrem?: { ok: boolean; error?: string }
+}
 type Act = (body: { change?: Change; apply?: boolean }) => Promise<void>
 
 function useRelative(isHe: boolean) {
@@ -91,6 +96,9 @@ export default function ScannerAccountsPage() {
     mutationFn: post,
     onSuccess: (r, vars) => {
       const failed = (r.applied ?? []).filter((a) => !a.ok)
+      if (r.onPrem && !r.onPrem.ok) {
+        toast.error((isHe ? 'נשמר בענן, אבל לא ב-Redis של השרתים המקומיים (.179 / VPS): ' : 'Saved to the cloud, but not to the on-prem Redis (.179 / VPS): ') + (r.onPrem.error ?? ''))
+      }
       if (failed.length) {
         toast.error((isHe ? 'נשמר, אבל הסורק לא רוענן: ' : 'Saved, but a scanner was not refreshed: ') + failed.map((f) => `${f.name} — ${f.error}`).join('; '))
       } else if (r.applied?.length) {
@@ -212,7 +220,7 @@ function ProviderCard({ provider: p, isHe, unlocked, busy, act, reveal }: {
                   : `${p.accounts.length} of ${p.maxAccounts} accounts · ${used} used by the scanner`}
             </p>
           </div>
-          {!p.readOnly && (sync === 'pending' ? (
+          {!p.readOnly && (sync === 'pending' || p.onPremSynced === false ? (
             <div className="flex items-center gap-2">
               <Badge variant="warning">{isHe ? 'השינוי עוד לא נקלט בסורק' : 'Change not picked up yet'}</Badge>
               <Button type="button" size="sm" className="h-8" disabled={!unlocked || busy} onClick={() => act({ apply: true })}
@@ -288,6 +296,21 @@ function ProviderCard({ provider: p, isHe, unlocked, busy, act, reveal }: {
           <p className="flex items-start gap-2 text-xs text-muted-foreground">
             <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />{isHe ? p.noteHe : p.noteEn}
           </p>
+        )}
+
+        {p.hasOnPrem && (
+          <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+            <ServerCog className="h-3.5 w-3.5" />
+            <span>{isHe ? 'שרתים מקומיים (portal-pilot ב-.179, סורקי VPS):' : 'On-prem (portal-pilot on .179, VPS walkers):'}</span>
+            {p.onPremSynced === true ? (
+              <Badge variant="success" className="text-[10px]">{isHe ? 'Redis מעודכן' : 'Redis in step'}</Badge>
+            ) : p.onPremSynced === false ? (
+              <Badge variant="warning" className="text-[10px]">{isHe ? 'Redis לא מעודכן — "החל עכשיו" יכתוב אותו' : 'Redis out of step — "Apply now" rewrites it'}</Badge>
+            ) : (
+              <Badge variant="outline" className="text-[10px]">{isHe ? 'לא ידוע' : 'unknown'}</Badge>
+            )}
+            <span>{isHe ? 'נקלט באתחול הבא שלהם (הסורקים מתאתחלים כל לילה, 03:30 UTC).' : 'Picked up at their next restart (the walkers restart nightly at 03:30 UTC).'}</span>
+          </div>
         )}
 
         <div className="flex flex-wrap items-center gap-1.5 border-t pt-3 text-xs text-muted-foreground">

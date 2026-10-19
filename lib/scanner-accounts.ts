@@ -49,6 +49,11 @@ export interface ProviderDef {
   lambdas: LambdaRef[]
   /** The deployed scanner walks the whole list (else only the mirrored old keys). */
   scannerReadsList: boolean
+  /**
+   * On-prem consumers that read logins from the office Redis instead of the
+   * secret (portal-pilot on .179 and the psa-native walkers on the VPS).
+   */
+  onPrem?: { prefix: string; listKey: string; mirror: { key: string; take: 'dealer1' | 'dealer2' | 'public1' }[] }
   readOnlyReasonHe?: string
   readOnlyReasonEn?: string
   noteHe?: string
@@ -74,8 +79,18 @@ export const PROVIDERS: ProviderDef[] = [
       { name: 'psa-catalog-service-lambda-dev-api', region: 'eu-west-3' },
     ],
     scannerReadsList: true,
-    noteHe: 'פורטל ציבורי מתחבר ומחפש חלקים, אבל לא יכול להריץ סריקה מלאה. סורק שעבר לחשבון גיבוי נשאר עליו עד שמרעננים אותו. psa-catalog משתמש רק בחשבון הסוכן הראשון. portal-pilot (דייגו) שומר עותק משלו של הסיסמה ב-Redis — לעדכן גם שם.',
-    noteEn: 'A public-portal account can sign in and look up parts but cannot run a full scan. A scanner that moved to a fallback stays on it until refreshed. psa-catalog only uses the first dealer account. portal-pilot (Diego) keeps its own copy of the password in Redis — update it there too.',
+    onPrem: {
+      prefix: 'portal-pilot:creds:',
+      listKey: 'psa_accounts',
+      mirror: [
+        { key: 'psa', take: 'dealer1' }, // the .179 keeper
+        { key: 'psa_worker', take: 'dealer1' }, // the VPS walkers' primary (PP_PSA_ACCOUNT)
+        { key: 'psa_fallback', take: 'dealer2' }, // walkers' fallback + the .179 verifier pool
+        { key: 'psa_public', take: 'public1' },
+      ],
+    },
+    noteHe: 'פורטל ציבורי מתחבר ומחפש חלקים, אבל לא יכול להריץ סריקה מלאה. סורק שעבר לחשבון גיבוי נשאר עליו עד שמרעננים אותו. psa-catalog משתמש רק בחשבון הסוכן הראשון. portal-pilot (דייגו) וסורקי ה-VPS מקבלים עותק ב-Redis בכל שמירה.',
+    noteEn: 'A public-portal account can sign in and look up parts but cannot run a full scan. A scanner that moved to a fallback stays on it until refreshed. psa-catalog only uses the first dealer account. portal-pilot (Diego) and the VPS walkers get a copy in Redis on every save.',
   },
   {
     id: 'partslink',
@@ -181,6 +196,8 @@ export interface ProviderView {
   legacyOnly: boolean
   /** Last change to this provider's accounts (any add/edit/delete/move). */
   changedAt?: string
+  /** Has on-prem consumers reading Redis (see ProviderDef.onPrem). */
+  hasOnPrem: boolean
   readOnly: boolean
   readOnlyReasonHe?: string
   readOnlyReasonEn?: string
@@ -289,6 +306,7 @@ export function buildView(values: Record<string, string>): ProviderView[] {
       scannerReadsList: p.scannerReadsList,
       legacyOnly,
       ...(changed[p.id] ? { changedAt: changed[p.id] } : {}),
+      hasOnPrem: !!p.onPrem,
       readOnly: !!p.readOnlyReasonEn,
       readOnlyReasonHe: p.readOnlyReasonHe,
       readOnlyReasonEn: p.readOnlyReasonEn,
@@ -432,6 +450,33 @@ export function applyChange(
     }
   }
   return { values: next, touched: [...touched] }
+}
+
+/**
+ * The Redis writes that keep a provider's on-prem consumers in step: the list
+ * itself plus the per-role keys they read today ({"username","password"}, the
+ * shape portal-pilot's store.set_creds writes). null = delete the key.
+ */
+export function onPremWrites(p: ProviderDef, accounts: StoredAccount[]): Record<string, string | null> {
+  if (!p.onPrem) return {}
+  const usable = usableAccounts(accounts)
+  const dealers = usable.filter((a) => a.portal === 'dealer')
+  const pick = { dealer1: dealers[0], dealer2: dealers[1], public1: usable.find((a) => a.portal === 'public') }
+  const out: Record<string, string | null> = {
+    [p.onPrem.prefix + p.onPrem.listKey]: onPremList(accounts),
+  }
+  for (const m of p.onPrem.mirror) {
+    const a = pick[m.take]
+    out[p.onPrem.prefix + m.key] = a ? JSON.stringify({ username: a.username, password: a.password }) : null
+  }
+  return out
+}
+
+/** The list as the on-prem copy holds it — no audit fields, so it can be compared with the secret's. */
+export function onPremList(accounts: StoredAccount[]): string {
+  return JSON.stringify(accounts.map(({ id, username, password, enabled, portal, label }) => ({
+    id, username, password, enabled, portal, ...(label ? { label } : {}),
+  })))
 }
 
 /** One account's password, for an explicit, password-gated reveal. */

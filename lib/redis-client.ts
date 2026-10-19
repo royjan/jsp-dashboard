@@ -56,6 +56,16 @@ function getRedis(): Redis | null {
 // Public API — same interface regardless of backend
 // ---------------------------------------------------------------------------
 
+/**
+ * The shared Redis connection itself, or null when there is none (no REDIS_URL,
+ * DISABLE_REDIS). For data that is NOT a cache — e.g. the portal-pilot logins
+ * written by /api/settings/scanner-accounts — where silently landing in the
+ * in-memory fallback would be a lie: callers must treat null as a failure.
+ */
+export function getRedisClient(): Redis | null {
+  return getRedis()
+}
+
 export async function getCached<T>(key: string): Promise<T | null> {
   const r = getRedis()
   if (r) {

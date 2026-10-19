@@ -1,11 +1,16 @@
 import { NextResponse } from 'next/server'
 import { forgetSecret } from '@/lib/aws-secrets'
+import { getRedisClient } from '@/lib/redis-client'
 import { checkEditPassword, editingEnabled, sessionEmail } from '@/lib/settings-gate'
 import {
   applyChange,
   buildView,
   ChangeError,
+  onPremList,
+  onPremWrites,
+  PROVIDERS,
   providerById,
+  readAccounts,
   revealPassword,
   type Change,
   type LambdaRef,
@@ -21,6 +26,12 @@ import {
  *       { password, provider, reveal }   one account's password, on request
  *       { password, provider, apply }    recycle the provider's Lambdas now
  *       A change may carry `apply: true` to do both in one step.
+ *
+ * PSA also has on-prem users that read logins from the office Redis, not the
+ * secret (portal-pilot on .179 and the psa-native walkers on the VPS): every
+ * PSA save writes the list and the per-role keys they read there as well
+ * (lib/scanner-accounts.ts onPremWrites). They load them at start-up, so they
+ * pick a change up at their next restart — the walkers' nightly rolling one.
  *
  * Writes go through PutSecretValue on the `config` secret, which versions it
  * (the previous version stays under AWSPREVIOUS). Scanners read that secret
@@ -89,17 +100,63 @@ async function refreshLambda(ref: LambdaRef, now: string): Promise<{ name: strin
   }
 }
 
+async function writeOnPrem(writes: Record<string, string | null>): Promise<{ ok: boolean; error?: string } | undefined> {
+  const keys = Object.keys(writes)
+  if (!keys.length) return undefined
+  const redis = getRedisClient()
+  if (!redis) return { ok: false, error: 'no Redis connection (REDIS_URL)' }
+  try {
+    const tx = redis.multi()
+    for (const k of keys) {
+      const v = writes[k]
+      if (v === null) tx.del(k)
+      else tx.set(k, v)
+    }
+    const res = await tx.exec()
+    const failed = (res ?? []).find(([err]) => err)
+    return failed ? { ok: false, error: String(failed[0]) } : { ok: true }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'redis write failed' }
+  }
+}
+
+/** Does the on-prem copy of each provider's list match the secret's? null = could not tell. */
+async function onPremSync(values: Record<string, string>): Promise<Record<string, boolean | null>> {
+  const out: Record<string, boolean | null> = {}
+  const redis = getRedisClient()
+  for (const p of PROVIDERS) {
+    if (!p.onPrem) continue
+    if (!redis) { out[p.id] = null; continue }
+    try {
+      const stored = await redis.get(p.onPrem.prefix + p.onPrem.listKey)
+      const { accounts, legacyOnly } = readAccounts(values, p)
+      // Before the first save neither side has a list yet: nothing to be out of step with.
+      out[p.id] = legacyOnly && stored === null ? true : stored === onPremList(accounts)
+    } catch {
+      out[p.id] = null
+    }
+  }
+  return out
+}
+
 export async function GET() {
   const email = await sessionEmail()
   if (email === null) return NextResponse.json({ error: 'sign in first' }, { status: 401 })
   try {
     const values = await readSecret()
     const providers = buildView(values)
-    const states = await Promise.all(providers.flatMap((p) => p.lambdas.map(lambdaState)))
+    const [states, onPrem] = await Promise.all([
+      Promise.all(providers.flatMap((p) => p.lambdas.map(lambdaState))),
+      onPremSync(values),
+    ])
     const byName = new Map(states.map((s) => [s.name, s]))
     return NextResponse.json({
       editable: editingEnabled(),
-      providers: providers.map((p) => ({ ...p, lambdas: p.lambdas.map((l) => byName.get(l.name) ?? { ...l, refreshedAt: null }) })),
+      providers: providers.map((p) => ({
+        ...p,
+        lambdas: p.lambdas.map((l) => byName.get(l.name) ?? { ...l, refreshedAt: null }),
+        ...(p.hasOnPrem ? { onPremSynced: onPrem[p.id] ?? null } : {}),
+      })),
     })
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'could not read the config' }, { status: 502 })
@@ -134,12 +191,18 @@ export async function POST(req: Request) {
     }
 
     let versionId: string | undefined
+    let onPrem: Awaited<ReturnType<typeof writeOnPrem>>
     if (body.change) {
       const values = await readSecret()
       const next = applyChange(values, provider.id, body.change, email || 'dashboard', new Date())
       versionId = await writeSecret(next.values)
       for (const k of next.touched) forgetSecret(k)
-    } else if (!body.apply) {
+      onPrem = await writeOnPrem(onPremWrites(provider, readAccounts(next.values, provider).accounts))
+    } else if (body.apply) {
+      // "Apply now" also (re)writes the on-prem copy, which heals one that fell out of step.
+      const values = await readSecret()
+      onPrem = await writeOnPrem(onPremWrites(provider, readAccounts(values, provider).accounts))
+    } else {
       return NextResponse.json({ error: 'nothing to do' }, { status: 400 })
     }
 
@@ -148,7 +211,7 @@ export async function POST(req: Request) {
       const now = new Date().toISOString()
       applied = await Promise.all(provider.lambdas.map((l) => refreshLambda(l, now)))
     }
-    return NextResponse.json({ ok: true, versionId, applied })
+    return NextResponse.json({ ok: true, versionId, applied, ...(onPrem ? { onPrem } : {}) })
   } catch (e) {
     if (e instanceof ChangeError) return NextResponse.json({ error: e.message }, { status: 400 })
     return NextResponse.json({ error: e instanceof Error ? e.message : 'could not save' }, { status: 502 })

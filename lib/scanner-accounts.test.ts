@@ -4,6 +4,7 @@ import {
   buildView,
   ChangeError,
   MAX_ACCOUNTS,
+  onPremWrites,
   providerById,
   readAccounts,
   revealPassword,
@@ -132,6 +133,31 @@ describe('changes', () => {
     const v = apply(legacy(), { op: 'add', username: 'pl2', password: 'x' }, 'partslink')
     const pl = buildView(v).find((p) => p.id === 'partslink')!
     expect(pl.accounts.map((a) => [a.username, a.usedNow])).toEqual([['pl', true], ['pl2', false]])
+  })
+})
+
+describe('onPremWrites', () => {
+  it('writes the list and keeps the per-role Redis keys portal-pilot reads in step', () => {
+    const p = providerById('psa')!
+    const v = apply(apply(legacy(), { op: 'add', username: 'db5', password: 'p5' }), { op: 'move', id: 'a4', to: 1 })
+    const w = onPremWrites(p, readAccounts(v, p).accounts)
+    const creds = (k: string) => JSON.parse(w[`portal-pilot:creds:${k}`] as string)
+    expect(creds('psa')).toEqual({ username: 'db31832', password: 'p1' })
+    expect(creds('psa_worker')).toEqual({ username: 'db31832', password: 'p1' })
+    expect(creds('psa_fallback')).toEqual({ username: 'db5', password: 'p5' })
+    expect(creds('psa_public')).toEqual({ username: 'APJSP', password: 'p3' })
+    const list = JSON.parse(w['portal-pilot:creds:psa_accounts'] as string)
+    expect(list.map((a: { username: string }) => a.username)).toEqual(['db31832', 'db5', 'db40000', 'APJSP'])
+    expect(list[0]).not.toHaveProperty('changedBy')
+  })
+
+  it('deletes a role key when no account fills it, and does nothing for providers without on-prem users', () => {
+    const p = providerById('psa')!
+    const v = apply(apply(legacy(), { op: 'delete', id: 'a2' }), { op: 'delete', id: 'a3' })
+    const w = onPremWrites(p, readAccounts(v, p).accounts)
+    expect(w['portal-pilot:creds:psa_fallback']).toBeNull()
+    expect(w['portal-pilot:creds:psa_public']).toBeNull()
+    expect(onPremWrites(providerById('saic')!, [])).toEqual({})
   })
 })
 
