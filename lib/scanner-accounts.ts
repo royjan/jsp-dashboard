@@ -1,126 +1,139 @@
 /**
- * Scanner portal accounts — which login each scraper Lambda uses, and in what
- * order it falls back. Pure: the API route reads/writes the `config` secret and
- * hands the values here, so everything below is testable without AWS.
+ * Scanner portal accounts — the logins each scraper Lambda uses, in the order it
+ * tries them. Pure: the API route reads/writes the `config` secret and hands
+ * the values here, so everything below is testable without AWS.
  *
- * Every scanner reads its login from the `config` secret ONCE per container
- * (jsp-selenium-lambdas common/base/config.py `_cached_secrets`), so a change
- * only reaches a scanner after its containers are recycled — the route does
- * that by touching the Lambda's configuration ("apply now").
+ * STORAGE. One key per provider holds an ordered JSON list, e.g. PSA_ACCOUNTS:
+ *   [{ id, username, password, enabled, portal, label?, changedAt?, changedBy? }, ...]
+ * List order IS login order: the scanner tries the first enabled account, and
+ * on a failed login moves to the next (up to MAX_ACCOUNTS: a primary + 5
+ * fallbacks). Disabled accounts, and a repeat of an earlier portal+username,
+ * are skipped. `portal` is only meaningful for PSA, where "public" accounts log
+ * in to the independent-operator portal instead of the dealer one.
  *
- * Only PSA walks an account ladder today (psa/app/services/session_manager.py
- * `_swap_to_fallback_credentials`): primary dealer → fallback dealer → public
- * portal. A rung is used only when BOTH its keys are non-empty, and there is no
- * on/off flag — so switching a rung off here PARKS its keys under `<KEY>__OFF`
- * (the scanner sees nothing and skips it) and switching it on moves them back.
- * Nothing is ever deleted.
+ * MIRROR. Every write also refreshes the provider's old fixed keys
+ * (PSA_USERNAME/PASSWORD = first usable dealer account, _FALLBACK = the second,
+ * _PUBLIC = the first public one), so anything that has not learned the list —
+ * psa-catalog, a rolled-back image, a scanner not updated yet — keeps working
+ * on the same accounts it always had. A provider with no list key yet is read
+ * from those old keys, so the first save here migrates it.
+ *
+ * Scanners read the secret once per container; the API route recycles them
+ * ("apply now") so a change takes effect for new scans.
  */
 
-export type RungKind = 'dealer' | 'public' | 'account'
+export type Portal = 'dealer' | 'public'
 
-export interface RungDef {
-  id: string
-  userKey: string
-  passKey: string
-  kind: RungKind
-  labelHe: string
-  labelEn: string
-  /** May be switched off. The primary account of a provider cannot. */
-  toggleable: boolean
-}
+export const MAX_ACCOUNTS = 6
+export const PARKED_SUFFIX = '__OFF' // written by an earlier version of this page; cleaned up on save
+/** { providerId: ISO time of its last change } — tells whether its scanners have picked it up. */
+export const CHANGED_KEY = 'SCANNER_ACCOUNTS_CHANGED'
 
 export interface LambdaRef {
   name: string
   region: string
 }
 
+interface LegacySlot {
+  userKey: string
+  passKey: string
+}
+
 export interface ProviderDef {
   id: string
   nameHe: string
   nameEn: string
-  rungs: RungDef[]
+  accountsKey: string
+  legacy: { primary: LegacySlot; fallback?: LegacySlot; public?: LegacySlot }
+  portals: Portal[]
   lambdas: LambdaRef[]
-  /** Does the scanner walk to a second account when the first login fails? */
-  fallbackSupported: boolean
-  /** Editing the secret has no effect (credentials are baked in at deploy). */
+  /** The deployed scanner walks the whole list (else only the mirrored old keys). */
+  scannerReadsList: boolean
   readOnlyReasonHe?: string
   readOnlyReasonEn?: string
   noteHe?: string
   noteEn?: string
 }
 
-export const PARKED_SUFFIX = '__OFF'
-export const META_KEY = 'SCANNER_ACCOUNTS_META'
-
-const primary = (prefix: string, userKey = `${prefix}_USERNAME`, passKey = `${prefix}_PASSWORD`): RungDef => ({
-  id: 'primary', userKey, passKey, kind: 'account', labelHe: 'חשבון ראשי', labelEn: 'Primary account', toggleable: false,
-})
+const slot = (userKey: string, passKey: string): LegacySlot => ({ userKey, passKey })
 
 export const PROVIDERS: ProviderDef[] = [
   {
     id: 'psa',
     nameHe: 'PSA · ServiceBox',
     nameEn: 'PSA · ServiceBox',
-    rungs: [
-      { id: 'primary', userKey: 'PSA_USERNAME', passKey: 'PSA_PASSWORD', kind: 'dealer', labelHe: 'סוכן ראשי', labelEn: 'Dealer — primary', toggleable: false },
-      { id: 'fallback', userKey: 'PSA_USERNAME_FALLBACK', passKey: 'PSA_PASSWORD_FALLBACK', kind: 'dealer', labelHe: 'סוכן גיבוי', labelEn: 'Dealer — fallback', toggleable: true },
-      { id: 'public', userKey: 'PSA_USERNAME_PUBLIC', passKey: 'PSA_PASSWORD_PUBLIC', kind: 'public', labelHe: 'פורטל ציבורי', labelEn: 'Public portal', toggleable: true },
-    ],
+    accountsKey: 'PSA_ACCOUNTS',
+    legacy: {
+      primary: slot('PSA_USERNAME', 'PSA_PASSWORD'),
+      fallback: slot('PSA_USERNAME_FALLBACK', 'PSA_PASSWORD_FALLBACK'),
+      public: slot('PSA_USERNAME_PUBLIC', 'PSA_PASSWORD_PUBLIC'),
+    },
+    portals: ['dealer', 'public'],
     lambdas: [
       { name: 'psa-vehicle-service-lambda-dev-api', region: 'eu-west-3' },
       { name: 'psa-catalog-service-lambda-dev-api', region: 'eu-west-3' },
     ],
-    fallbackSupported: true,
-    noteHe: 'הפורטל הציבורי מתחבר ומחפש חלקים, אבל לא יכול להריץ סריקה מלאה. סורק שירד לגיבוי נשאר עליו עד שמרעננים אותו. portal-pilot (דייגו) שומר עותק משלו של הסיסמה ב-Redis — לעדכן גם שם.',
-    noteEn: 'The public portal can sign in and look up parts but cannot run a full scan. A scanner that dropped to a fallback stays on it until refreshed. portal-pilot (Diego) keeps its own copy of the password in Redis — update it there too.',
+    scannerReadsList: true,
+    noteHe: 'פורטל ציבורי מתחבר ומחפש חלקים, אבל לא יכול להריץ סריקה מלאה. סורק שעבר לחשבון גיבוי נשאר עליו עד שמרעננים אותו. psa-catalog משתמש רק בחשבון הסוכן הראשון. portal-pilot (דייגו) שומר עותק משלו של הסיסמה ב-Redis — לעדכן גם שם.',
+    noteEn: 'A public-portal account can sign in and look up parts but cannot run a full scan. A scanner that moved to a fallback stays on it until refreshed. psa-catalog only uses the first dealer account. portal-pilot (Diego) keeps its own copy of the password in Redis — update it there too.',
   },
   {
     id: 'partslink',
     nameHe: 'PartsLink24 · טויוטה',
     nameEn: 'PartsLink24 · Toyota',
-    rungs: [primary('PARTSLINK')],
+    accountsKey: 'PARTSLINK_ACCOUNTS',
+    legacy: { primary: slot('PARTSLINK_USERNAME', 'PARTSLINK_PASSWORD') },
+    portals: ['dealer'],
     lambdas: [
       { name: 'partslink-vehicle-service-lambda-dev-api', region: 'eu-central-1' },
       { name: 'partslink-vehicle-service-lambda-hk-api', region: 'eu-central-1' },
     ],
-    fallbackSupported: false,
-    noteHe: 'החשבון מאפשר חיבור אחד בכל פעם.',
-    noteEn: 'The account allows one session at a time.',
+    scannerReadsList: false,
+    noteHe: 'כל חשבון מאפשר חיבור אחד בכל פעם.',
+    noteEn: 'Each account allows one session at a time.',
   },
   {
     id: 'saic',
     nameHe: 'SAIC · MG',
     nameEn: 'SAIC · MG',
-    rungs: [primary('SAIC')],
+    accountsKey: 'SAIC_ACCOUNTS',
+    legacy: { primary: slot('SAIC_USERNAME', 'SAIC_PASSWORD') },
+    portals: ['dealer'],
     lambdas: [
       { name: 'saic-vehicle-service-lambda-prod-api', region: 'ap-northeast-2' },
       { name: 'saic-vehicle-service-lambda-prod-orchestrator', region: 'ap-northeast-2' },
     ],
-    fallbackSupported: false,
+    scannerReadsList: false,
   },
   {
     id: 'qipei',
     nameHe: 'Qipei · cii.me',
     nameEn: 'Qipei · cii.me',
-    rungs: [primary('QIPEI', 'QIPEI_CII_ME_USERNAME', 'QIPEI_CII_ME_PASSWORD')],
+    accountsKey: 'QIPEI_ACCOUNTS',
+    legacy: { primary: slot('QIPEI_CII_ME_USERNAME', 'QIPEI_CII_ME_PASSWORD') },
+    portals: ['dealer'],
     lambdas: [{ name: 'qipei-vehicle-service-lambda-dev-api', region: 'eu-central-1' }],
-    fallbackSupported: false,
+    scannerReadsList: false,
   },
   {
     id: 'vin17',
     nameHe: 'VIN17',
     nameEn: 'VIN17',
-    rungs: [primary('VIN17')],
+    accountsKey: 'VIN17_ACCOUNTS',
+    legacy: { primary: slot('VIN17_USERNAME', 'VIN17_PASSWORD') },
+    portals: ['dealer'],
     lambdas: [{ name: 'vin17-lambda-dev-api', region: 'eu-central-1' }],
-    fallbackSupported: false,
+    scannerReadsList: false,
   },
   {
     id: 'tivtaam',
     nameHe: 'טיב טעם',
     nameEn: "Tiv Ta'am",
-    rungs: [{ ...primary('TIVTAAM', 'TIVTAAM_EMAIL', 'TIVTAAM_PASSWORD') }],
+    accountsKey: 'TIVTAAM_ACCOUNTS',
+    legacy: { primary: slot('TIVTAAM_EMAIL', 'TIVTAAM_PASSWORD') },
+    portals: ['dealer'],
     lambdas: [{ name: 'tivtaam-cart-service-dev-api', region: 'il-central-1' }],
-    fallbackSupported: false,
+    scannerReadsList: false,
     readOnlyReasonHe: 'הסורק לא קורא את הסוד — הפרטים נצרבים בזמן הפריסה. שינוי כאן לא ישפיע.',
     readOnlyReasonEn: 'This scanner does not read the secret — its login is baked in at deploy. A change here would have no effect.',
   },
@@ -130,26 +143,30 @@ export function providerById(id: string): ProviderDef | undefined {
   return PROVIDERS.find((p) => p.id === id)
 }
 
-export interface RungMeta {
+export interface StoredAccount {
+  id: string
+  username: string
+  password: string
+  enabled: boolean
+  portal: Portal
+  label?: string
   changedAt?: string
   changedBy?: string
 }
 
-export interface RungView {
+export interface AccountView {
   id: string
-  kind: RungKind
-  labelHe: string
-  labelEn: string
-  toggleable: boolean
   username: string
   hasPassword: boolean
-  /** The scanner will try this rung (both keys live and non-empty). */
-  active: boolean
-  /** Switched off here — keys parked under __OFF. */
-  parked: boolean
-  /** Same username as an earlier account of the same kind: the scanner skips it (id of that account). */
+  enabled: boolean
+  portal: Portal
+  label?: string
+  changedAt?: string
+  changedBy?: string
+  /** Earlier account with the same portal+username — the scanner skips this one. */
   sameAs?: string
-  meta: RungMeta
+  /** The deployed scanner will try this account (in this list's order). */
+  usedNow: boolean
 }
 
 export interface ProviderView {
@@ -157,79 +174,157 @@ export interface ProviderView {
   nameHe: string
   nameEn: string
   lambdas: LambdaRef[]
-  fallbackSupported: boolean
+  portals: Portal[]
+  maxAccounts: number
+  scannerReadsList: boolean
+  /** Still stored only in the old fixed keys — the first save here migrates it. */
+  legacyOnly: boolean
+  /** Last change to this provider's accounts (any add/edit/delete/move). */
+  changedAt?: string
   readOnly: boolean
   readOnlyReasonHe?: string
   readOnlyReasonEn?: string
   noteHe?: string
   noteEn?: string
-  rungs: RungView[]
+  accounts: AccountView[]
 }
 
-type Meta = Record<string, Record<string, RungMeta>>
+const nonEmpty = (v: unknown): v is string => typeof v === 'string' && v.trim() !== ''
+const sameLogin = (a: StoredAccount, b: StoredAccount) =>
+  a.portal === b.portal && a.username.trim().toLowerCase() === b.username.trim().toLowerCase()
 
-export function readMeta(values: Record<string, string>): Meta {
+function newId(taken: Set<string>): string {
+  for (let i = 1; ; i++) if (!taken.has(`a${i}`)) return `a${i}`
+}
+
+/** The provider's accounts: the list key if present, else derived from the old fixed keys. */
+export function readAccounts(values: Record<string, string>, p: ProviderDef): { accounts: StoredAccount[]; legacyOnly: boolean } {
+  const raw = values[p.accountsKey]
+  if (nonEmpty(raw)) {
+    try {
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed)) {
+        const taken = new Set<string>()
+        const accounts = parsed
+          .filter((a) => a && typeof a === 'object')
+          .map((a): StoredAccount => {
+            const id = nonEmpty(a.id) && !taken.has(a.id) ? a.id : newId(taken)
+            taken.add(id)
+            return {
+              id,
+              username: String(a.username ?? ''),
+              password: String(a.password ?? ''),
+              enabled: a.enabled !== false,
+              portal: a.portal === 'public' && p.portals.includes('public') ? 'public' : 'dealer',
+              ...(nonEmpty(a.label) ? { label: String(a.label) } : {}),
+              ...(nonEmpty(a.changedAt) ? { changedAt: String(a.changedAt) } : {}),
+              ...(nonEmpty(a.changedBy) ? { changedBy: String(a.changedBy) } : {}),
+            }
+          })
+        return { accounts, legacyOnly: false }
+      }
+    } catch {
+      // A hand-mangled list: fall through to the old keys, which the mirror kept in step.
+    }
+  }
+  const accounts: StoredAccount[] = []
+  const from = (s: LegacySlot | undefined, portal: Portal, id: string) => {
+    if (!s) return
+    const live = nonEmpty(values[s.userKey]) || nonEmpty(values[s.passKey])
+    const user = live ? values[s.userKey] : values[s.userKey + PARKED_SUFFIX]
+    const pass = live ? values[s.passKey] : values[s.passKey + PARKED_SUFFIX]
+    if (!nonEmpty(user) && !nonEmpty(pass)) return
+    accounts.push({ id, username: user ?? '', password: pass ?? '', enabled: live, portal })
+  }
+  from(p.legacy.primary, 'dealer', 'a1')
+  from(p.legacy.fallback, 'dealer', 'a2')
+  from(p.legacy.public, 'public', 'a3')
+  return { accounts, legacyOnly: true }
+}
+
+/** Enabled, complete, and not a repeat of an earlier login — what a list-reading scanner walks. */
+export function usableAccounts(accounts: StoredAccount[]): StoredAccount[] {
+  const out: StoredAccount[] = []
+  for (const a of accounts) {
+    if (!a.enabled || !nonEmpty(a.username) || !nonEmpty(a.password)) continue
+    if (out.some((b) => sameLogin(a, b))) continue
+    out.push(a)
+  }
+  return out
+}
+
+/** Which accounts land in the old fixed keys (what a scanner that has not learned the list uses). */
+export function mirrorPlan(p: ProviderDef, accounts: StoredAccount[]): { slot: LegacySlot; account: StoredAccount | null }[] {
+  const usable = usableAccounts(accounts)
+  const dealers = usable.filter((a) => a.portal === 'dealer')
+  const plan: { slot: LegacySlot; account: StoredAccount | null }[] = [{ slot: p.legacy.primary, account: dealers[0] ?? null }]
+  if (p.legacy.fallback) plan.push({ slot: p.legacy.fallback, account: dealers[1] ?? null })
+  if (p.legacy.public) plan.push({ slot: p.legacy.public, account: usable.find((a) => a.portal === 'public') ?? null })
+  return plan
+}
+
+/** What the browser may see: never a password. */
+function readChanged(values: Record<string, string>): Record<string, string> {
   try {
-    const parsed = JSON.parse(values[META_KEY] || '{}')
-    return parsed && typeof parsed === 'object' ? (parsed as Meta) : {}
+    const parsed = JSON.parse(values[CHANGED_KEY] || '{}')
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}
   } catch {
     return {}
   }
 }
 
-const nonEmpty = (v: string | undefined) => typeof v === 'string' && v.trim() !== ''
-
-/** What the browser may see: usernames and whether a password is set — never a password. */
 export function buildView(values: Record<string, string>): ProviderView[] {
-  const meta = readMeta(values)
-  return PROVIDERS.map((p) => ({
-    id: p.id,
-    nameHe: p.nameHe,
-    nameEn: p.nameEn,
-    lambdas: p.lambdas,
-    fallbackSupported: p.fallbackSupported,
-    readOnly: !!p.readOnlyReasonEn,
-    readOnlyReasonHe: p.readOnlyReasonHe,
-    readOnlyReasonEn: p.readOnlyReasonEn,
-    noteHe: p.noteHe,
-    noteEn: p.noteEn,
-    rungs: p.rungs.map((r, i) => {
-      const liveUser = values[r.userKey]
-      const livePass = values[r.passKey]
-      const parkedUser = values[r.userKey + PARKED_SUFFIX]
-      const parkedPass = values[r.passKey + PARKED_SUFFIX]
-      const parked = !nonEmpty(liveUser) && !nonEmpty(livePass) && (nonEmpty(parkedUser) || nonEmpty(parkedPass))
-      // The PSA ladder only drops to a fallback whose username differs from the
-      // account it is leaving (session_manager `_swap_to_fallback_credentials`),
-      // so a duplicate is a rung that can never be reached.
-      const sameAs = p.rungs.slice(0, i).find(
-        (e) => e.kind === r.kind && nonEmpty(liveUser) && values[e.userKey]?.trim() === liveUser.trim(),
-      )?.id
-      return {
-        id: r.id,
-        kind: r.kind,
-        labelHe: r.labelHe,
-        labelEn: r.labelEn,
-        toggleable: r.toggleable,
-        username: (parked ? parkedUser : liveUser) ?? '',
-        hasPassword: nonEmpty(parked ? parkedPass : livePass),
-        active: nonEmpty(liveUser) && nonEmpty(livePass) && !sameAs,
-        parked,
-        ...(sameAs ? { sameAs } : {}),
-        meta: meta[p.id]?.[r.id] ?? {},
-      }
-    }),
-  }))
+  const changed = readChanged(values)
+  return PROVIDERS.map((p) => {
+    const { accounts, legacyOnly } = readAccounts(values, p)
+    const usable = new Set(usableAccounts(accounts).map((a) => a.id))
+    const mirrored = new Set(mirrorPlan(p, accounts).map((m) => m.account?.id).filter(Boolean))
+    return {
+      id: p.id,
+      nameHe: p.nameHe,
+      nameEn: p.nameEn,
+      lambdas: p.lambdas,
+      portals: p.portals,
+      maxAccounts: MAX_ACCOUNTS,
+      scannerReadsList: p.scannerReadsList,
+      legacyOnly,
+      ...(changed[p.id] ? { changedAt: changed[p.id] } : {}),
+      readOnly: !!p.readOnlyReasonEn,
+      readOnlyReasonHe: p.readOnlyReasonHe,
+      readOnlyReasonEn: p.readOnlyReasonEn,
+      noteHe: p.noteHe,
+      noteEn: p.noteEn,
+      accounts: accounts.map((a, i) => {
+        const sameAs = a.enabled && nonEmpty(a.username)
+          ? accounts.slice(0, i).find((b) => b.enabled && sameLogin(a, b))?.id
+          : undefined
+        return {
+          id: a.id,
+          username: a.username,
+          hasPassword: nonEmpty(a.password),
+          enabled: a.enabled,
+          portal: a.portal,
+          ...(a.label ? { label: a.label } : {}),
+          ...(a.changedAt ? { changedAt: a.changedAt } : {}),
+          ...(a.changedBy ? { changedBy: a.changedBy } : {}),
+          ...(sameAs ? { sameAs } : {}),
+          usedNow: p.scannerReadsList ? usable.has(a.id) : mirrored.has(a.id),
+        }
+      }),
+    }
+  })
 }
 
 export type Change =
-  | { op: 'set'; rung: string; username?: string; password?: string }
-  | { op: 'toggle'; rung: string; enabled: boolean }
-  | { op: 'swap'; a: string; b: string }
+  | { op: 'add'; username: string; password: string; portal?: Portal; label?: string }
+  | { op: 'update'; id: string; username?: string; password?: string; label?: string }
+  | { op: 'delete'; id: string }
+  | { op: 'toggle'; id: string; enabled: boolean }
+  | { op: 'move'; id: string; to: number }
 
 export class ChangeError extends Error {}
 
-/** The secret with one change applied. Returns new values; never mutates the input. */
+/** The secret with one change applied (list key + mirrored old keys). Never mutates the input. */
 export function applyChange(
   values: Record<string, string>,
   providerId: string,
@@ -240,82 +335,110 @@ export function applyChange(
   const p = providerById(providerId)
   if (!p) throw new ChangeError(`unknown provider: ${providerId}`)
   if (p.readOnlyReasonEn) throw new ChangeError(`${p.nameEn} is not editable here`)
-  const rung = (id: string) => {
-    const r = p.rungs.find((x) => x.id === id)
-    if (!r) throw new ChangeError(`unknown account: ${id}`)
-    return r
+
+  const accounts = readAccounts(values, p).accounts.map((a) => ({ ...a }))
+  const stamp = (a: StoredAccount) => { a.changedAt = now.toISOString(); a.changedBy = who }
+  const find = (id: string) => {
+    const a = accounts.find((x) => x.id === id)
+    if (!a) throw new ChangeError('unknown account')
+    return a
   }
+  const clash = (cand: StoredAccount) => accounts.find((b) => b.id !== cand.id && sameLogin(cand, b))
+
+  switch (change.op) {
+    case 'add': {
+      if (accounts.length >= MAX_ACCOUNTS) throw new ChangeError(`at most ${MAX_ACCOUNTS} accounts (a primary and ${MAX_ACCOUNTS - 1} fallbacks)`)
+      const portal: Portal = change.portal === 'public' && p.portals.includes('public') ? 'public' : 'dealer'
+      if (!nonEmpty(change.username)) throw new ChangeError('username cannot be empty')
+      if (!nonEmpty(change.password)) throw new ChangeError('password cannot be empty')
+      const a: StoredAccount = {
+        id: newId(new Set(accounts.map((x) => x.id))),
+        username: change.username.trim(),
+        password: change.password,
+        enabled: true,
+        portal,
+        ...(nonEmpty(change.label) ? { label: change.label.trim() } : {}),
+      }
+      if (clash(a)) throw new ChangeError('this account is already in the list')
+      stamp(a)
+      accounts.push(a)
+      break
+    }
+    case 'update': {
+      const a = find(change.id)
+      if (change.username !== undefined) {
+        if (!nonEmpty(change.username)) throw new ChangeError('username cannot be empty')
+        a.username = change.username.trim()
+      }
+      if (change.password !== undefined) {
+        if (!nonEmpty(change.password)) throw new ChangeError('password cannot be empty')
+        a.password = change.password
+      }
+      if (change.label !== undefined) {
+        if (nonEmpty(change.label)) a.label = change.label.trim()
+        else delete a.label
+      }
+      if (clash(a)) throw new ChangeError('another account already uses this username')
+      stamp(a)
+      break
+    }
+    case 'delete': {
+      const i = accounts.findIndex((x) => x.id === change.id)
+      if (i < 0) throw new ChangeError('unknown account')
+      accounts.splice(i, 1)
+      break
+    }
+    case 'toggle': {
+      const a = find(change.id)
+      a.enabled = change.enabled
+      stamp(a)
+      break
+    }
+    case 'move': {
+      const i = accounts.findIndex((x) => x.id === change.id)
+      if (i < 0) throw new ChangeError('unknown account')
+      const to = Math.max(0, Math.min(accounts.length - 1, Math.trunc(change.to)))
+      const [a] = accounts.splice(i, 1)
+      accounts.splice(to, 0, a)
+      stamp(a)
+      break
+    }
+  }
+
+  // The old keys need a dealer account to mirror, and a scanner with none could not log in at all.
+  if (!usableAccounts(accounts).some((a) => a.portal === 'dealer')) {
+    throw new ChangeError(
+      p.portals.includes('public')
+        ? 'keep at least one enabled dealer account'
+        : 'keep at least one enabled account',
+    )
+  }
+
   const next = { ...values }
-  const touched: string[] = []
-  const stamp: string[] = []
-  const isParked = (r: RungDef) =>
-    !nonEmpty(next[r.userKey]) && !nonEmpty(next[r.passKey]) &&
-    (nonEmpty(next[r.userKey + PARKED_SUFFIX]) || nonEmpty(next[r.passKey + PARKED_SUFFIX]))
-  const put = (k: string, v: string) => { next[k] = v; touched.push(k) }
-  const drop = (k: string) => { if (k in next) { delete next[k]; touched.push(k) } }
-
-  if (change.op === 'set') {
-    const r = rung(change.rung)
-    // A parked rung is edited in place, so switching it on later brings the new value.
-    const parked = isParked(r)
-    const uk = parked ? r.userKey + PARKED_SUFFIX : r.userKey
-    const pk = parked ? r.passKey + PARKED_SUFFIX : r.passKey
-    if (change.username !== undefined) {
-      const u = change.username.trim()
-      if (!u) throw new ChangeError('username cannot be empty')
-      put(uk, u)
+  const touched = new Set<string>()
+  next[p.accountsKey] = JSON.stringify(accounts)
+  touched.add(p.accountsKey)
+  next[CHANGED_KEY] = JSON.stringify({ ...readChanged(values), [p.id]: now.toISOString() })
+  touched.add(CHANGED_KEY)
+  for (const { slot: s, account } of mirrorPlan(p, accounts)) {
+    for (const k of [s.userKey + PARKED_SUFFIX, s.passKey + PARKED_SUFFIX]) {
+      if (k in next) { delete next[k]; touched.add(k) }
     }
-    if (change.password !== undefined) {
-      if (!change.password) throw new ChangeError('password cannot be empty')
-      put(pk, change.password)
-    }
-    if (!touched.length) throw new ChangeError('nothing to change')
-    stamp.push(r.id)
-  } else if (change.op === 'toggle') {
-    const r = rung(change.rung)
-    if (!r.toggleable) throw new ChangeError(`${r.labelEn} cannot be switched off`)
-    const parked = isParked(r)
-    if (change.enabled && parked) {
-      for (const k of [r.userKey, r.passKey]) {
-        put(k, next[k + PARKED_SUFFIX] ?? '')
-        drop(k + PARKED_SUFFIX)
-      }
-    } else if (!change.enabled && !parked) {
-      if (!nonEmpty(next[r.userKey]) && !nonEmpty(next[r.passKey])) {
-        throw new ChangeError(`${r.labelEn} has no account to switch off`)
-      }
-      for (const k of [r.userKey, r.passKey]) {
-        put(k + PARKED_SUFFIX, next[k] ?? '')
-        drop(k)
-      }
+    if (account) {
+      if (next[s.userKey] !== account.username) { next[s.userKey] = account.username; touched.add(s.userKey) }
+      if (next[s.passKey] !== account.password) { next[s.passKey] = account.password; touched.add(s.passKey) }
     } else {
-      throw new ChangeError(`${r.labelEn} is already ${change.enabled ? 'on' : 'off'}`)
+      for (const k of [s.userKey, s.passKey]) if (k in next) { delete next[k]; touched.add(k) }
     }
-    stamp.push(r.id)
-  } else {
-    const a = rung(change.a)
-    const b = rung(change.b)
-    if (a.kind !== b.kind || a.id === b.id) throw new ChangeError('only two accounts of the same kind can swap order')
-    if (isParked(a) || isParked(b)) throw new ChangeError('switch both accounts on before swapping their order')
-    const [au, ap, bu, bp] = [next[a.userKey], next[a.passKey], next[b.userKey], next[b.passKey]]
-    if (!nonEmpty(au) || !nonEmpty(bu)) throw new ChangeError('both accounts need a username to swap')
-    put(a.userKey, bu); put(a.passKey, bp ?? '')
-    put(b.userKey, au); put(b.passKey, ap ?? '')
-    stamp.push(a.id, b.id)
   }
-
-  const meta = readMeta(next)
-  meta[p.id] = { ...(meta[p.id] ?? {}) }
-  for (const id of stamp) meta[p.id][id] = { changedAt: now.toISOString(), changedBy: who }
-  next[META_KEY] = JSON.stringify(meta)
-  touched.push(META_KEY)
-  return { values: next, touched: [...new Set(touched)] }
+  return { values: next, touched: [...touched] }
 }
 
-/** The password of one rung (live or parked), for an explicit, password-gated reveal. */
-export function revealPassword(values: Record<string, string>, providerId: string, rungId: string): string {
+/** One account's password, for an explicit, password-gated reveal. */
+export function revealPassword(values: Record<string, string>, providerId: string, accountId: string): string {
   const p = providerById(providerId)
-  const r = p?.rungs.find((x) => x.id === rungId)
-  if (!p || !r) throw new ChangeError('unknown account')
-  return values[r.passKey] || values[r.passKey + PARKED_SUFFIX] || ''
+  if (!p) throw new ChangeError('unknown provider')
+  const a = readAccounts(values, p).accounts.find((x) => x.id === accountId)
+  if (!a) throw new ChangeError('unknown account')
+  return a.password
 }

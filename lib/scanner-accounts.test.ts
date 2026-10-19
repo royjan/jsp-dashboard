@@ -1,8 +1,17 @@
 import { describe, expect, it } from 'vitest'
-import { applyChange, buildView, ChangeError, META_KEY, revealPassword } from './scanner-accounts'
+import {
+  applyChange,
+  buildView,
+  ChangeError,
+  MAX_ACCOUNTS,
+  providerById,
+  readAccounts,
+  revealPassword,
+  type Change,
+} from './scanner-accounts'
 
 const NOW = new Date('2026-10-19T18:00:00Z')
-const base = (): Record<string, string> => ({
+const legacy = (): Record<string, string> => ({
   PSA_USERNAME: 'db31832',
   PSA_PASSWORD: 'p1',
   PSA_USERNAME_FALLBACK: 'db40000',
@@ -13,90 +22,121 @@ const base = (): Record<string, string> => ({
   PARTSLINK_PASSWORD: 'plp',
   OPENAI_API_KEY: 'untouched',
 })
-const psa = (values: Record<string, string>) => buildView(values).find((p) => p.id === 'psa')!
+const psa = (v: Record<string, string>) => buildView(v).find((p) => p.id === 'psa')!
+const apply = (v: Record<string, string>, change: Change, provider = 'psa') =>
+  applyChange(v, provider, change, 'roy@jan.co.il', NOW).values
+const list = (v: Record<string, string>) => readAccounts(v, providerById('psa')!).accounts
 
-describe('buildView', () => {
-  it('never carries a password to the browser', () => {
-    expect(JSON.stringify(buildView(base()))).not.toMatch(/"p1"|"p2"|"p3"|"plp"/)
-  })
-
-  it('shows the PSA ladder in order with every rung active', () => {
-    const v = psa(base())
-    expect(v.rungs.map((r) => [r.id, r.username, r.active, r.hasPassword])).toEqual([
-      ['primary', 'db31832', true, true],
-      ['fallback', 'db40000', true, true],
-      ['public', 'APJSP', true, true],
+describe('reading', () => {
+  it('derives the list from the old fixed keys until the first save', () => {
+    const v = psa(legacy())
+    expect(v.legacyOnly).toBe(true)
+    expect(v.accounts.map((a) => [a.username, a.portal, a.enabled, a.usedNow])).toEqual([
+      ['db31832', 'dealer', true, true],
+      ['db40000', 'dealer', true, true],
+      ['APJSP', 'public', true, true],
     ])
   })
 
-  it('a fallback with the same username as the primary is never reached', () => {
-    const v = psa({ ...base(), PSA_USERNAME_FALLBACK: 'db31832' })
-    expect(v.rungs[1]).toMatchObject({ active: false, sameAs: 'primary' })
-    expect(v.rungs[2].active).toBe(true) // the public portal is a different kind
+  it('never carries a password to the browser', () => {
+    const v = apply(legacy(), { op: 'add', username: 'db5', password: 'p5' })
+    expect(JSON.stringify(buildView(v))).not.toMatch(/"p1"|"p2"|"p3"|"p5"|"plp"/)
   })
 
-  it('a rung with a missing password is not active (the scanner skips it)', () => {
-    const v = psa({ ...base(), PSA_PASSWORD_FALLBACK: '' })
-    expect(v.rungs[1]).toMatchObject({ active: false, hasPassword: false, parked: false })
+  it('a repeat of an earlier login is flagged and never used', () => {
+    const v = psa({ ...legacy(), PSA_USERNAME_FALLBACK: 'db31832' })
+    expect(v.accounts[1]).toMatchObject({ sameAs: 'a1', usedNow: false })
+    expect(v.accounts[2].usedNow).toBe(true)
   })
 })
 
-describe('applyChange', () => {
-  it('switching a rung off parks its keys so the scanner sees nothing, and back on restores them', () => {
-    const off = applyChange(base(), 'psa', { op: 'toggle', rung: 'fallback', enabled: false }, 'roy@jan.co.il', NOW).values
-    expect(off.PSA_USERNAME_FALLBACK).toBeUndefined()
-    expect(off.PSA_PASSWORD_FALLBACK).toBeUndefined()
-    expect(off.PSA_USERNAME_FALLBACK__OFF).toBe('db40000')
-    expect(psa(off).rungs[1]).toMatchObject({ active: false, parked: true, username: 'db40000', hasPassword: true })
-
-    const on = applyChange(off, 'psa', { op: 'toggle', rung: 'fallback', enabled: true }, 'roy@jan.co.il', NOW).values
-    expect(on.PSA_USERNAME_FALLBACK).toBe('db40000')
-    expect(on.PSA_PASSWORD_FALLBACK).toBe('p2')
-    expect(on.PSA_USERNAME_FALLBACK__OFF).toBeUndefined()
-    expect(psa(on).rungs[1].active).toBe(true)
+describe('changes', () => {
+  it('the first save migrates to the list and keeps the old keys in step', () => {
+    const v = apply(legacy(), { op: 'update', id: 'a2', password: 'p2b' })
+    expect(list(v).map((a) => [a.id, a.username, a.password])).toEqual([
+      ['a1', 'db31832', 'p1'], ['a2', 'db40000', 'p2b'], ['a3', 'APJSP', 'p3'],
+    ])
+    expect(v.PSA_PASSWORD_FALLBACK).toBe('p2b')
+    expect(v.OPENAI_API_KEY).toBe('untouched')
+    expect(psa(v).legacyOnly).toBe(false)
   })
 
-  it('the primary account cannot be switched off', () => {
-    expect(() => applyChange(base(), 'psa', { op: 'toggle', rung: 'primary', enabled: false }, 'x', NOW)).toThrow(ChangeError)
+  it('adds up to a primary and five fallbacks', () => {
+    let v = legacy()
+    for (let i = 4; i <= MAX_ACCOUNTS; i++) v = apply(v, { op: 'add', username: `db${i}`, password: `p${i}` })
+    expect(list(v)).toHaveLength(MAX_ACCOUNTS)
+    expect(() => apply(v, { op: 'add', username: 'one-too-many', password: 'x' })).toThrow(/at most 6/)
   })
 
-  it('editing a parked rung edits the parked copy, so it stays off', () => {
-    const off = applyChange(base(), 'psa', { op: 'toggle', rung: 'public', enabled: false }, 'x', NOW).values
-    const edited = applyChange(off, 'psa', { op: 'set', rung: 'public', password: 'new' }, 'x', NOW).values
-    expect(edited.PSA_PASSWORD_PUBLIC).toBeUndefined()
-    expect(edited.PSA_PASSWORD_PUBLIC__OFF).toBe('new')
+  it('refuses a duplicate login, but the same username on the other portal is fine', () => {
+    expect(() => apply(legacy(), { op: 'add', username: 'DB31832', password: 'x' })).toThrow(/already/)
+    expect(list(apply(legacy(), { op: 'add', username: 'db31832', password: 'x', portal: 'public' }))).toHaveLength(4)
   })
 
-  it('swap exchanges the two dealer accounts and leaves the public portal alone', () => {
-    const v = applyChange(base(), 'psa', { op: 'swap', a: 'primary', b: 'fallback' }, 'x', NOW).values
-    expect([v.PSA_USERNAME, v.PSA_PASSWORD, v.PSA_USERNAME_FALLBACK, v.PSA_PASSWORD_FALLBACK]).toEqual(['db40000', 'p2', 'db31832', 'p1'])
-    expect(v.PSA_USERNAME_PUBLIC).toBe('APJSP')
-    expect(() => applyChange(base(), 'psa', { op: 'swap', a: 'primary', b: 'public' }, 'x', NOW)).toThrow(/same kind/)
+  it('moving an account to the top makes it the primary in the old keys too', () => {
+    const v = apply(legacy(), { op: 'move', id: 'a2', to: 0 })
+    expect(list(v).map((a) => a.id)).toEqual(['a2', 'a1', 'a3'])
+    expect([v.PSA_USERNAME, v.PSA_PASSWORD, v.PSA_USERNAME_FALLBACK]).toEqual(['db40000', 'p2', 'db31832'])
   })
 
-  it('stamps who changed which account, and touches nothing outside the provider', () => {
-    const { values, touched } = applyChange(base(), 'psa', { op: 'set', rung: 'fallback', password: 'p9' }, 'roy@jan.co.il', NOW)
-    expect(touched.sort()).toEqual([META_KEY, 'PSA_PASSWORD_FALLBACK'].sort())
-    expect(values.OPENAI_API_KEY).toBe('untouched')
-    expect(psa(values).rungs[1].meta).toEqual({ changedAt: NOW.toISOString(), changedBy: 'roy@jan.co.il' })
+  it('disabling the primary promotes the next dealer in the old keys; the list keeps it', () => {
+    const v = apply(legacy(), { op: 'toggle', id: 'a1', enabled: false })
+    expect(v.PSA_USERNAME).toBe('db40000')
+    expect(v.PSA_USERNAME_FALLBACK).toBeUndefined()
+    expect(list(v)[0]).toMatchObject({ username: 'db31832', enabled: false })
   })
 
-  it('refuses empty values and read-only providers', () => {
-    expect(() => applyChange(base(), 'psa', { op: 'set', rung: 'primary', password: '' }, 'x', NOW)).toThrow(/empty/)
-    expect(() => applyChange(base(), 'psa', { op: 'set', rung: 'primary', username: '  ' }, 'x', NOW)).toThrow(/empty/)
-    expect(() => applyChange(base(), 'tivtaam', { op: 'set', rung: 'primary', password: 'x' }, 'x', NOW)).toThrow(/not editable/)
+  it('deleting the public account removes it from the old keys', () => {
+    const v = apply(legacy(), { op: 'delete', id: 'a3' })
+    expect(list(v)).toHaveLength(2)
+    expect(v.PSA_USERNAME_PUBLIC).toBeUndefined()
+    expect(v.PSA_PASSWORD_PUBLIC).toBeUndefined()
+  })
+
+  it('will not leave a provider without a usable dealer account', () => {
+    const one = apply(legacy(), { op: 'delete', id: 'a2' })
+    expect(() => apply(one, { op: 'delete', id: 'a1' })).toThrow(/at least one enabled dealer/)
+    expect(() => apply(one, { op: 'toggle', id: 'a1', enabled: false })).toThrow(ChangeError)
+    expect(() => apply(legacy(), { op: 'delete', id: 'a1' }, 'partslink')).toThrow(/at least one enabled account/)
+  })
+
+  it('cleans up keys parked by the earlier on/off version', () => {
+    const parked = { ...legacy(), PSA_USERNAME_FALLBACK__OFF: 'db40000', PSA_PASSWORD_FALLBACK__OFF: 'p2' }
+    delete (parked as Record<string, string>).PSA_USERNAME_FALLBACK
+    delete (parked as Record<string, string>).PSA_PASSWORD_FALLBACK
+    expect(psa(parked).accounts[1]).toMatchObject({ enabled: false, username: 'db40000' })
+    const v = apply(parked, { op: 'toggle', id: 'a2', enabled: true })
+    expect(v.PSA_USERNAME_FALLBACK__OFF).toBeUndefined()
+    expect(v.PSA_USERNAME_FALLBACK).toBe('db40000')
+  })
+
+  it('stamps who changed an account, and refuses read-only providers', () => {
+    const v = apply(legacy(), { op: 'update', id: 'a1', label: 'Main' })
+    expect(list(v)[0]).toMatchObject({ label: 'Main', changedAt: NOW.toISOString(), changedBy: 'roy@jan.co.il' })
+    expect(() => apply(legacy(), { op: 'add', username: 'x', password: 'y' }, 'tivtaam')).toThrow(/not editable/)
+  })
+
+  it('records when each provider last changed, deletions included', () => {
+    const v = apply(legacy(), { op: 'delete', id: 'a3' })
+    expect(psa(v).changedAt).toBe(NOW.toISOString())
+    expect(buildView(v).find((p) => p.id === 'saic')!.changedAt).toBeUndefined()
   })
 
   it('does not mutate its input', () => {
-    const v = base()
-    applyChange(v, 'psa', { op: 'toggle', rung: 'fallback', enabled: false }, 'x', NOW)
-    expect(v).toEqual(base())
+    const v = legacy()
+    apply(v, { op: 'move', id: 'a3', to: 0 })
+    expect(v).toEqual(legacy())
+  })
+
+  it('a provider whose scanner reads only the old keys shows which accounts it really uses', () => {
+    const v = apply(legacy(), { op: 'add', username: 'pl2', password: 'x' }, 'partslink')
+    const pl = buildView(v).find((p) => p.id === 'partslink')!
+    expect(pl.accounts.map((a) => [a.username, a.usedNow])).toEqual([['pl', true], ['pl2', false]])
   })
 })
 
 describe('revealPassword', () => {
-  it('finds a parked password too', () => {
-    const off = applyChange(base(), 'psa', { op: 'toggle', rung: 'fallback', enabled: false }, 'x', NOW).values
-    expect(revealPassword(off, 'psa', 'fallback')).toBe('p2')
+  it('returns one account password by id', () => {
+    expect(revealPassword(legacy(), 'psa', 'a3')).toBe('p3')
   })
 })

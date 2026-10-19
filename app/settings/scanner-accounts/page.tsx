@@ -3,8 +3,8 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  ArrowDown, ArrowUpToLine, CheckCircle2, Eye, EyeOff, Info, KeyRound, Lock, Pencil,
-  RefreshCw, ServerCog, ShieldAlert, Unlock, XCircle,
+  ArrowDown, ArrowUp, CheckCircle2, Eye, EyeOff, Info, KeyRound, Lock, Pencil, Plus,
+  RefreshCw, ServerCog, ShieldAlert, Trash2, Unlock, XCircle,
 } from 'lucide-react'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { Input } from '@/components/ui/input'
@@ -14,23 +14,24 @@ import { Card, CardContent } from '@/components/ui/card'
 import { useLocale } from '@/lib/locale-context'
 import { toast } from '@/lib/toast'
 import { cn } from '@/lib/utils'
-import type { Change, ProviderView, RungView } from '@/lib/scanner-accounts'
+import type { AccountView, Change, Portal, ProviderView } from '@/lib/scanner-accounts'
 
 /**
- * /settings/scanner-accounts — which portal login each scanner uses, and the
- * order it falls back in when a login fails.
+ * /settings/scanner-accounts — the portal logins each scanner uses, in the
+ * order it tries them (a primary + up to 5 fallbacks).
  *
  * Reading needs a signed-in session and shows no passwords. Every change (and
  * every reveal) sends the settings password, checked on the server each time;
- * it lives only in this page's memory. Scanners read their login once per
- * container, so a saved change shows as "not applied" until the scanner is
- * refreshed — the save form does that by default.
+ * it lives only in this page's memory. Scanners read their logins once per
+ * container, so a saved change shows as "not picked up" until the scanner is
+ * refreshed — saving does that by default.
  */
 
 interface LambdaState { name: string; region: string; refreshedAt: string | null; error?: string }
 type Provider = Omit<ProviderView, 'lambdas'> & { lambdas: LambdaState[] }
 interface Payload { editable: boolean; providers: Provider[] }
 interface PostResult { ok?: boolean; password?: string; applied?: { name: string; ok: boolean; error?: string }[] }
+type Act = (body: { change?: Change; apply?: boolean }) => Promise<void>
 
 function useRelative(isHe: boolean) {
   const rtf = new Intl.RelativeTimeFormat(isHe ? 'he' : 'en', { numeric: 'auto' })
@@ -43,13 +44,16 @@ function useRelative(isHe: boolean) {
   }
 }
 
-/** Has every scanner of this provider been refreshed since its newest account change? */
+/** Has every scanner of this provider been refreshed since its last account change? */
 function syncState(p: Provider): 'synced' | 'pending' | 'unknown' {
-  const changed = p.rungs.map((r) => r.meta.changedAt).filter(Boolean).sort().pop()
-  if (!changed) return 'synced'
+  if (!p.changedAt) return 'synced'
   if (p.lambdas.some((l) => !l.refreshedAt)) return 'unknown'
-  return p.lambdas.every((l) => (l.refreshedAt as string) >= changed) ? 'synced' : 'pending'
+  return p.lambdas.every((l) => (l.refreshedAt as string) >= (p.changedAt as string)) ? 'synced' : 'pending'
 }
+
+const portalLabel = (portal: Portal, isHe: boolean, multi: boolean) =>
+  !multi ? (isHe ? 'חשבון' : 'Account')
+    : portal === 'public' ? (isHe ? 'פורטל ציבורי' : 'Public portal') : (isHe ? 'סוכן' : 'Dealer')
 
 export default function ScannerAccountsPage() {
   const { locale } = useLocale()
@@ -78,31 +82,28 @@ export default function ScannerAccountsPage() {
     const out = await res.json().catch(() => ({}))
     if (!res.ok) {
       if (res.status === 403 && out?.error === 'wrong password') { setUnlocked(false); setPassword('') }
-      throw new Error(out?.error || String(res.status))
+      throw new Error(out?.error === 'wrong password' ? (isHe ? 'סיסמת הגדרות שגויה' : 'Wrong settings password') : out?.error || String(res.status))
     }
     return out
-  }
-
-  const reportApplied = (r: PostResult) => {
-    const failed = (r.applied ?? []).filter((a) => !a.ok)
-    if (failed.length) {
-      toast.error((isHe ? 'הסורק לא רוענן: ' : 'Scanner not refreshed: ') + failed.map((f) => `${f.name} — ${f.error}`).join('; '))
-    } else if (r.applied?.length) {
-      toast.success(isHe ? 'הסורקים רועננו — סריקות חדשות ישתמשו בפרטים החדשים' : 'Scanners refreshed — new scans use the new login')
-    }
   }
 
   const mutation = useMutation({
     mutationFn: post,
     onSuccess: (r, vars) => {
-      if (vars.change) toast.success(isHe ? 'נשמר' : 'Saved')
-      reportApplied(r)
+      const failed = (r.applied ?? []).filter((a) => !a.ok)
+      if (failed.length) {
+        toast.error((isHe ? 'נשמר, אבל הסורק לא רוענן: ' : 'Saved, but a scanner was not refreshed: ') + failed.map((f) => `${f.name} — ${f.error}`).join('; '))
+      } else if (r.applied?.length) {
+        toast.success(vars.change
+          ? (isHe ? 'נשמר והסורקים רועננו — סריקות חדשות ישתמשו בזה' : 'Saved and scanners refreshed — new scans use it')
+          : (isHe ? 'הסורקים רועננו' : 'Scanners refreshed'))
+      } else if (vars.change) {
+        toast.success(isHe ? 'נשמר' : 'Saved')
+      }
       qc.invalidateQueries({ queryKey: ['scanner-accounts'] })
     },
-    onError: (e: Error) => toast.error(e.message === 'wrong password' ? (isHe ? 'סיסמת הגדרות שגויה' : 'Wrong settings password') : e.message),
+    onError: (e: Error) => toast.error(e.message),
   })
-
-  const act = (provider: string, body: { change?: Change; apply?: boolean }) => mutation.mutate({ provider, ...body })
 
   return (
     <div className="space-y-4">
@@ -110,8 +111,8 @@ export default function ScannerAccountsPage() {
         icon={KeyRound}
         title={isHe ? 'חשבונות סורקים' : 'Scanner accounts'}
         description={isHe
-          ? 'עם איזה משתמש כל סורק מתחבר לפורטל, ולאן הוא עובר כשההתחברות נכשלת.'
-          : 'Which login each scanner uses on its portal, and where it goes when that login fails.'}
+          ? 'עם אילו משתמשים כל סורק מתחבר לפורטל, ובאיזה סדר: הראשון ברשימה קודם, ואם ההתחברות נכשלת — הבא בתור.'
+          : 'Which logins each scanner uses on its portal, in order: the first in the list first, and the next one whenever a login fails.'}
       />
 
       <Card>
@@ -132,10 +133,7 @@ export default function ScannerAccountsPage() {
               </span>
             </>
           ) : (
-            <form
-              className="flex w-full flex-wrap items-center gap-2"
-              onSubmit={(e) => { e.preventDefault(); if (password) setUnlocked(true) }}
-            >
+            <form className="flex w-full flex-wrap items-center gap-2" onSubmit={(e) => { e.preventDefault(); if (password) setUnlocked(true) }}>
               <Lock className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm text-muted-foreground">{isHe ? 'לצפייה בלבד' : 'View only'}</span>
               <input type="text" name="username" autoComplete="username" value="dashboard-settings" readOnly hidden />
@@ -169,34 +167,36 @@ export default function ScannerAccountsPage() {
             isHe={isHe}
             unlocked={unlocked}
             busy={mutation.isPending}
-            onAct={(body) => act(p.id, body)}
-            onReveal={(rung) => post({ provider: p.id, reveal: rung })}
+            act={(body) => mutation.mutateAsync({ provider: p.id, ...body }).then(() => undefined)}
+            reveal={(id) => post({ provider: p.id, reveal: id })}
           />
         ))}
       </div>
 
       <p className="text-xs text-muted-foreground">
         {isHe
-          ? 'כל שמירה יוצרת גרסה חדשה של הסוד config ב-AWS (הקודמת נשמרת תחת AWSPREVIOUS). כיבוי חשבון לא מוחק אותו — הפרטים נשמרים בצד ומוחזרים בהדלקה. רענון סורק לא עוצר סריקות רצות; הן מסתיימות עם הפרטים הקודמים.'
-          : 'Every save writes a new version of the config secret in AWS (the previous one stays under AWSPREVIOUS). Switching an account off never deletes it — it is set aside and comes back when switched on. Refreshing a scanner does not stop running scans; they finish on the previous login.'}
+          ? 'כל שמירה יוצרת גרסה חדשה של הסוד config ב-AWS (הקודמת נשמרת תחת AWSPREVIOUS). החשבונות נשמרים ברשימה אחת לכל ספק (למשל PSA_ACCOUNTS), והמפתחות הישנים (PSA_USERNAME וכו׳) מתעדכנים אוטומטית לחשבונות הראשונים. רענון סורק לא עוצר סריקות רצות; הן מסתיימות עם הפרטים הקודמים.'
+          : 'Every save writes a new version of the config secret in AWS (the previous one stays under AWSPREVIOUS). Accounts are stored as one list per provider (e.g. PSA_ACCOUNTS); the old keys (PSA_USERNAME etc.) are kept in step with the first accounts automatically. Refreshing a scanner does not stop running scans; they finish on the previous login.'}
       </p>
     </div>
   )
 }
 
-function ProviderCard({ provider: p, isHe, unlocked, busy, onAct, onReveal }: {
+function ProviderCard({ provider: p, isHe, unlocked, busy, act, reveal }: {
   provider: Provider
   isHe: boolean
   unlocked: boolean
   busy: boolean
-  onAct: (body: { change?: Change; apply?: boolean }) => void
-  onReveal: (rung: string) => Promise<PostResult>
+  act: Act
+  reveal: (id: string) => Promise<PostResult>
 }) {
   const rel = useRelative(isHe)
+  const [adding, setAdding] = useState(false)
   const sync = syncState(p)
-  const active = p.rungs.filter((r) => r.active).length
+  const used = p.accounts.filter((a) => a.usedNow).length
   const editable = unlocked && !p.readOnly
-  const dealers = p.rungs.filter((r) => r.kind === 'dealer')
+  const multiPortal = p.portals.length > 1
+  const full = p.accounts.length >= p.maxAccounts
 
   return (
     <Card className={cn(p.readOnly && 'opacity-80')}>
@@ -207,15 +207,15 @@ function ProviderCard({ provider: p, isHe, unlocked, busy, onAct, onReveal }: {
             <p className="text-xs text-muted-foreground">
               {p.readOnly
                 ? (isHe ? 'לא ניתן לעריכה כאן' : 'Not editable here')
-                : p.fallbackSupported
-                  ? (isHe ? `${active} מתוך ${p.rungs.length} חשבונות פעילים בשרשרת` : `${active} of ${p.rungs.length} accounts active in the chain`)
-                  : (isHe ? 'חשבון אחד · ללא גיבוי' : 'One account · no fallback')}
+                : isHe
+                  ? `${p.accounts.length} מתוך ${p.maxAccounts} חשבונות · ${used} בשימוש הסורק`
+                  : `${p.accounts.length} of ${p.maxAccounts} accounts · ${used} used by the scanner`}
             </p>
           </div>
           {!p.readOnly && (sync === 'pending' ? (
             <div className="flex items-center gap-2">
               <Badge variant="warning">{isHe ? 'השינוי עוד לא נקלט בסורק' : 'Change not picked up yet'}</Badge>
-              <Button type="button" size="sm" className="h-8" disabled={!unlocked || busy} onClick={() => onAct({ apply: true })}
+              <Button type="button" size="sm" className="h-8" disabled={!unlocked || busy} onClick={() => act({ apply: true })}
                 title={unlocked ? undefined : (isHe ? 'פתח לעריכה קודם' : 'Unlock editing first')}>
                 <RefreshCw className="me-1 h-3.5 w-3.5" />{isHe ? 'החל עכשיו' : 'Apply now'}
               </Button>
@@ -233,35 +233,51 @@ function ProviderCard({ provider: p, isHe, unlocked, busy, onAct, onReveal }: {
             {isHe ? p.readOnlyReasonHe : p.readOnlyReasonEn}
           </p>
         )}
+        {!p.readOnly && !p.scannerReadsList && p.accounts.length > 1 && (
+          <p className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 p-2 text-xs">
+            <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
+            {isHe
+              ? 'הסורק הזה עוד משתמש רק בחשבון הראשון. חשבונות הגיבוי נשמרים ויופעלו אחרי עדכון הסורק.'
+              : 'This scanner still uses only the first account. The fallbacks are saved and take effect once the scanner is updated.'}
+          </p>
+        )}
 
-        <ol className="space-y-0">
-          {p.rungs.map((r, i) => (
-            <li key={r.id}>
-              <RungRow
-                rung={r}
+        <ol>
+          {p.accounts.map((a, i) => (
+            <li key={a.id}>
+              <AccountRow
+                account={a}
                 step={i + 1}
+                last={i === p.accounts.length - 1}
                 isHe={isHe}
+                multiPortal={multiPortal}
                 editable={editable}
                 busy={busy}
-                canPromote={r.kind === 'dealer' && dealers.length === 2 && r.id !== dealers[0].id}
-                onChange={(change, apply) => onAct({ change, apply })}
-                onPromote={() => onAct({ change: { op: 'swap', a: dealers[0].id, b: r.id }, apply: true })}
-                onReveal={() => onReveal(r.id)}
+                act={act}
+                reveal={() => reveal(a.id)}
                 rel={rel}
               />
               <Connector isHe={isHe} />
             </li>
           ))}
-          {!p.fallbackSupported && !p.readOnly && (
+          {editable && (adding ? (
             <li>
-              <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
-                {isHe
-                  ? 'חשבון גיבוי — הסורק הזה עוד לא יודע לעבור לחשבון שני. נדרש עדכון קטן בסורק (קוד ההתחברות המשותף כבר תומך בזה).'
-                  : 'Fallback account — this scanner cannot switch to a second account yet. It needs a small scanner update (the shared login code already supports it).'}
-              </div>
+              <AddAccountForm isHe={isHe} portals={p.portals} busy={busy} onCancel={() => setAdding(false)}
+                onAdd={async (change, apply) => { await act({ change, apply }); setAdding(false) }} />
               <Connector isHe={isHe} />
             </li>
-          )}
+          ) : (
+            <li>
+              <button type="button" disabled={full || busy} onClick={() => setAdding(true)}
+                className="flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed p-2.5 text-xs text-muted-foreground transition-colors hover:border-foreground/40 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60">
+                <Plus className="h-3.5 w-3.5" />
+                {full
+                  ? (isHe ? `הגעת למקסימום — ${p.maxAccounts} חשבונות` : `Maximum reached — ${p.maxAccounts} accounts`)
+                  : (isHe ? 'הוסף חשבון גיבוי' : 'Add a fallback account')}
+              </button>
+              <Connector isHe={isHe} />
+            </li>
+          ))}
           <li className="flex items-center gap-2 ps-1 text-xs text-muted-foreground">
             <XCircle className="h-4 w-4 text-destructive/70" />
             {isHe ? 'כל החשבונות נכשלו ← הסריקה נכשלת' : 'Every account failed → the scan fails'}
@@ -300,23 +316,20 @@ function Connector({ isHe }: { isHe: boolean }) {
   )
 }
 
-function RungRow({ rung: r, step, isHe, editable, busy, canPromote, onChange, onPromote, onReveal, rel }: {
-  rung: RungView
+function AccountRow({ account: a, step, last, isHe, multiPortal, editable, busy, act, reveal, rel }: {
+  account: AccountView
   step: number
+  last: boolean
   isHe: boolean
+  multiPortal: boolean
   editable: boolean
   busy: boolean
-  canPromote: boolean
-  onChange: (change: Change, apply: boolean) => void
-  onPromote: () => void
-  onReveal: () => Promise<PostResult>
+  act: Act
+  reveal: () => Promise<PostResult>
   rel: (iso?: string | null) => string
 }) {
   const [editing, setEditing] = useState(false)
-  const [username, setUsername] = useState(r.username)
-  const [newPassword, setNewPassword] = useState('')
-  const [showNew, setShowNew] = useState(false)
-  const [apply, setApply] = useState(true)
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const [revealed, setRevealed] = useState<string | null>(null)
 
   // A revealed password hides itself again after 20 seconds.
@@ -325,120 +338,212 @@ function RungRow({ rung: r, step, isHe, editable, busy, canPromote, onChange, on
     const t = setTimeout(() => setRevealed(null), 20_000)
     return () => clearTimeout(t)
   }, [revealed])
-  // Locking the page closes the form and hides a revealed password without resetting state.
+  // Locking the page closes forms and hides a revealed password without resetting state.
   const isEditing = editing && editable
+  const isConfirming = confirmDelete && editable
   const shown = editable ? revealed : null
 
-  const incomplete = !r.parked && !r.active && (r.username || r.hasPassword)
-  const empty = !r.parked && !r.username && !r.hasPassword
-  const status = r.active
-    ? { text: isHe ? 'פעיל' : 'Active', cls: 'bg-success text-white' }
-    : r.sameAs && !r.parked
-      ? { text: isHe ? 'זהה לחשבון קודם — מדולג' : 'Same as an earlier account — skipped', cls: 'bg-warning text-white' }
-    : r.parked
-      ? { text: isHe ? 'כבוי — מדולג' : 'Off — skipped', cls: 'bg-muted text-muted-foreground' }
-      : incomplete
+  const status = !a.enabled
+    ? { text: isHe ? 'כבוי — מדולג' : 'Off — skipped', cls: 'bg-muted text-muted-foreground' }
+    : a.sameAs
+      ? { text: isHe ? 'כפול לחשבון קודם — מדולג' : 'Repeats an earlier account — skipped', cls: 'bg-warning text-white' }
+      : !a.username || !a.hasPassword
         ? { text: isHe ? 'חסר — מדולג' : 'Incomplete — skipped', cls: 'bg-warning text-white' }
-        : { text: isHe ? 'לא מוגדר' : 'Not set', cls: 'bg-muted text-muted-foreground' }
-
-  const save = () => {
-    const change: Change = { op: 'set', rung: r.id }
-    if (username.trim() && username.trim() !== r.username) change.username = username.trim()
-    if (newPassword) change.password = newPassword
-    if (change.username === undefined && change.password === undefined) { setEditing(false); return }
-    onChange(change, apply)
-    setEditing(false); setNewPassword(''); setShowNew(false)
-  }
+        : a.usedNow
+          ? { text: step === 1 ? (isHe ? 'ראשי' : 'Primary') : (isHe ? 'גיבוי פעיל' : 'Active fallback'), cls: 'bg-success text-white' }
+          : { text: isHe ? 'שמור — הסורק עוד לא משתמש בו' : 'Saved — not used by the scanner yet', cls: 'bg-muted text-muted-foreground' }
+  const live = a.enabled && a.usedNow
 
   return (
-    <div className={cn('rounded-md border p-3', r.active ? 'border-border' : 'border-dashed bg-muted/20')}>
+    <div className={cn('rounded-md border p-3', live ? 'border-border' : 'border-dashed bg-muted/20')}>
       <div className="flex flex-wrap items-center gap-2">
         <span className={cn('flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold', status.cls)}>{step}</span>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-sm font-medium">{isHe ? r.labelHe : r.labelEn}</span>
+            <span className="text-sm font-medium">{a.label || portalLabel(a.portal, isHe, multiPortal)}</span>
+            {a.label && multiPortal && <span className="text-[10px] text-muted-foreground">{portalLabel(a.portal, isHe, true)}</span>}
             <span className={cn('rounded px-1.5 py-0.5 text-[10px] font-medium', status.cls)}>{status.text}</span>
           </div>
-          {!empty && (
-            <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
-              <span className="font-mono text-foreground" dir="ltr">{r.username || '—'}</span>
-              <span className="font-mono" dir="ltr">
-                {shown !== null ? shown || '—' : r.hasPassword ? '••••••••' : (isHe ? 'אין סיסמה' : 'no password')}
-              </span>
-              {r.meta.changedAt && (
-                <span>{isHe ? 'שונה ' : 'changed '}{rel(r.meta.changedAt)}{r.meta.changedBy ? ` · ${r.meta.changedBy.split('@')[0]}` : ''}</span>
-              )}
-            </div>
-          )}
+          <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+            <span className="font-mono text-foreground" dir="ltr">{a.username || '—'}</span>
+            <span className="font-mono" dir="ltr">
+              {shown !== null ? shown || '—' : a.hasPassword ? '••••••••' : (isHe ? 'אין סיסמה' : 'no password')}
+            </span>
+            {a.changedAt && (
+              <span>{isHe ? 'שונה ' : 'changed '}{rel(a.changedAt)}{a.changedBy ? ` · ${a.changedBy.split('@')[0]}` : ''}</span>
+            )}
+          </div>
         </div>
 
-        {editable && !isEditing && (
-          <div className="flex items-center gap-1">
-            {r.hasPassword && (
-              <Button type="button" size="icon" variant="ghost" className="h-8 w-8" disabled={busy}
-                title={revealed !== null ? (isHe ? 'הסתר סיסמה' : 'Hide password') : (isHe ? 'הצג סיסמה' : 'Show password')}
+        {editable && !isEditing && !isConfirming && (
+          <div className="flex items-center gap-0.5">
+            {a.hasPassword && (
+              <IconButton title={shown !== null ? (isHe ? 'הסתר סיסמה' : 'Hide password') : (isHe ? 'הצג סיסמה' : 'Show password')} disabled={busy}
                 onClick={async () => {
-                  if (revealed !== null) { setRevealed(null); return }
-                  try { setRevealed((await onReveal()).password ?? '') } catch (e) { toast.error((e as Error).message) }
+                  if (shown !== null) { setRevealed(null); return }
+                  try { setRevealed((await reveal()).password ?? '') } catch (e) { toast.error((e as Error).message) }
                 }}>
-                {revealed !== null ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-              </Button>
+                {shown !== null ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+              </IconButton>
             )}
-            {canPromote && r.active && (
-              <Button type="button" size="icon" variant="ghost" className="h-8 w-8" disabled={busy}
-                title={isHe ? 'הפוך לחשבון הראשי' : 'Make this the primary account'} onClick={onPromote}>
-                <ArrowUpToLine className="h-3.5 w-3.5" />
-              </Button>
-            )}
-            <Button type="button" size="icon" variant="ghost" className="h-8 w-8" disabled={busy}
-              title={isHe ? 'ערוך' : 'Edit'} onClick={() => { setUsername(r.username); setEditing(true) }}>
+            <IconButton title={isHe ? 'הזז למעלה בסדר' : 'Move up the order'} disabled={busy || step === 1}
+              onClick={() => act({ change: { op: 'move', id: a.id, to: step - 2 }, apply: true })}>
+              <ArrowUp className="h-3.5 w-3.5" />
+            </IconButton>
+            <IconButton title={isHe ? 'הזז למטה בסדר' : 'Move down the order'} disabled={busy || last}
+              onClick={() => act({ change: { op: 'move', id: a.id, to: step }, apply: true })}>
+              <ArrowDown className="h-3.5 w-3.5" />
+            </IconButton>
+            <IconButton title={isHe ? 'ערוך' : 'Edit'} disabled={busy} onClick={() => setEditing(true)}>
               <Pencil className="h-3.5 w-3.5" />
-            </Button>
-            {r.toggleable && (r.parked || !!r.username || r.hasPassword) && (
-              <Switch
-                checked={!r.parked}
-                disabled={busy}
-                label={r.parked ? (isHe ? 'הדלק חשבון' : 'Switch on') : (isHe ? 'כבה חשבון' : 'Switch off')}
-                onChange={(on) => onChange({ op: 'toggle', rung: r.id, enabled: on }, true)}
-              />
-            )}
+            </IconButton>
+            <IconButton title={isHe ? 'מחק' : 'Delete'} disabled={busy} onClick={() => setConfirmDelete(true)}>
+              <Trash2 className="h-3.5 w-3.5 text-destructive" />
+            </IconButton>
+            <Switch
+              checked={a.enabled}
+              disabled={busy}
+              label={a.enabled ? (isHe ? 'כבה חשבון' : 'Switch off') : (isHe ? 'הדלק חשבון' : 'Switch on')}
+              onChange={(on) => act({ change: { op: 'toggle', id: a.id, enabled: on }, apply: true })}
+            />
           </div>
         )}
       </div>
 
+      {isConfirming && (
+        <div className="mt-3 flex flex-wrap items-center gap-2 rounded-md bg-destructive/5 p-2 text-xs">
+          <span>{isHe ? `למחוק את ${a.username}? אי אפשר לבטל מכאן (גרסה קודמת נשמרת ב-AWS).` : `Delete ${a.username}? This can't be undone here (AWS keeps the previous version).`}</span>
+          <Button type="button" size="sm" variant="destructive" className="ms-auto h-7" disabled={busy}
+            onClick={() => act({ change: { op: 'delete', id: a.id }, apply: true }).finally(() => setConfirmDelete(false))}>
+            {isHe ? 'מחק' : 'Delete'}
+          </Button>
+          <Button type="button" size="sm" variant="outline" className="h-7" onClick={() => setConfirmDelete(false)}>
+            {isHe ? 'ביטול' : 'Cancel'}
+          </Button>
+        </div>
+      )}
+
       {isEditing && (
-        <form className="mt-3 grid gap-2 sm:grid-cols-2" onSubmit={(e) => { e.preventDefault(); save() }}>
-          <label className="space-y-1 text-xs">
-            <span className="text-muted-foreground">{isHe ? 'שם משתמש' : 'Username'}</span>
-            <Input id={`${r.id}-username`} value={username} onChange={(e) => setUsername(e.target.value)}
-              className="h-8 font-mono text-sm" dir="ltr" autoComplete="off" />
-          </label>
-          <label className="space-y-1 text-xs">
-            <span className="text-muted-foreground">{isHe ? 'סיסמה חדשה (ריק = ללא שינוי)' : 'New password (empty = keep)'}</span>
-            <div className="relative">
-              <Input id={`${r.id}-password`} type={showNew ? 'text' : 'password'} value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)} className="h-8 pe-9 font-mono text-sm" dir="ltr" autoComplete="new-password" />
-              <button type="button" className="absolute inset-y-0 end-0 flex w-8 items-center justify-center text-muted-foreground"
-                onClick={() => setShowNew((s) => !s)} aria-label={showNew ? 'hide' : 'show'}>
-                {showNew ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-              </button>
-            </div>
-          </label>
-          <label className="flex items-center gap-2 text-xs sm:col-span-2">
-            <input type="checkbox" checked={apply} onChange={(e) => setApply(e.target.checked)} className="h-3.5 w-3.5" />
-            {isHe ? 'החל על הסורקים מיד (סריקות רצות יסתיימו עם הפרטים הקודמים)' : 'Apply to the scanners now (running scans finish on the old login)'}
-          </label>
-          <div className="flex gap-2 sm:col-span-2">
-            <Button type="submit" size="sm" className="h-8" disabled={busy || (!newPassword && username.trim() === r.username) || !username.trim()}>
-              {isHe ? 'שמור' : 'Save'}
-            </Button>
-            <Button type="button" size="sm" variant="outline" className="h-8" onClick={() => { setEditing(false); setNewPassword('') }}>
-              {isHe ? 'ביטול' : 'Cancel'}
-            </Button>
-          </div>
-        </form>
+        <AccountForm
+          isHe={isHe}
+          busy={busy}
+          initial={{ username: a.username, label: a.label ?? '' }}
+          passwordOptional
+          submitLabel={isHe ? 'שמור' : 'Save'}
+          onCancel={() => setEditing(false)}
+          onSubmit={async ({ username, password, label }, apply) => {
+            const change: Change = { op: 'update', id: a.id }
+            if (username !== a.username) change.username = username
+            if (password) change.password = password
+            if (label !== (a.label ?? '')) change.label = label
+            if (change.username === undefined && change.password === undefined && change.label === undefined) { setEditing(false); return }
+            await act({ change, apply })
+            setEditing(false)
+          }}
+        />
       )}
     </div>
+  )
+}
+
+function AddAccountForm({ isHe, portals, busy, onAdd, onCancel }: {
+  isHe: boolean
+  portals: Portal[]
+  busy: boolean
+  onAdd: (change: Change, apply: boolean) => Promise<void>
+  onCancel: () => void
+}) {
+  const [portal, setPortal] = useState<Portal>('dealer')
+  return (
+    <div className="rounded-md border border-primary/40 p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary"><Plus className="h-3.5 w-3.5" /></span>
+        <span className="text-sm font-medium">{isHe ? 'חשבון חדש — נכנס בסוף הרשימה' : 'New account — goes to the end of the list'}</span>
+        {portals.length > 1 && (
+          <div className="ms-auto inline-flex rounded-md border p-0.5 text-xs" role="radiogroup" aria-label={isHe ? 'סוג פורטל' : 'Portal type'}>
+            {portals.map((pt) => (
+              <button key={pt} type="button" role="radio" aria-checked={portal === pt} onClick={() => setPortal(pt)}
+                className={cn('rounded px-2 py-1', portal === pt ? 'bg-primary text-primary-foreground' : 'text-muted-foreground')}>
+                {portalLabel(pt, isHe, true)}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      <AccountForm
+        isHe={isHe}
+        busy={busy}
+        initial={{ username: '', label: '' }}
+        submitLabel={isHe ? 'הוסף' : 'Add'}
+        onCancel={onCancel}
+        onSubmit={({ username, password, label }, apply) =>
+          onAdd({ op: 'add', username, password, portal, ...(label ? { label } : {}) }, apply)}
+      />
+    </div>
+  )
+}
+
+function AccountForm({ isHe, busy, initial, passwordOptional, submitLabel, onSubmit, onCancel }: {
+  isHe: boolean
+  busy: boolean
+  initial: { username: string; label: string }
+  passwordOptional?: boolean
+  submitLabel: string
+  onSubmit: (v: { username: string; password: string; label: string }, apply: boolean) => Promise<void> | void
+  onCancel: () => void
+}) {
+  const [username, setUsername] = useState(initial.username)
+  const [password, setPassword] = useState('')
+  const [label, setLabel] = useState(initial.label)
+  const [show, setShow] = useState(false)
+  const [apply, setApply] = useState(true)
+  const changed = username.trim() !== initial.username || !!password || label.trim() !== initial.label
+  const valid = !!username.trim() && (passwordOptional || !!password) && changed
+
+  return (
+    <form className="mt-3 grid gap-2 sm:grid-cols-3" onSubmit={(e) => {
+      e.preventDefault()
+      if (valid) void onSubmit({ username: username.trim(), password, label: label.trim() }, apply)
+    }}>
+      <label className="space-y-1 text-xs">
+        <span className="text-muted-foreground">{isHe ? 'שם משתמש' : 'Username'}</span>
+        <Input value={username} onChange={(e) => setUsername(e.target.value)} className="h-8 font-mono text-sm" dir="ltr" autoComplete="off" />
+      </label>
+      <label className="space-y-1 text-xs">
+        <span className="text-muted-foreground">
+          {passwordOptional ? (isHe ? 'סיסמה חדשה (ריק = ללא שינוי)' : 'New password (empty = keep)') : (isHe ? 'סיסמה' : 'Password')}
+        </span>
+        <div className="relative">
+          <Input type={show ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)}
+            className="h-8 pe-9 font-mono text-sm" dir="ltr" autoComplete="new-password" />
+          <button type="button" className="absolute inset-y-0 end-0 flex w-8 items-center justify-center text-muted-foreground"
+            onClick={() => setShow((s) => !s)} aria-label={show ? 'hide' : 'show'}>
+            {show ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+          </button>
+        </div>
+      </label>
+      <label className="space-y-1 text-xs">
+        <span className="text-muted-foreground">{isHe ? 'כינוי (לא חובה)' : 'Nickname (optional)'}</span>
+        <Input value={label} onChange={(e) => setLabel(e.target.value)} className="h-8 text-sm" autoComplete="off"
+          placeholder={isHe ? 'למשל: סניף חולון' : 'e.g. Holon branch'} />
+      </label>
+      <label className="flex items-center gap-2 text-xs sm:col-span-3">
+        <input type="checkbox" checked={apply} onChange={(e) => setApply(e.target.checked)} className="h-3.5 w-3.5" />
+        {isHe ? 'החל על הסורקים מיד (סריקות רצות יסתיימו עם הפרטים הקודמים)' : 'Apply to the scanners now (running scans finish on the old login)'}
+      </label>
+      <div className="flex gap-2 sm:col-span-3">
+        <Button type="submit" size="sm" className="h-8" disabled={busy || !valid}>{submitLabel}</Button>
+        <Button type="button" size="sm" variant="outline" className="h-8" onClick={onCancel}>{isHe ? 'ביטול' : 'Cancel'}</Button>
+      </div>
+    </form>
+  )
+}
+
+function IconButton({ title, disabled, onClick, children }: { title: string; disabled?: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <Button type="button" size="icon" variant="ghost" className="h-8 w-8" title={title} aria-label={title} disabled={disabled} onClick={onClick}>
+      {children}
+    </Button>
   )
 }
 
@@ -453,7 +558,7 @@ function Switch({ checked, disabled, label, onChange }: { checked: boolean; disa
       disabled={disabled}
       onClick={() => onChange(!checked)}
       className={cn(
-        'relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors disabled:opacity-50',
+        'relative ms-1 inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors disabled:opacity-50',
         checked ? 'bg-success' : 'bg-muted-foreground/30',
       )}
     >
