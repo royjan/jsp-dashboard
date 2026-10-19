@@ -1,0 +1,27 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "WriteConfigSecret",
+      "Effect": "Allow",
+      "Action": ["secretsmanager:PutSecretValue"],
+      "Resource": "arn:aws:secretsmanager:eu-central-1:224072612352:secret:config-lrmLtO"
+    },
+    {
+      "Sid": "RefreshScannerLambdas",
+      "Effect": "Allow",
+      "Action": ["lambda:GetFunctionConfiguration", "lambda:UpdateFunctionConfiguration"],
+      "Resource": [
+        "arn:aws:lambda:eu-west-3:224072612352:function:psa-vehicle-service-lambda-dev-api",
+        "arn:aws:lambda:eu-west-3:224072612352:function:psa-catalog-service-lambda-dev-api",
+        "arn:aws:lambda:eu-central-1:224072612352:function:partslink-vehicle-service-lambda-dev-api",
+        "arn:aws:lambda:eu-central-1:224072612352:function:partslink-vehicle-service-lambda-hk-api",
+        "arn:aws:lambda:ap-northeast-2:224072612352:function:saic-vehicle-service-lambda-prod-api",
+        "arn:aws:lambda:ap-northeast-2:224072612352:function:saic-vehicle-service-lambda-prod-orchestrator",
+        "arn:aws:lambda:eu-central-1:224072612352:function:qipei-vehicle-service-lambda-dev-api",
+        "arn:aws:lambda:eu-central-1:224072612352:function:vin17-lambda-dev-api",
+        "arn:aws:lambda:il-central-1:224072612352:function:tivtaam-cart-service-dev-api"
+      ]
+    }
+  ]
+}
