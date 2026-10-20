@@ -3,8 +3,8 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  ArrowDown, ArrowUp, CheckCircle2, Eye, EyeOff, Info, KeyRound, Lock, Pencil, Plus,
-  RefreshCw, ServerCog, ShieldAlert, Trash2, Unlock, XCircle,
+  ArrowDown, ArrowUp, CheckCircle2, Eye, EyeOff, Info, KeyRound, Pencil, Plus,
+  RefreshCw, ServerCog, ShieldAlert, Trash2, XCircle,
 } from 'lucide-react'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { Input } from '@/components/ui/input'
@@ -20,9 +20,8 @@ import type { AccountView, Change, Portal, ProviderView } from '@/lib/scanner-ac
  * /settings/scanner-accounts — the portal logins each scanner uses, in the
  * order it tries them (a primary + up to 5 fallbacks).
  *
- * Reading needs a signed-in session and shows no passwords. Every change (and
- * every reveal) sends the settings password, checked on the server each time;
- * it lives only in this page's memory. Scanners read their logins once per
+ * Reading and editing need a signed-in session; passwords show only on request.
+ * Scanners read their logins once per
  * container, so a saved change shows as "not picked up" until the scanner is
  * refreshed — saving does that by default.
  */
@@ -64,8 +63,6 @@ export default function ScannerAccountsPage() {
   const { locale } = useLocale()
   const isHe = locale === 'he'
   const qc = useQueryClient()
-  const [password, setPassword] = useState('')
-  const [unlocked, setUnlocked] = useState(false)
 
   const q = useQuery<Payload>({
     queryKey: ['scanner-accounts'],
@@ -82,13 +79,10 @@ export default function ScannerAccountsPage() {
     const res = await fetch('/api/settings/scanner-accounts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password, ...body }),
+      body: JSON.stringify(body),
     })
     const out = await res.json().catch(() => ({}))
-    if (!res.ok) {
-      if (res.status === 403 && out?.error === 'wrong password') { setUnlocked(false); setPassword('') }
-      throw new Error(out?.error === 'wrong password' ? (isHe ? 'סיסמת הגדרות שגויה' : 'Wrong settings password') : out?.error || String(res.status))
-    }
+    if (!res.ok) throw new Error(out?.error || String(res.status))
     return out
   }
 
@@ -125,45 +119,6 @@ export default function ScannerAccountsPage() {
           : 'Which logins each scanner uses on its portal, in order: the first in the list first, and the next one whenever a login fails.'}
       />
 
-      <Card>
-        <CardContent className="flex flex-wrap items-center gap-2 p-3">
-          {unlocked ? (
-            <>
-              <Unlock className="h-4 w-4 text-warning" />
-              <span className="text-sm">{isHe ? 'עריכה פתוחה' : 'Editing unlocked'}</span>
-              <Button type="button" size="sm" variant="ghost" className="ms-auto h-8" onClick={() => { setUnlocked(false); setPassword('') }}>
-                <Lock className="me-1 h-3.5 w-3.5" />{isHe ? 'נעל' : 'Lock'}
-              </Button>
-            </>
-          ) : q.data && !q.data.editable ? (
-            <>
-              <Lock className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">
-                {isHe ? 'לצפייה בלבד · עריכה כבויה: SETTINGS_EDIT_PASSWORD לא מוגדר באפליקציה' : 'View only · editing is off: SETTINGS_EDIT_PASSWORD is not set on the app'}
-              </span>
-            </>
-          ) : (
-            <form className="flex w-full flex-wrap items-center gap-2" onSubmit={(e) => { e.preventDefault(); if (password) setUnlocked(true) }}>
-              <Lock className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">{isHe ? 'לצפייה בלבד' : 'View only'}</span>
-              <input type="text" name="username" autoComplete="username" value="dashboard-settings" readOnly hidden />
-              <Input
-                id="scanner-accounts-password"
-                type="password"
-                autoComplete="current-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder={isHe ? 'סיסמת הגדרות' : 'settings password'}
-                className="ms-auto h-8 w-56 text-sm"
-              />
-              <Button type="submit" size="sm" variant="outline" className="h-8" disabled={!password}>
-                <Unlock className="me-1 h-3.5 w-3.5" />{isHe ? 'פתח לעריכה' : 'Unlock'}
-              </Button>
-            </form>
-          )}
-        </CardContent>
-      </Card>
-
       {q.isLoading && <div className="h-72 animate-pulse rounded-md bg-muted/40" />}
       {q.error && (
         <p className="text-sm text-destructive">{isHe ? 'לא ניתן לקרוא את החשבונות: ' : 'Could not read the accounts: '}{(q.error as Error).message}</p>
@@ -175,7 +130,7 @@ export default function ScannerAccountsPage() {
             key={p.id}
             provider={p}
             isHe={isHe}
-            unlocked={unlocked}
+            unlocked
             busy={mutation.isPending}
             act={(body) => mutation.mutateAsync({ provider: p.id, ...body }).then(() => undefined)}
             reveal={(id) => post({ provider: p.id, reveal: id })}

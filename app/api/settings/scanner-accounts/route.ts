@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { forgetSecret } from '@/lib/aws-secrets'
 import { getRedisClient } from '@/lib/redis-client'
-import { checkEditPassword, editingEnabled, sessionEmail } from '@/lib/settings-gate'
+import { sessionEmail } from '@/lib/settings-gate'
 import {
   applyChange,
   buildView,
@@ -21,10 +21,10 @@ import {
  *
  * GET   signed-in session. Usernames, which accounts are on, and when each
  *       scanner last picked up the config. NEVER a password.
- * POST  signed-in session AND the settings password (lib/settings-gate.ts).
- *       { password, provider, change }   change one account (see Change)
- *       { password, provider, reveal }   one account's password, on request
- *       { password, provider, apply }    recycle the provider's Lambdas now
+ * POST  signed-in session (no settings password on this page).
+ *       { provider, change }   change one account (see Change)
+ *       { provider, reveal }   one account's password, on request
+ *       { provider, apply }    recycle the provider's Lambdas now
  *       A change may carry `apply: true` to do both in one step.
  *
  * PSA also has on-prem users that read logins from the office Redis, not the
@@ -151,7 +151,7 @@ export async function GET() {
     ])
     const byName = new Map(states.map((s) => [s.name, s]))
     return NextResponse.json({
-      editable: editingEnabled(),
+      editable: true,
       providers: providers.map((p) => ({
         ...p,
         lambdas: p.lambdas.map((l) => byName.get(l.name) ?? { ...l, refreshedAt: null }),
@@ -164,7 +164,6 @@ export async function GET() {
 }
 
 interface PostBody {
-  password?: string
   provider?: string
   change?: Change
   reveal?: string
@@ -177,9 +176,6 @@ export async function POST(req: Request) {
 
   let body: PostBody
   try { body = await req.json() } catch { return NextResponse.json({ error: 'bad body' }, { status: 400 }) }
-
-  const gate = checkEditPassword(req, body.password)
-  if (!gate.ok) return NextResponse.json({ error: gate.error }, { status: gate.status })
 
   const provider = providerById(String(body.provider ?? ''))
   if (!provider) return NextResponse.json({ error: 'unknown provider' }, { status: 400 })
