@@ -53,6 +53,7 @@ export function PolicyForm({ id, policy, he }: { id: string; policy: BotPolicy; 
   const [prices, setPrices] = useState(policy.show_prices !== false)
   const [exemptUi, setExemptUi] = useState((policy.exempt_channels ?? ['ui']).includes('ui'))
   const [counter, setCounter] = useState(!!policy.show_counter)
+  const [validate, setValidate] = useState(!!policy.validate_thumbdown)
 
   return (
     <Card>
@@ -87,11 +88,16 @@ export function PolicyForm({ id, policy, he }: { id: string; policy: BotPolicy; 
           <input type="checkbox" checked={exemptUi} onChange={(e) => setExemptUi(e.target.checked)} className="h-4 w-4" />
           {tr('הקונסולה של הצוות לא כפופה להגבלות', 'Staff console is exempt from the limits')}
         </label>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={validate} onChange={(e) => setValidate(e.target.checked)} className="h-4 w-4" />
+          {tr('👎 על תשובה — לבדוק מול קטלוג היצרן ולענות בקבוצה (רק רכבים שיש להם קטלוג)', '👎 on an answer — check it against the manufacturer catalogue and reply in the chat (cars with a catalogue only)')}
+        </label>
         <div className="flex items-center gap-3">
           <Button disabled={save.isPending} onClick={() => save.mutate({
             daily_limit_per_user: Math.max(0, parseInt(limit || '0', 10) || 0), limit_reply: limitReply,
             allow_list: allow.split('\n').map((x) => x.trim()).filter(Boolean), allow_reply: allowReply,
             show_prices: prices, exempt_channels: exemptUi ? ['ui'] : [], show_counter: counter,
+            validate_thumbdown: validate,
           })}>{tr('שמור', 'Save')}</Button>
           {save.isSuccess && <span className="text-sm text-emerald-600">{tr('נשמר', 'Saved')}</span>}
           {save.error && <span className="text-sm text-destructive">{(save.error as Error).message}</span>}

@@ -16,6 +16,7 @@ export interface BotPolicy {
   show_counter?: boolean
   group_limits?: Record<string, GroupRule>
   user_limits?: Record<string, number>
+  validate_thumbdown?: boolean
 }
 
 export interface GroupRule {
