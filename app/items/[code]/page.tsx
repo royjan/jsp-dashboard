@@ -286,6 +286,7 @@ function CodeChainCard({
   catalogPrev,
   chainMissingErp,
   chainForks,
+  chainMerges,
   erpLatest,
   erpLatestSource,
   isHe,
@@ -300,6 +301,8 @@ function CodeChainCard({
   chainMissingErp?: string[]
   /** Siblings: other codes the same old number was replaced by. */
   chainForks?: Array<{ from: string; code: string; name: string | null }>
+  /** Other old codes that were replaced by a code in this chain (a merge), + how many older ones reach it through them. */
+  chainMerges?: { merges: Array<{ into: string; code: string; name: string | null }>; more: number }
   erpLatest?: string | null
   erpLatestSource?: 'lubinski' | 'erp' | null
   isHe: boolean
@@ -387,12 +390,25 @@ function CodeChainCard({
   /* Which column a code occupies, so a branch lands under the code it forked FROM. */
   const chainIndex = new Map(chain.map((c, i) => [c.code, i]))
   const forks = (chainForks ?? []).filter((f) => !chainCodes.has(f.code))
+  /* Merges: other old numbers whose "replaced by" is a chain code. Without them a part
+     with five predecessors looked like a different chain depending on which old code
+     you opened (25203036 vs 55573746, owner 2026-11-13). */
+  const merges = (chainMerges?.merges ?? []).filter((m) => !chainCodes.has(m.code) && chainIndex.has(m.into))
+  const mergeMore = chainMerges?.more ?? 0
   const notes: string[] = []
   if (forks.length) {
     notes.push(
       isHe
         ? `אותו מספר ישן הוחלף ביותר ממק\u201dט אחד — ${forks.map((f) => f.code).join(', ')} אינם המשך של השרשרת הזו אלא ענף אחר ממנה, ולרוב חלק אחר לגמרי.`
         : `The same old number was replaced by more than one code — ${forks.map((f) => f.code).join(', ')} are a separate branch, not a further step, and usually a different part.`,
+    )
+  }
+  if (merges.length) {
+    const into = [...new Set(merges.map((m) => m.into))]
+    notes.push(
+      isHe
+        ? `עוד ${merges.length === 1 ? 'קוד ישן אחד הוחלף' : merges.length + ' קודים ישנים הוחלפו'} ב‑${into.join(', ')}${mergeMore ? ` (ועוד ${mergeMore} ישנים יותר דרכם)` : ''}. השדה "קודם" בפיננסית מציין רק אחד, ולכן השרשרת נראתה שונה מכל קוד ישן.`
+        : `${merges.length} more old code(s) were replaced by ${into.join(', ')}${mergeMore ? ` (+${mergeMore} older through them)` : ''}. The ERP's "previous" field names only one.`,
     )
   }
   if (missingErp.size > 0) {
@@ -538,6 +554,33 @@ function CodeChainCard({
                 {isHe ? 'ענף' : 'branch'}
                 {f.name ? ` · ${f.name}` : ''}
               </span>
+            </motion.span>
+          ))}
+          {/* The merges: other old codes that lead INTO a chain code. Placed under the
+              code they were replaced by, with an arrow pointing at it (toward the newer
+              code), unlike a branch which has none. */}
+          {merges.map((m, k) => (
+            <motion.span
+              key={`merge-${m.code}`}
+              className="flex items-center gap-1.5"
+              style={{ gridColumn: `1 / ${(chainIndex.get(m.into) ?? 0) + 2}`, gridRow: forks.length + k + 2, justifySelf: 'end' }}
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: (chain.length + forks.length + k) * 0.08, duration: 0.3, ease: 'easeOut' }}
+            >
+              <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                {isHe ? 'קוד ישן נוסף' : 'also replaced'}
+                {m.name ? ` · ${m.name}` : ''}
+              </span>
+              <Badge variant="outline" className="font-mono text-xs" title={m.name ?? undefined}>
+                <ItemLink code={m.code} showCode copyable={false} />
+              </Badge>
+              <Arrow className="h-3.5 w-3.5 text-muted-foreground" />
+              <span
+                aria-hidden
+                className="-mt-5 inline-block h-7 w-5 shrink-0 self-start border-b border-e border-muted-foreground/50"
+                style={{ borderEndEndRadius: '1rem' }}
+              />
             </motion.span>
           ))}
         </div>
@@ -915,6 +958,7 @@ export default function ItemDetailPage({ params }: { params: Promise<{ code: str
           catalogPrev={data.catalog_prev}
           chainMissingErp={data.chain_missing_erp}
           chainForks={data.chain_forks}
+          chainMerges={data.chain_merges}
           erpLatest={data.erp_latest}
           erpLatestSource={data.erp_latest_source}
           isHe={isHe}
@@ -1274,6 +1318,7 @@ export default function ItemDetailPage({ params }: { params: Promise<{ code: str
         catalogPrev={data.catalog_prev}
         chainMissingErp={data.chain_missing_erp}
         chainForks={data.chain_forks}
+        chainMerges={data.chain_merges}
         erpLatest={data.erp_latest}
         erpLatestSource={data.erp_latest_source}
         isHe={isHe}

@@ -24,7 +24,7 @@
  * the wrong place, it is a row nobody sees.
  */
 import type { LucideIcon } from 'lucide-react'
-import {
+import { Link2Off,
   Activity, Ban, Bell, BookOpen, Bot, BotMessageSquare, Briefcase, Calendar, Store,
   CalendarRange, Car, CarFront, ScanSearch, ClipboardList, Container, DollarSign, FileBarChart,
   FileSearch, FileText, FlaskConical, GitBranch, HeartPulse, Landmark, Settings, Shuffle,
@@ -206,6 +206,8 @@ export const NAV_SECTIONS: NavSection[] = [
       { href: '/vehicle-twins', labelKey: 'vehicleTwins', icon: Car },
       // Share of Israel's active fleet with a scanned catalogue in Partly, and how much of it is priced.
       { href: '/scan-coverage', labelKey: 'scanCoverage', icon: ScanSearch },
+      // ERP "replaced by" links that are broken or only half there — fix once in Finansit, fixed everywhere (2026-11-13).
+      { href: '/chain-health', labelKey: 'chainHealth', icon: Link2Off },
       // VIN prefixes Partly refuses to scan or import, per provider (IM Motors, …) — enforced within a minute.
       { href: '/vehicle-blocklist', labelKey: 'vehicleBlocklist', icon: Ban },
     ],

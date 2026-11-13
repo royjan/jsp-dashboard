@@ -332,6 +332,40 @@ async function codesMissingFromErp(codes: string[]): Promise<string[]> {
 }
 
 /**
+ * Other OLD codes that lead INTO this chain — a merge, the mirror of a fork.
+ *
+ * 25198877 (Opel valve cover) was the "replaced by" of five old numbers, but its
+ * own "previous" field can name only one (55573747). So the line drawn from
+ * 25203036 showed 25198753 → 55573747 → 25198877 → 25203036 and the line drawn
+ * from 55573746 showed 55573746 → 25198877 → 25203036: two different-looking
+ * chains of the same part (owner, 2026-11-13). Listing every code whose
+ * "replaced by" points at a chain code makes both pages show the same tree.
+ * `more` counts older codes that reach the chain only through one of these.
+ */
+async function chainMerges(chain: string[]): Promise<{ merges: Array<{ into: string; code: string; name: string | null }>; more: number }> {
+  const known = [...new Set(chain.map((c) => String(c ?? '').trim()).filter(Boolean))]
+  if (known.length === 0) return { merges: [], more: 0 }
+  const direct = await query(
+    `SELECT code, new_item_id AS into_code, name
+       FROM erp.items
+      WHERE new_item_id = ANY($1::text[]) AND NOT (code = ANY($1::text[]))
+      ORDER BY code LIMIT 24`,
+    [known],
+  ).catch(() => null)
+  const merges = (direct?.rows ?? []).map((r: any) => ({
+    into: String(r.into_code ?? '').trim(), code: String(r.code ?? '').trim(),
+    // the ERP "name" of a replaced item is often just the new code typed in — that is not a name
+    name: /^[A-Z]{0,3}\d[A-Z0-9-]{3,15}$/i.test(String(r.name ?? '').trim()) ? null : (String(r.name ?? '').trim() || null),
+  })).filter((m: { code: string }) => m.code)
+  const latest = known[known.length - 1]
+  const all = await query(
+    `SELECT count(*)::int AS n FROM erp.canonical_map WHERE canonical = $1 AND NOT (item_code = ANY($2::text[]))`,
+    [latest, [...known, ...merges.map((m: { code: string }) => m.code)]],
+  ).catch(() => null)
+  return { merges, more: Number((all?.rows?.[0] as any)?.n ?? 0) }
+}
+
+/**
  * Other codes that branch off this chain — a FORK, not a further step.
  *
  * 6325H4 was replaced by two different things: 1688409680, a mirror lamp
@@ -636,6 +670,7 @@ export async function GET(
           c.item_number, ...erpChain,
           ...catalogPrev.map((t) => t.code), ...catalogTail.map((t) => t.code),
         ]).catch(() => []),
+        chain_merges: await chainMerges(erpChain).catch(() => ({ merges: [], more: 0 })),
         erp_latest: erpChain.length ? erpChain[erpChain.length - 1] : null,
         erp_latest_source: erpChain.length
           ? await erpLatestSource(erpChain[erpChain.length - 1]).catch(() => 'erp')
@@ -751,6 +786,7 @@ export async function GET(
         ...erpChain,
         ...catalogPrev.map((t) => t.code), ...catalogTail.map((t) => t.code),
       ]).catch(() => []),
+      chain_merges: await chainMerges(erpChain).catch(() => ({ merges: [], more: 0 })),
       // The newest number the manufacturer prints, which is NOT necessarily one
       // we can price. Kept apart from canonical_code for that reason.
       catalog_canonical_code: catalogTail.length ? catalogTail[catalogTail.length - 1].code : null,
