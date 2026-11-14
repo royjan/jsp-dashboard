@@ -489,6 +489,29 @@ export function useCustomerDetail(code: string | null) {
   })
 }
 
+/**
+ * The customer timeline tab. `enabled` is the caller's gate: the page holds it
+ * until the history request has settled, so the server finds FINAPI's answer
+ * in the history cache instead of asking the single ERP seat again.
+ */
+export function useCustomerTimeline(code: string | null, enabled: boolean) {
+  return useQuery({
+    queryKey: ['customer-timeline', code],
+    queryFn: async () => {
+      const res = await fetch(`/api/customers/${encodeURIComponent(code!)}/timeline`)
+      if (!res.ok) throw new Error('Failed')
+      return res.json() as Promise<import('@/lib/customer-timeline').TimelinePayload>
+    },
+    enabled: !!code && enabled,
+    // Server caches 10 min; refetching sooner only re-reads that cache.
+    staleTime: 10 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    // No retry: a failed build is already a per-source note, and a retry on a
+    // cold customer is a second round of FINAPI calls.
+    retry: false,
+  })
+}
+
 export function useCustomerHistory(code: string | null) {
   return useQuery({
     queryKey: ['customer-history', code],

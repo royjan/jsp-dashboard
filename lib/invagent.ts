@@ -232,3 +232,23 @@ export async function shippingHistory(dateFrom?: string, dateTo?: string, limit 
       : null,
   }
 }
+
+/**
+ * Special orders held for one customer (`internal_orders`, not archived) — the
+ * customer timeline's "שמור" rows. `codeVariants` is every spelling of the
+ * customer code (invagent has stored both `31284` and `031284`), matched with
+ * one `in.()` filter rather than pulling the whole table.
+ *
+ * `select=*` on purpose: the timeline reads `arrived_at` when the table has it
+ * and works without it, and naming a missing column would 400 the whole call.
+ */
+export async function heldOrdersForCustomer(codeVariants: string[], limit = 200) {
+  const list = codeVariants.map((c) => `"${c.replace(/"/g, '')}"`).join(',')
+  return query<Record<string, unknown>>('internal_orders', {
+    select: '*',
+    customer_code: `in.(${list})`,
+    archived: 'not.is.true',
+    order: 'created_at.desc',
+    limit,
+  })
+}

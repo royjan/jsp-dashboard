@@ -27,6 +27,7 @@ import {
   DollarSign,
   ExternalLink,
   FileText,
+  History,
   Receipt,
   ShoppingCart,
   User,
@@ -36,6 +37,7 @@ import { formatCurrency, formatDate, formatNumber } from '@/lib/format'
 import { cardVariants } from '@/lib/motion'
 import { useMoneyHidden } from '@/lib/use-money-hidden'
 import type { CustomerTab } from './tabs'
+import { CustomerTimeline } from './customer-timeline'
 
 
 // Severity ramp, CVD-validated on the dark surface (90 vs 90+ were previously
@@ -219,6 +221,9 @@ export function CustomerDetailView({ code, initialTab }: { code: string; initial
               <TabsTrigger value="unpaid" className="gap-1">
                 <Wallet className="h-3.5 w-3.5" />{t('customer.openDebts')} ({openDebts.length})
               </TabsTrigger>
+              <TabsTrigger value="timeline" className="gap-1">
+                <History className="h-3.5 w-3.5" />{t('customer.timeline')}
+              </TabsTrigger>
             </TabsList>
           </CardHeader>
           <CardContent>
@@ -242,6 +247,13 @@ export function CustomerDetailView({ code, initialTab }: { code: string; initial
             </TabsContent>
             <TabsContent value="unpaid">
               <OpenDebtsTable docs={openDebts} asOf={data.aging_as_of} balance={balance} />
+            </TabsContent>
+            <TabsContent value="timeline">
+              {/* Held until the history request settles: the timeline route then
+                  reads FINAPI's documents/receipts from that cache instead of
+                  asking the single ERP seat a second time. Mounted only when
+                  the tab is open, so other tabs never trigger it. */}
+              {tab === 'timeline' && <CustomerTimeline code={code} enabled={!historyLoading} />}
             </TabsContent>
           </CardContent>
         </Tabs>
